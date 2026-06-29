@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +35,7 @@ func New(addr string, reg *registry.Registry) *Server {
 	mux.HandleFunc("emb.info", s.handleINFO)
 	mux.HandleFunc("emb.stats", s.handleSTATS)
 	mux.HandleFunc("emb.help", s.handleHELP)
+	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
 
 	s.srv = redcon.NewServer(addr, mux.ServeRESP,
 		func(conn redcon.Conn) bool { return true },
@@ -162,11 +164,55 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteBulkString(strings.Join(perModel, " "))
 }
 
+func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
+	pairs := cmd.Args[1:]
+	if len(pairs) < 2 || len(pairs)%2 != 0 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.MULTI' command")
+		return
+	}
+
+	n := len(pairs) / 2
+	results := make([][]byte, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			model := string(pairs[idx*2])
+			text := string(pairs[idx*2+1])
+
+			entry, err := s.reg.GetOrInit(model)
+			if err != nil {
+				return
+			}
+
+			resp, err := entry.Pool.Embed([]string{text})
+			if err != nil || resp.Err != nil {
+				return
+			}
+
+			results[idx] = resp.Embeddings[0]
+			s.total.Add(1)
+		}(i)
+	}
+	wg.Wait()
+
+	conn.WriteArray(n)
+	for _, r := range results {
+		if r == nil {
+			conn.WriteNull()
+		} else {
+			conn.WriteBulk(r)
+		}
+	}
+}
+
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 	help := strings.Join([]string{
 		"EMB <model> <text> [text...] - Generate embeddings for one or more texts",
 		"EMB.MODELS - List available models and their dimensions",
 		"EMB.INFO <model> - Show model details and statistics",
+		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics",
 		"EMB.HELP - Show this help message",
 		"PING - Redis compatibility",
