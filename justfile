@@ -37,13 +37,17 @@ dev: build
 # Usage: just download-model [huggingface_repo] [output_dir]
 download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @mkdir -p {{dir}}
-    @test -f {{dir}}/model.onnx && echo "✓ Already exists at {{dir}}" || { \
-        echo "Downloading {{repo}}..."; \
-        curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx" && \
-        curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && \
-        curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" || \
-        { echo "Failed. Try a repo with pre-converted ONNX files (e.g. Xenova/all-MiniLM-L6-v2)"; exit 1; }; \
-    }
+    @test -f {{dir}}/model.onnx && echo "✓ Already exists at {{dir}}" && exit 0
+    @echo "Downloading {{repo}}..."
+    @# Try root model.onnx first, then onnx/model.onnx (newer repos)
+    @curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx"
+    @if [ -f "{{dir}}/model.onnx" ] && [ "$$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
+        echo "  model.onnx (root)"; \
+    else \
+        curl -sL "https://huggingface.co/{{repo}}/resolve/main/onnx/model.onnx" -o "{{dir}}/model.onnx" && echo "  model.onnx (onnx/)"; \
+    fi
+    @curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"
+    @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
 
 # Run end-to-end response time benchmark (requires downloaded model on :6379)
 bench-e2e: build
@@ -72,6 +76,22 @@ verify-embeddings: build
     CGO_ENABLED=0 go run ./cmd/emb-verify
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
+
+# Download two models and test EMB.MULTI across them
+# Usage: just verify-emb-multi
+verify-emb-multi:
+    @echo "Ensuring models are downloaded..."
+    just download-model "Xenova/all-MiniLM-L6-v2" "./models/minilm"
+    just download-model "onnx-community/siglip2-base-patch16-224-ONNX" "./models/siglip2"
+    @echo "Generating e2e config..."
+    @printf 'listen: ":6379"\nmodels:\n  minilm:\n    onnx: ./models/minilm/model.onnx\n    tokenizer: ./models/minilm/tokenizer.json\n    max_length: 256\n    pooling: mean\n    normalize: true\n  siglip2:\n    onnx: ./models/siglip2/text_model.onnx\n    tokenizer: ./models/siglip2/tokenizer.json\n    max_length: 256\n    output_tensor: pooler_output\n    pooling: none\n    normalize: true\n    dim: 768\n' > /tmp/emb-multi-config.yaml
+    @echo "Starting server with both models..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config /tmp/emb-multi-config.yaml & echo $! > /tmp/emb-srv.pid
+    sleep 3
+    @echo "Running EMB.MULTI verification..."
+    CGO_ENABLED=0 go run ./cmd/emb-multi-verify
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid /tmp/emb-multi-config.yaml
 
 # Determine image tag from git
 image_tag := `git rev-parse --short HEAD 2>/dev/null || echo "dev"`

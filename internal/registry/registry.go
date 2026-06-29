@@ -89,8 +89,11 @@ func (e *ModelEntry) ensurePool() error {
 	}
 	out, ok := outInfo[cfg.OutputTensor]
 	if !ok {
-		tok.Close()
-		return fmt.Errorf("model %q: output tensor %q not found", e.Name, cfg.OutputTensor)
+		name, rank := selectOutputTensor(outInfo)
+		log.Printf("  %s: output %q not found, auto-selected %q", e.Name, cfg.OutputTensor, name)
+		cfg.OutputTensor = name
+		cfg.Pooling = poolingForRank(rank)
+		out = outInfo[name]
 	}
 
 	inputNames, err := onnx.GetInputNames(cfg.ONNX)
@@ -146,6 +149,44 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 	return nil
 }
 
+func selectOutputTensor(outputs map[string]onnx.OutputInfo) (string, int) {
+	var rank2Name, rank3Name, firstName string
+	var firstRank int
+	for name, info := range outputs {
+		if firstName == "" {
+			firstName = name
+			firstRank = info.Rank
+		}
+		switch info.Rank {
+		case 2:
+			if rank2Name == "" {
+				rank2Name = name
+			}
+		case 3:
+			if rank3Name == "" {
+				rank3Name = name
+			}
+		}
+	}
+	if rank2Name != "" {
+		return rank2Name, 2
+	}
+	if rank3Name != "" {
+		return rank3Name, 3
+	}
+	if firstName != "" {
+		return firstName, firstRank
+	}
+	return "last_hidden_state", 3
+}
+
+func poolingForRank(rank int) string {
+	if rank == 2 {
+		return "none"
+	}
+	return "mean"
+}
+
 func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	if cfg.Tokenizer == "" && cfg.ONNX != "" {
 		cfg.Tokenizer = filepath.Join(filepath.Dir(cfg.ONNX), "tokenizer.json")
@@ -162,6 +203,20 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 		if d, err := onnx.InferDim(cfg.ONNX); err == nil {
 			cfg.Dim = d
 			log.Printf("  %s: detected dim=%d from ONNX graph", name, cfg.Dim)
+		}
+	}
+	if cfg.OutputTensor == "" || cfg.Pooling == "" {
+		outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
+		if err == nil {
+			tensorName, rank := selectOutputTensor(outInfo)
+			if cfg.OutputTensor == "" {
+				cfg.OutputTensor = tensorName
+				log.Printf("  %s: auto-detected output=%q rank=%d", name, cfg.OutputTensor, rank)
+			}
+			if cfg.Pooling == "" {
+				cfg.Pooling = poolingForRank(rank)
+				log.Printf("  %s: auto-detected pooling=%s", name, cfg.Pooling)
+			}
 		}
 	}
 	if cfg.Pooling == "" {

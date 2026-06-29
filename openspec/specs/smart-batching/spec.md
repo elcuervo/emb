@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ## ADDED Requirements
+=======
+## Requirements
+>>>>>>> worktree/calm-river-71c1
 
 ### Requirement: Batch concurrent requests
 

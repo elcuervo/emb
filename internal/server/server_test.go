@@ -167,6 +167,81 @@ func TestServerHELP(t *testing.T) {
 	c.Close()
 }
 
+func TestServerEMBMULTISingle(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*3\r\n$9\r\nEMB.MULTI\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 3 || resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBMULTIMultiple(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*5\r\n$9\r\nEMB.MULTI\r\n$4\r\ntest\r\n$1\r\na\r\n$4\r\ntest\r\n$1\r\nb\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 3 || resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBMULTIOddArgs(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*4\r\n$9\r\nEMB.MULTI\r\n$4\r\ntest\r\n$1\r\na\r\n$11\r\nnonexistent\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 5 || resp[:2] != "-E" {
+		t.Fatalf("expected error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBMULTINoArgs(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.MULTI\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 5 || resp[:2] != "-E" {
+		t.Fatalf("expected error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBMULTIUnknownModel(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*5\r\n$9\r\nEMB.MULTI\r\n$4\r\ntest\r\n$1\r\na\r\n$11\r\nnonexistent\r\n$1\r\nb\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 3 || resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBMULTIStats(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*5\r\n$9\r\nEMB.MULTI\r\n$4\r\ntest\r\n$1\r\na\r\n$4\r\ntest\r\n$1\r\nb\r\n"))
+	readRESP(t, c)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.STATS\r\n"))
+	resp := readRESP(t, c)
+	if resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
 func serveTest(t *testing.T) string {
 	t.Helper()
 	reg := registry.New()
