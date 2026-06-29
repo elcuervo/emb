@@ -1,0 +1,15 @@
+module github.com/elcuervo/emb
+
+go 1.24
+
+require (
+	github.com/daulet/tokenizers v1.27.0
+	github.com/tidwall/redcon v1.6.2
+	github.com/yalue/onnxruntime_go v1.31.0
+	gopkg.in/yaml.v3 v3.0.1
+)
+
+require (
+	github.com/tidwall/btree v1.1.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+)

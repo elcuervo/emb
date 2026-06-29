@@ -1,0 +1,275 @@
+package server
+
+import (
+	"net"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/pipeline"
+	"github.com/elcuervo/emb/internal/registry"
+)
+
+type mockTokenizer struct{}
+
+func (mockTokenizer) Encode(text string, maxLength int) ([]int64, []int64, error) {
+	ids := []int64{101}
+	mask := []int64{1}
+	for _, r := range text {
+		ids = append(ids, int64(r))
+		mask = append(mask, 1)
+	}
+	ids = append(ids, 102)
+	mask = append(mask, 1)
+	if len(ids) > maxLength {
+		ids = ids[:maxLength]
+		mask = mask[:maxLength]
+	}
+	return ids, mask, nil
+}
+
+func (mockTokenizer) Close() error { return nil }
+
+type mockSession struct {
+	mu sync.Mutex
+}
+
+func (m *mockSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	data := make([]float32, batchSize*seqLen*dim)
+	for i := range data {
+		data[i] = float32(i % dim)
+	}
+	return data, nil
+}
+
+func (m *mockSession) Close() error { return nil }
+
+func TestServerPING(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	resp := readRESP(t, c)
+	if resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBSingle(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 3 || resp[0] != '$' {
+		t.Fatalf("expected bulk string, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBBatch(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*4\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$1\r\na\r\n$1\r\nb\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 3 || resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBUnknownModel(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$10\r\nnonexistent\r\n$4\r\ntest\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 5 || resp[:2] != "-E" {
+		t.Fatalf("expected error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerEMBNoArgs(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$3\r\nEMB\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 5 || resp[:2] != "-E" {
+		t.Fatalf("expected error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerMODELS(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$10\r\nEMB.MODELS\r\n"))
+	resp := readRESP(t, c)
+	if resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerINFO(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$4\r\ntest\r\n"))
+	resp := readRESP(t, c)
+	if resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerINFONotFound(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$10\r\nnonexistent\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 5 || resp[:2] != "-E" {
+		t.Fatalf("expected error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerSTATS(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.STATS\r\n"))
+	resp := readRESP(t, c)
+	if resp[0] != '*' {
+		t.Fatalf("expected array, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestServerHELP(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$8\r\nEMB.HELP\r\n"))
+	resp := readRESP(t, c)
+	if resp[0] != '$' {
+		t.Fatalf("expected bulk string, got %q", resp)
+	}
+	c.Close()
+}
+
+func serveTest(t *testing.T) string {
+	t.Helper()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr
+}
+
+func dial(t *testing.T, addr string) net.Conn {
+	t.Helper()
+	c, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	return c
+}
+
+func readRESP(t *testing.T, c net.Conn) string {
+	t.Helper()
+	buf := make([]byte, 4096)
+	n, err := c.Read(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(buf[:n])
+}
+
+func getFreeAddr() string {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	l.Close()
+	return l.Addr().String()
+}
+
+func BenchmarkRESP(b *testing.B) {
+	addr := getFreeAddr()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true,
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+	srv := New(addr, reg)
+	go srv.ListenAndServe()
+	b.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+
+	cmd := []byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n")
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer conn.Close()
+
+	buf := make([]byte, 4096)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		conn.Write(cmd)
+		conn.Read(buf)
+	}
+}
+
+func BenchmarkPoolEmbed(b *testing.B) {
+		pool, err := pipeline.NewPool(
+			func() (onnx.Session, error) { return &mockSession{}, nil },
+			mockTokenizer{},
+			4, 4, 128, true,
+		)
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer pool.Close()
+	
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				resp, err := pool.Embed([]string{"hello world"})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if resp.Err != nil {
+					b.Fatal(resp.Err)
+				}
+			}
+		})
+	}
