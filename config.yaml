@@ -1,5 +1,21 @@
 listen: ":6379"
 
 models:
+  # Standard sentence-transformers model - 3D output, mean pooling
   minilm:
     onnx: ./models/minilm/model.onnx
+
+  # Pre-pooled model (e.g., siglip2, E5) - 2D output, skip mean pooling
+  # siglip2:
+  #   onnx: ./models/siglip2/model.onnx
+  #   output_tensor: pooler_output
+  #   pooling: none
+  #   normalize: true
+  #   dim: 768
+
+  # Another pre-pooled example (E5)
+  # e5:
+  #   onnx: ./models/e5/model.onnx
+  #   output_tensor: pooled_sentence_embeddings_debiased_normalized
+  #   pooling: none
+  #   normalize: false

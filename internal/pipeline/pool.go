@@ -16,11 +16,12 @@ type Worker struct {
 	dim       int
 	maxLen    int
 	normalize bool
+	pooling   string
 	requests  atomic.Int64
 	totalLat  atomic.Int64
 }
 
-func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, normalize bool) *Worker {
+func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, normalize bool, pooling string) *Worker {
 	w := &Worker{
 		session:   sess,
 		tokenizer: tok,
@@ -28,6 +29,7 @@ func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, norm
 		dim:       dim,
 		maxLen:    maxLen,
 		normalize: normalize,
+		pooling:   pooling,
 	}
 	go w.run()
 	return w
@@ -64,7 +66,13 @@ func (w *Worker) process(texts []string) Response {
 		return Response{Err: fmt.Errorf("inference: %w", err)}
 	}
 
-	embeddings := MeanPoolAndNormalize(hidden, attnMask, w.dim, seqLen, batchSize, w.normalize)
+	var embeddings [][]byte
+	switch w.pooling {
+	case "none":
+		embeddings = ExtractPrePooled(hidden, batchSize, w.dim, w.normalize)
+	default:
+		embeddings = MeanPoolAndNormalize(hidden, attnMask, w.dim, seqLen, batchSize, w.normalize)
+	}
 
 	return Response{Embeddings: embeddings}
 }
@@ -90,14 +98,14 @@ type Pool struct {
 	next    atomic.Uint64
 }
 
-func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool) (*Pool, error) {
+func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string) (*Pool, error) {
 	workers := make([]*Worker, numWorkers)
 	for i := range numWorkers {
 		sess, err := sessionFactory()
 		if err != nil {
 			return nil, fmt.Errorf("creating worker %d session: %w", i, err)
 		}
-		workers[i] = NewWorker(sess, tok, dim, maxLen, normalize)
+		workers[i] = NewWorker(sess, tok, dim, maxLen, normalize, pooling)
 	}
 	return &Pool{workers: workers}, nil
 }

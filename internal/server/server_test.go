@@ -173,7 +173,7 @@ func serveTest(t *testing.T) string {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true,
+		2, 4, 128, true, "mean",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +223,7 @@ func BenchmarkRESP(b *testing.B) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true,
+		2, 4, 128, true, "mean",
 	)
 	if err != nil {
 		b.Fatal(err)
@@ -253,7 +253,7 @@ func BenchmarkPoolEmbed(b *testing.B) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		4, 4, 128, true,
+		4, 4, 128, true, "mean",
 	)
 	if err != nil {
 		b.Fatal(err)

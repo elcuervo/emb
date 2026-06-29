@@ -13,10 +13,12 @@ import (
 type RuntimeSession struct {
 	session      *ort.DynamicAdvancedSession
 	dim          int
+	hasAttnMask  bool
 	hasTokenType bool
+	outputRank   int // 2 (pre-pooled) or 3 (sequence)
 }
 
-func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int) (*RuntimeSession, error) {
+func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int) (*RuntimeSession, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("creating session options: %w", err)
@@ -36,18 +38,23 @@ func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim i
 		return nil, fmt.Errorf("creating session: %w", err)
 	}
 
+	hasAttnMask := false
 	hasTokenType := false
 	for _, name := range inputNames {
-		if name == "token_type_ids" {
+		switch name {
+		case "attention_mask":
+			hasAttnMask = true
+		case "token_type_ids":
 			hasTokenType = true
-			break
 		}
 	}
 
 	return &RuntimeSession{
 		session:      session,
 		dim:          dim,
+		hasAttnMask:  hasAttnMask,
 		hasTokenType: hasTokenType,
+		outputRank:   outputRank,
 	}, nil
 }
 
@@ -58,13 +65,15 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 	}
 	defer inputTensor.Destroy()
 
-	attnTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(seqLen)), attnMask)
-	if err != nil {
-		return nil, fmt.Errorf("creating attention_mask tensor: %w", err)
+	inputs := []ort.Value{inputTensor}
+	if s.hasAttnMask {
+		attnTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(seqLen)), attnMask)
+		if err != nil {
+			return nil, fmt.Errorf("creating attention_mask tensor: %w", err)
+		}
+		defer attnTensor.Destroy()
+		inputs = append(inputs, attnTensor)
 	}
-	defer attnTensor.Destroy()
-
-	inputs := []ort.Value{inputTensor, attnTensor}
 	if s.hasTokenType {
 		ttTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(seqLen)), make([]int64, batchSize*seqLen))
 		if err != nil {
@@ -74,7 +83,17 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 		inputs = append(inputs, ttTensor)
 	}
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(seqLen), int64(dim)))
+	var outputShape []int64
+	var flatSize int
+	if s.outputRank == 2 {
+		outputShape = []int64{int64(batchSize), int64(dim)}
+		flatSize = batchSize * dim
+	} else {
+		outputShape = []int64{int64(batchSize), int64(seqLen), int64(dim)}
+		flatSize = batchSize * seqLen * dim
+	}
+
+	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(outputShape...))
 	if err != nil {
 		return nil, fmt.Errorf("creating output tensor: %w", err)
 	}
@@ -87,7 +106,7 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 	}
 
 	data := outputTensor.GetData()
-	result := make([]float32, batchSize*seqLen*dim)
+	result := make([]float32, flatSize)
 	copy(result, data)
 	return result, nil
 }
@@ -132,11 +151,45 @@ func InferDim(modelPath string) (int, error) {
 		return 0, fmt.Errorf("reading ONNX metadata from %q: %w", modelPath, err)
 	}
 	for _, o := range outputs {
+		if len(o.Dimensions) == 2 {
+			return int(o.Dimensions[1]), nil
+		}
+	}
+	for _, o := range outputs {
 		if len(o.Dimensions) == 3 {
 			return int(o.Dimensions[2]), nil
 		}
 	}
 	return 0, fmt.Errorf("could not infer dim from %q outputs", modelPath)
+}
+
+func GetInputNames(modelPath string) ([]string, error) {
+	inputs, _, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading ONNX metadata from %q: %w", modelPath, err)
+	}
+	names := make([]string, len(inputs))
+	for i, inp := range inputs {
+		names[i] = inp.Name
+	}
+	return names, nil
+}
+
+func GetOutputInfo(modelPath string) (map[string]OutputInfo, error) {
+	_, outputs, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading ONNX metadata from %q: %w", modelPath, err)
+	}
+	result := make(map[string]OutputInfo, len(outputs))
+	for _, o := range outputs {
+		rank := len(o.Dimensions)
+		var dim int64
+		if rank >= 2 {
+			dim = o.Dimensions[rank-1]
+		}
+		result[o.Name] = OutputInfo{Name: o.Name, Rank: rank, Dim: dim}
+	}
+	return result, nil
 }
 
 func InferMaxLength(modelDir string) (int, error) {

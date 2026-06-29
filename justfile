@@ -33,17 +33,16 @@ build:
 dev: build
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml
 
-# Download a model from HuggingFace using optimum-cli
+# Download a model from HuggingFace
 # Usage: just download-model [huggingface_repo] [output_dir]
-download-model repo="sentence-transformers/all-MiniLM-L6-v2" dir="./models/minilm":
+download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @mkdir -p {{dir}}
     @test -f {{dir}}/model.onnx && echo "✓ Already exists at {{dir}}" || { \
-        echo "Setting up venv..."; \
-        python3 -m venv /tmp/emb-dl; \
-        . /tmp/emb-dl/bin/activate; \
-        pip install -q "optimum[onnxruntime]" torch --extra-index-url https://download.pytorch.org/whl/cpu; \
-        optimum-cli export onnx --model {{repo}} {{dir}}; \
-        rm -rf /tmp/emb-dl; \
+        echo "Downloading {{repo}}..."; \
+        curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx" && \
+        curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && \
+        curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" || \
+        { echo "Failed. Try a repo with pre-converted ONNX files (e.g. Xenova/all-MiniLM-L6-v2)"; exit 1; }; \
     }
 
 # Run end-to-end response time benchmark (requires downloaded model on :6379)

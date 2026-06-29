@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/hfhub"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/tokenizer"
@@ -82,16 +82,35 @@ func (e *ModelEntry) ensurePool() error {
 		numWorkers = autoTuneWorkers(cfg.ONNX, 0)
 	}
 
+	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
+	if err != nil {
+		tok.Close()
+		return fmt.Errorf("reading output info for %q: %w", e.Name, err)
+	}
+	out, ok := outInfo[cfg.OutputTensor]
+	if !ok {
+		tok.Close()
+		return fmt.Errorf("model %q: output tensor %q not found", e.Name, cfg.OutputTensor)
+	}
+
+	inputNames, err := onnx.GetInputNames(cfg.ONNX)
+	if err != nil {
+		tok.Close()
+		return fmt.Errorf("reading input names for %q: %w", e.Name, err)
+	}
+	log.Printf("  %s: inputs=%v output=%q rank=%d", e.Name, inputNames, cfg.OutputTensor, out.Rank)
+
 	sessionFactory := func() (onnx.Session, error) {
 		return onnx.NewRuntimeSession(
 			cfg.ONNX,
-			[]string{"input_ids", "attention_mask", "token_type_ids"},
-			[]string{"last_hidden_state"},
+			inputNames,
+			[]string{cfg.OutputTensor},
 			cfg.Dim,
+			out.Rank,
 		)
 	}
 
-	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize)
+	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling)
 	if err != nil {
 		tok.Close()
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
@@ -114,11 +133,7 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 		return nil
 	}
 	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
-	os.MkdirAll(dir, 0755)
-	cmd := exec.Command("optimum-cli", "export", "onnx", "--model", cfg.ModelRepo, dir)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := hfhub.New().DownloadModel(cfg.ModelRepo, dir); err != nil {
 		return fmt.Errorf("downloading %s: %w", cfg.ModelRepo, err)
 	}
 	log.Printf("  downloaded %s to %s", name, dir)
@@ -145,6 +160,9 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	}
 	if cfg.Pooling == "" {
 		cfg.Pooling = "mean"
+	}
+	if cfg.OutputTensor == "" {
+		cfg.OutputTensor = "last_hidden_state"
 	}
 	return nil
 }

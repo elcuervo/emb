@@ -39,6 +39,26 @@ func MeanPoolAndNormalize(hidden []float32, masks []int64, dim, seqLen, batchSiz
 	return result
 }
 
+func ExtractPrePooled(hidden []float32, batchSize, dim int, normalize bool) [][]byte {
+	result := make([][]byte, batchSize)
+	for b := range batchSize {
+		offset := b * dim
+		vec := hidden[offset : offset+dim]
+		if normalize {
+			cp := make([]float32, dim)
+			copy(cp, vec)
+			L2Normalize(cp)
+			vec = cp
+		}
+		bytes := make([]byte, dim*4)
+		for d := range dim {
+			binary.LittleEndian.PutUint32(bytes[d*4:], math.Float32bits(vec[d]))
+		}
+		result[b] = bytes
+	}
+	return result
+}
+
 func L2Normalize(vec []float32) {
 	var sumSq float64
 	for _, v := range vec {

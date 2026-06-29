@@ -13,15 +13,16 @@ type Config struct {
 }
 
 type ModelConfig struct {
-	ONNX      string `yaml:"onnx"`
-	Tokenizer string `yaml:"tokenizer"`
-	ModelRepo string `yaml:"model_repo"`
-	Pooling   string `yaml:"pooling"`
-	Normalize bool   `yaml:"normalize"`
-	MaxLength int    `yaml:"max_length"`
-	Dim       int    `yaml:"dim"`
-	Preload   bool   `yaml:"preload"`
-	Workers   int    `yaml:"workers"`
+	ONNX         string `yaml:"onnx"`
+	Tokenizer    string `yaml:"tokenizer"`
+	ModelRepo    string `yaml:"model_repo"`
+	Pooling      string `yaml:"pooling"`
+	Normalize    bool   `yaml:"normalize"`
+	MaxLength    int    `yaml:"max_length"`
+	Dim          int    `yaml:"dim"`
+	Preload      bool   `yaml:"preload"`
+	Workers      int    `yaml:"workers"`
+	OutputTensor string `yaml:"output_tensor"`
 }
 
 func Load(path string) (*Config, error) {

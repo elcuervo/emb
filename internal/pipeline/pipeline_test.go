@@ -194,6 +194,41 @@ func TestL2NormalizeZero(t *testing.T) {
 	}
 }
 
+func TestExtractPrePooled(t *testing.T) {
+	dim := 4
+	batchSize := 2
+	hidden := []float32{1, 2, 3, 4, 5, 6, 7, 8} // 2 × 4
+
+	result := ExtractPrePooled(hidden, batchSize, dim, false)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 embeddings, got %d", len(result))
+	}
+
+	got0 := result[0]
+	v0 := math.Float32frombits(uint32(got0[0]) | uint32(got0[1])<<8 | uint32(got0[2])<<16 | uint32(got0[3])<<24)
+	v1 := math.Float32frombits(uint32(got0[4]) | uint32(got0[5])<<8 | uint32(got0[6])<<16 | uint32(got0[7])<<24)
+	if v0 != 1 || v1 != 2 {
+		t.Fatalf("expected [1,2], got [%f,%f]", v0, v1)
+	}
+}
+
+func TestExtractPrePooledNormalized(t *testing.T) {
+	dim := 3
+	batchSize := 1
+	hidden := []float32{3, 0, 4} // length 3, should normalize to [0.6, 0, 0.8]
+
+	result := ExtractPrePooled(hidden, batchSize, dim, true)
+	got := result[0]
+	v0 := math.Float32frombits(uint32(got[0]) | uint32(got[1])<<8 | uint32(got[2])<<16 | uint32(got[3])<<24)
+	v1 := math.Float32frombits(uint32(got[4]) | uint32(got[5])<<8 | uint32(got[6])<<16 | uint32(got[7])<<24)
+	v2 := math.Float32frombits(uint32(got[8]) | uint32(got[9])<<8 | uint32(got[10])<<16 | uint32(got[11])<<24)
+
+	eps := float32(0.0001)
+	if abs(v0-0.6) > eps || abs(v1) > eps || abs(v2-0.8) > eps {
+		t.Fatalf("expected [0.6,0,0.8], got [%f,%f,%f]", v0, v1, v2)
+	}
+}
+
 func TestMeanPoolAndNormalizeBatch(t *testing.T) {
 	// batch=2, seq_len=2, dim=2
 	hidden := []float32{
