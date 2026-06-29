@@ -1,7 +1,10 @@
 package onnx
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 
 	ort "github.com/yalue/onnxruntime_go"
@@ -112,4 +115,34 @@ func InitEnvironment(libPath string) error {
 
 func DestroyEnvironment() error {
 	return ort.DestroyEnvironment()
+}
+
+func InferDim(modelPath string) (int, error) {
+	_, outputs, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return 0, fmt.Errorf("reading ONNX metadata from %q: %w", modelPath, err)
+	}
+	for _, o := range outputs {
+		if len(o.Dimensions) == 3 {
+			return int(o.Dimensions[2]), nil
+		}
+	}
+	return 0, fmt.Errorf("could not infer dim from %q outputs", modelPath)
+}
+
+func InferMaxLength(modelDir string) (int, error) {
+	data, err := os.ReadFile(filepath.Join(modelDir, "config.json"))
+	if err != nil {
+		return 0, fmt.Errorf("reading config.json: %w", err)
+	}
+	var mc struct {
+		MaxPositionEmbeddings int `json:"max_position_embeddings"`
+	}
+	if err := json.Unmarshal(data, &mc); err != nil {
+		return 0, fmt.Errorf("parsing config.json: %w", err)
+	}
+	if mc.MaxPositionEmbeddings <= 0 {
+		return 0, fmt.Errorf("max_position_embeddings not found in config.json")
+	}
+	return mc.MaxPositionEmbeddings, nil
 }

@@ -38,22 +38,8 @@ func Load(path string) (*Config, error) {
 	}
 
 	for name, m := range cfg.Models {
-		if m.Pooling == "" {
-			m.Pooling = "mean"
-		}
-		if m.MaxLength <= 0 {
-			m.MaxLength = 512
-		}
-		if m.ModelRepo == "" {
-			if m.ONNX == "" {
-				return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
-			}
-			if m.Tokenizer == "" {
-				return nil, fmt.Errorf("model %q: tokenizer path or model_repo is required", name)
-			}
-		}
-		if m.Dim <= 0 {
-			return nil, fmt.Errorf("model %q: dim must be > 0", name)
+		if m.ModelRepo == "" && m.ONNX == "" {
+			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
 		}
 		cfg.Models[name] = m
 	}

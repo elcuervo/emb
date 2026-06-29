@@ -15,6 +15,9 @@ models:
   test-model:
     onnx: ./model.onnx
     tokenizer: ./tokenizer.json
+    pooling: mean
+    normalize: false
+    max_length: 512
     dim: 384
 `), 0644)
 
@@ -37,44 +40,28 @@ models:
 		t.Fatalf("expected 512, got %d", m.MaxLength)
 	}
 	if m.Normalize {
-		t.Fatal("expected normalize=false by default")
+		t.Fatal("expected normalize=false")
 	}
 	if m.Dim != 384 {
 		t.Fatalf("expected 384, got %d", m.Dim)
 	}
 }
 
-func TestLoadMissingONNX(t *testing.T) {
+func TestLoadMinimalConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	os.WriteFile(cfgPath, []byte(`
 models:
   test:
-    onnx: ""
-    tokenizer: ./tok.json
-    dim: 768
+    model_repo: some/repo
 `), 0644)
 
-	_, err := Load(cfgPath)
-	if err == nil {
-		t.Fatal("expected error for missing onnx path")
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestLoadMissingTokenizer(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	os.WriteFile(cfgPath, []byte(`
-models:
-  test:
-    onnx: ./model.onnx
-    tokenizer: ""
-    dim: 768
-`), 0644)
-
-	_, err := Load(cfgPath)
-	if err == nil {
-		t.Fatal("expected error for missing tokenizer path")
+	if _, ok := cfg.Models["test"]; !ok {
+		t.Fatal("expected test model")
 	}
 }
 
@@ -84,14 +71,12 @@ func TestLoadInvalidDim(t *testing.T) {
 	os.WriteFile(cfgPath, []byte(`
 models:
   test:
-    onnx: ./model.onnx
-    tokenizer: ./tok.json
     dim: 0
 `), 0644)
 
 	_, err := Load(cfgPath)
 	if err == nil {
-		t.Fatal("expected error for invalid dim")
+		t.Fatal("expected error for missing onnx")
 	}
 }
 

@@ -2,6 +2,7 @@ models/
 bin/
 benchmark-baseline.txt
 benchmark-responsetime.txt
+reference-embeddings.json
 /tmp/emb
 .DS_Store
 *.swp

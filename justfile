@@ -56,6 +56,24 @@ bench-e2e: build
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
+# Verify embeddings match Python reference (requires downloaded model)
+verify-embeddings: build
+    @echo "Generating reference embeddings..."
+    @if [ ! -f reference-embeddings.json ]; then \
+        python3 -m venv /tmp/emb-verify-venv; \
+        . /tmp/emb-verify-venv/bin/activate; \
+        pip install -q sentence-transformers torch --extra-index-url https://download.pytorch.org/whl/cpu; \
+        python3 cmd/emb-verify/generate-reference.py; \
+        rm -rf /tmp/emb-verify-venv; \
+    else echo "✓ reference-embeddings.json exists"; fi
+    @echo "Starting server..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    sleep 3
+    @echo "Running verification..."
+    CGO_ENABLED=0 go run ./cmd/emb-verify
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid
+
 # Clean build artifacts
 clean:
     rm -rf bin/

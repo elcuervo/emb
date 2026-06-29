@@ -54,11 +54,39 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 	return nil
 }
 
+func resolveModelConfig(cfg *config.ModelConfig, name string) error {
+	if cfg.Tokenizer == "" && cfg.ONNX != "" {
+		cfg.Tokenizer = filepath.Join(filepath.Dir(cfg.ONNX), "tokenizer.json")
+	}
+	if cfg.MaxLength <= 0 && cfg.ONNX != "" {
+		if ml, err := onnx.InferMaxLength(filepath.Dir(cfg.ONNX)); err == nil {
+			cfg.MaxLength = ml
+			log.Printf("  %s: detected max_length=%d from config.json", name, cfg.MaxLength)
+		} else {
+			cfg.MaxLength = 512
+		}
+	}
+	if cfg.Dim <= 0 && cfg.ONNX != "" {
+		if d, err := onnx.InferDim(cfg.ONNX); err == nil {
+			cfg.Dim = d
+			log.Printf("  %s: detected dim=%d from ONNX graph", name, cfg.Dim)
+		}
+	}
+	if cfg.Pooling == "" {
+		cfg.Pooling = "mean"
+	}
+	return nil
+}
+
 func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 	if cfg.ModelRepo != "" {
 		if err := downloadModel(&cfg, name); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := resolveModelConfig(&cfg, name); err != nil {
+		return nil, err
 	}
 
 	if err := cfg.Validate(); err != nil {

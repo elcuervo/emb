@@ -3,8 +3,3 @@ listen: ":6379"
 models:
   minilm:
     onnx: ./models/minilm/model.onnx
-    tokenizer: ./models/minilm/tokenizer.json
-    pooling: mean
-    normalize: true
-    max_length: 256
-    dim: 384
