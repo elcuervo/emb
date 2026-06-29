@@ -46,6 +46,16 @@ download-model repo="sentence-transformers/all-MiniLM-L6-v2" dir="./models/minil
         rm -rf /tmp/emb-dl; \
     }
 
+# Run end-to-end response time benchmark (requires downloaded model on :6379)
+bench-e2e: build
+    @echo "Starting server..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    sleep 3
+    @echo "Running 50 EMB requests..."
+    CGO_ENABLED=0 go run ./cmd/emb-bench
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid
+
 # Clean build artifacts
 clean:
     rm -rf bin/

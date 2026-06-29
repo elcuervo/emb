@@ -1,4 +1,11 @@
 models/
 bin/
 benchmark-baseline.txt
+benchmark-responsetime.txt
+/tmp/emb
 .DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
