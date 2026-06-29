@@ -110,6 +110,15 @@ func InitEnvironment(libPath string) error {
 			}
 		}
 	}
+	if runtime.GOOS == "linux" {
+		for _, lib := range []string{"onnxruntime.so", "libonnxruntime.so", "libonnxruntime.so.1"} {
+			ort.SetSharedLibraryPath(lib)
+			err := ort.InitializeEnvironment()
+			if err == nil {
+				return nil
+			}
+		}
+	}
 	return ort.InitializeEnvironment()
 }
 

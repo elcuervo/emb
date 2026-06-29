@@ -10,8 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/pipeline"
@@ -38,14 +36,6 @@ func New() *Registry {
 	return &Registry{
 		models: make(map[string]*ModelEntry),
 	}
-}
-
-func totalSystemMemory() uint64 {
-	val, err := unix.SysctlUint64("hw.memsize")
-	if err != nil {
-		return 0
-	}
-	return val
 }
 
 func autoTuneWorkers(modelPath string, maxWorkers int) int {

@@ -74,6 +74,29 @@ verify-embeddings: build
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
+# Determine image tag from git
+image_tag := `git rev-parse --short HEAD 2>/dev/null || echo "dev"`
+image_name := "elcuervo/emb-server"
+
+# Build multi-arch Docker image (native platform)
+docker-build:
+    @echo "Building {{image_name}}:{{image_tag}} for $(shell uname -m)..."
+    docker buildx build \
+        --load \
+        -t {{image_name}}:{{image_tag}} \
+        -t {{image_name}}:latest \
+        .
+
+# Build and push multi-arch Docker image to Docker Hub
+docker-push:
+    @echo "Building and pushing {{image_name}}:{{image_tag}} for linux/amd64,linux/arm64..."
+    docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --push \
+        -t {{image_name}}:{{image_tag}} \
+        -t {{image_name}}:latest \
+        .
+
 # Clean build artifacts
 clean:
     rm -rf bin/

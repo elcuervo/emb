@@ -1,0 +1,12 @@
+models/
+bin/
+benchmark-baseline.txt
+benchmark-responsetime.txt
+reference-embeddings.json
+.git/
+.gitignore
+.gitattributes
+*.md
+.DS_Store
+.vscode/
+.idea/
