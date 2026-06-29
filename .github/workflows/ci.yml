@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Format check
+        run: |
+          test -z "$(gofmt -l .)" || { echo "Run 'gofmt -s -w .' to fix formatting"; exit 1; }
+
+      - name: Vet
+        run: go vet ./internal/config/... ./internal/hfhub/... ./internal/tokenizer/...
+
+      - name: Test
+        run: go test -short ./internal/config/... ./internal/hfhub/... ./internal/tokenizer/...
