@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,7 +17,6 @@ type Server struct {
 	srv     *redcon.Server
 	started time.Time
 	total   atomic.Int64
-	mu      sync.Mutex
 	addr    string
 }
 

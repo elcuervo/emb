@@ -27,10 +27,10 @@ func main() {
 		start := time.Now()
 
 		cmd := "*3\r\n$3\r\nEMB\r\n$6\r\nminilm\r\n$11\r\nhello world\r\n"
-		conn.Write([]byte(cmd))
+		_, _ = conn.Write([]byte(cmd))
 
 		resp := make([]byte, 4096)
-		conn.Read(resp)
+		_, _ = conn.Read(resp)
 
 		elapsed := float64(time.Since(start).Microseconds()) / 1000
 		times[i] = elapsed

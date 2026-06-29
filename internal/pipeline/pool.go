@@ -92,7 +92,7 @@ type Pool struct {
 
 func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool) (*Pool, error) {
 	workers := make([]*Worker, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		sess, err := sessionFactory()
 		if err != nil {
 			return nil, fmt.Errorf("creating worker %d session: %w", i, err)
@@ -130,8 +130,4 @@ func (p *Pool) Close() error {
 		w.Close()
 	}
 	return nil
-}
-
-func (p *Pool) NumWorkers() int {
-	return len(p.workers)
 }

@@ -100,9 +100,8 @@ func readEMBResponse(conn net.Conn, dim int) ([]float64, error) {
 		return nil, fmt.Errorf("reading data: %w", err)
 	}
 
-	// Read trailing \r\n
 	trail := make([]byte, 2)
-	conn.Read(trail)
+	_, _ = conn.Read(trail)
 
 	return bytesToFloats(data, dim), nil
 }

@@ -215,13 +215,6 @@ func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.models[name] = entry
 }
 
-func (r *Registry) Get(name string) (*ModelEntry, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	entry, ok := r.models[name]
-	return entry, ok
-}
-
 func (r *Registry) List() []*ModelEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -235,9 +228,9 @@ func (r *Registry) List() []*ModelEntry {
 func (r *Registry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for name, entry := range r.models {
+	for _, entry := range r.models {
 		entry.Pool.Close()
-		delete(r.models, name)
 	}
+	clear(r.models)
 	return nil
 }

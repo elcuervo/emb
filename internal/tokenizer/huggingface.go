@@ -12,22 +12,11 @@ type modelConfig struct {
 	Type     string           `json:"type"`
 	Vocab    map[string]int32 `json:"vocab"`
 	UnkToken string           `json:"unk_token"`
-	MaxInput int              `json:"max_input"`
-}
-
-type preTokenizer struct {
-	Type string `json:"type"`
-}
-
-type normalizer struct {
-	Type string `json:"type"`
 }
 
 type tokenizerFile struct {
-	Model        modelConfig  `json:"model"`
-	PreTokenizer preTokenizer `json:"pre_tokenizer"`
-	Normalizer   normalizer   `json:"normalizer"`
-	AddedTokens  []addedToken `json:"added_tokens"`
+	Model       modelConfig  `json:"model"`
+	AddedTokens []addedToken `json:"added_tokens"`
 }
 
 type addedToken struct {
@@ -40,13 +29,10 @@ type addedToken struct {
 
 type HFTokenizer struct {
 	vocab     map[string]int32
-	idToToken map[int32]string
 	unkID     int32
 	clsID     int32
 	sepID     int32
-	padID     int32
 	modelType string
-	maxLength int
 }
 
 func NewHFTokenizer(path string) (*HFTokenizer, error) {
@@ -66,11 +52,9 @@ func NewHFTokenizer(path string) (*HFTokenizer, error) {
 
 	t := &HFTokenizer{
 		vocab:     tf.Model.Vocab,
-		idToToken: make(map[int32]string, len(tf.Model.Vocab)),
 		unkID:     0,
 		clsID:     101,
 		sepID:     102,
-		padID:     0,
 		modelType: tf.Model.Type,
 	}
 
@@ -80,18 +64,12 @@ func NewHFTokenizer(path string) (*HFTokenizer, error) {
 		}
 	}
 
-	for token, id := range tf.Model.Vocab {
-		t.idToToken[id] = token
-	}
-
 	for _, at := range tf.AddedTokens {
 		switch at.Content {
 		case "[CLS]":
 			t.clsID = at.ID
 		case "[SEP]":
 			t.sepID = at.ID
-		case "[PAD]":
-			t.padID = at.ID
 		case "[UNK]":
 			t.unkID = at.ID
 		}
@@ -129,12 +107,15 @@ done:
 		tokens = tokens[:maxLength]
 	}
 
-	mask := make([]int64, len(tokens))
-	for i := range tokens {
+	return tokens, makeMask(len(tokens)), nil
+}
+
+func makeMask(n int) []int64 {
+	mask := make([]int64, n)
+	for i := range n {
 		mask[i] = 1
 	}
-
-	return tokens, mask, nil
+	return mask
 }
 
 func (t *HFTokenizer) encodeBPE(text string, maxLength int) ([]int64, []int64, error) {
@@ -154,12 +135,7 @@ done:
 		tokens = tokens[:maxLength]
 	}
 
-	mask := make([]int64, len(tokens))
-	for i := range tokens {
-		mask[i] = 1
-	}
-
-	return tokens, mask, nil
+	return tokens, makeMask(len(tokens)), nil
 }
 
 func preTokenize(text string) []string {
@@ -208,9 +184,6 @@ func (t *HFTokenizer) wordPiece(word string) []int32 {
 				break
 			}
 			end--
-			if start > 0 && string(fullWord[start:end]) == "" {
-				break
-			}
 			if end-start == 1 && start > 0 {
 				break
 			}
@@ -245,7 +218,7 @@ func (t *HFTokenizer) bpeEncode(word string) []int32 {
 
 		bestPair := ""
 		bestScore := -1
-		for i := 0; i < len(tokens)-1; i++ {
+		for i := range len(tokens) - 1 {
 			pair := tokens[i] + tokens[i+1]
 			if id, ok := t.vocab[pair]; ok {
 				if int(id) > bestScore {

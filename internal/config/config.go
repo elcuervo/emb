@@ -51,11 +51,6 @@ func Load(path string) (*Config, error) {
 
 func (m ModelConfig) Validate() error {
 	if m.ModelRepo != "" {
-		if m.ONNX != "" {
-			if _, err := os.Stat(m.ONNX); err == nil {
-				return nil
-			}
-		}
 		return nil
 	}
 	if _, err := os.Stat(m.ONNX); err != nil {

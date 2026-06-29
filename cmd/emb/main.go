@@ -30,9 +30,7 @@ func main() {
 	reg := registry.New()
 
 	for name, modelCfg := range cfg.Models {
-		if modelCfg.Preload {
-			log.Printf("preloading model %q (dim=%d, max_length=%d)...", name, modelCfg.Dim, modelCfg.MaxLength)
-		}
+		log.Printf("registering model %q", name)
 		entry, err := registry.LoadModel(modelCfg, name)
 		if err != nil {
 			log.Fatalf("loading model %q: %v", name, err)
