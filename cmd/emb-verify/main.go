@@ -9,10 +9,10 @@ import (
 )
 
 type ReferenceData struct {
-	Model       string      `json:"model"`
-	Dim         int         `json:"dim"`
-	Sentences   []string    `json:"sentences"`
-	Embeddings  [][]float64 `json:"embeddings"`
+	Model      string      `json:"model"`
+	Dim        int         `json:"dim"`
+	Sentences  []string    `json:"sentences"`
+	Embeddings [][]float64 `json:"embeddings"`
 }
 
 func main() {

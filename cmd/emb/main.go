@@ -30,13 +30,14 @@ func main() {
 	reg := registry.New()
 
 	for name, modelCfg := range cfg.Models {
-		log.Printf("loading model %q (dim=%d, max_length=%d)", name, modelCfg.Dim, modelCfg.MaxLength)
+		if modelCfg.Preload {
+			log.Printf("preloading model %q (dim=%d, max_length=%d)...", name, modelCfg.Dim, modelCfg.MaxLength)
+		}
 		entry, err := registry.LoadModel(modelCfg, name)
 		if err != nil {
 			log.Fatalf("loading model %q: %v", name, err)
 		}
 		reg.Add(name, entry)
-		log.Printf("  %s: %d workers ready", name, entry.Pool.NumWorkers())
 	}
 
 	srv := server.New(cfg.Listen, reg)

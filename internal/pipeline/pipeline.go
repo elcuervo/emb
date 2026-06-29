@@ -9,3 +9,9 @@ type Response struct {
 	Embeddings [][]byte
 	Err        error
 }
+
+type Stats struct {
+	Requests   int64
+	AvgLatency float64
+	NumWorkers int
+}

@@ -69,6 +69,18 @@ func (w *Worker) process(texts []string) Response {
 	return Response{Embeddings: embeddings}
 }
 
+func (w *Worker) Requests() int64 {
+	return w.requests.Load()
+}
+
+func (w *Worker) AvgLatency() float64 {
+	r := w.requests.Load()
+	if r == 0 {
+		return 0
+	}
+	return float64(w.totalLat.Load()) / float64(r)
+}
+
 func (w *Worker) Close() error {
 	return w.session.Close()
 }
@@ -97,6 +109,20 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 	result := make(chan Response, 1)
 	w.reqChan <- Request{Texts: texts, Result: result}
 	return <-result, nil
+}
+
+func (p *Pool) Stats() Stats {
+	var totalReqs int64
+	var totalLat int64
+	for _, w := range p.workers {
+		totalReqs += w.Requests()
+		totalLat += w.totalLat.Load()
+	}
+	avg := 0.0
+	if totalReqs > 0 {
+		avg = float64(totalLat) / float64(totalReqs)
+	}
+	return Stats{Requests: totalReqs, AvgLatency: avg, NumWorkers: len(p.workers)}
 }
 
 func (p *Pool) Close() error {

@@ -70,9 +70,9 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		texts[i] = string(arg)
 	}
 
-	entry, ok := s.reg.Get(modelName)
-	if !ok {
-		conn.WriteError(fmt.Sprintf("ERR model '%s' not found", modelName))
+	entry, err := s.reg.GetOrInit(modelName)
+	if err != nil {
+		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
@@ -121,34 +121,47 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	modelName := string(cmd.Args[1])
-	entry, ok := s.reg.Get(modelName)
-	if !ok {
-		conn.WriteError(fmt.Sprintf("ERR model '%s' not found", modelName))
+	entry, err := s.reg.GetOrInit(modelName)
+	if err != nil {
+		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
-	pool := entry.Pool
+	stats := entry.Pool.Stats()
 
-	conn.WriteArray(6)
+	conn.WriteArray(8)
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
 	conn.WriteBulkString("workers")
-	conn.WriteInt(pool.NumWorkers())
+	conn.WriteInt(stats.NumWorkers)
 	conn.WriteBulkString("requests")
-	conn.WriteInt(0)
+	conn.WriteInt(int(stats.Requests))
+	conn.WriteBulkString("avg_latency_us")
+	conn.WriteInt(int(stats.AvgLatency))
 }
 
 func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	models := s.reg.List()
 	uptime := int(time.Since(s.started).Seconds())
 
-	conn.WriteArray(6)
+	var perModel []string
+	for _, m := range models {
+		reqs := int64(0)
+		if m.Pool != nil {
+			reqs = m.Pool.Stats().Requests
+		}
+		perModel = append(perModel, fmt.Sprintf("%s:%d", m.Name, reqs))
+	}
+
+	conn.WriteArray(8)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
 	conn.WriteInt(int(s.total.Load()))
 	conn.WriteBulkString("models_loaded")
 	conn.WriteInt(len(models))
+	conn.WriteBulkString("per_model")
+	conn.WriteBulkString(strings.Join(perModel, " "))
 }
 
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {

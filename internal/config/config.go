@@ -20,6 +20,8 @@ type ModelConfig struct {
 	Normalize bool   `yaml:"normalize"`
 	MaxLength int    `yaml:"max_length"`
 	Dim       int    `yaml:"dim"`
+	Preload   bool   `yaml:"preload"`
+	Workers   int    `yaml:"workers"`
 }
 
 func Load(path string) (*Config, error) {

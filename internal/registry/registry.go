@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
@@ -19,6 +22,11 @@ type ModelEntry struct {
 	Pool *pipeline.Pool
 	Dim  int
 	Name string
+
+	once    sync.Once
+	cfg     config.ModelConfig
+	loaded  atomic.Bool
+	loadErr error
 }
 
 type Registry struct {
@@ -30,6 +38,79 @@ func New() *Registry {
 	return &Registry{
 		models: make(map[string]*ModelEntry),
 	}
+}
+
+func totalSystemMemory() uint64 {
+	val, err := unix.SysctlUint64("hw.memsize")
+	if err != nil {
+		return 0
+	}
+	return val
+}
+
+func autoTuneWorkers(modelPath string, maxWorkers int) int {
+	maxCores := runtime.GOMAXPROCS(0)
+	if maxWorkers > 0 && maxWorkers < maxCores {
+		maxCores = maxWorkers
+	}
+	mem := totalSystemMemory()
+	if mem == 0 {
+		return maxCores
+	}
+	info, err := os.Stat(modelPath)
+	if err != nil {
+		return maxCores
+	}
+	modelSize := uint64(info.Size())
+	perSession := modelSize + modelSize/5 // +20% overhead
+	availMem := mem / 2
+	byMem := int(availMem / perSession)
+	if byMem < 1 {
+		byMem = 1
+	}
+	if byMem > maxCores {
+		byMem = maxCores
+	}
+	return byMem
+}
+
+func (e *ModelEntry) ensurePool() error {
+	if e.loaded.Load() {
+		return nil
+	}
+
+	log.Printf("  loading model %q (dim=%d, max_length=%d)...", e.Name, e.cfg.Dim, e.cfg.MaxLength)
+
+	cfg := e.cfg
+	tok, err := tokenizer.NewHFTokenizer(cfg.Tokenizer)
+	if err != nil {
+		return fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
+	}
+
+	numWorkers := cfg.Workers
+	if numWorkers <= 0 {
+		numWorkers = autoTuneWorkers(cfg.ONNX, 0)
+	}
+
+	sessionFactory := func() (onnx.Session, error) {
+		return onnx.NewRuntimeSession(
+			cfg.ONNX,
+			[]string{"input_ids", "attention_mask", "token_type_ids"},
+			[]string{"last_hidden_state"},
+			cfg.Dim,
+		)
+	}
+
+	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize)
+	if err != nil {
+		tok.Close()
+		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
+	}
+
+	e.Pool = pool
+	e.loaded.Store(true)
+	log.Printf("  %s: %d workers ready (detected dim=%d)", e.Name, numWorkers, cfg.Dim)
+	return nil
 }
 
 func downloadModel(cfg *config.ModelConfig, name string) error {
@@ -93,33 +174,39 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 		return nil, fmt.Errorf("validating model %q: %w", name, err)
 	}
 
-	tok, err := tokenizer.NewHFTokenizer(cfg.Tokenizer)
-	if err != nil {
-		return nil, fmt.Errorf("loading tokenizer for %q: %w", name, err)
-	}
-
-	numWorkers := runtime.GOMAXPROCS(0)
-
-	sessionFactory := func() (onnx.Session, error) {
-		return onnx.NewRuntimeSession(
-			cfg.ONNX,
-			[]string{"input_ids", "attention_mask", "token_type_ids"},
-			[]string{"last_hidden_state"},
-			cfg.Dim,
-		)
-	}
-
-	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize)
-	if err != nil {
-		tok.Close()
-		return nil, fmt.Errorf("creating pool for %q: %w", name, err)
-	}
-
-	return &ModelEntry{
-		Pool: pool,
-		Dim:  cfg.Dim,
+	entry := &ModelEntry{
 		Name: name,
-	}, nil
+		Dim:  cfg.Dim,
+		cfg:  cfg,
+	}
+
+	if cfg.Preload {
+		log.Printf("  preloading model %q...", name)
+		if err := entry.ensurePool(); err != nil {
+			return nil, err
+		}
+	}
+
+	return entry, nil
+}
+
+func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
+	r.mu.RLock()
+	entry, ok := r.models[name]
+	r.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("model '%s' not found", name)
+	}
+
+	if entry.Pool == nil {
+		entry.once.Do(func() {
+			entry.loadErr = entry.ensurePool()
+		})
+		if entry.loadErr != nil {
+			return nil, entry.loadErr
+		}
+	}
+	return entry, nil
 }
 
 func (r *Registry) Add(name string, entry *ModelEntry) {
