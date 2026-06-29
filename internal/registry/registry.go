@@ -2,6 +2,10 @@ package registry
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -12,9 +16,9 @@ import (
 )
 
 type ModelEntry struct {
-	Pool  *pipeline.Pool
-	Dim   int
-	Name  string
+	Pool *pipeline.Pool
+	Dim  int
+	Name string
 }
 
 type Registry struct {
@@ -28,7 +32,35 @@ func New() *Registry {
 	}
 }
 
+func downloadModel(cfg *config.ModelConfig, name string) error {
+	dir := filepath.Dir(cfg.ONNX)
+	if cfg.ONNX == "" {
+		dir = filepath.Join("models", name)
+		cfg.ONNX = filepath.Join(dir, "model.onnx")
+		cfg.Tokenizer = filepath.Join(dir, "tokenizer.json")
+	}
+	if _, err := os.Stat(cfg.ONNX); err == nil {
+		return nil
+	}
+	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
+	os.MkdirAll(dir, 0755)
+	cmd := exec.Command("optimum-cli", "export", "onnx", "--model", cfg.ModelRepo, dir)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("downloading %s: %w", cfg.ModelRepo, err)
+	}
+	log.Printf("  downloaded %s to %s", name, dir)
+	return nil
+}
+
 func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
+	if cfg.ModelRepo != "" {
+		if err := downloadModel(&cfg, name); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validating model %q: %w", name, err)
 	}

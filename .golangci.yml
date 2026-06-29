@@ -1,0 +1,25 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -SA1019
+        - -SA1029
+  exclusions:
+    presets:
+      - comments
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/elcuervo/emb

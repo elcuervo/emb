@@ -31,6 +31,8 @@
           buildInputs = with pkgs; [
             go
             gopls
+            golangci-lint
+            just
             onnxruntime
             python3
             redis
@@ -42,17 +44,6 @@
             export C_INCLUDE_PATH="${onnxruntime}/include/onnxruntime:$C_INCLUDE_PATH"
             export LIBRARY_PATH="${onnxruntime}/lib:$LIBRARY_PATH"
             export DYLD_LIBRARY_PATH="${onnxruntime}/lib:$DYLD_LIBRARY_PATH"
-            export PATH="$PWD/scripts:$PATH"
-          '';
-        };
-
-        devShells.model-setup = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            python3
-          ];
-
-          shellHook = ''
-            export PATH="$PWD/scripts:$PATH"
           '';
         };
       });

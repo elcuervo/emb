@@ -250,26 +250,26 @@ func BenchmarkRESP(b *testing.B) {
 }
 
 func BenchmarkPoolEmbed(b *testing.B) {
-		pool, err := pipeline.NewPool(
-			func() (onnx.Session, error) { return &mockSession{}, nil },
-			mockTokenizer{},
-			4, 4, 128, true,
-		)
-		if err != nil {
-			b.Fatal(err)
-		}
-		defer pool.Close()
-	
-		b.ResetTimer()
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				resp, err := pool.Embed([]string{"hello world"})
-				if err != nil {
-					b.Fatal(err)
-				}
-				if resp.Err != nil {
-					b.Fatal(resp.Err)
-				}
-			}
-		})
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		4, 4, 128, true,
+	)
+	if err != nil {
+		b.Fatal(err)
 	}
+	defer pool.Close()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			resp, err := pool.Embed([]string{"hello world"})
+			if err != nil {
+				b.Fatal(err)
+			}
+			if resp.Err != nil {
+				b.Fatal(resp.Err)
+			}
+		}
+	})
+}

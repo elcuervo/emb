@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	Listen string                `yaml:"listen"`
+	Listen string                 `yaml:"listen"`
 	Models map[string]ModelConfig `yaml:"models"`
 }
 
 type ModelConfig struct {
 	ONNX      string `yaml:"onnx"`
 	Tokenizer string `yaml:"tokenizer"`
+	ModelRepo string `yaml:"model_repo"`
 	Pooling   string `yaml:"pooling"`
 	Normalize bool   `yaml:"normalize"`
 	MaxLength int    `yaml:"max_length"`
@@ -43,11 +44,13 @@ func Load(path string) (*Config, error) {
 		if m.MaxLength <= 0 {
 			m.MaxLength = 512
 		}
-		if m.ONNX == "" {
-			return nil, fmt.Errorf("model %q: onnx path is required", name)
-		}
-		if m.Tokenizer == "" {
-			return nil, fmt.Errorf("model %q: tokenizer path is required", name)
+		if m.ModelRepo == "" {
+			if m.ONNX == "" {
+				return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
+			}
+			if m.Tokenizer == "" {
+				return nil, fmt.Errorf("model %q: tokenizer path or model_repo is required", name)
+			}
 		}
 		if m.Dim <= 0 {
 			return nil, fmt.Errorf("model %q: dim must be > 0", name)
@@ -59,6 +62,14 @@ func Load(path string) (*Config, error) {
 }
 
 func (m ModelConfig) Validate() error {
+	if m.ModelRepo != "" {
+		if m.ONNX != "" {
+			if _, err := os.Stat(m.ONNX); err == nil {
+				return nil
+			}
+		}
+		return nil
+	}
 	if _, err := os.Stat(m.ONNX); err != nil {
 		return fmt.Errorf("onnx file %q: %w", m.ONNX, err)
 	}

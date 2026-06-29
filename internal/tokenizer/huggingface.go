@@ -9,10 +9,10 @@ import (
 )
 
 type modelConfig struct {
-	Type      string            `json:"type"`
-	Vocab     map[string]int32  `json:"vocab"`
-	UnkToken  string            `json:"unk_token"`
-	MaxInput  int               `json:"max_input"`
+	Type     string           `json:"type"`
+	Vocab    map[string]int32 `json:"vocab"`
+	UnkToken string           `json:"unk_token"`
+	MaxInput int              `json:"max_input"`
 }
 
 type preTokenizer struct {
@@ -24,29 +24,29 @@ type normalizer struct {
 }
 
 type tokenizerFile struct {
-	Model       modelConfig  `json:"model"`
+	Model        modelConfig  `json:"model"`
 	PreTokenizer preTokenizer `json:"pre_tokenizer"`
-	Normalizer  normalizer   `json:"normalizer"`
-	AddedTokens []addedToken `json:"added_tokens"`
+	Normalizer   normalizer   `json:"normalizer"`
+	AddedTokens  []addedToken `json:"added_tokens"`
 }
 
 type addedToken struct {
-	ID    int32  `json:"id"`
-	Content string `json:"content"`
-	SingleWord bool `json:"single_word"`
-	LStrip bool `json:"lstrip"`
-	RStrip bool `json:"rstrip"`
+	ID         int32  `json:"id"`
+	Content    string `json:"content"`
+	SingleWord bool   `json:"single_word"`
+	LStrip     bool   `json:"lstrip"`
+	RStrip     bool   `json:"rstrip"`
 }
 
 type HFTokenizer struct {
-	vocab       map[string]int32
-	idToToken   map[int32]string
-	unkID       int32
-	clsID       int32
-	sepID       int32
-	padID       int32
-	modelType   string
-	maxLength   int
+	vocab     map[string]int32
+	idToToken map[int32]string
+	unkID     int32
+	clsID     int32
+	sepID     int32
+	padID     int32
+	modelType string
+	maxLength int
 }
 
 func NewHFTokenizer(path string) (*HFTokenizer, error) {
@@ -241,10 +241,8 @@ func (t *HFTokenizer) bpeEncode(word string) []int32 {
 		}
 	}
 
-	for {
-		if len(tokens) <= 1 {
-			break
-		}
+	for len(tokens) > 1 {
+
 		bestPair := ""
 		bestScore := -1
 		for i := 0; i < len(tokens)-1; i++ {
