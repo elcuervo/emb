@@ -8,7 +8,9 @@ type Encoding struct {
 func PadEncodings(encs []Encoding) (inputIDs []int64, attnMask []int64, seqLen int) {
 	maxLen := 0
 	for _, enc := range encs {
-		maxLen = max(maxLen, len(enc.InputIDs))
+		if len(enc.InputIDs) > maxLen {
+			maxLen = len(enc.InputIDs)
+		}
 	}
 
 	batchSize := len(encs)

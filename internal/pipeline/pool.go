@@ -95,10 +95,21 @@ func (w *Worker) Close() error {
 
 type Pool struct {
 	workers []*Worker
+	batcher *Batcher
 	next    atomic.Uint64
 }
 
-func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string) (*Pool, error) {
+func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string, timeoutMS, maxBatch int) (*Pool, error) {
+	if timeoutMS > 0 {
+		sess, err := sessionFactory()
+		if err != nil {
+			return nil, fmt.Errorf("creating batcher session: %w", err)
+		}
+		return &Pool{
+			batcher: NewBatcher(sess, tok, dim, maxLen, normalize, pooling, timeoutMS, maxBatch),
+		}, nil
+	}
+
 	workers := make([]*Worker, numWorkers)
 	for i := range numWorkers {
 		sess, err := sessionFactory()
@@ -111,6 +122,9 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 }
 
 func (p *Pool) Embed(texts []string) (Response, error) {
+	if p.batcher != nil {
+		return p.batcher.Embed(texts)
+	}
 	idx := p.next.Add(1) - 1
 	w := p.workers[idx%uint64(len(p.workers))]
 
@@ -120,6 +134,13 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 }
 
 func (p *Pool) Stats() Stats {
+	if p.batcher != nil {
+		return Stats{
+			Requests:   p.batcher.Requests(),
+			AvgLatency: p.batcher.AvgLatency(),
+			NumWorkers: 1,
+		}
+	}
 	var totalReqs int64
 	var totalLat int64
 	for _, w := range p.workers {
@@ -134,6 +155,9 @@ func (p *Pool) Stats() Stats {
 }
 
 func (p *Pool) Close() error {
+	if p.batcher != nil {
+		return p.batcher.Close()
+	}
 	for _, w := range p.workers {
 		w.Close()
 	}

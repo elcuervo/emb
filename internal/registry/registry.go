@@ -110,7 +110,7 @@ func (e *ModelEntry) ensurePool() error {
 		)
 	}
 
-	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling)
+	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, cfg.Batching.Timeout, cfg.Batching.MaxBatch)
 	if err != nil {
 		tok.Close()
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
@@ -118,7 +118,13 @@ func (e *ModelEntry) ensurePool() error {
 
 	e.Pool = pool
 	e.loaded.Store(true)
-	log.Printf("  %s: %d workers ready (detected dim=%d)", e.Name, numWorkers, cfg.Dim)
+	workers := numWorkers
+	batchInfo := ""
+	if cfg.Batching.Timeout > 0 {
+		batchInfo = fmt.Sprintf(", batching=%dms/%d", cfg.Batching.Timeout, cfg.Batching.MaxBatch)
+		workers = 1
+	}
+	log.Printf("  %s: %d workers ready (detected dim=%d%s)", e.Name, workers, cfg.Dim, batchInfo)
 	return nil
 }
 
@@ -163,6 +169,12 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	}
 	if cfg.OutputTensor == "" {
 		cfg.OutputTensor = "last_hidden_state"
+	}
+	if cfg.Batching.Timeout <= 0 {
+		cfg.Batching.Timeout = 1
+	}
+	if cfg.Batching.MaxBatch <= 0 {
+		cfg.Batching.MaxBatch = 32
 	}
 	return nil
 }
