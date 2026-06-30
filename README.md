@@ -10,6 +10,33 @@ redis-cli EMB minilm "hello world"
 → \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
 ```
 
+## Install
+
+```bash
+curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | sh
+```
+
+Installs to `/usr/local/bin`. Set `EMB_INSTALL_DIR` to change the target:
+
+```bash
+curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | EMB_INSTALL_DIR=~/.local/bin sh
+```
+
+**Platforms:** macOS (Apple Silicon), Linux (amd64, arm64).
+
+## Quick start
+
+```bash
+# Auto-downloads a model from HuggingFace and starts the server
+emb -model-repo Xenova/all-MiniLM-L6-v2
+
+# In another terminal:
+redis-cli EMB model "hello world"
+```
+redis-cli EMB minilm "hello world"
+→ \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
+```
+
 ## Features
 
 - **Redis protocol**: any Redis client works (`redis-cli`, `redis-py`, `redis-rb`, etc.)
