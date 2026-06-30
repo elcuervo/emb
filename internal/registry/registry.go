@@ -72,7 +72,7 @@ func (e *ModelEntry) ensurePool() error {
 	log.Printf("  loading model %q (dim=%d, max_length=%d)...", e.Name, e.cfg.Dim, e.cfg.MaxLength)
 
 	cfg := e.cfg
-	tok, err := tokenizer.NewHFTokenizer(cfg.Tokenizer)
+	tok, err := tokenizer.NewTokenizer(cfg.Tokenizer)
 	if err != nil {
 		return fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
 	}

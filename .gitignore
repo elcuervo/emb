@@ -1,5 +1,6 @@
 models/
 bin/
+lib/
 benchmark-baseline.txt
 benchmark-responsetime.txt
 reference-embeddings.json

@@ -2,6 +2,7 @@ default:
     @just --list
 
 ort_lib := `echo "${DYLD_LIBRARY_PATH:-}" | grep -o '/nix/store/[^:]*onnxruntime[^:]*/lib' | head -1`
+libtokenizers_dir := "./lib/libtokenizers"
 
 # Format all Go code with golangci-lint (gofmt + goimports)
 format:
@@ -25,13 +26,37 @@ baseline:
     go test -bench=. -benchmem ./... | tee benchmark-baseline.txt
 
 # Build the emb binary
-build:
+build: download-libtokenizers
     @mkdir -p bin
-    CGO_ENABLED=1 go build -o ./bin/emb ./cmd/emb
+    CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build -o ./bin/emb ./cmd/emb
 
 # Build and run the server
 dev: build
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml
+
+# Download libtokenizers.a for the current platform
+# Uses the pre-built release from daulet/tokenizers
+libtokenizers-version := "v1.27.0"
+
+download-libtokenizers:
+    @mkdir -p {{libtokenizers_dir}}; \
+    if [ -f {{libtokenizers_dir}}/libtokenizers.a ]; then \
+        echo "✓ libtokenizers.a already exists"; \
+        exit 0; \
+    fi; \
+    echo "Downloading libtokenizers.a ({{libtokenizers-version}})..." && \
+    case "$$(uname -s),$$(uname -m)" in \
+        Darwin,arm64)  ARCH="darwin-arm64" ;; \
+        Darwin,x86_64) ARCH="darwin-x86_64" ;; \
+        Linux,aarch64) ARCH="linux-aarch64" ;; \
+        Linux,x86_64)  ARCH="linux-x86_64" ;; \
+        *) echo "unsupported platform: $$(uname -s)-$$(uname -m)"; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/daulet/tokenizers/releases/download/{{libtokenizers-version}}/libtokenizers.$${ARCH}.tar.gz" \
+      -o /tmp/libtokenizers.tar.gz && \
+    tar xzf /tmp/libtokenizers.tar.gz -C {{libtokenizers_dir}} && \
+    rm /tmp/libtokenizers.tar.gz && \
+    echo "✓ Downloaded libtokenizers.a ($$ARCH)"
 
 # Download a model from HuggingFace
 # Usage: just download-model [huggingface_repo] [output_dir]

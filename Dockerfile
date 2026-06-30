@@ -16,6 +16,18 @@ RUN set -eux; \
     rm /tmp/onnx.tgz; \
     ls /opt/onnxruntime-linux-${ORT_ARCH}-1.27.0/lib/
 
+# Install libtokenizers pre-built static library (same arch mapping as ONNX)
+RUN set -eux; \
+    case ${TARGETARCH} in \
+      amd64) LT_ARCH=linux-x86_64 ;; \
+      arm64) LT_ARCH=linux-aarch64 ;; \
+    esac; \
+    curl -fsSL "https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.${LT_ARCH}.tar.gz" \
+      -o /tmp/libtokenizers.tgz; \
+    mkdir -p /opt/libtokenizers; \
+    tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers; \
+    rm /tmp/libtokenizers.tgz
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -29,7 +41,7 @@ RUN set -eux; \
     ORT_DIR=/opt/onnxruntime-linux-${ORT_ARCH}-1.27.0; \
     CGO_ENABLED=1 \
     CGO_CFLAGS="-I${ORT_DIR}/include" \
-    CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime" \
+    CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime -L/opt/libtokenizers" \
     go build -o /emb ./cmd/emb
 
 # Stage 2: minimal runtime image
