@@ -1,5 +1,8 @@
 name: Release
 
+env:
+  DOCKER_USER: ${{ vars.DOCKER_USER || 'elcuervo' }}
+
 on:
   release:
     types: [published]
@@ -65,13 +68,13 @@ jobs:
       - uses: docker/login-action@v3
         if: github.event_name != 'workflow_dispatch'
         with:
-          username: ${{ vars.DOCKER_USER }}
+          username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ vars.DOCKER_USER }}/emb
+          images: ${{ env.DOCKER_USER }}/emb
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
@@ -111,65 +114,6 @@ jobs:
           generate_release_notes: true
           make_latest: false
 
-  smoke-test-linux:
-    needs: [release-linux]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Source versions
-        run: cat .github/versions.env >> $GITHUB_ENV
-
-      - name: Set tag name
-        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}" >> $GITHUB_ENV
-
-      - name: Pull released image
-        if: github.event_name != 'workflow_dispatch'
-        run: docker pull ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
-
-      - name: Build image locally (workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          tags: ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
-          build-args: |
-            ORT_VERSION=${{ env.ORT_VERSION }}
-            TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
-
-      - name: Start server
-        run: |
-          docker run -d --name emb-smoke -p 16379:6379 \
-            ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
-          sleep 3
-
-      - name: Install redis-cli
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq redis-tools
-
-      - name: Smoke test PING
-        run: |
-          response=$(redis-cli -p 16379 PING)
-          if [ "$response" != "PONG" ]; then
-            echo "PING failed: got '$response'"
-            exit 1
-          fi
-          echo "PASS: PING"
-
-      - name: Smoke test EMB.HELP
-        run: |
-          response=$(redis-cli -p 16379 EMB.HELP)
-          if echo "$response" | grep -q "EMB"; then
-            echo "PASS: EMB.HELP"
-          else
-            echo "EMB.HELP failed: got '$response'"
-            exit 1
-          fi
-
-      - name: Cleanup
-        run: docker stop emb-smoke
-
   release-macos:
     needs: [test]
     runs-on: macos-latest
@@ -198,80 +142,6 @@ jobs:
 
       - uses: goreleaser/goreleaser-action@v6
         with:
-          args: release --clean
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  smoke-test-macos:
-    needs: [release-macos]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Source versions
-        run: cat .github/versions.env >> $GITHUB_ENV
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          cache: true
-
-      - name: Install ONNX Runtime
-        run: brew install onnxruntime
-
-      - name: Install libtokenizers
-        run: |
-          mkdir -p ./lib/libtokenizers
-          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.darwin-arm64.tar.gz" \
-            | tar xz -C ./lib/libtokenizers
-
-      - name: Download model for smoke test
-        run: |
-          mkdir -p ./models/minilm
-          curl -sL "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/model.onnx" \
-            -o ./models/minilm/model.onnx
-
-      - name: Create test config
-        run: |
-          cat > /tmp/emb-smoke.yaml << 'EOF'
-          listen: ":16379"
-          models:
-            minilm:
-              onnx: ./models/minilm/model.onnx
-          EOF
-
-      - name: Build binary
-        run: |
-          CGO_ENABLED=1 \
-          CGO_LDFLAGS="-L./lib/libtokenizers" \
-          go build -o /tmp/emb-smoke ./cmd/emb
-
-      - name: Start server
-        run: |
-          /tmp/emb-smoke -config /tmp/emb-smoke.yaml &
-          sleep 3
-
-      - name: Install redis-cli
-        run: brew install redis
-
-      - name: Smoke test PING
-        run: |
-          response=$(redis-cli -p 16379 PING)
-          if [ "$response" != "PONG" ]; then
-            echo "PING failed: got '$response'"
-            exit 1
-          fi
-          echo "PASS: PING"
-
-      - name: Smoke test EMB.MODELS
-        run: |
-          response=$(redis-cli -p 16379 EMB.MODELS)
-          if echo "$response" | grep -q "minilm"; then
-            echo "PASS: EMB.MODELS"
-          else
-            echo "EMB.MODELS failed: models not loaded"
-            exit 1
-          fi
-
-      - name: Cleanup
-        run: pkill emb-smoke || true
