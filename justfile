@@ -3,6 +3,9 @@ default:
 
 ort_lib := `echo "${DYLD_LIBRARY_PATH:-}" | grep -o '/nix/store/[^:]*onnxruntime[^:]*/lib' | head -1`
 libtokenizers_dir := "./lib/libtokenizers"
+image_tag := `git describe --tags --dirty --always 2>/dev/null || echo "dev"`
+docker_user := "elcuervo"
+image_name := "{{docker_user}}/emb"
 
 # Format all Go code with golangci-lint (gofmt + goimports)
 format:
@@ -25,17 +28,12 @@ bench:
 baseline:
     go test -bench=. -benchmem ./... | tee benchmark-baseline.txt
 
-# Build the emb binary (version from git tag)
-image_tag := `git describe --tags --dirty --always 2>/dev/null || echo "dev"`
-
-build: download-libtokenizers
+build:
     @mkdir -p bin
-    CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build \
-        -ldflags="-X main.version={{image_tag}}" \
-        -o ./bin/emb ./cmd/emb
+    go build -ldflags="-X main.version={{image_tag}}" -o ./bin/emb ./cmd/emb
 
 # Build and run the server
-dev: build
+dev: download-libtokenizers build
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml
 
 # Download libtokenizers.a for the current platform
@@ -122,13 +120,8 @@ verify-emb-multi:
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid /tmp/emb-multi-config.yaml
 
-# Determine image tag from git
-image_tag := `git rev-parse --short HEAD 2>/dev/null || echo "dev"`
-docker_user := "elcuervo"
-image_name := "{{docker_user}}/emb"
-
-# Build multi-arch Docker image (native platform)
-docker-build:
+# Build Docker image (native platform)
+docker:
     @echo "Building {{image_name}}:{{image_tag}} for $(shell uname -m)..."
     docker buildx build \
         --load \
