@@ -11,3 +11,5 @@ reference-embeddings.json
 *~
 .vscode/
 .idea/
+emb
+*.yaml
