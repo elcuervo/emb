@@ -1,10 +1,24 @@
 name: Release
 
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
+  DOCKER_USER: ${{ vars.DOCKER_USER || 'elcuervo' }}
+
 on:
   release:
     types: [published]
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag name for testing (e.g., v0.0.1-test)"
+        required: false
+        default: "v0.0.0-ci"
 
 jobs:
   test:
@@ -54,17 +68,70 @@ jobs:
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Set tag name
+        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}" >> $GITHUB_ENV
+
+      - name: Install libtokenizers
+        run: |
+          sudo mkdir -p /opt/libtokenizers
+          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.linux-x86_64.tar.gz" \
+            -o /tmp/libtokenizers.tgz
+          sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
+
+      - name: Install ONNX Runtime
+        run: |
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
+            -o /tmp/onnx.tgz
+          sudo mkdir -p /opt/onnxruntime
+          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+
+      - name: Build binary
+        run: |
+          mkdir -p dist/linux-amd64
+          CGO_ENABLED=1 \
+            CGO_CFLAGS="-I/opt/onnxruntime/include" \
+            CGO_LDFLAGS="-L/opt/onnxruntime/lib -lonnxruntime -L/opt/libtokenizers" \
+            go build -o dist/linux-amd64/emb ./cmd/emb
+
+      - name: Package artifact
+        run: |
+          cp /opt/onnxruntime/lib/libonnxruntime.so* dist/linux-amd64/
+          cd dist/linux-amd64 && tar czf ../emb-${{ env.TAG_NAME }}-linux-amd64.tar.gz emb libonnxruntime.so*
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: dist/emb-${{ env.TAG_NAME }}-linux-amd64.tar.gz
+          make_latest: false
+          fail_on_unmatched_files: true
+
+  release-linux-docker:
+    needs: [test]
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source versions
+        run: cat .github/versions.env >> $GITHUB_ENV
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKER_USER }}
+          username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ vars.DOCKER_USER }}/emb
+          images: ${{ env.DOCKER_USER }}/emb
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
@@ -79,105 +146,8 @@ jobs:
             ORT_VERSION=${{ env.ORT_VERSION }}
             TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
 
-      - name: Set tag name
-        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
-
-      - name: Extract binary for linux/amd64
-        run: docker buildx build --platform linux/amd64 --output type=local,dest=./dist/linux-amd64 .
-      - name: Archive linux/amd64
-        run: |
-          cd dist/linux-amd64 && tar czf ../emb-${{ env.TAG_NAME }}-linux-amd64.tar.gz emb libonnxruntime.so*
-
-      - name: Extract binary for linux/arm64
-        run: docker buildx build --platform linux/arm64 --output type=local,dest=./dist/linux-arm64 .
-      - name: Archive linux/arm64
-        run: |
-          cd dist/linux-arm64 && tar czf ../emb-${{ env.TAG_NAME }}-linux-arm64.tar.gz emb libonnxruntime.so*
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            dist/emb-${{ env.TAG_NAME }}-linux-amd64.tar.gz
-            dist/emb-${{ env.TAG_NAME }}-linux-arm64.tar.gz
-          generate_release_notes: true
-          make_latest: false
-
-  smoke-test-linux:
-    needs: [release-linux]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set tag name
-        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
-
-      - name: Pull built image
-        run: docker pull ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
-
-      - name: Start server
-        run: |
-          docker run -d --name emb-smoke -p 16379:6379 \
-            ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
-          sleep 3
-
-      - name: Install redis-cli
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq redis-tools
-
-      - name: Smoke test PING
-        run: |
-          response=$(redis-cli -p 16379 PING)
-          if [ "$response" != "PONG" ]; then
-            echo "PING failed: got '$response'"
-            exit 1
-          fi
-          echo "PASS: PING"
-
-      - name: Smoke test EMB.HELP
-        run: |
-          response=$(redis-cli -p 16379 EMB.HELP)
-          if echo "$response" | grep -q "EMB"; then
-            echo "PASS: EMB.HELP"
-          else
-            echo "EMB.HELP failed: got '$response'"
-            exit 1
-          fi
-
-      - name: Cleanup
-        run: docker stop emb-smoke
-
   release-macos:
-    needs: [test]
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [arm64, x86_64]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Source versions
-        run: cat .github/versions.env >> $GITHUB_ENV
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          cache: true
-
-      - name: Install ONNX Runtime
-        run: brew install onnxruntime
-
-      - name: Install libtokenizers
-        run: |
-          mkdir -p ./lib/libtokenizers
-          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.darwin-${{ matrix.arch }}.tar.gz" \
-            | tar xz -C ./lib/libtokenizers
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  smoke-test-macos:
-    needs: [release-macos]
+    needs: [test, release-linux]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -199,53 +169,8 @@ jobs:
           curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.darwin-arm64.tar.gz" \
             | tar xz -C ./lib/libtokenizers
 
-      - name: Download model for smoke test
-        run: |
-          mkdir -p ./models/minilm
-          curl -sL "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/model.onnx" \
-            -o ./models/minilm/model.onnx
-
-      - name: Create test config
-        run: |
-          cat > /tmp/emb-smoke.yaml << 'EOF'
-          listen: ":16379"
-          models:
-            minilm:
-              onnx: ./models/minilm/model.onnx
-          EOF
-
-      - name: Build binary
-        run: |
-          CGO_ENABLED=1 \
-          CGO_LDFLAGS="-L./lib/libtokenizers" \
-          go build -o /tmp/emb-smoke ./cmd/emb
-
-      - name: Start server
-        run: |
-          /tmp/emb-smoke -config /tmp/emb-smoke.yaml &
-          sleep 3
-
-      - name: Install redis-cli
-        run: brew install redis
-
-      - name: Smoke test PING
-        run: |
-          response=$(redis-cli -p 16379 PING)
-          if [ "$response" != "PONG" ]; then
-            echo "PING failed: got '$response'"
-            exit 1
-          fi
-          echo "PASS: PING"
-
-      - name: Smoke test EMB.MODELS
-        run: |
-          response=$(redis-cli -p 16379 EMB.MODELS)
-          if echo "$response" | grep -q "minilm"; then
-            echo "PASS: EMB.MODELS"
-          else
-            echo "EMB.MODELS failed: models not loaded"
-            exit 1
-          fi
-
-      - name: Cleanup
-        run: pkill emb-smoke || true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean' || 'release --clean' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

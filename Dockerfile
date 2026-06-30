@@ -8,7 +8,7 @@ ARG TOKENIZERS_VERSION=v1.27.0
 # Install ONNX Runtime pre-built shared library
 RUN set -eux; \
     case ${TARGETARCH} in \
-      amd64) ORT_ARCH=x86_64 ;; \
+      amd64) ORT_ARCH=x64 ;; \
       arm64) ORT_ARCH=aarch64 ;; \
       *) echo "unsupported arch: ${TARGETARCH}"; exit 1 ;; \
     esac; \
@@ -38,7 +38,7 @@ COPY . .
 
 RUN set -eux; \
     case ${TARGETARCH} in \
-      amd64) ORT_ARCH=x86_64 ;; \
+      amd64) ORT_ARCH=x64 ;; \
       arm64) ORT_ARCH=aarch64 ;; \
     esac; \
     ORT_VER="${ORT_VERSION#v}"; \
