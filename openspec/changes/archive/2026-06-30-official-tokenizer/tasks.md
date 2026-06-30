@@ -32,7 +32,7 @@
 - [x] 5.3 `go test ./...` — all existing tests pass
 - [x] 5.4 `golangci-lint run ./...` — zero issues
 - [x] 5.5 Manual: emb starts, loads minilm model, `EMB.MODELS` returns correct dim=384
-- [ ] 5.6 Run the Ruby PoC (`unsplash-api/tmp/emb-poc/run.sh`) — all cos-sim > 0.9999 (requires siglip2 model + Docker)
+- [x] 5.6 Run the Ruby PoC (`unsplash-api/tmp/emb-poc/run.sh`) — all cos-sim > 0.9999 (requires siglip2 model + Docker)
 - [x] 5.7 Verify with minilm (WordPiece) via `just verify-embeddings` — 20/20 cosine=1.000000
 - [x] 5.8 Docker build: `just docker-build` — builds successfully, libtokenizers downloads and links correctly
 - [x] 5.9 Docker run: `docker run emb-server:latest` — starts, PING responds +PONG, no tokenizer errors

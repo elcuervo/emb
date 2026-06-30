@@ -21,4 +21,4 @@
 - [x] 3.3 `go test ./...` — all pass
 - [x] 3.4 Manual: SIGTERM → "shutting down..." → exit 0, "server stopped" logged
 - [x] 3.5 Docker stop: `docker stop` sends SIGTERM (verified via terminal simulation)
-- [ ] 3.6 Manual: in-flight EMB request completes during shutdown (verify via log timing)
+- [x] 3.6 Manual: in-flight EMB request completes during shutdown (verify via log timing)

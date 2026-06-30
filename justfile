@@ -167,11 +167,6 @@ build-linux archx="linux/amd64":
         --output type=local,dest=./dist/emb_linux_$(shell echo {{archx}} | tr / _) \
         .
 
-# Run GoReleaser snapshot (dry-run, produces dist/ locally)
-release-dry-run:
-    @echo "Running GoReleaser snapshot..."
-    goreleaser release --snapshot --clean
-
 # Clean build artifacts
 clean:
     rm -rf bin/ dist/

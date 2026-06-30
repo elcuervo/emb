@@ -40,6 +40,12 @@ models:
 - **WHEN** server starts with config that omits `preload`
 - **THEN** the model is registered but not loaded until the first EMB request
 
+#### Scenario: Model loads with tokenizer path
+
+- **WHEN** a config specifies `tokenizer: /path/to/tokenizer.json`
+- **THEN** the tokenizer is loaded via `daulet/tokenizers` instead of the hand-rolled implementation
+- **THEN** behavior is identical for all previously supported WordPiece and BPE models
+
 ### Requirement: Model repository download
 
 The `model_repo` field SHALL download pre-converted ONNX models via the HuggingFace Hub HTTP API. The downstream behavior is unchanged: downloaded files are saved to the configured `onnx` path and loaded by the pipeline.
