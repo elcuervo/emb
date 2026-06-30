@@ -120,7 +120,7 @@ verify-emb-multi:
 
 # Determine image tag from git
 image_tag := `git rev-parse --short HEAD 2>/dev/null || echo "dev"`
-image_name := "elcuervo/emb-server"
+image_name := "elcuervo/emb"
 
 # Build multi-arch Docker image (native platform)
 docker-build:
@@ -141,6 +141,19 @@ docker-push:
         -t {{image_name}}:latest \
         .
 
+# Build Linux binaries using Docker builder (extract from builder stage)
+build-linux archx="linux/amd64":
+    @echo "Building for {{archx}} using Docker builder..."
+    docker buildx build \
+        --platform {{archx}} \
+        --output type=local,dest=./dist/emb_linux_$(shell echo {{archx}} | tr / _) \
+        .
+
+# Run GoReleaser snapshot (dry-run, produces dist/ locally)
+release-dry-run:
+    @echo "Running GoReleaser snapshot..."
+    goreleaser release --snapshot --clean
+
 # Clean build artifacts
 clean:
-    rm -rf bin/
+    rm -rf bin/ dist/

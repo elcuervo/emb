@@ -1,0 +1,52 @@
+project_name: emb
+
+env:
+  - GO111MODULE=on
+
+builds:
+  - id: emb
+    main: ./cmd/emb
+    binary: emb
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=1
+      - CGO_CFLAGS=-I/opt/homebrew/opt/onnxruntime/include
+      - CGO_LDFLAGS=-L/opt/homebrew/opt/onnxruntime/lib -lonnxruntime -L./lib/libtokenizers
+    hooks:
+      pre:
+        - cmd: sh -c "test -f ./lib/libtokenizers/libtokenizers.a || (mkdir -p ./lib/libtokenizers && curl -fsSL https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.darwin-{{ .Arch }}.tar.gz | tar xz -C ./lib/libtokenizers)"
+
+archives:
+  - id: emb
+    builds:
+      - emb
+    formats: ["tar.gz"]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^merge:"
+
+release:
+  github:
+    owner: elcuervo
+    name: emb
+  prerelease: auto
