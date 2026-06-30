@@ -1,5 +1,7 @@
 # emb
 
+![](https://images.unsplash.com/photo-1625768376503-68d2495d78c5?q=80&w=2225&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)
+
 ```
 redis-cli EMB minilm "hello world"
 → \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
@@ -200,7 +202,7 @@ just docker-build
 just docker-push
 
 # Run with a model mounted:
-docker run -v ./models:/models elcuervo/emb-server \
+docker run -v ./models:/models elcuervo/emb \
   -config /models/config.yaml
 ```
 
