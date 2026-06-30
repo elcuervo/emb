@@ -19,6 +19,28 @@ redis-cli EMB minilm "hello world"
 
 ## Quick start
 
+### One-liner (no config file)
+
+```bash
+# Auto-downloads a model from HuggingFace and starts the server
+emb -model-repo Xenova/all-MiniLM-L6-v2
+
+# In another terminal:
+redis-cli EMB model "hello world"
+```
+
+### Two models inline
+
+```bash
+emb \
+  -model minilm -model-onnx ./models/minilm/model.onnx -model-tokenizer ./models/minilm/tokenizer.json \
+  -model bge   -model-repo Xenova/bge-small-en-v1.5
+
+redis-cli EMB.MULTI minilm "hello" bge "world"
+```
+
+### Local development (with config file)
+
 ```bash
 # Download a model from HuggingFace
 just download-model

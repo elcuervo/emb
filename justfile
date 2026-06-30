@@ -25,10 +25,14 @@ bench:
 baseline:
     go test -bench=. -benchmem ./... | tee benchmark-baseline.txt
 
-# Build the emb binary
+# Build the emb binary (version from git tag)
+image_tag := `git describe --tags --dirty --always 2>/dev/null || echo "dev"`
+
 build: download-libtokenizers
     @mkdir -p bin
-    CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build -o ./bin/emb ./cmd/emb
+    CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build \
+        -ldflags="-X main.version={{image_tag}}" \
+        -o ./bin/emb ./cmd/emb
 
 # Build and run the server
 dev: build

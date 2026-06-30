@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -15,24 +15,26 @@ import (
 	"github.com/elcuervo/emb/internal/server"
 )
 
-func main() {
-	configPath := flag.String("config", "config.yaml", "path to config file")
-	ortLib := flag.String("ort-lib", "", "path to ONNX Runtime shared library")
-	flag.Parse()
+var version = "dev"
 
-	if err := onnx.InitEnvironment(*ortLib); err != nil {
+func main() {
+	fc, err := config.ParseFlags(os.Args[1:])
+	if err != nil {
+		if err.Error() == "__version__" {
+			fmt.Println(version)
+			os.Exit(0)
+		}
+		log.Fatalf("parsing flags: %v", err)
+	}
+
+	if err := onnx.InitEnvironment(fc.OrtLib); err != nil {
 		log.Fatalf("initializing ONNX Runtime: %v", err)
 	}
 	defer onnx.DestroyEnvironment()
 
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("loading config: %v", err)
-	}
-
 	reg := registry.New()
 
-	for name, modelCfg := range cfg.Models {
+	for name, modelCfg := range fc.Models {
 		log.Printf("registering model %q", name)
 		entry, err := registry.LoadModel(modelCfg, name)
 		if err != nil {
@@ -41,7 +43,7 @@ func main() {
 		reg.Add(name, entry)
 	}
 
-	srv := server.New(cfg.Listen, reg)
+	srv := server.New(fc.Listen, reg)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

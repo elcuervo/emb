@@ -11,6 +11,8 @@ builds:
       - darwin
     goarch:
       - arm64
+    ldflags:
+      - -X main.version={{.Version}}
     env:
       - CGO_ENABLED=1
       - CGO_CFLAGS=-I/opt/homebrew/opt/onnxruntime/include

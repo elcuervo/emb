@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,8 +15,8 @@ type Config struct {
 }
 
 type BatchingConfig struct {
-	Timeout  int `yaml:"timeout"`   // ms to wait before flush (0 = disable)
-	MaxBatch int `yaml:"max_batch"` // max texts per batch
+	Timeout  int `yaml:"timeout"`
+	MaxBatch int `yaml:"max_batch"`
 }
 
 type ModelConfig struct {
@@ -57,6 +59,111 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+type FlagConfig struct {
+	Config
+	OrtLib string
+}
+
+func ParseFlags(args []string) (*FlagConfig, error) {
+	fc := &FlagConfig{
+		Config: Config{
+			Listen: ":6379",
+			Models: make(map[string]ModelConfig),
+		},
+	}
+	var currentModel string
+	hasModel := false
+	hasConfig := false
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		switch {
+		case arg == "-listen" && i+1 < len(args):
+			i++
+			fc.Listen = args[i]
+
+		case arg == "-config" && i+1 < len(args):
+			i++
+			hasConfig = true
+			cfg, err := Load(args[i])
+			if err != nil {
+				return nil, fmt.Errorf("loading config: %w", err)
+			}
+			fc.Config = *cfg
+			// -config implies models, mark hasModel so the check below passes
+			hasModel = true
+
+		case arg == "-ort-lib" && i+1 < len(args):
+			i++
+			fc.OrtLib = args[i]
+
+		case arg == "-version":
+			return nil, fmt.Errorf("__version__")
+
+		case arg == "-model" && i+1 < len(args):
+			i++
+			currentModel = args[i]
+			fc.Models[currentModel] = ModelConfig{}
+			hasModel = true
+
+		case strings.HasPrefix(arg, "-model-"):
+			if currentModel == "" {
+				currentModel = "model"
+				fc.Models[currentModel] = ModelConfig{}
+			}
+			hasModel = true
+			m := fc.Models[currentModel]
+			val := func() string {
+				if i+1 < len(args) {
+					i++
+					return args[i]
+				}
+				return ""
+			}
+			switch arg {
+			case "-model-onnx":
+				m.ONNX = val()
+			case "-model-repo":
+				m.ModelRepo = val()
+			case "-model-tokenizer":
+				m.Tokenizer = val()
+			case "-pooling":
+				m.Pooling = val()
+			case "-normalize":
+				m.Normalize = true
+			case "-output-tensor":
+				m.OutputTensor = val()
+			case "-pad-output":
+				m.PadOutput = true
+			case "-dim":
+				m.Dim, _ = strconv.Atoi(val())
+			case "-max-length":
+				m.MaxLength, _ = strconv.Atoi(val())
+			case "-workers":
+				m.Workers, _ = strconv.Atoi(val())
+			case "-intra-op-threads":
+				m.IntraOpThreads, _ = strconv.Atoi(val())
+			case "-inter-op-threads":
+				m.InterOpThreads, _ = strconv.Atoi(val())
+			}
+			fc.Models[currentModel] = m
+		}
+	}
+
+	if !hasConfig && !hasModel {
+		return nil, fmt.Errorf("no models configured; use -config, or -model with -model-onnx/-model-repo")
+	}
+
+	for name, m := range fc.Models {
+		if m.ModelRepo == "" && m.ONNX == "" {
+			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
+		}
+	}
+
+	return fc, nil
 }
 
 func (m ModelConfig) Validate() error {
