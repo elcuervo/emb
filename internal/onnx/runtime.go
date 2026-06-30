@@ -127,11 +127,21 @@ func InitEnvironment(libPath string) error {
 		return ort.InitializeEnvironment()
 	}
 	if runtime.GOOS == "darwin" {
-		for _, lib := range []string{"onnxruntime.dylib", "libonnxruntime.dylib"} {
+		names := []string{"onnxruntime.dylib", "libonnxruntime.dylib", "libonnxruntime.1.dylib"}
+		for _, lib := range names {
 			ort.SetSharedLibraryPath(lib)
-			err := ort.InitializeEnvironment()
-			if err == nil {
+			if err := ort.InitializeEnvironment(); err == nil {
 				return nil
+			}
+		}
+		if exe, err := os.Executable(); err == nil {
+			dir := filepath.Dir(exe)
+			for _, lib := range names {
+				p := filepath.Join(dir, lib)
+				ort.SetSharedLibraryPath(p)
+				if err := ort.InitializeEnvironment(); err == nil {
+					return nil
+				}
 			}
 		}
 	}

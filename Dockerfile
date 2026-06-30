@@ -45,8 +45,8 @@ RUN set -eux; \
     ORT_DIR=/opt/onnxruntime-linux-${ORT_ARCH}-${ORT_VER}; \
     CGO_ENABLED=1 \
     CGO_CFLAGS="-I${ORT_DIR}/include" \
-    CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime -L/opt/libtokenizers" \
-    go build -o /emb ./cmd/emb
+    CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime -L/opt/libtokenizers -Wl,-rpath,\$ORIGIN" \
+    go build -ldflags="-X main.version=$(git describe --tags --dirty --always 2>/dev/null || echo dev)" -o /emb ./cmd/emb
 
 # Copy ONNX libs to a version-independent path for the runtime stage
 RUN set -eux; \
