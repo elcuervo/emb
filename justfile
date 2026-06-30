@@ -106,16 +106,6 @@ bench-redis-multi: build
 # Run all redis-benchmark variants (single-threaded + multi-threaded)
 bench-redis: bench-redis-single bench-redis-multi
 
-# Run end-to-end response time benchmark (requires downloaded model on :6379)
-bench-e2e: build
-    @echo "Starting server..."
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
-    sleep 3
-    @echo "Running 50 EMB requests..."
-    CGO_ENABLED=0 go run ./cmd/emb-bench
-    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
-    rm -f /tmp/emb-srv.pid
-
 # Verify embeddings match Python reference (requires downloaded model)
 verify-embeddings: build
     @echo "Generating reference embeddings..."
