@@ -5,6 +5,12 @@ on:
     types: [published]
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag name for testing (e.g., v0.0.1-test)"
+        required: false
+        default: "v0.0.0-ci"
 
 jobs:
   test:
@@ -57,6 +63,7 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
+        if: github.event_name != 'workflow_dispatch'
         with:
           username: ${{ vars.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -73,14 +80,14 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'workflow_dispatch' }}
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             ORT_VERSION=${{ env.ORT_VERSION }}
             TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
 
       - name: Set tag name
-        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
+        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}" >> $GITHUB_ENV
 
       - name: Extract binary for linux/amd64
         run: docker buildx build --platform linux/amd64 --output type=local,dest=./dist/linux-amd64 .
@@ -95,6 +102,7 @@ jobs:
           cd dist/linux-arm64 && tar czf ../emb-${{ env.TAG_NAME }}-linux-arm64.tar.gz emb libonnxruntime.so*
 
       - uses: softprops/action-gh-release@v2
+        if: github.event_name != 'workflow_dispatch'
         with:
           tag_name: ${{ env.TAG_NAME }}
           files: |
@@ -107,11 +115,29 @@ jobs:
     needs: [release-linux]
     runs-on: ubuntu-latest
     steps:
-      - name: Set tag name
-        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
 
-      - name: Pull built image
+      - name: Source versions
+        run: cat .github/versions.env >> $GITHUB_ENV
+
+      - name: Set tag name
+        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}" >> $GITHUB_ENV
+
+      - name: Pull released image
+        if: github.event_name != 'workflow_dispatch'
         run: docker pull ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
+
+      - name: Build image locally (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ${{ vars.DOCKER_USER }}/emb:${{ env.TAG_NAME }}
+          build-args: |
+            ORT_VERSION=${{ env.ORT_VERSION }}
+            TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
 
       - name: Start server
         run: |
