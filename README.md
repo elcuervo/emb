@@ -123,44 +123,6 @@ var vec []float32
 binary.Read(bytes.NewReader(raw), binary.LittleEndian, &vec)
 ```
 
-## Architecture
-
-```
-redis-cli ──RESP──▶ tidwall/redcon ──▶ Model Registry ──▶ Pool
-                                                           │
-                                              ┌────────────┼────────────┐
-                                              ▼            ▼            ▼
-                                         Tokenizer   ONNX Runtime   Pool+Norm
-                                         (pure Go)   (CGo binding)  (mean+L2)
-                                                           │
-                                              ┌────────────┘
-                                              ▼
-                                         Smart Batcher
-                                    (coalesces concurrent
-                                     requests into batches)
-```
-
-- **Concurrency**: goroutine-per-connection, round-robin worker pool per model
-- **Session pooling**: one ONNX session per worker (safe for concurrent use)
-- **Smart batching**: when enabled, concurrent requests are collected for up to `timeout` ms, then run as a single ONNX inference with batch_size = N
-- **Lazy loading**: models load on first request; ONNX metadata and config.json are read upfront for auto-detection
-- **Memory auto-tune**: workers capped to fit within half of available RAM
-- **Auto-download**: `model_repo` triggers a pure-Go HuggingFace download (ONNX file + tokenizer.json + config.json)
-- **Auto-config**: dim, max_length, output tensor, and pooling strategy are detected from the ONNX graph and config.json
-
-## Performance
-
-Microbenchmarks (Apple M1 Pro, all-MiniLM-L6-v2):
-
-| Benchmark | Result |
-|-----------|--------|
-| MeanPool batch=1 | 26µs |
-| L2Normalize dim=768 | 1.5µs |
-| RESP roundtrip | 28µs |
-| Pool embed (parallel) | 656ns |
-| **End-to-end p50** | **1.8ms** |
-| **End-to-end p95** | **4.4ms** |
-
 ## Development
 
 ### Prerequisites
@@ -204,23 +166,3 @@ just docker-push
 # Run with a model mounted:
 docker run -v ./models:/models elcuervo/emb \
   -config /models/config.yaml
-```
-
-### Verifying correctness
-
-```bash
-# End-to-end response time benchmark
-just bench-e2e
-
-# Verify embeddings match Python sentence-transformers reference
-just verify-embeddings
-
-# Verify multi-model EMB.MULTI across different model types
-just verify-emb-multi
-```
-
-The verification tools compare byte-level output against sequential `EMB` calls and Python-generated reference embeddings using cosine similarity.
-
-## License
-
-MIT
