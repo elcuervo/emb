@@ -31,9 +31,6 @@ curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | EMB_INSTALL_DIR
 emb -model-repo Xenova/all-MiniLM-L6-v2
 
 # In another terminal:
-redis-cli EMB model "hello world"
-
-```bash
 redis-cli EMB minilm "hello world"
 → \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
 ```
