@@ -1,3 +1,12 @@
+// DEPRECATED: Use redis-benchmark(1) instead.
+//
+//   brew install redis
+//   redis-benchmark -p 6379 -n 100000 -q -P 512 -c 512 EMB minilm "hello world"
+//
+// redis-benchmark sends RESP commands directly (it accepts positional
+// arguments and formats them via redisFormatCommandArgv). This custom
+// tool only exists for latency-distribution measurements (P50/P95/P99)
+// which redis-benchmark -q does not show.
 package main
 
 import (

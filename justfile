@@ -3,6 +3,7 @@ default:
 
 ort_lib := `echo "${DYLD_LIBRARY_PATH:-}" | grep -o '/nix/store/[^:]*onnxruntime[^:]*/lib' | head -1`
 libtokenizers_dir := "./lib/libtokenizers"
+redis_benchmark := `which redis-benchmark 2>/dev/null || echo ""`
 image_tag := `git describe --tags --dirty --always 2>/dev/null || echo "dev"`
 docker_user := "elcuervo"
 image_name := "{{docker_user}}/emb"
@@ -75,6 +76,35 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     fi
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
+
+# Run redis-benchmark with a single-threaded server
+# Uses 1 client, 1 pipeline, 500 requests (~2s at 280 req/s)
+# Requires: redis-benchmark, downloaded model at ./models/minilm
+bench-redis-single: build
+    @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
+    @echo "Starting server (GOMAXPROCS=1)..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=1 ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    sleep 10
+    @echo "Running: redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"
+    {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid
+
+# Run redis-benchmark with a multi-threaded server
+# Uses 16 clients, 1 pipeline, 2000 requests (~5s at 400 req/s)
+# Requires: redis-benchmark, downloaded model at ./models/minilm
+bench-redis-multi: build
+    @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
+    @echo "Starting server (GOMAXPROCS=0)..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    sleep 10
+    @echo "Running: redis-benchmark -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world"
+    {{redis_benchmark}} -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid
+
+# Run all redis-benchmark variants (single-threaded + multi-threaded)
+bench-redis: bench-redis-single bench-redis-multi
 
 # Run end-to-end response time benchmark (requires downloaded model on :6379)
 bench-e2e: build
