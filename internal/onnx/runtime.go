@@ -18,15 +18,21 @@ type RuntimeSession struct {
 	outputRank   int // 2 (pre-pooled) or 3 (sequence)
 }
 
-func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int) (*RuntimeSession, error) {
+func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int) (*RuntimeSession, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("creating session options: %w", err)
 	}
 	defer opts.Destroy()
 
-	opts.SetIntraOpNumThreads(1)
-	opts.SetInterOpNumThreads(2)
+	if intraOpThreads <= 0 {
+		intraOpThreads = 1
+	}
+	if interOpThreads <= 0 {
+		interOpThreads = 2
+	}
+	opts.SetIntraOpNumThreads(intraOpThreads)
+	opts.SetInterOpNumThreads(interOpThreads)
 	opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll)
 	opts.SetCpuMemArena(true)
 	opts.SetMemPattern(true)

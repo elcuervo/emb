@@ -110,6 +110,8 @@ func (e *ModelEntry) ensurePool() error {
 			[]string{cfg.OutputTensor},
 			cfg.Dim,
 			out.Rank,
+			cfg.IntraOpThreads,
+			cfg.InterOpThreads,
 		)
 	}
 
@@ -225,7 +227,7 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	if cfg.OutputTensor == "" {
 		cfg.OutputTensor = "last_hidden_state"
 	}
-	if cfg.Batching.Timeout <= 0 {
+	if cfg.Batching.Timeout < 0 {
 		cfg.Batching.Timeout = 1
 	}
 	if cfg.Batching.MaxBatch <= 0 {
