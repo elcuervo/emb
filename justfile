@@ -36,7 +36,7 @@ dev: build
 
 # Download libtokenizers.a for the current platform
 # Uses the pre-built release from daulet/tokenizers
-libtokenizers-version := "v1.27.0"
+libtokenizers-version := `grep '^TOKENIZERS_VERSION=' .github/versions.env 2>/dev/null | cut -d= -f2 || echo "v1.27.0"`
 
 download-libtokenizers:
     @mkdir -p {{libtokenizers_dir}}; \
@@ -120,7 +120,8 @@ verify-emb-multi:
 
 # Determine image tag from git
 image_tag := `git rev-parse --short HEAD 2>/dev/null || echo "dev"`
-image_name := "elcuervo/emb"
+docker_user := "elcuervo"
+image_name := "{{docker_user}}/emb"
 
 # Build multi-arch Docker image (native platform)
 docker-build:
