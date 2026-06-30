@@ -56,11 +56,9 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 listen: ":6379"
 
 models:
-  # Standard sentence-transformer (3D output → mean pooled)
   minilm:
     onnx: ./models/minilm/model.onnx
 
-  # Pre-pooled model (2D output, skip mean pooling)
   siglip2:
     onnx: ./models/siglip2/text_model.onnx
     tokenizer: ./models/siglip2/tokenizer.json
