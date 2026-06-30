@@ -110,6 +110,14 @@ emb = raw.unpack("e*")
 # → [0.0123, -0.0456, 0.0789, ...]
 ```
 
+```ruby
+require "redis_client"
+
+redis = RedisClient.new(port: 6379)
+raw = redis.call("EMB", "minilm", "hello world")
+emb = raw.unpack("e*")
+```
+
 **Python:**
 ```python
 import struct
