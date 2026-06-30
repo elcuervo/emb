@@ -90,6 +90,7 @@ models:
 | `normalize` | `false` | L2-normalize the output |
 | `output_tensor` | auto-detected | ONNX output tensor name |
 | `preload` | `false` | Load model at startup instead of on first request |
+| `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
 | `workers` | auto-tuned | Number of worker goroutines |
 | `batching` | `{timeout: 1, max_batch: 32}` | Smart batching settings (set `timeout: 0` to disable) |
 

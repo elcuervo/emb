@@ -28,6 +28,7 @@ type ModelConfig struct {
 	Preload      bool           `yaml:"preload"`
 	Workers      int            `yaml:"workers"`
 	OutputTensor string         `yaml:"output_tensor"`
+	PadOutput    bool           `yaml:"pad_output"`
 	Batching     BatchingConfig `yaml:"batching"`
 }
 
