@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,11 +16,14 @@ import (
 )
 
 type Server struct {
-	reg     *registry.Registry
-	srv     *redcon.Server
-	started time.Time
-	total   atomic.Int64
-	addr    string
+	reg          *registry.Registry
+	srv          *redcon.Server
+	ln           net.Listener
+	active       sync.WaitGroup
+	shuttingDown atomic.Bool
+	started      time.Time
+	total        atomic.Int64
+	addr         string
 }
 
 func New(addr string, reg *registry.Registry) *Server {
@@ -46,8 +51,35 @@ func New(addr string, reg *registry.Registry) *Server {
 }
 
 func (s *Server) ListenAndServe() error {
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return fmt.Errorf("listening on %s: %w", s.addr, err)
+	}
+	s.ln = ln
 	log.Printf("emb listening on %s", s.addr)
-	return s.srv.ListenAndServe()
+	return s.srv.Serve(ln)
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.shuttingDown.Store(true)
+
+	if s.ln != nil {
+		s.ln.Close()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		s.active.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		log.Printf("shutdown timeout after %v", ctx.Err())
+	}
+
+	return s.srv.Close()
 }
 
 func (s *Server) Close() error {
@@ -59,10 +91,18 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
+	if s.shuttingDown.Load() {
+		conn.WriteError("ERR server shutting down")
+		return
+	}
+
 	if len(cmd.Args) < 3 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB' command")
 		return
 	}
+
+	s.active.Add(1)
+	defer s.active.Done()
 
 	modelName := string(cmd.Args[1])
 	texts := make([]string, len(cmd.Args)-2)
@@ -165,11 +205,19 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
+	if s.shuttingDown.Load() {
+		conn.WriteError("ERR server shutting down")
+		return
+	}
+
 	pairs := cmd.Args[1:]
 	if len(pairs) < 2 || len(pairs)%2 != 0 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.MULTI' command")
 		return
 	}
+
+	s.active.Add(1)
+	defer s.active.Done()
 
 	n := len(pairs) / 2
 	results := make([][]byte, n)
