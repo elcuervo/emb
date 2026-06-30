@@ -19,6 +19,8 @@ type Worker struct {
 	pooling   string
 	requests  atomic.Int64
 	totalLat  atomic.Int64
+	tokens    atomic.Int64
+	errors    atomic.Int64
 }
 
 func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, normalize bool, pooling string) *Worker {
@@ -49,31 +51,12 @@ func (w *Worker) run() {
 }
 
 func (w *Worker) process(texts []string) Response {
-	encs := make([]Encoding, len(texts))
-	for i, text := range texts {
-		ids, mask, err := w.tokenizer.Encode(text, w.maxLen)
-		if err != nil {
-			return Response{Err: fmt.Errorf("tokenizing text %d: %w", i, err)}
-		}
-		encs[i] = Encoding{InputIDs: ids, AttentionMask: mask}
-	}
-
-	inputIDs, attnMask, seqLen := PadEncodings(encs)
-	batchSize := len(texts)
-
-	hidden, err := w.session.Run(inputIDs, attnMask, batchSize, seqLen, w.dim)
+	embeddings, totalTokens, err := processBatch(w.session, w.tokenizer, texts, w.dim, w.maxLen, w.normalize, w.pooling)
+	w.tokens.Add(int64(totalTokens))
 	if err != nil {
-		return Response{Err: fmt.Errorf("inference: %w", err)}
+		w.errors.Add(1)
+		return Response{Err: err}
 	}
-
-	var embeddings [][]byte
-	switch w.pooling {
-	case "none":
-		embeddings = ExtractPrePooled(hidden, batchSize, w.dim, w.normalize)
-	default:
-		embeddings = MeanPoolAndNormalize(hidden, attnMask, w.dim, seqLen, batchSize, w.normalize)
-	}
-
 	return Response{Embeddings: embeddings}
 }
 
@@ -89,14 +72,25 @@ func (w *Worker) AvgLatency() float64 {
 	return float64(w.totalLat.Load()) / float64(r)
 }
 
+func (w *Worker) Tokens() int64 {
+	return w.tokens.Load()
+}
+
+func (w *Worker) Errors() int64 {
+	return w.errors.Load()
+}
+
 func (w *Worker) Close() error {
 	return w.session.Close()
 }
 
 type Pool struct {
-	workers []*Worker
-	batcher *Batcher
-	next    atomic.Uint64
+	workers   []*Worker
+	batcher   *Batcher
+	next      atomic.Uint64
+	pooling   string
+	normalize bool
+	maxLen    int
 }
 
 func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string, timeoutMS, maxBatch int) (*Pool, error) {
@@ -106,7 +100,10 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 			return nil, fmt.Errorf("creating batcher session: %w", err)
 		}
 		return &Pool{
-			batcher: NewBatcher(sess, tok, dim, maxLen, normalize, pooling, timeoutMS, maxBatch),
+			batcher:   NewBatcher(sess, tok, dim, maxLen, normalize, pooling, timeoutMS, maxBatch),
+			pooling:   pooling,
+			normalize: normalize,
+			maxLen:    maxLen,
 		}, nil
 	}
 
@@ -118,7 +115,12 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 		}
 		workers[i] = NewWorker(sess, tok, dim, maxLen, normalize, pooling)
 	}
-	return &Pool{workers: workers}, nil
+	return &Pool{
+		workers:   workers,
+		pooling:   pooling,
+		normalize: normalize,
+		maxLen:    maxLen,
+	}, nil
 }
 
 func (p *Pool) Embed(texts []string) (Response, error) {
@@ -136,22 +138,42 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 func (p *Pool) Stats() Stats {
 	if p.batcher != nil {
 		return Stats{
-			Requests:   p.batcher.Requests(),
-			AvgLatency: p.batcher.AvgLatency(),
-			NumWorkers: 1,
+			Requests:         p.batcher.Requests(),
+			AvgLatency:       p.batcher.AvgLatency(),
+			NumWorkers:       1,
+			Tokens:           p.batcher.Tokens(),
+			Errors:           p.batcher.Errors(),
+			Pooling:          p.pooling,
+			Normalize:        p.normalize,
+			MaxLen:           p.maxLen,
+			BatchingTimeout:  int(p.batcher.timeout.Milliseconds()),
+			BatchingMaxBatch: p.batcher.maxBatch,
 		}
 	}
 	var totalReqs int64
 	var totalLat int64
+	var totalTokens int64
+	var totalErrors int64
 	for _, w := range p.workers {
 		totalReqs += w.Requests()
 		totalLat += w.totalLat.Load()
+		totalTokens += w.Tokens()
+		totalErrors += w.Errors()
 	}
 	avg := 0.0
 	if totalReqs > 0 {
 		avg = float64(totalLat) / float64(totalReqs)
 	}
-	return Stats{Requests: totalReqs, AvgLatency: avg, NumWorkers: len(p.workers)}
+	return Stats{
+		Requests:   totalReqs,
+		AvgLatency: avg,
+		NumWorkers: len(p.workers),
+		Tokens:     totalTokens,
+		Errors:     totalErrors,
+		Pooling:    p.pooling,
+		Normalize:  p.normalize,
+		MaxLen:     p.maxLen,
+	}
 }
 
 func (p *Pool) Close() error {

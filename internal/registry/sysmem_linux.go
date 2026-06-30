@@ -2,7 +2,11 @@
 
 package registry
 
-import "golang.org/x/sys/unix"
+import (
+	"runtime"
+
+	"golang.org/x/sys/unix"
+)
 
 func totalSystemMemory() uint64 {
 	var info unix.Sysinfo_t
@@ -10,4 +14,10 @@ func totalSystemMemory() uint64 {
 		return 0
 	}
 	return uint64(info.Totalram) * uint64(info.Unit)
+}
+
+func currentMemoryUsage() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.Alloc
 }

@@ -302,6 +302,18 @@ func (r *Registry) List() []*ModelEntry {
 	return list
 }
 
+func (r *Registry) TotalErrors() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var total int64
+	for _, entry := range r.models {
+		if entry.Pool != nil {
+			total += entry.Pool.Stats().Errors
+		}
+	}
+	return total
+}
+
 func (r *Registry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +21,8 @@ type Batcher struct {
 	maxBatch  int
 	requests  atomic.Int64
 	totalLat  atomic.Int64
+	tokens    atomic.Int64
+	errors    atomic.Int64
 	done      chan struct{}
 	once      sync.Once
 }
@@ -112,31 +113,12 @@ func (b *Batcher) run() {
 }
 
 func (b *Batcher) process(texts []string) Response {
-	encs := make([]Encoding, len(texts))
-	for i, text := range texts {
-		ids, mask, err := b.tokenizer.Encode(text, b.maxLen)
-		if err != nil {
-			return Response{Err: fmt.Errorf("tokenizing text %d: %w", i, err)}
-		}
-		encs[i] = Encoding{InputIDs: ids, AttentionMask: mask}
-	}
-
-	inputIDs, attnMask, seqLen := PadEncodings(encs)
-	batchSize := len(texts)
-
-	hidden, err := b.session.Run(inputIDs, attnMask, batchSize, seqLen, b.dim)
+	embeddings, totalTokens, err := processBatch(b.session, b.tokenizer, texts, b.dim, b.maxLen, b.normalize, b.pooling)
+	b.tokens.Add(int64(totalTokens))
 	if err != nil {
-		return Response{Err: fmt.Errorf("inference: %w", err)}
+		b.errors.Add(1)
+		return Response{Err: err}
 	}
-
-	var embeddings [][]byte
-	switch b.pooling {
-	case "none":
-		embeddings = ExtractPrePooled(hidden, batchSize, b.dim, b.normalize)
-	default:
-		embeddings = MeanPoolAndNormalize(hidden, attnMask, b.dim, seqLen, batchSize, b.normalize)
-	}
-
 	return Response{Embeddings: embeddings}
 }
 
@@ -150,6 +132,14 @@ func (b *Batcher) AvgLatency() float64 {
 		return 0
 	}
 	return float64(b.totalLat.Load()) / float64(r)
+}
+
+func (b *Batcher) Tokens() int64 {
+	return b.tokens.Load()
+}
+
+func (b *Batcher) Errors() int64 {
+	return b.errors.Load()
 }
 
 func (b *Batcher) Close() error {

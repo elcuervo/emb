@@ -22,7 +22,6 @@ type Server struct {
 	active       sync.WaitGroup
 	shuttingDown atomic.Bool
 	started      time.Time
-	total        atomic.Int64
 	addr         string
 }
 
@@ -116,8 +115,6 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	s.total.Add(1)
-
 	resp, err := entry.Pool.Embed(texts)
 	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
@@ -169,39 +166,73 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 
 	stats := entry.Pool.Stats()
 
-	conn.WriteArray(8)
+	conn.WriteArray(22)
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
+	conn.WriteBulkString("max_length")
+	conn.WriteInt(stats.MaxLen)
 	conn.WriteBulkString("workers")
 	conn.WriteInt(stats.NumWorkers)
 	conn.WriteBulkString("requests")
 	conn.WriteInt(int(stats.Requests))
 	conn.WriteBulkString("avg_latency_us")
 	conn.WriteInt(int(stats.AvgLatency))
+	conn.WriteBulkString("tokens")
+	conn.WriteInt(int(stats.Tokens))
+	conn.WriteBulkString("errors")
+	conn.WriteInt(int(stats.Errors))
+	conn.WriteBulkString("pooling")
+	conn.WriteBulkString(stats.Pooling)
+	conn.WriteBulkString("normalize")
+	if stats.Normalize {
+		conn.WriteBulkString("true")
+	} else {
+		conn.WriteBulkString("false")
+	}
+	conn.WriteBulkString("batching_timeout_ms")
+	conn.WriteInt(stats.BatchingTimeout)
+	conn.WriteBulkString("batching_max_batch")
+	conn.WriteInt(stats.BatchingMaxBatch)
 }
 
 func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	models := s.reg.List()
 	uptime := int(time.Since(s.started).Seconds())
+	totalReqs := int64(0)
+	totalToks := int64(0)
 
-	var perModel []string
+	perModel := make([]string, 0, len(models))
 	for _, m := range models {
-		reqs := int64(0)
 		if m.Pool != nil {
-			reqs = m.Pool.Stats().Requests
+			st := m.Pool.Stats()
+			totalReqs += st.Requests
+			totalToks += st.Tokens
+			batchInfo := ""
+			if st.BatchingTimeout > 0 {
+				batchInfo = fmt.Sprintf(" batch=%d/%d", st.BatchingTimeout, st.BatchingMaxBatch)
+			}
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d mem=%dmb pool=%s norm=%t%s",
+				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.MemoryMB, st.Pooling, st.Normalize, batchInfo))
 		}
-		perModel = append(perModel, fmt.Sprintf("%s:%d", m.Name, reqs))
 	}
 
-	conn.WriteArray(8)
+	totalErrors := s.reg.TotalErrors()
+
+	conn.WriteArray(14)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
-	conn.WriteInt(int(s.total.Load()))
+	conn.WriteInt(int(totalReqs))
+	conn.WriteBulkString("active_requests")
+	conn.WriteBulkString("0") // TODO: track active via atomic counter
+	conn.WriteBulkString("total_tokens")
+	conn.WriteInt(int(totalToks))
+	conn.WriteBulkString("total_errors")
+	conn.WriteInt(int(totalErrors))
 	conn.WriteBulkString("models_loaded")
 	conn.WriteInt(len(models))
 	conn.WriteBulkString("per_model")
-	conn.WriteBulkString(strings.Join(perModel, " "))
+	conn.WriteBulkString(strings.Join(perModel, " | "))
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
@@ -240,7 +271,6 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 			}
 
 			results[idx] = resp.Embeddings[0]
-			s.total.Add(1)
 		}(i)
 	}
 	wg.Wait()
