@@ -12,16 +12,10 @@ redis-cli EMB minilm "hello world"
 
 ## Features
 
-- **Redis protocol** — any Redis client works (`redis-cli`, `redis-py`, `redis-rb`, etc.)
-- **Pure Go** — no Python or Node.js runtime dependency
-- **ONNX Runtime** — fast CPU/GPU inference via CGo bindings
-- **HuggingFace integration** — auto-download models and auto-detect dim, max_length, output tensor, pooling strategy from ONNX graph + config.json
-- **Smart batching** — coalesce concurrent requests into a single ONNX inference batch with configurable timeout
-- **Multi-model queries** — `EMB.MULTI` calls different models in one command (MGET-style partial failures)
-- **Pre-pooled models** — supports 2D-output models like SigLIP2, E5 via `output_tensor` + `pooling: none`
-- **Auto-tuned workers** — pool size automatically capped to fit within half of available RAM
-- **Lazy loading** — models initialized on first request by default (optional `preload`)
-- **Pure Go tokenizer** — HuggingFace WordPiece and BPE tokenization, no `tokenizers` library needed
+- **Redis protocol**: any Redis client works (`redis-cli`, `redis-py`, `redis-rb`, etc.)
+- **ONNX Runtime**: fast CPU/GPU inference via CGo bindings
+- **HuggingFace integration**: auto-download models and auto-detect dim, max_length, output tensor, pooling strategy from ONNX graph + config.json
+- **Multi-model queries**: `EMB.MULTI` calls different models in one command (MGET-style partial failures)
 
 ## Quick start
 
@@ -46,7 +40,7 @@ redis-cli EMB minilm "hello world"
 | `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown |
 | `EMB.MULTI <model> <text> [<model> <text>...]` | Embed texts across different models in one call |
 | `EMB.HELP` | Command reference |
-| `PING` | Redis compatibility |
+| `PING` | PONG |
 
 ### EMB.MULTI example
 
@@ -136,13 +130,6 @@ binary.Read(bytes.NewReader(raw), binary.LittleEndian, &vec)
 
 ## Development
 
-### Prerequisites
-
-- [Go 1.25+](https://go.dev/dl/)
-- [ONNX Runtime](https://github.com/microsoft/onnxruntime/releases) shared library
-- Python 3 (for `just verify-embeddings` reference generation)
-- [Just](https://github.com/casey/just) command runner
-
 ### Commands
 
 ```bash
@@ -168,12 +155,6 @@ This provides Go, ONNX Runtime, golangci-lint, just, and all CGo configuration.
 ### Docker
 
 ```bash
-# Build for native architecture
-just docker-build
-
-# Build and push multi-arch (amd64 + arm64)
-just docker-push
-
 # Run with a model mounted:
 docker run -v ./models:/models elcuervo/emb \
   -config /models/config.yaml
