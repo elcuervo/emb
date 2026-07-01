@@ -1,0 +1,22 @@
+PATH
+  remote: .
+  specs:
+    emb-server (0.1.0)
+      onnxruntime (~> 0.9)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    ffi (1.17.3-arm64-darwin)
+    onnxruntime (0.10.1-arm64-darwin)
+      ffi
+
+PLATFORMS
+  arm64-darwin
+
+DEPENDENCIES
+  emb-server!
+  onnxruntime
+
+BUNDLED WITH
+   2.7.2
