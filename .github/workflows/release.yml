@@ -100,7 +100,7 @@ jobs:
           mkdir -p dist/linux-amd64
           CGO_ENABLED=1 \
             CGO_CFLAGS="-I/opt/onnxruntime/include" \
-            CGO_LDFLAGS="-L/opt/onnxruntime/lib -lonnxruntime -L/opt/libtokenizers -Wl,-rpath,\$ORIGIN" \
+            CGO_LDFLAGS="-L/opt/libtokenizers" \
             go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb ./cmd/emb
 
       - name: Package artifact
@@ -198,7 +198,7 @@ jobs:
           mkdir -p dist
           CGO_ENABLED=1 \
             CGO_CFLAGS="-I/opt/homebrew/opt/onnxruntime/include" \
-            CGO_LDFLAGS="-L/opt/homebrew/opt/onnxruntime/lib -lonnxruntime -L./lib/libtokenizers -Wl,-rpath,@loader_path" \
+            CGO_LDFLAGS="-L./lib/libtokenizers" \
             go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb ./cmd/emb
 
       - name: Package artifact
