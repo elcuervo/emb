@@ -9,8 +9,12 @@ module Emb
   class << self
     def models
       raw = send_command("EMB.MODELS")
+
       return [] if raw.nil?
-      raw.map { |name, dim, status| {name: name, dim: dim.to_i, status: status} }
+
+      raw.map do |name, dim, status|
+        { name: name, dim: dim.to_i, status: status }
+      end
     end
 
     def info(name)
@@ -18,7 +22,9 @@ module Emb
 
       return {} if raw.nil?
 
-      raw.each_slice(2).map { |k, v| [k.to_sym, v] }.to_h
+      raw
+        .each_slice(2)
+        .to_h { |k, v| [k.to_sym, v] }
     end
 
     def stats = send_command("EMB.STATS")
