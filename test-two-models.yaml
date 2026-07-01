@@ -1,0 +1,9 @@
+listen: ":16379"
+
+models:
+  minilm:
+    onnx: ./models/minilm/model.onnx
+    tokenizer: ./models/minilm/tokenizer.json
+
+  bge:
+    model_repo: Xenova/bge-small-en-v1.5

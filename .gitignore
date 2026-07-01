@@ -11,7 +11,7 @@ reference-embeddings.json
 *~
 .vscode/
 .idea/
-*.yaml
 *.gem
+config-prod.yaml
 gems/emb/vendor/*
 dist/
