@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
-require "emb"
+require File.expand_path("../lib/emb.rb", __dir__)
 
 EMB_PORT = 16379
 
