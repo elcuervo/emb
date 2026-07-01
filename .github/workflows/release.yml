@@ -272,14 +272,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract binary
+      - name: Start emb server
         run: |
           cd /tmp/emb-test
           tar xzf *.tar.gz
           chmod +x emb
+          mkdir -p "${{ github.workspace }}/models"
           LD_LIBRARY_PATH="/opt/onnxruntime/lib:$LD_LIBRARY_PATH" \
-            ./emb -config "${{ github.workspace }}/test-two-models.yaml" &
-          sleep 8
+            ./emb -model minilm -model-repo Xenova/all-MiniLM-L6-v2 -listen ":16379" &
+          sleep 10
 
       - name: Run emb gem tests
         working-directory: gems/emb
@@ -294,7 +295,7 @@ jobs:
           gem build emb-server.gemspec
 
       - name: Cleanup
-        run: pkill -f "emb -config" 2>/dev/null || true
+        run: pkill -f "emb -model-repo" 2>/dev/null || true
 
   release-emb:
     needs: [test-gems]
