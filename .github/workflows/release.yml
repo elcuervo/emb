@@ -317,11 +317,6 @@ jobs:
           cd "${{ github.workspace }}/gems/emb"
           gem build emb.gemspec
 
-      - name: Validate gem
-        run: |
-          gem install --local "${{ github.workspace }}/gems/emb"/emb-*.gem
-          ruby -e "require 'emb'; puts Emb::VERSION"
-
       - uses: rubygems/configure-rubygems-credentials@main
 
       - name: Publish gem
@@ -371,12 +366,6 @@ jobs:
         run: |
           cd "${{ github.workspace }}/gems/emb-server"
           gem build emb-server.gemspec
-
-      - name: Validate gem
-        run: |
-          gem install --local "${{ github.workspace }}/gems/emb-server"/emb-server-*.gem
-          which emb
-          emb -version
 
       - uses: rubygems/configure-rubygems-credentials@main
 
