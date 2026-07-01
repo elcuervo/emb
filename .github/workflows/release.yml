@@ -260,10 +260,6 @@ jobs:
       - name: Set tag name
         run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
 
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-
       - name: Download emb binary from release
         run: |
           gh release download "${{ env.TAG_NAME }}" \
@@ -282,8 +278,8 @@ jobs:
           sleep 8
 
       - name: Run emb gem tests
+        working-directory: gems/emb
         run: |
-          cd "${{ github.workspace }}/gems/emb"
           bundle install
           bundle exec rake
 
