@@ -19,13 +19,7 @@ unless File.exist?(binary)
   exit 1
 end
 
-onnx_spec = Gem::Specification.find_by_name("onnxruntime")
-ort_lib = Dir.glob("#{onnx_spec.gem_dir}/lib/onnxruntime.{dylib,so,bundle}").first
-
-unless ort_lib
-  $stderr.puts "ERROR: could not find onnxruntime shared library"
-  $stderr.puts "Checked: #{onnx_spec.gem_dir}/lib/onnxruntime.{dylib,so,bundle}"
-  exit 1
-end
+require "onnxruntime"
+ort_lib = OnnxRuntime.ffi_lib.first
 
 exec binary, "-ort-lib", ort_lib, *ARGV
