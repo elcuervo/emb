@@ -6,7 +6,7 @@ require "redis_client"
 module Emb
   @pool = nil
 
-  DEFAULTS = {host: "localhost", port: 6379, pool: 5}.freeze
+  DEFAULTS = { host: "localhost", port: 6379, pool: 5 }.freeze
 
   class << self
     def setup(host: DEFAULTS[:host], port: DEFAULTS[:port], pool: DEFAULTS[:pool])
@@ -14,6 +14,7 @@ module Emb
         RedisClient.new(host: host, port: port, protocol: 2, reconnect_attempts: 3)
       end
     end
+
     alias_method :config, :setup
 
     def send_command(*args)

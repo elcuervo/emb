@@ -21,7 +21,12 @@ module Emb
     end
 
     def [](text, *texts)
-      Emb.send_command("EMB", @name.to_s, text, *texts)
+      set = Array(Emb.send_command("EMB", @name.to_s, text, *texts))
+      result = set.map { |entry| entry.unpack("e*") }
+
+      return result.first if result.size == 1
+
+      result
     end
 
     def inspect

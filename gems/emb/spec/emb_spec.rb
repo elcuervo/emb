@@ -51,8 +51,8 @@ RSpec.describe Emb do
   describe "Proxy" do
     it "embeds text and returns binary data" do
       result = Emb[:minilm]["hello world"]
-      expect(result).to be_a(String)
-      expect(result.bytesize).to eq(384 * 4) # 384 floats × 4 bytes
+      expect(result).to be_a(Array)
+      expect(result.size).to eq(384)
     end
 
     it "embeds multiple texts" do
