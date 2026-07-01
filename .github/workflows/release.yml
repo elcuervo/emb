@@ -251,7 +251,7 @@ jobs:
             TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
 
   test-gems:
-    needs: [build-linux-amd64, build-linux-arm64, build-darwin-arm64]
+    needs: [build-linux-amd64]
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -327,7 +327,7 @@ jobs:
         run: gem push "${{ github.workspace }}/gems/emb"/emb-*.gem
 
   release-emb-server:
-    needs: [test-gems]
+    needs: [test-gems, build-linux-amd64, build-linux-arm64, build-darwin-arm64]
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
