@@ -1,0 +1,11 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gemspec
+
+gem 'connection_pool'
+gem 'redis-client'
+
+gem 'rake', require: false
+gem 'rspec', require: false

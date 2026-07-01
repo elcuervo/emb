@@ -61,6 +61,9 @@
             libtokenizers
             python3
             redis
+            ruby_3_4
+            bundler
+            act
           ];
 
           shellHook = ''

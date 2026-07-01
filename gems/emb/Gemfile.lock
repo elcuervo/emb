@@ -1,0 +1,42 @@
+PATH
+  remote: .
+  specs:
+    emb (0.1.0)
+      connection_pool (~> 2.5)
+      redis-client (~> 0.24)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    connection_pool (2.5.5)
+    diff-lcs (1.6.2)
+    rake (13.4.2)
+    redis-client (0.30.0)
+      connection_pool
+    rspec (3.13.2)
+      rspec-core (~> 3.13.0)
+      rspec-expectations (~> 3.13.0)
+      rspec-mocks (~> 3.13.0)
+    rspec-core (3.13.6)
+      rspec-support (~> 3.13.0)
+    rspec-expectations (3.13.5)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.13.0)
+    rspec-mocks (3.13.8)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.13.0)
+    rspec-support (3.13.7)
+
+PLATFORMS
+  arm64-darwin-25
+  ruby
+
+DEPENDENCIES
+  connection_pool
+  emb!
+  rake
+  redis-client
+  rspec (~> 3.13, >= 0)
+
+BUNDLED WITH
+   2.7.2

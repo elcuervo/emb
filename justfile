@@ -4,7 +4,7 @@ default:
 ort_lib := `echo "${DYLD_LIBRARY_PATH:-}" | grep -o '/nix/store/[^:]*onnxruntime[^:]*/lib' | head -1`
 libtokenizers_dir := "./lib/libtokenizers"
 redis_benchmark := `which redis-benchmark 2>/dev/null || echo ""`
-image_tag := `git describe --tags --dirty --always 2>/dev/null || echo "dev"`
+image_tag := `cat VERSION 2>/dev/null || echo "dev"`
 docker_user := "elcuervo"
 image_name := "{{docker_user}}/emb"
 
@@ -33,6 +33,34 @@ build:
     @mkdir -p bin
     CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build \
         -ldflags="-X main.version={{image_tag}}" -o ./bin/emb ./cmd/emb
+
+# Run all tests: Go server, Ruby client
+all: test build
+    @echo "=== Testing Ruby client ==="
+    @EMB_CMD="./bin/emb -config test-two-models.yaml"; \
+    pkill -f "emb -config test-two-models" 2>/dev/null || true; \
+    if [ -n "{{ort_lib}}" ]; then \
+        DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" $EMB_CMD & \
+    else \
+        $EMB_CMD & \
+    fi; \
+    echo $$! > /tmp/emb-all.pid; \
+    sleep 8
+    cd gems/emb && bundle exec rake
+    @echo "=== All tests passed ==="
+    -kill `cat /tmp/emb-all.pid` 2>/dev/null
+    rm -f /tmp/emb-all.pid
+
+# Build, install, and validate both gems locally
+validate-gems: build
+    @echo "=== Validating emb gem ==="
+    cd gems/emb && gem build emb.gemspec && gem install --local emb-*.gem --no-doc && ruby -e "require 'emb'; puts \"emb gem: #{Emb::VERSION}\""
+    @echo "=== Validating emb-server gem ==="
+    cp bin/emb gems/emb-server/lib/emb-server/emb-binary-arm64-darwin
+    cd gems/emb-server && gem build emb-server.gemspec && gem install --local emb-server-*.gem --no-doc 2>/dev/null
+    @which emb || echo "WARNING: emb not on PATH (check GEM_HOME/bin)"
+    rm gems/emb-server/lib/emb-server/emb-binary-arm64-darwin
+    @echo "=== Both gems valid ==="
 
 # Build and run the server
 dev: download-libtokenizers build

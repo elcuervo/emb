@@ -1,0 +1,58 @@
+name: emb Ruby gem
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+    paths: ["gems/emb/**"]
+  pull_request:
+    paths: ["gems/emb/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source versions
+        run: cat .github/versions.env >> $GITHUB_ENV
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Install libtokenizers
+        run: |
+          sudo mkdir -p /opt/libtokenizers
+          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.linux-x86_64.tar.gz" \
+            -o /tmp/libtokenizers.tgz
+          sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
+
+      - name: Install ONNX Runtime
+        run: |
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
+            -o /tmp/onnx.tgz
+          sudo mkdir -p /opt/onnxruntime
+          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+
+      - name: Build emb binary
+        run: |
+          CGO_ENABLED=1 \
+            CGO_CFLAGS="-I/opt/onnxruntime/include" \
+            CGO_LDFLAGS="-L/opt/onnxruntime/lib -lonnxruntime -L/opt/libtokenizers" \
+            go build -ldflags="-X main.version=ci" -o ./bin/emb ./cmd/emb
+
+      - name: Start emb server
+        run: |
+          mkdir -p models
+          LD_LIBRARY_PATH="/opt/onnxruntime/lib:$LD_LIBRARY_PATH" \
+            ./bin/emb -model-repo Xenova/all-MiniLM-L6-v2 &
+          sleep 10
+
+      - name: Run gem tests
+        working-directory: gems/emb
+        run: |
+          bundle install
+          bundle exec rake

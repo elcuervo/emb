@@ -68,6 +68,11 @@ jobs:
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
 
+      - name: Write version from tag
+        run: |
+          TV="${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}"
+          echo "${TV#v}" > VERSION
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
@@ -121,6 +126,11 @@ jobs:
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
 
+      - name: Write version from tag
+        run: |
+          TV="${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}"
+          echo "${TV#v}" > VERSION
+
       - name: Set tag name
         run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}" >> $GITHUB_ENV
 
@@ -160,6 +170,11 @@ jobs:
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
+
+      - name: Write version from tag
+        run: |
+          TV="${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}"
+          echo "${TV#v}" > VERSION
 
       - uses: actions/setup-go@v5
         with:
@@ -234,3 +249,123 @@ jobs:
           build-args: |
             ORT_VERSION=${{ env.ORT_VERSION }}
             TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
+
+  test-gems:
+    needs: [build-linux-amd64, build-linux-arm64, build-darwin-arm64]
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set tag name
+        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Download emb binary from release
+        run: |
+          gh release download "${{ env.TAG_NAME }}" \
+            --pattern "emb_*_linux_amd64.tar.gz" \
+            --dir /tmp/emb-test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract binary
+        run: |
+          cd /tmp/emb-test
+          tar xzf *.tar.gz
+          chmod +x emb
+          LD_LIBRARY_PATH="/opt/onnxruntime/lib:$LD_LIBRARY_PATH" \
+            ./emb -config "${{ github.workspace }}/test-two-models.yaml" &
+          sleep 8
+
+      - name: Run emb gem tests
+        run: |
+          cd "${{ github.workspace }}/gems/emb"
+          bundle install
+          bundle exec rake
+
+      - name: Validate emb-server gem build
+        run: |
+          cp /tmp/emb-test/emb "${{ github.workspace }}/gems/emb-server/lib/emb-server/emb-binary-linux-amd64"
+          cd "${{ github.workspace }}/gems/emb-server"
+          gem build emb-server.gemspec
+
+      - name: Cleanup
+        run: pkill -f "emb -config" 2>/dev/null || true
+
+  release-emb:
+    needs: [test-gems]
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build gem
+        run: |
+          cd "${{ github.workspace }}/gems/emb"
+          gem build emb.gemspec
+
+      - name: Validate gem
+        run: |
+          gem install --local "${{ github.workspace }}/gems/emb"/emb-*.gem
+          ruby -e "require 'emb'; puts Emb::VERSION"
+
+      - uses: rubygems/configure-rubygems-credentials@main
+
+      - name: Publish gem
+        run: gem push "${{ github.workspace }}/gems/emb"/emb-*.gem
+
+  release-emb-server:
+    needs: [test-gems]
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set tag name
+        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Download all platform binaries
+        run: |
+          for pattern in emb_*_linux_amd64.tar.gz emb_*_linux_arm64.tar.gz emb_*_darwin_arm64.tar.gz; do
+            gh release download "${{ env.TAG_NAME }}" --pattern "$pattern" --dir /tmp/emb-gem
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy binaries into gem structure
+        run: |
+          mkdir -p "${{ github.workspace }}/gems/emb-server/lib/emb-server"
+          cd /tmp/emb-gem
+          for tarball in *.tar.gz; do
+            case "$tarball" in
+              *_linux_amd64*)  name="emb-binary-x86_64-linux" ;;
+              *_linux_arm64*)  name="emb-binary-aarch64-linux" ;;
+              *_darwin_arm64*) name="emb-binary-arm64-darwin" ;;
+            esac
+            tar xzf "$tarball"
+            cp emb "${{ github.workspace }}/gems/emb-server/lib/emb-server/$name"
+          done
+
+      - name: Build gem
+        run: |
+          cd "${{ github.workspace }}/gems/emb-server"
+          gem build emb-server.gemspec
+
+      - name: Validate gem
+        run: |
+          gem install --local "${{ github.workspace }}/gems/emb-server"/emb-server-*.gem
+          which emb
+          emb -version
+
+      - uses: rubygems/configure-rubygems-credentials@main
+
+      - name: Publish gem
+        run: gem push "${{ github.workspace }}/gems/emb-server"/emb-server-*.gem
