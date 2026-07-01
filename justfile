@@ -31,7 +31,8 @@ baseline:
 
 build:
     @mkdir -p bin
-    go build -ldflags="-X main.version={{image_tag}}" -o ./bin/emb ./cmd/emb
+    CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build \
+        -ldflags="-X main.version={{image_tag}}" -o ./bin/emb ./cmd/emb
 
 # Build and run the server
 dev: download-libtokenizers build
