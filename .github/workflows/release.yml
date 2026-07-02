@@ -24,12 +24,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache: true
@@ -63,7 +63,7 @@ jobs:
     needs: [test, test-gems]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
@@ -73,7 +73,7 @@ jobs:
           TV="${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}"
           echo "${TV#v}" > VERSION
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache: true
@@ -121,7 +121,7 @@ jobs:
     needs: [test, test-gems]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
@@ -166,7 +166,7 @@ jobs:
     needs: [test, test-gems]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
@@ -176,7 +176,7 @@ jobs:
           TV="${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}"
           echo "${TV#v}" > VERSION
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache: true
@@ -220,7 +220,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
@@ -253,12 +253,12 @@ jobs:
   test-gems:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Source versions
         run: cat .github/versions.env >> $GITHUB_ENV
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           cache: true
@@ -320,7 +320,7 @@ jobs:
       id-token: write
     environment: release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -350,7 +350,7 @@ jobs:
       id-token: write
     environment: release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ruby/setup-ruby@v1
         with:
