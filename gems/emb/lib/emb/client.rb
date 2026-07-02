@@ -9,17 +9,15 @@ module Emb
   class Client
     attr_reader :pool
 
-    def initialize(url: nil, host: nil, port: nil, pool: DEFAULTS[:pool])
-      url ||= ENV['EMB_URL']
-      host ||= DEFAULTS[:host]
-      port ||= DEFAULTS[:port]
+    def initialize(pool: DEFAULTS[:pool], **redis_options)
+      url = extract_url!(redis_options)
+      redis_options[:host] ||= DEFAULTS[:host] unless url
+      redis_options[:port] ||= DEFAULTS[:port] unless url
+      redis_options[:protocol] ||= 2
+      redis_options[:reconnect_attempts] ||= 3
 
       @pool = ConnectionPool.new(size: pool) do
-        if url
-          RedisClient.new(url: url, protocol: 2, reconnect_attempts: 3)
-        else
-          RedisClient.new(host: host, port: port, protocol: 2, reconnect_attempts: 3)
-        end
+        RedisClient.new(url: url, **redis_options)
       end
 
       @registry = {}
@@ -73,6 +71,13 @@ module Emb
       mp = MultiProxy.new(self)
       yield mp
       mp.run
+    end
+
+    private
+
+    def extract_url!(opts)
+      url = opts.delete(:url)
+      url.nil? ? ENV.fetch('EMB_URL', nil) : url
     end
   end
 end

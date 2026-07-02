@@ -69,6 +69,29 @@ Manual authentication is also possible but not recommended for pooled connection
 Emb.send_command("AUTH", "hunter2")  # only authenticates one connection
 ```
 
+### Redis client options
+
+Any `RedisClient` option can be forwarded through `Emb.setup` or `Emb.new`:
+
+```ruby
+Emb.setup(
+  url: "redis://localhost:6379",
+  pool: 10,
+  connect_timeout: 2,
+  read_timeout: 10,
+  write_timeout: 5,
+  reconnect_attempts: 5,
+  ssl: true,
+  ssl_params: { verify_mode: OpenSSL::SSL::VERIFY_PEER },
+  driver: :hiredis,
+  inherit_socket: true
+)
+```
+
+See the [redis-client documentation](https://github.com/redis-rb/redis-client) for
+all available options. Only `pool` is handled by the gem — everything else passes
+through to `RedisClient.new`.
+
 ## Instance-based clients
 
 Create independent clients to connect to multiple servers or use different configurations:

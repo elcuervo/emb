@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -28,10 +29,11 @@ type Server struct {
 	started      time.Time
 	addr         string
 	password     string
+	tlsConfig    *tls.Config
 	cache        *Cache
 }
 
-func New(addr string, reg *registry.Registry, password string, cacheConfig string) *Server {
+func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config) *Server {
 	cacheBytes, err := parseCacheConfig(cacheConfig)
 	if err != nil {
 		log.Fatalf("parsing cache config: %v", err)
@@ -42,11 +44,12 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	s := &Server{
-		reg:      reg,
-		started:  time.Now(),
-		addr:     addr,
-		password: password,
-		cache:    c,
+		reg:       reg,
+		started:   time.Now(),
+		addr:      addr,
+		password:  password,
+		tlsConfig: tlsConfig,
+		cache:     c,
 	}
 
 	mux := redcon.NewServeMux()
@@ -77,12 +80,22 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 }
 
 func (s *Server) ListenAndServe() error {
-	ln, err := net.Listen("tcp", s.addr)
+	var ln net.Listener
+	var err error
+	if s.tlsConfig != nil {
+		ln, err = tls.Listen("tcp", s.addr, s.tlsConfig)
+	} else {
+		ln, err = net.Listen("tcp", s.addr)
+	}
 	if err != nil {
 		return fmt.Errorf("listening on %s: %w", s.addr, err)
 	}
 	s.ln = ln
-	log.Printf("emb listening on %s", s.addr)
+	if s.tlsConfig != nil {
+		log.Printf("emb listening on %s (TLS)", s.addr)
+	} else {
+		log.Printf("emb listening on %s", s.addr)
+	}
 	return s.srv.Serve(ln)
 }
 

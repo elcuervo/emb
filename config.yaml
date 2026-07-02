@@ -1,6 +1,8 @@
 listen: ":6379"
 
 # password: "hunter2"
+# tls_cert: /etc/emb/cert.pem
+# tls_key:  /etc/emb/key.pem
 # cache: "auto"   # or "1GB", "256MB", etc. Empty = disabled
 
 models:

@@ -1,7 +1,12 @@
 package server
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -343,7 +348,7 @@ func serveTestWithAuth(t *testing.T, password string) string {
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
 
 	addr := getFreeAddr()
-	srv := New(addr, reg, password, "")
+	srv := New(addr, reg, password, "", nil)
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
@@ -368,7 +373,7 @@ func serveTestWithCache(t *testing.T, cacheConfig string) string {
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
 
 	addr := getFreeAddr()
-	srv := New(addr, reg, "", cacheConfig)
+	srv := New(addr, reg, "", cacheConfig, nil)
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
@@ -585,6 +590,118 @@ func TestCacheInfoArrayCount(t *testing.T) {
 	c.Close()
 }
 
+func TestTLSAcceptsPlainTCP(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+	c.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	resp := readRESP(t, c)
+	if resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestTLSEmptyConfigNew(t *testing.T) {
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true, "mean", 0, 32,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+
+	c := dial(t, addr)
+	c.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	resp := readRESP(t, c)
+	if resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG with nil tlsConfig, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestTLSConnection(t *testing.T) {
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true, "mean", 0, 32,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	cert := generateTestCert(t)
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.NoClientCert,
+	}
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", tlsCfg)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+
+	conn, err := tls.Dial("tcp", addr, &tls.Config{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		t.Fatalf("TLS dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	conn.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	resp := string(buf[:n])
+	if resp != "+PONG\r\n" {
+		t.Fatalf("expected +PONG, got %q", resp)
+	}
+}
+
+func generateTestCert(t *testing.T) tls.Certificate {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tls.Certificate{
+		Certificate: [][]byte{certDER},
+		PrivateKey:  priv,
+		Leaf:        cert,
+	}
+}
+
 func TestParseCacheConfig(t *testing.T) {
 	bytes, err := parseCacheConfig("")
 	if err != nil || bytes != 0 {
@@ -616,7 +733,7 @@ func BenchmarkRESP(b *testing.B) {
 		b.Fatal(err)
 	}
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
-	srv := New(addr, reg, "", "")
+	srv := New(addr, reg, "", "", nil)
 	go srv.ListenAndServe()
 	b.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
