@@ -7,30 +7,28 @@ require_relative "emb/multi"
 
 module Emb
   class << self
-    def models
-      raw = send_command("EMB.MODELS")
+    def new(...) = Client.new(...)
 
-      return [] if raw.nil?
-
-      raw.map do |name, dim, status|
-        { name: name, dim: dim.to_i, status: status }
-      end
+    def setup(...)
+      @default_client = Client.new(...)
     end
 
-    def info(name)
-      raw = send_command("EMB.INFO", name.to_s)
+    alias_method :config, :setup
 
-      return {} if raw.nil?
+    def [](name)    = default_client[name]
+    def models      = default_client.models
+    def info(name)  = default_client.info(name)
+    def stats       = default_client.stats
+    def help        = default_client.help
+    def ping        = default_client.ping
+    def multi(&)    = default_client.multi(&)
+    def reset_registry! = default_client.reset_registry!
+    def send_command(*args) = default_client.send_command(*args)
 
-      raw
-        .each_slice(2)
-        .to_h { |k, v| [k.to_sym, v] }
+    private
+
+    def default_client
+      @default_client ||= Client.new
     end
-
-    def stats = send_command("EMB.STATS")
-
-    def help = send_command("EMB.HELP")
-
-    def ping = send_command("PING")
   end
 end

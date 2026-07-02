@@ -2,7 +2,8 @@
 
 module Emb
   class MultiProxy
-    def initialize
+    def initialize(client)
+      @client = client
       @pairs = []
     end
 
@@ -13,7 +14,9 @@ module Emb
     def run
       args = @pairs.flat_map { |pair| [pair[:model].to_s, pair[:text]] }
 
-      Emb.send_command("EMB.MULTI", *args)
+      @client
+        .send_command("EMB.MULTI", *args)
+        .map { |entry| entry.unpack("e*") }
     end
 
     class PairCollector
@@ -23,19 +26,8 @@ module Emb
       end
 
       def [](text)
-        @pairs << {
-           model: @model, text: text }
+        @pairs << { model: @model, text: text }
       end
-    end
-  end
-
-  class << self
-    def multi
-      mp = MultiProxy.new
-
-      yield mp
-
-      mp.run
     end
   end
 end

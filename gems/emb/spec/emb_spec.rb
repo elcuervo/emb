@@ -49,27 +49,87 @@ RSpec.describe Emb do
   end
 
   describe "Proxy" do
-    it "embeds text and returns binary data" do
+    it "embeds text and returns an array of floats" do
       result = Emb[:minilm]["hello world"]
       expect(result).to be_a(Array)
       expect(result.size).to eq(384)
+      expect(result.first).to be_a(Float)
     end
 
     it "embeds multiple texts" do
       results = Emb[:minilm]["hello", "world"]
       expect(results).to be_an(Array)
       expect(results.length).to eq(2)
+      expect(results.first).to be_a(Array)
+      expect(results.first.size).to eq(384)
     end
   end
 
   describe ".multi" do
-    it "sends EMB.MULTI and returns array" do
+    it "returns unpacked float arrays" do
       results = Emb.multi do |m|
         m[:minilm]["hello"]
         m[:minilm]["world"]
       end
       expect(results).to be_an(Array)
       expect(results.length).to eq(2)
+      expect(results.first).to be_a(Array)
+      expect(results.first.size).to eq(384)
+      expect(results.first.first).to be_a(Float)
+    end
+  end
+
+  describe ".new" do
+    it "returns an Emb::Client instance" do
+      client = Emb.new(port: 16379)
+      expect(client).to be_a(Emb::Client)
+      expect(client.ping).to eq("PONG")
+    end
+
+    it "supports url parameter" do
+      client = Emb.new(url: "redis://localhost:16379")
+      expect(client).to be_a(Emb::Client)
+      expect(client.ping).to eq("PONG")
+    end
+
+    it "supports pool size parameter" do
+      client = Emb.new(port: 16379, pool: 3)
+      expect(client.pool.size).to eq(3)
+    end
+
+    it "defaults to EMB_URL env var" do
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with("EMB_URL").and_return("redis://localhost:16379")
+      client = Emb.new
+      expect(client.ping).to eq("PONG")
+    end
+
+    it "creates independent clients" do
+      c1 = Emb.new(port: 16379)
+      c2 = Emb.new(port: 16379)
+      expect(c1).not_to equal(c2)
+      expect(c1[:minilm]).not_to equal(c2[:minilm])
+    end
+
+    it "supports all command methods" do
+      client = Emb.new(port: 16379)
+      expect(client.models).to be_an(Array)
+      expect(client.info(:minilm)).to be_a(Hash)
+      expect(client.help).to be_a(String)
+      expect(client.ping).to eq("PONG")
+    end
+
+    it "supports multi on instance" do
+      client = Emb.new(port: 16379)
+      results = client.multi do |m|
+        m[:minilm]["hello"]
+        m[:minilm]["world"]
+      end
+      expect(results).to be_an(Array)
+      expect(results.length).to eq(2)
+      expect(results.first).to be_a(Array)
+      expect(results.first.size).to eq(384)
+      expect(results.first.first).to be_a(Float)
     end
   end
 end
