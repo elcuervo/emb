@@ -15,6 +15,14 @@ import (
 	"github.com/elcuervo/emb/internal/registry"
 )
 
+type serverState int64
+
+const (
+	stateLoading serverState = iota
+	stateReady
+	stateDraining
+)
+
 type connState struct {
 	authenticated bool
 }
@@ -29,6 +37,7 @@ type Server struct {
 	addr         string
 	password     string
 	cache        *Cache
+	state        atomic.Int64
 }
 
 func New(addr string, reg *registry.Registry, password string, cacheConfig string) *Server {
@@ -58,6 +67,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.stats", s.handleSTATS)
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
+	mux.HandleFunc("emb.ready", s.handleREADY)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
 		if password != "" && !isExempt(cmd) && !isAuthenticated(conn) {
@@ -112,12 +122,36 @@ func (s *Server) Close() error {
 	return s.srv.Close()
 }
 
+func (s *Server) SetReady() {
+	s.state.Store(int64(stateReady))
+}
+
+func (s *Server) SetDraining() {
+	s.state.Store(int64(stateDraining))
+}
+
+func (s *Server) handleREADY(conn redcon.Conn, cmd redcon.Command) {
+	state := serverState(s.state.Load())
+	if state == stateLoading && len(s.reg.List()) == 0 {
+		conn.WriteError("no models")
+		return
+	}
+	switch state {
+	case stateReady:
+		conn.WriteString("OK")
+	case stateLoading:
+		conn.WriteError("loading")
+	case stateDraining:
+		conn.WriteError("draining")
+	}
+}
+
 func isExempt(cmd redcon.Command) bool {
 	if len(cmd.Args) == 0 {
 		return false
 	}
 	name := strings.ToLower(string(cmd.Args[0]))
-	return name == "auth" || name == "ping"
+	return name == "auth" || name == "ping" || name == "emb.ready"
 }
 
 func isAuthenticated(conn redcon.Conn) bool {
@@ -463,6 +497,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
 		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics",
+		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.HELP - Show this help message",
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",

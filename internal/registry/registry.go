@@ -28,8 +28,9 @@ type ModelEntry struct {
 }
 
 type Registry struct {
-	mu     sync.RWMutex
-	models map[string]*ModelEntry
+	mu          sync.RWMutex
+	models      map[string]*ModelEntry
+	totalModels atomic.Int64
 }
 
 func New() *Registry {
@@ -290,6 +291,22 @@ func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.models[name] = entry
+}
+
+func (r *Registry) ModelsLoaded() (loaded, total int) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	total = len(r.models)
+	for _, entry := range r.models {
+		if entry.loaded.Load() {
+			loaded++
+		}
+	}
+	return loaded, total
+}
+
+func (r *Registry) SetModelCount(n int) {
+	r.totalModels.Store(int64(n))
 }
 
 func (r *Registry) List() []*ModelEntry {
