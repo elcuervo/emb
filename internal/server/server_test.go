@@ -359,6 +359,89 @@ func serveTest(t *testing.T) string {
 	return serveTestWithAuth(t, "")
 }
 
+func serveTestWithServer(t *testing.T) (string, *Server) {
+	t.Helper()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true, "mean", 0, 32,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr, srv
+}
+
+func serveTestEmpty(t *testing.T) string {
+	t.Helper()
+	reg := registry.New()
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr
+}
+
+func TestREADYWhenReady(t *testing.T) {
+	addr, srv := serveTestWithServer(t)
+	srv.SetReady()
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.READY\r\n"))
+	resp := readRESP(t, c)
+	if resp != "+OK\r\n" {
+		t.Fatalf("expected +OK, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestREADYWhenLoading(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.READY\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "loading") {
+		t.Fatalf("expected loading error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestREADYDraining(t *testing.T) {
+	addr, srv := serveTestWithServer(t)
+	srv.SetDraining()
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.READY\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "draining") {
+		t.Fatalf("expected draining error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestREADYNoModels(t *testing.T) {
+	addr := serveTestEmpty(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$9\r\nEMB.READY\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "no models") {
+		t.Fatalf("expected no models error, got %q", resp)
+	}
+	c.Close()
+}
+
 func serveTestWithCache(t *testing.T, cacheConfig string) string {
 	t.Helper()
 	reg := registry.New()

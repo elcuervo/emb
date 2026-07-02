@@ -41,6 +41,7 @@ func run() error {
 
 	reg := registry.New()
 
+	var modelCount int
 	for name, modelCfg := range fc.Models {
 		log.Printf("registering model %q", name)
 		entry, err := registry.LoadModel(modelCfg, name)
@@ -49,7 +50,9 @@ func run() error {
 			return fmt.Errorf("loading model %q: %w", name, err)
 		}
 		reg.Add(name, entry)
+		modelCount++
 	}
+	reg.SetModelCount(modelCount)
 
 	var tlsConfig *tls.Config
 	if fc.TLSCert != "" && fc.TLSKey != "" {
@@ -61,6 +64,9 @@ func run() error {
 	}
 
 	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig)
+	if modelCount > 0 {
+		srv.SetReady()
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -68,6 +74,7 @@ func run() error {
 	go func() {
 		s := <-sig
 		log.Printf("shutting down (signal: %v)...", s)
+		srv.SetDraining()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)

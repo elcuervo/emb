@@ -48,6 +48,18 @@ RSpec.describe Emb do
     end
   end
 
+  describe '.ready?' do
+    it 'returns true when server is ready' do
+      expect(described_class.ready?).to be true
+    end
+  end
+
+  describe '.ready' do
+    it 'returns a string' do
+      expect(described_class.ready).to be_a(String)
+    end
+  end
+
   describe 'Proxy' do
     it 'embeds text and returns an array of floats' do
       result = described_class[:minilm]['hello world']
@@ -139,6 +151,8 @@ RSpec.describe Emb do
       expect(client.info(:minilm)).to be_a(Hash)
       expect(client.help).to be_a(String)
       expect(client.ping).to eq('PONG')
+      expect(client.ready?).to be true
+      expect(client.ready).to be_a(String)
     end
 
     it 'supports multi on instance' do

@@ -1,5 +1,7 @@
 # emb
 
+A simple yet powerful text embeddings generator.
+
 [![GitHub Release](https://img.shields.io/github/v/release/elcuervo/emb?logo=github&color=blue)](https://github.com/elcuervo/emb/releases)
 [![Docker Hub](https://img.shields.io/docker/v/elcuervo/emb?logo=docker&color=blue&label=docker)](https://hub.docker.com/r/elcuervo/emb)
 [![emb gem](https://img.shields.io/gem/v/emb?logo=rubygems&color=red&label=emb)](https://rubygems.org/gems/emb)
@@ -34,7 +36,7 @@ emb -model-repo Xenova/all-MiniLM-L6-v2
 
 # In another terminal:
 redis-cli EMB minilm "hello world"
-→ \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
+# → \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
 ```
 
 ## Features
@@ -91,9 +93,29 @@ redis-cli EMB minilm "hello world"
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency |
 | `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown |
 | `EMB.MULTI <model> <text> [<model> <text>...]` | Embed texts across different models in one call |
+| `EMB.READY` | Health check: `+OK` (ready), `-ERR loading` (loading), `-ERR draining` (shutting down) |
 | `EMB.HELP` | Command reference |
 | `AUTH <password>` | Authenticate the connection (required if `password` is set in config) |
 | `PING` | PONG |
+
+### EMB.READY for health checks
+
+`EMB.READY` returns `+OK` when the server is ready to serve traffic, or `-ERR` with a reason (`loading`, `draining`, `no models`). Use this in your load balancer's HTTP/TCP health check or monitoring system:
+
+```
+redis-cli EMB.READY
+→ OK
+```
+
+The [emb](gems/emb/README.md) gem exposes `Emb.ready?` (boolean) and `Emb.ready` (reason string):
+
+```ruby
+Emb.ready?
+# => true
+
+Emb.ready
+# => "ready"
+```
 
 ### EMB.MULTI example
 
