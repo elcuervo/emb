@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"os"
@@ -53,7 +54,16 @@ func run() error {
 	}
 	reg.SetModelCount(modelCount)
 
-	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache)
+	var tlsConfig *tls.Config
+	if fc.TLSCert != "" && fc.TLSKey != "" {
+		cert, err := tls.LoadX509KeyPair(fc.TLSCert, fc.TLSKey)
+		if err != nil {
+			return fmt.Errorf("loading TLS cert/key: %w", err)
+		}
+		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+	}
+
+	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig)
 	if modelCount > 0 {
 		srv.SetReady()
 	}

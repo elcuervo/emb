@@ -131,6 +131,8 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 listen: ":6379"
 
 # password: "hunter2"
+# tls_cert: /etc/emb/cert.pem
+# tls_key:  /etc/emb/key.pem
 
 models:
   minilm:

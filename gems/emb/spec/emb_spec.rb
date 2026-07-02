@@ -132,8 +132,8 @@ RSpec.describe Emb do
     end
 
     it 'defaults to EMB_URL env var' do
-      allow(ENV).to receive(:[]).and_call_original
-      allow(ENV).to receive(:[]).with('EMB_URL').and_return('redis://localhost:16379')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('EMB_URL', nil).and_return('redis://localhost:16379')
       client = described_class.new
       expect(client.ping).to eq('PONG')
     end
@@ -166,6 +166,26 @@ RSpec.describe Emb do
       expect(results.first).to be_a(Array)
       expect(results.first.size).to eq(384)
       expect(results.first.first).to be_a(Float)
+    end
+
+    it 'forwards redis-client connect_timeout' do
+      client = described_class.new(port: 16_379, connect_timeout: 2)
+      expect(client.ping).to eq('PONG')
+    end
+
+    it 'forwards redis-client read_timeout' do
+      client = described_class.new(port: 16_379, read_timeout: 5)
+      expect(client.ping).to eq('PONG')
+    end
+
+    it 'forwards reconnect_attempts' do
+      client = described_class.new(port: 16_379, reconnect_attempts: 5)
+      expect(client.ping).to eq('PONG')
+    end
+
+    it 'forwards unknown redis-client options without error' do
+      client = described_class.new(port: 16_379, write_timeout: 3)
+      expect(client.ping).to eq('PONG')
     end
   end
 end
