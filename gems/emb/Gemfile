@@ -5,7 +5,13 @@ source 'https://rubygems.org'
 gemspec
 
 gem 'connection_pool'
+gem 'irb', require: false
+gem 'ostruct', require: false
 gem 'redis-client'
 
 gem 'rake', require: false
 gem 'rspec', require: false
+
+gem 'rubocop', require: false
+gem 'rubocop-rake', require: false
+gem 'rubocop-rspec', require: false

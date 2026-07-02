@@ -1,17 +1,15 @@
 # frozen_string_literal: true
 
-require 'rspec/core/rake_task'
 require 'rubocop/rake_task'
 
-RSpec::Core::RakeTask.new(:spec)
 RuboCop::RakeTask.new
-
-task default: :spec
 
 desc 'Start an IRB console with the gem loaded'
 task :console do
   require 'irb'
-  require_relative 'lib/emb'
+  require_relative 'lib/emb-server'
   ARGV.clear
   IRB.start
 end
+
+task default: :rubocop

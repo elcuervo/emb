@@ -1,25 +1,25 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-spec = Gem::Specification.find_by_name("emb-server")
+spec = Gem::Specification.find_by_name('emb-server')
 
 binary_name = case RUBY_PLATFORM
-when /arm64.*darwin/  then "emb-binary-arm64-darwin"
-when /x86_64.*linux/  then "emb-binary-x86_64-linux"
-when /aarch64.*linux/ then "emb-binary-aarch64-linux"
-else
-  $stderr.puts "ERROR: unsupported platform #{RUBY_PLATFORM}"
-  exit 1
-end
+              when /arm64.*darwin/  then 'emb-binary-arm64-darwin'
+              when /x86_64.*linux/  then 'emb-binary-x86_64-linux'
+              when /aarch64.*linux/ then 'emb-binary-aarch64-linux'
+              else
+                warn "ERROR: unsupported platform #{RUBY_PLATFORM}"
+                exit 1
+              end
 
-binary = File.join(spec.gem_dir, "lib", "emb-server", binary_name)
+binary = File.join(spec.gem_dir, 'lib', 'emb-server', binary_name)
 
 unless File.exist?(binary)
-  $stderr.puts "ERROR: binary not found at #{binary}"
+  warn "ERROR: binary not found at #{binary}"
   exit 1
 end
 
-require "onnxruntime"
+require 'onnxruntime'
 ort_lib = OnnxRuntime.ffi_lib.first
 
-exec binary, "-ort-lib", ort_lib, *ARGV
+exec binary, '-ort-lib', ort_lib, *ARGV

@@ -15,8 +15,8 @@ module Emb
       args = @pairs.flat_map { |pair| [pair[:model].to_s, pair[:text]] }
 
       @client
-        .send_command("EMB.MULTI", *args)
-        .map { |entry| entry.unpack("e*") }
+        .send_command('EMB.MULTI', *args)
+        .map { |entry| entry.unpack('e*') }
     end
 
     class PairCollector

@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
-require "connection_pool"
-require "redis_client"
+require 'connection_pool'
+require 'redis_client'
 
 module Emb
-  DEFAULTS = { host: "localhost", port: 6379, pool: 5 }.freeze
+  DEFAULTS = { host: 'localhost', port: 6379, pool: 5 }.freeze
 
   class Client
     attr_reader :pool
 
     def initialize(url: nil, host: nil, port: nil, pool: DEFAULTS[:pool])
-      url ||= ENV["EMB_URL"]
+      url ||= ENV.fetch('EMB_URL', nil)
       host ||= DEFAULTS[:host]
       port ||= DEFAULTS[:port]
 
@@ -34,7 +34,7 @@ module Emb
     end
 
     def models
-      raw = send_command("EMB.MODELS")
+      raw = send_command('EMB.MODELS')
       return [] if raw.nil?
 
       raw.map do |name, dim, status|
@@ -43,7 +43,7 @@ module Emb
     end
 
     def info(name)
-      raw = send_command("EMB.INFO", name.to_s)
+      raw = send_command('EMB.INFO', name.to_s)
       return {} if raw.nil?
 
       raw
@@ -51,17 +51,17 @@ module Emb
         .to_h { |k, v| [k.to_sym, v] }
     end
 
-    def stats = send_command("EMB.STATS")
+    def stats = send_command('EMB.STATS')
 
-    def help = send_command("EMB.HELP")
+    def help = send_command('EMB.HELP')
 
-    def ping = send_command("PING")
+    def ping = send_command('PING')
 
     def reset_registry!
       @registry = {}
     end
 
-    def multi(&block)
+    def multi(&)
       mp = MultiProxy.new(self)
       yield mp
       mp.run

@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
     'lib/**/*',
     'LICENSE',
     'README.md',
-    'Gemfile',
+    'Gemfile'
   ]
 
   spec.require_paths = ['lib']
@@ -23,6 +23,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'connection_pool', '~> 2.5'
   spec.add_dependency 'redis-client', '~> 0.24'
 
-  spec.add_development_dependency 'rspec', '~> 3.13'
   spec.metadata['rubygems_mfa_required'] = 'true'
 end

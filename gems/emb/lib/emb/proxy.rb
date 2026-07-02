@@ -10,8 +10,8 @@ module Emb
     end
 
     def [](text, *texts)
-      set = Array(@client.send_command("EMB", @name.to_s, text, *texts))
-      result = set.map { |entry| entry.unpack("e*") }
+      set = Array(@client.send_command('EMB', @name.to_s, text, *texts))
+      result = set.map { |entry| entry.unpack('e*') }
 
       return result.first if result.size == 1
 
