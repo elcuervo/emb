@@ -65,6 +65,20 @@ module Emb
 
     def ping = send_command('PING')
 
+    def ready
+      send_command('EMB.READY')
+      "ready"
+    rescue RedisClient::CommandError => e
+      e.message
+    end
+
+    def ready?
+      send_command('EMB.READY')
+      true
+    rescue RedisClient::CommandError
+      false
+    end
+
     def reset_registry!
       @registry = {}
     end

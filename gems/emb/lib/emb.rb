@@ -21,6 +21,8 @@ module Emb
     def stats       = default_client.stats
     def help        = default_client.help
     def ping        = default_client.ping
+    def ready       = default_client.ready
+    def ready?      = default_client.ready?
     def multi(&)    = default_client.multi(&)
     def reset_registry! = default_client.reset_registry!
     def debug? = @debug
