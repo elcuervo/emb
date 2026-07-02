@@ -43,7 +43,7 @@ func main() {
 		reg.Add(name, entry)
 	}
 
-	srv := server.New(fc.Listen, reg)
+	srv := server.New(fc.Listen, reg, fc.Password)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

@@ -10,8 +10,9 @@ import (
 )
 
 type Config struct {
-	Listen string                 `yaml:"listen"`
-	Models map[string]ModelConfig `yaml:"models"`
+	Listen   string                 `yaml:"listen"`
+	Password string                 `yaml:"password"`
+	Models   map[string]ModelConfig `yaml:"models"`
 }
 
 type BatchingConfig struct {
@@ -95,6 +96,10 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 			fc.Config = *cfg
 			// -config implies models, mark hasModel so the check below passes
 			hasModel = true
+
+		case arg == "-password" && i+1 < len(args):
+			i++
+			fc.Password = args[i]
 
 		case arg == "-ort-lib" && i+1 < len(args):
 			i++

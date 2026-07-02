@@ -2,6 +2,7 @@ package server
 
 import (
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -242,7 +243,91 @@ func TestServerEMBMULTIStats(t *testing.T) {
 	c.Close()
 }
 
-func serveTest(t *testing.T) string {
+func TestAUTHNoPassword(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+	c.Write([]byte("*2\r\n$4\r\nAUTH\r\n$5\r\nhello\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "no password is set") {
+		t.Fatalf("expected no password error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestAUTHWrongPassword(t *testing.T) {
+	addr := serveTestWithAuth(t, "secret123")
+	c := dial(t, addr)
+	c.Write([]byte("*2\r\n$4\r\nAUTH\r\n$6\r\nwrong!\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "invalid password") {
+		t.Fatalf("expected invalid password error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestAUTHCorrectPassword(t *testing.T) {
+	addr := serveTestWithAuth(t, "secret123")
+	c := dial(t, addr)
+	c.Write([]byte("*2\r\n$4\r\nAUTH\r\n$9\r\nsecret123\r\n"))
+	resp := readRESP(t, c)
+	if resp != "+OK\r\n" {
+		t.Fatalf("expected +OK, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestCommandBeforeAuth(t *testing.T) {
+	addr := serveTestWithAuth(t, "secret123")
+	c := dial(t, addr)
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "NOAUTH") {
+		t.Fatalf("expected NOAUTH error, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestPINGBeforeAuth(t *testing.T) {
+	addr := serveTestWithAuth(t, "secret123")
+	c := dial(t, addr)
+	c.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	resp := readRESP(t, c)
+	if resp != "+PONG\r\n" {
+		t.Fatalf("expected +PONG, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestAUTHDouble(t *testing.T) {
+	addr := serveTestWithAuth(t, "secret123")
+	c := dial(t, addr)
+	c.Write([]byte("*2\r\n$4\r\nAUTH\r\n$9\r\nsecret123\r\n"))
+	resp1 := readRESP(t, c)
+	c.Write([]byte("*2\r\n$4\r\nAUTH\r\n$9\r\nsecret123\r\n"))
+	resp2 := readRESP(t, c)
+	if resp1 != "+OK\r\n" {
+		t.Fatalf("expected +OK, got %q", resp1)
+	}
+	if resp2 != "+OK\r\n" {
+		t.Fatalf("expected +OK on second AUTH, got %q", resp2)
+	}
+	c.Close()
+}
+
+func TestCommandsWorkAfterAuth(t *testing.T) {
+	addr := serveTestWithAuth(t, "secret123")
+	c := dial(t, addr)
+	c.Write([]byte("*2\r\n$4\r\nAUTH\r\n$9\r\nsecret123\r\n"))
+	readRESP(t, c)
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	resp := readRESP(t, c)
+	if len(resp) < 3 || resp[0] != '$' {
+		t.Fatalf("expected bulk string after auth, got %q", resp)
+	}
+	c.Close()
+}
+
+func serveTestWithAuth(t *testing.T, password string) string {
 	t.Helper()
 	reg := registry.New()
 	pool, err := pipeline.NewPool(
@@ -256,11 +341,15 @@ func serveTest(t *testing.T) string {
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
 
 	addr := getFreeAddr()
-	srv := New(addr, reg)
+	srv := New(addr, reg, password)
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
 	return addr
+}
+
+func serveTest(t *testing.T) string {
+	return serveTestWithAuth(t, "")
 }
 
 func dial(t *testing.T, addr string) net.Conn {
@@ -304,7 +393,7 @@ func BenchmarkRESP(b *testing.B) {
 		b.Fatal(err)
 	}
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
-	srv := New(addr, reg)
+	srv := New(addr, reg, "")
 	go srv.ListenAndServe()
 	b.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)

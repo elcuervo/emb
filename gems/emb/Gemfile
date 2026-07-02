@@ -5,8 +5,6 @@ source 'https://rubygems.org'
 gemspec
 
 gem 'connection_pool'
-gem 'irb', require: false
-gem 'ostruct', require: false
 gem 'redis-client'
 
 gem 'rake', require: false

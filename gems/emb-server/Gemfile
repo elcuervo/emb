@@ -4,7 +4,6 @@ source 'https://rubygems.org'
 
 gemspec
 
-gem 'irb', require: false
 gem 'onnxruntime'
 
 gem 'rubocop', require: false
