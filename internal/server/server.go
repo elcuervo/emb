@@ -283,7 +283,11 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 
 	stats := entry.Pool.Stats()
 
-	conn.WriteArray(28)
+	if s.cache != nil {
+		conn.WriteArray(36)
+	} else {
+		conn.WriteArray(22)
+	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
 	conn.WriteBulkString("max_length")

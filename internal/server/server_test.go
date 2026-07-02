@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -501,6 +502,86 @@ func TestCacheDisabled(t *testing.T) {
 	if resp[0] != '$' {
 		t.Fatalf("expected bulk string, got %q", resp)
 	}
+	c.Close()
+}
+
+func parseRESPArrayCount(resp string) (declared, actual int) {
+	if len(resp) == 0 || resp[0] != '*' {
+		return -1, -1
+	}
+
+	i := 1
+	for i < len(resp) && resp[i] >= '0' && resp[i] <= '9' {
+		i++
+	}
+	declared, _ = strconv.Atoi(resp[1:i])
+
+	if i+1 >= len(resp) || resp[i:i+2] != "\r\n" {
+		return -1, -1
+	}
+	i += 2
+
+	for i < len(resp) {
+		switch {
+		case resp[i] == '$':
+			i++
+			j := i
+			for j < len(resp) && resp[j] >= '0' && resp[j] <= '9' {
+				j++
+			}
+			strlen, _ := strconv.Atoi(resp[i:j])
+			i = j + 2 + strlen + 2
+			actual++
+
+		case resp[i] == ':':
+			i++
+			for i < len(resp) && resp[i] != '\r' {
+				i++
+			}
+			i += 2
+			actual++
+
+		default:
+			return declared, actual
+		}
+	}
+
+	return declared, actual
+}
+
+func TestServerINFOArrayCount(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$4\r\ntest\r\n"))
+	resp := readRESP(t, c)
+
+	declared, actual := parseRESPArrayCount(resp)
+	if declared != 22 {
+		t.Fatalf("expected 22 declared elements, got %d: %q", declared, resp)
+	}
+	if actual != 22 {
+		t.Fatalf("expected 22 actual elements, got %d: %q", actual, resp)
+	}
+
+	c.Close()
+}
+
+func TestCacheInfoArrayCount(t *testing.T) {
+	addr := serveTestWithCache(t, "1GB")
+	c := dial(t, addr)
+
+	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$4\r\ntest\r\n"))
+	resp := readRESP(t, c)
+
+	declared, actual := parseRESPArrayCount(resp)
+	if declared != 36 {
+		t.Fatalf("expected 36 declared elements, got %d: %q", declared, resp)
+	}
+	if actual != 36 {
+		t.Fatalf("expected 36 actual elements, got %d: %q", actual, resp)
+	}
+
 	c.Close()
 }
 
