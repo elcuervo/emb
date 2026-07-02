@@ -79,6 +79,28 @@ RSpec.describe Emb do
     end
   end
 
+  describe '.debug!' do
+    after { described_class.instance_variable_set(:@debug, false) }
+
+    it 'switches debug mode on' do
+      described_class.debug!
+      expect(described_class.debug?).to be true
+    end
+
+    it 'is off by default' do
+      expect(described_class.debug?).to be_falsey
+    end
+
+    it 'logs commands to stdout when enabled' do
+      described_class.debug!
+      expect { described_class.ping }.to output(/\[EMB\] "PING" \(\d+\.\d+ms\)/).to_stdout
+    end
+
+    it 'does not log when disabled' do
+      expect { described_class.ping }.not_to output.to_stdout
+    end
+  end
+
   describe '.new' do
     it 'returns an Emb::Client instance' do
       client = described_class.new(port: 16_379)

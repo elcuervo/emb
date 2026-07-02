@@ -26,7 +26,15 @@ module Emb
     end
 
     def send_command(*args)
-      @pool.with { |r| r.call(*args) }
+      return @pool.with { |r| r.call(*args) } unless Emb.debug?
+
+      start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      result = @pool.with { |r| r.call(*args) }
+      elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000
+
+      $stdout.puts "[EMB] #{args.map(&:inspect).join(' ')} (#{format('%.2f', elapsed)}ms)"
+
+      result
     end
 
     def [](name)

@@ -23,7 +23,12 @@ module Emb
     def ping        = default_client.ping
     def multi(&)    = default_client.multi(&)
     def reset_registry! = default_client.reset_registry!
+    def debug? = @debug
     def send_command(*) = default_client.send_command(*)
+
+    def debug!
+      @debug = true
+    end
 
     private
 
