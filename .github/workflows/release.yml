@@ -312,7 +312,7 @@ jobs:
         run: pkill -f "emb -model-repo" 2>/dev/null || true
 
   release-emb:
-    needs: [test-gems]
+    needs: [docker]
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -342,7 +342,7 @@ jobs:
         run: gem push "${{ github.workspace }}/gems/emb"/emb-*.gem
 
   release-emb-server:
-    needs: [test-gems, build-linux-amd64, build-linux-arm64, build-darwin-arm64]
+    needs: [docker]
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
