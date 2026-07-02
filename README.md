@@ -52,6 +52,9 @@ redis-cli EMB minilm "hello world"
 # Auto-downloads a model from HuggingFace and starts the server
 emb -model-repo Xenova/all-MiniLM-L6-v2
 
+# With password authentication
+emb -model-repo Xenova/all-MiniLM-L6-v2 -password "hunter2"
+
 # In another terminal:
 redis-cli EMB model "hello world"
 ```
@@ -89,6 +92,7 @@ redis-cli EMB minilm "hello world"
 | `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown |
 | `EMB.MULTI <model> <text> [<model> <text>...]` | Embed texts across different models in one call |
 | `EMB.HELP` | Command reference |
+| `AUTH <password>` | Authenticate the connection (required if `password` is set in config) |
 | `PING` | PONG |
 
 ### EMB.MULTI example
@@ -103,6 +107,8 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 
 ```yaml
 listen: ":6379"
+
+# password: "hunter2"
 
 models:
   minilm:

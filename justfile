@@ -64,7 +64,18 @@ validate-gems: build
 
 # Build and run the server
 dev: download-libtokenizers build
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml
+    @if [ -z "{{ort_lib}}" ]; then \
+        echo "WARNING: onnxruntime not found in DYLD_LIBRARY_PATH."; \
+        echo "Run 'nix develop' first, or set DYLD_LIBRARY_PATH manually."; \
+        echo "Falling back to system library paths..."; \
+        ./bin/emb -config config.yaml; \
+    else \
+        DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml; \
+    fi
+
+# Launch an IRB console with the emb gem loaded
+console:
+    @cd gems/emb && bundle exec rake console
 
 # Download libtokenizers.a for the current platform
 # Uses the pre-built release from daulet/tokenizers
