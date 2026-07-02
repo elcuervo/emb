@@ -20,15 +20,94 @@ gem install emb
 
 ## Setup
 
-Configure the connection pool (defaults shown):
+The client connects to an emb server via the Redis protocol (RESP2). Configure with a URL,
+host/port, or rely on defaults and environment variables:
 
 ```ruby
 require "emb"
 
-Emb.setup(host: "localhost", port: 6379, pool: 5)
+# URL (Redis URL format)
+Emb.setup(url: "redis://localhost:6379")
+
+# Or individual params
+Emb.setup(host: "localhost", port: 6379)
+
+# Or rely on defaults
+Emb.setup
 ```
 
 `Emb.config` is an alias for `Emb.setup`.
+
+### Configuration sources (priority order)
+
+1. Explicit `url:` or `host:`/`port:` arguments
+2. `EMB_URL` environment variable
+3. Default: `redis://localhost:6379`
+
+### Connection pool
+
+```ruby
+Emb.setup(url: "redis://localhost:6379", pool: 10)
+```
+
+### Authentication
+
+If the server is configured with a password, include it in the URL:
+
+```ruby
+# Password as URL userinfo
+Emb.setup(url: "redis://:hunter2@localhost:6379")
+```
+
+The `RedisClient` gem handles `AUTH` automatically on connect when a password
+is embedded in the URL. This works correctly with connection pooling — every
+connection in the pool authenticates on creation.
+
+Manual authentication is also possible but not recommended for pooled connections:
+
+```ruby
+Emb.send_command("AUTH", "hunter2")  # only authenticates one connection
+```
+
+## Instance-based clients
+
+Create independent clients to connect to multiple servers or use different configurations:
+
+```ruby
+default = Emb.setup(url: "redis://localhost:6379")
+other   = Emb.new(url: "redis://:hunter2@10.0.0.1:6380")
+
+default.ping  # => "PONG"
+other.ping    # => "PONG"
+```
+
+Each client has its own connection pool and model proxy registry:
+
+```ruby
+c1 = Emb.new(url: "redis://server1:6379")
+c2 = Emb.new(url: "redis://server2:6379")
+
+c1[:minilm] != c2[:minilm]  # separate proxies
+```
+
+### Global convenience API
+
+When you don't need multiple clients, use the module-level methods:
+
+```ruby
+Emb.setup
+
+Emb[:minilm]["hello"]   # proxy access
+Emb.models               # list models
+Emb.info(:minilm)        # model info
+Emb.stats                # server stats
+Emb.help                 # command reference
+Emb.ping                 # health check
+```
+
+These all delegate to a lazily-initialized default client. No explicit `setup` call
+is required for simple cases — the default client connects to `redis://localhost:6379`
+automatically.
 
 ## Usage
 
@@ -37,6 +116,13 @@ Emb.setup(host: "localhost", port: 6379, pool: 5)
 ```ruby
 result = Emb[:minilm]["hello world"]
 # => [0.0123, -0.0456, 0.0789, ...]  (384 floats)
+```
+
+With an instance-based client:
+
+```ruby
+client = Emb.new(url: "redis://localhost:6379")
+result = client[:minilm]["hello world"]
 ```
 
 ### Multiple texts
@@ -51,11 +137,21 @@ results = Emb[:minilm]["hello", "world"]
 Send texts to different models in one round trip:
 
 ```ruby
-Emb.multi do |m|
+results = Emb.multi do |m|
   m[:minilm]["hello"]
   m[:bge]["world"]
 end
-# => EMB.MULTI minilm "hello" bge "world"
+# => [[0.0123, ...], [-0.0456, ...]]
+# Results are unpacked from float32 binary — same format as single embeddings
+```
+
+Works the same on instance clients:
+
+```ruby
+client.multi do |m|
+  m[:minilm]["hello"]
+  m[:bge]["world"]
+end
 ```
 
 ### Commands
@@ -68,7 +164,23 @@ Emb.help     # => command reference string
 Emb.ping     # => "PONG"
 ```
 
-## Testing end to end
+## Development
+
+### Console
+
+Start an IRB session with the gem loaded:
+
+```bash
+bundle exec rake console
+```
+
+### Lint
+
+```bash
+bundle exec rubocop
+```
+
+### Tests
 
 Start the emb server, then run the test suite:
 
@@ -80,4 +192,5 @@ Start the emb server, then run the test suite:
 bundle exec rake
 ```
 
-Tests cover all commands: `EMB`, `EMB.MODELS`, `EMB.INFO`, `EMB.HELP`, `PING`, and `EMB.MULTI`.
+Tests cover all commands: `EMB`, `EMB.MODELS`, `EMB.INFO`, `EMB.HELP`, `PING`,
+and `EMB.MULTI`, plus instance-based clients, URL configuration, and connection pooling.
