@@ -23,6 +23,6 @@ Gem::Specification.new do |spec|
   spec.executables = ["emb"]
   spec.require_paths = ["lib"]
 
-  spec.add_runtime_dependency "onnxruntime", "~> 0.9"
+  spec.add_runtime_dependency "onnxruntime", "~> 0.11"
   spec.metadata["rubygems_mfa_required"] = "true"
 end
