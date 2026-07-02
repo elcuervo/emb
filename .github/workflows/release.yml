@@ -164,7 +164,7 @@ jobs:
 
   build-darwin-arm64:
     needs: [test, test-gems]
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
 
