@@ -10,7 +10,7 @@ module Emb
     attr_reader :pool
 
     def initialize(url: nil, host: nil, port: nil, pool: DEFAULTS[:pool])
-      url ||= ENV.fetch('EMB_URL', nil)
+      url ||= ENV['EMB_URL']
       host ||= DEFAULTS[:host]
       port ||= DEFAULTS[:port]
 
