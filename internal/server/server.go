@@ -15,6 +15,10 @@ import (
 	"github.com/elcuervo/emb/internal/registry"
 )
 
+type connState struct {
+	authenticated bool
+}
+
 type Server struct {
 	reg          *registry.Registry
 	srv          *redcon.Server
@@ -23,17 +27,20 @@ type Server struct {
 	shuttingDown atomic.Bool
 	started      time.Time
 	addr         string
+	password     string
 }
 
-func New(addr string, reg *registry.Registry) *Server {
+func New(addr string, reg *registry.Registry, password string) *Server {
 	s := &Server{
-		reg:     reg,
-		started: time.Now(),
-		addr:    addr,
+		reg:      reg,
+		started:  time.Now(),
+		addr:     addr,
+		password: password,
 	}
 
 	mux := redcon.NewServeMux()
 	mux.HandleFunc("ping", s.handlePING)
+	mux.HandleFunc("auth", s.handleAUTH)
 	mux.HandleFunc("emb", s.handleEMB)
 	mux.HandleFunc("emb.models", s.handleMODELS)
 	mux.HandleFunc("emb.info", s.handleINFO)
@@ -41,8 +48,17 @@ func New(addr string, reg *registry.Registry) *Server {
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
 
-	s.srv = redcon.NewServer(addr, mux.ServeRESP,
-		func(conn redcon.Conn) bool { return true },
+	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
+		if password != "" && !isExempt(cmd) && !isAuthenticated(conn) {
+			conn.WriteError("NOAUTH Authentication required.")
+			return
+		}
+		mux.ServeRESP(conn, cmd)
+	},
+		func(conn redcon.Conn) bool {
+			conn.SetContext(&connState{})
+			return true
+		},
 		func(conn redcon.Conn, err error) {},
 	)
 
@@ -83,6 +99,36 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) Close() error {
 	return s.srv.Close()
+}
+
+func isExempt(cmd redcon.Command) bool {
+	if len(cmd.Args) == 0 {
+		return false
+	}
+	name := strings.ToLower(string(cmd.Args[0]))
+	return name == "auth" || name == "ping"
+}
+
+func isAuthenticated(conn redcon.Conn) bool {
+	state, ok := conn.Context().(*connState)
+	return ok && state.authenticated
+}
+
+func (s *Server) handleAUTH(conn redcon.Conn, cmd redcon.Command) {
+	if s.password == "" {
+		conn.WriteError("ERR Client sent AUTH, but no password is set")
+		return
+	}
+	if len(cmd.Args) != 2 {
+		conn.WriteError("ERR wrong number of arguments for 'AUTH' command")
+		return
+	}
+	if string(cmd.Args[1]) != s.password {
+		conn.WriteError("ERR invalid password")
+		return
+	}
+	conn.Context().(*connState).authenticated = true
+	conn.WriteString("OK")
 }
 
 func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
@@ -293,6 +339,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics",
 		"EMB.HELP - Show this help message",
+		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 	}, "\n")
 	conn.WriteBulkString(help)
