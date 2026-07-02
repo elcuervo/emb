@@ -60,7 +60,7 @@ jobs:
           CGO_LDFLAGS: "-L/opt/libtokenizers"
 
   build-linux-amd64:
-    needs: [test]
+    needs: [test, test-gems]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -118,7 +118,7 @@ jobs:
           fail_on_unmatched_files: true
 
   build-linux-arm64:
-    needs: [test]
+    needs: [test, test-gems]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -163,7 +163,7 @@ jobs:
           fail_on_unmatched_files: true
 
   build-darwin-arm64:
-    needs: [test]
+    needs: [test, test-gems]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -251,35 +251,49 @@ jobs:
             TOKENIZERS_VERSION=${{ env.TOKENIZERS_VERSION }}
 
   test-gems:
-    needs: [build-linux-amd64]
-    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set tag name
-        run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name }}" >> $GITHUB_ENV
+      - name: Source versions
+        run: cat .github/versions.env >> $GITHUB_ENV
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
 
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
 
-      - name: Download emb binary from release
+      - name: Install libtokenizers
         run: |
-          gh release download "${{ env.TAG_NAME }}" \
-            --pattern "emb_*_linux_amd64.tar.gz" \
-            --dir /tmp/emb-test
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          sudo mkdir -p /opt/libtokenizers
+          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.linux-x86_64.tar.gz" \
+            -o /tmp/libtokenizers.tgz
+          sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
+
+      - name: Install ONNX Runtime
+        run: |
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
+            -o /tmp/onnx.tgz
+          sudo mkdir -p /opt/onnxruntime
+          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+
+      - name: Build emb binary
+        run: |
+          mkdir -p /tmp/emb-test
+          CGO_ENABLED=1 \
+            CGO_CFLAGS="-I/opt/onnxruntime/include" \
+            CGO_LDFLAGS="-L/opt/onnxruntime/lib -lonnxruntime -L/opt/libtokenizers" \
+            go build -ldflags="-X main.version=ci" -o /tmp/emb-test/emb ./cmd/emb
 
       - name: Start emb server
         run: |
-          cd /tmp/emb-test
-          tar xzf *.tar.gz
-          chmod +x emb
-          mkdir -p "${{ github.workspace }}/models"
+          mkdir -p /tmp/emb-test/models
           LD_LIBRARY_PATH="/opt/onnxruntime/lib:$LD_LIBRARY_PATH" \
-            ./emb -model minilm -model-repo Xenova/all-MiniLM-L6-v2 -listen ":16379" &
+            /tmp/emb-test/emb -model minilm -model-repo Xenova/all-MiniLM-L6-v2 -listen ":16379" &
           sleep 10
 
       - name: Run emb gem tests
