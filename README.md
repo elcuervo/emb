@@ -145,14 +145,6 @@ models:
 The response is raw little-endian float32 bytes. Any Redis client works.
 
 **Ruby:**
-```ruby
-require "redis"
-
-r = Redis.new(port: 6379)
-raw = r.call("EMB", "minilm", "hello world")
-emb = raw.unpack("e*")
-# → [0.0123, -0.0456, 0.0789, ...]
-```
 
 ```ruby
 require "redis_client"
@@ -160,6 +152,15 @@ require "redis_client"
 redis = RedisClient.new(port: 6379)
 raw = redis.call("EMB", "minilm", "hello world")
 emb = raw.unpack("e*")
+```
+
+Or use the [`emb`](gems/emb/README.md) gem:
+
+```ruby
+require "emb"
+
+Emb[:minilm]["hello world"]
+# => [0.0123, -0.0456, 0.0789, ...]
 ```
 
 **Python:**
@@ -174,6 +175,16 @@ emb = list(struct.unpack(f"<{len(raw)//4}f", raw))
 var vec []float32
 binary.Read(bytes.NewReader(raw), binary.LittleEndian, &vec)
 ```
+
+## Ruby Gems
+
+Ruby gems for emb:
+
+- [`emb`](https://rubygems.org/gems/emb) — Client library with connection pooling, proxy, and multi-model support. Auto-decodes float32 responses.
+  [README](gems/emb/README.md)
+
+- [`emb-server`](https://rubygems.org/gems/emb-server) — Precompiled server binary. Install and run `emb` directly.
+  [README](gems/emb-server/README.md)
 
 ## Development
 
