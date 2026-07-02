@@ -12,6 +12,8 @@ import (
 type Config struct {
 	Listen   string                 `yaml:"listen"`
 	Password string                 `yaml:"password"`
+	TLSCert  string                 `yaml:"tls_cert"`
+	TLSKey   string                 `yaml:"tls_key"`
 	Cache    string                 `yaml:"cache"`
 	Models   map[string]ModelConfig `yaml:"models"`
 }
@@ -51,6 +53,10 @@ func Load(path string) (*Config, error) {
 
 	if cfg.Listen == "" {
 		cfg.Listen = ":6379"
+	}
+
+	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
+		return nil, fmt.Errorf("both tls_cert and tls_key must be set together")
 	}
 
 	for name, m := range cfg.Models {
@@ -105,6 +111,14 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		case arg == "-cache" && i+1 < len(args):
 			i++
 			fc.Cache = args[i]
+
+		case arg == "-tls-cert" && i+1 < len(args):
+			i++
+			fc.TLSCert = args[i]
+
+		case arg == "-tls-key" && i+1 < len(args):
+			i++
+			fc.TLSKey = args[i]
 
 		case arg == "-ort-lib" && i+1 < len(args):
 			i++
@@ -165,6 +179,10 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 
 	if !hasConfig && !hasModel {
 		return nil, fmt.Errorf("no models configured; use -config, or -model with -model-onnx/-model-repo")
+	}
+
+	if (fc.TLSCert == "") != (fc.TLSKey == "") {
+		return nil, fmt.Errorf("both -tls-cert and -tls-key must be set together")
 	}
 
 	for name, m := range fc.Models {

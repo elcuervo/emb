@@ -107,6 +107,71 @@ func TestValidateMissingFiles(t *testing.T) {
 	}
 }
 
+func TestParseFlagsTLSCertOnly(t *testing.T) {
+	_, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-tls-cert", "/etc/cert.pem",
+	})
+	if err == nil {
+		t.Fatal("expected error: tls_cert without tls_key")
+	}
+}
+
+func TestParseFlagsTLSKeyOnly(t *testing.T) {
+	_, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-tls-key", "/etc/key.pem",
+	})
+	if err == nil {
+		t.Fatal("expected error: tls_key without tls_cert")
+	}
+}
+
+func TestLoadTLSBothSet(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+tls_cert: /etc/cert.pem
+tls_key: /etc/key.pem
+models:
+  test:
+    onnx: ./model.onnx
+    tokenizer: ./tok.json
+    dim: 128
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TLSCert != "/etc/cert.pem" {
+		t.Fatalf("expected /etc/cert.pem, got %s", cfg.TLSCert)
+	}
+	if cfg.TLSKey != "/etc/key.pem" {
+		t.Fatalf("expected /etc/key.pem, got %s", cfg.TLSKey)
+	}
+}
+
+func TestLoadTLSCertOnly(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+tls_cert: /etc/cert.pem
+models:
+  test:
+    onnx: ./model.onnx
+    tokenizer: ./tok.json
+    dim: 128
+`), 0644)
+
+	_, err := Load(cfgPath)
+	if err == nil {
+		t.Fatal("expected error: tls_cert without tls_key")
+	}
+}
+
 func TestListenDefault(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
