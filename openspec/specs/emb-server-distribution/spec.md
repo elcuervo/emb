@@ -47,14 +47,44 @@ The `bin/emb` wrapper SHALL find the `onnxruntime` gem's shared library and exec
 - **THEN** `OnnxRuntime.ffi_lib` SHALL return `vendor/libonnxruntime.so`
 - **THEN** the wrapper SHALL pass it as `-ort-lib`
 
+### Requirement: Portable binary
+
+The Go binary SHALL be compiled without a compile-time link to onnxruntime, so it can start on any machine regardless of where ORT is installed.
+
+#### Scenario: Binary has no dyld dependency on ORT
+
+- **GIVEN** the binary is built with `CGO_ENABLED=1`
+- **WHEN** `otool -L emb-binary-arm64-darwin` is run
+- **THEN** no `libonnxruntime` entry SHALL appear in the output
+
+#### Scenario: Binary starts without ORT installed
+
+- **GIVEN** the binary exists on a machine without onnxruntime
+- **WHEN** `./emb -version` is run
+- **THEN** the version SHALL print without error
+
+#### Scenario: ORT loaded via -ort-lib at runtime
+
+- **GIVEN** the binary is running with `-ort-lib <path-to-libonnxruntime.dylib>`
+- **WHEN** the server receives an `EMB` command
+- **THEN** it SHALL successfully run inference
+
 ### Requirement: onnxruntime gem dependency
 
-The gemspec SHALL declare `onnxruntime` as a runtime dependency.
+The gemspec SHALL declare `onnxruntime ~> 0.11` as a runtime dependency, ensuring ORT 1.27.0+ is bundled.
 
 #### Scenario: Dependency installed automatically
 
 - **WHEN** `gem install emb-server` completes
 - **THEN** the `onnxruntime` gem SHALL also be installed
+
+#### Scenario: ORT runtime version compatibility
+
+- **GIVEN** the `emb-server` gem is installed in a project
+- **WHEN** `bundle exec emb -model-repo Xenova/all-MiniLM-L6-v2` is run
+- **THEN** the Gemfile.lock SHALL resolve to `onnxruntime ~> 0.11`
+- **THEN** the bundled ORT SHALL be version 1.27.0 or newer
+- **THEN** the server SHALL start and accept EMB commands
 
 ### Requirement: Release pipeline publishes platform gems
 
