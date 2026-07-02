@@ -207,6 +207,20 @@ build-linux archx="linux/amd64":
         --output type=local,dest=./dist/emb_linux_$(shell echo {{archx}} | tr / _) \
         .
 
+# Tag current HEAD with the version from VERSION file
+tag:
+	git tag -a "v$(cat VERSION)" -m "v$(cat VERSION)"
+
+# Release: tag and push to remote
+release: tag
+	git push origin "v$(cat VERSION)"
+
+# Bump version: edit VERSION with $EDITOR, then update gem lockfiles
+version:
+	$EDITOR VERSION
+	cd gems/emb && bundle
+	cd gems/emb-server && bundle
+
 # Clean build artifacts
 clean:
     rm -rf bin/ dist/
