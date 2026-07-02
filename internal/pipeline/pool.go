@@ -181,7 +181,7 @@ func (p *Pool) Close() error {
 		return p.batcher.Close()
 	}
 	for _, w := range p.workers {
-		w.Close()
+		_ = w.Close()
 	}
 	return nil
 }

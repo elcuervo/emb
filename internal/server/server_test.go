@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -341,7 +342,7 @@ func serveTestWithAuth(t *testing.T, password string) string {
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
 
 	addr := getFreeAddr()
-	srv := New(addr, reg, password)
+	srv := New(addr, reg, password, "")
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
@@ -350,6 +351,27 @@ func serveTestWithAuth(t *testing.T, password string) string {
 
 func serveTest(t *testing.T) string {
 	return serveTestWithAuth(t, "")
+}
+
+func serveTestWithCache(t *testing.T, cacheConfig string) string {
+	t.Helper()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true, "mean", 0, 32,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", cacheConfig)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr
 }
 
 func dial(t *testing.T, addr string) net.Conn {
@@ -381,6 +403,126 @@ func getFreeAddr() string {
 	return l.Addr().String()
 }
 
+func TestCacheGetSet(t *testing.T) {
+	c := NewCache(1024 * 1024)
+	key := "test:hello"
+	val := []byte{1, 2, 3, 4}
+	c.Set(key, val)
+	got, ok := c.Get(key)
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+	if len(got) != 4 || got[0] != 1 {
+		t.Fatal("wrong cached value")
+	}
+	_, ok = c.Get("nonexistent")
+	if ok {
+		t.Fatal("expected cache miss")
+	}
+}
+
+func TestCacheEviction(t *testing.T) {
+	c := NewCache(200)
+	for i := range 20 {
+		key := fmt.Sprintf("k:%d", i)
+		val := []byte{byte(i)}
+		c.Set(key, val)
+	}
+	st := c.Stats()
+	if st.Evictions == 0 {
+		t.Fatalf("expected evictions, got %d", st.Evictions)
+	}
+	if st.Entries > 15 {
+		t.Fatalf("expected <=15 entries after eviction, got %d", st.Entries)
+	}
+}
+
+func TestCacheHitCounts(t *testing.T) {
+	c := NewCache(1024 * 1024)
+	c.Set("m:hello", []byte{1})
+	c.Set("m:world", []byte{2})
+	c.Get("m:hello")
+	c.Get("m:hello")
+	c.Get("m:world")
+	c.Get("m:nope")
+	st := c.Stats()
+	if st.Hits != 3 {
+		t.Fatalf("expected 3 hits, got %d", st.Hits)
+	}
+	if st.Misses != 1 {
+		t.Fatalf("expected 1 miss, got %d", st.Misses)
+	}
+}
+
+func TestCachePartialHit(t *testing.T) {
+	addr := serveTestWithCache(t, "1GB")
+	c := dial(t, addr)
+
+	c.Write([]byte("*4\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$1\r\na\r\n$1\r\nb\r\n"))
+	resp1 := readRESP(t, c)
+	if resp1[0] != '*' {
+		t.Fatalf("expected array, got %q", resp1)
+	}
+
+	c.Write([]byte("*4\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$1\r\na\r\n$1\r\nc\r\n"))
+	resp2 := readRESP(t, c)
+	if resp2[0] != '*' {
+		t.Fatalf("expected array, got %q", resp2)
+	}
+
+	c.Close()
+}
+
+func TestCacheOnINFO(t *testing.T) {
+	addr := serveTestWithCache(t, "1GB")
+	c := dial(t, addr)
+
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	readRESP(t, c)
+
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	readRESP(t, c)
+
+	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$4\r\ntest\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "cache_hits") {
+		t.Fatalf("expected cache stats in INFO, got %q", resp)
+	}
+
+	c.Close()
+}
+
+func TestCacheDisabled(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	resp := readRESP(t, c)
+	if resp[0] != '$' {
+		t.Fatalf("expected bulk string, got %q", resp)
+	}
+	c.Close()
+}
+
+func TestParseCacheConfig(t *testing.T) {
+	bytes, err := parseCacheConfig("")
+	if err != nil || bytes != 0 {
+		t.Fatalf("expected 0, got %d", bytes)
+	}
+	bytes, err = parseCacheConfig("512MB")
+	if err != nil || bytes != 512000000 {
+		t.Fatalf("expected 512000000, got %d", bytes)
+	}
+	_, err = parseCacheConfig("invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid size")
+	}
+	bytes, err = parseCacheConfig("auto")
+	if err != nil || bytes == 0 {
+		t.Fatalf("expected positive auto-tune value, got %d", bytes)
+	}
+}
+
 func BenchmarkRESP(b *testing.B) {
 	addr := getFreeAddr()
 	reg := registry.New()
@@ -393,7 +535,7 @@ func BenchmarkRESP(b *testing.B) {
 		b.Fatal(err)
 	}
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
-	srv := New(addr, reg, "")
+	srv := New(addr, reg, "", "")
 	go srv.ListenAndServe()
 	b.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)

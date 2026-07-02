@@ -18,17 +18,23 @@ import (
 var version = "dev"
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("%v", err)
+	}
+}
+
+func run() error {
 	fc, err := config.ParseFlags(os.Args[1:])
 	if err != nil {
 		if err.Error() == "__version__" {
 			fmt.Println(version)
-			os.Exit(0)
+			return nil
 		}
-		log.Fatalf("parsing flags: %v", err)
+		return fmt.Errorf("parsing flags: %w", err)
 	}
 
 	if err := onnx.InitEnvironment(fc.OrtLib); err != nil {
-		log.Fatalf("initializing ONNX Runtime: %v", err)
+		return fmt.Errorf("initializing ONNX Runtime: %w", err)
 	}
 	defer onnx.DestroyEnvironment()
 
@@ -38,12 +44,13 @@ func main() {
 		log.Printf("registering model %q", name)
 		entry, err := registry.LoadModel(modelCfg, name)
 		if err != nil {
-			log.Fatalf("loading model %q: %v", name, err)
+			onnx.DestroyEnvironment()
+			return fmt.Errorf("loading model %q: %w", name, err)
 		}
 		reg.Add(name, entry)
 	}
 
-	srv := server.New(fc.Listen, reg, fc.Password)
+	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -53,13 +60,14 @@ func main() {
 		log.Printf("shutting down (signal: %v)...", s)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		srv.Shutdown(ctx)
-		reg.Close()
+		_ = srv.Shutdown(ctx)
+		_ = reg.Close()
 	}()
 
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("server error: %v", err)
+		return fmt.Errorf("server error: %w", err)
 	}
 
 	log.Print("server stopped")
+	return nil
 }

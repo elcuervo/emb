@@ -1,6 +1,7 @@
 listen: ":6379"
 
 # password: "hunter2"
+# cache: "auto"   # or "1GB", "256MB", etc. Empty = disabled
 
 models:
   # Standard sentence-transformers model - 3D output, mean pooling

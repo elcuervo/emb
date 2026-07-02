@@ -105,7 +105,7 @@ func (c *Client) Download(repo, filePath, destDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("creating %s: %w", destPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		return "", fmt.Errorf("writing %s: %w", destPath, err)
