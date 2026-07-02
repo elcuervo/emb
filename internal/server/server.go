@@ -28,14 +28,25 @@ type Server struct {
 	started      time.Time
 	addr         string
 	password     string
+	cache        *Cache
 }
 
-func New(addr string, reg *registry.Registry, password string) *Server {
+func New(addr string, reg *registry.Registry, password string, cacheConfig string) *Server {
+	cacheBytes, err := parseCacheConfig(cacheConfig)
+	if err != nil {
+		log.Fatalf("parsing cache config: %v", err)
+	}
+	var c *Cache
+	if cacheBytes > 0 {
+		c = NewCache(cacheBytes)
+	}
+
 	s := &Server{
 		reg:      reg,
 		started:  time.Now(),
 		addr:     addr,
 		password: password,
+		cache:    c,
 	}
 
 	mux := redcon.NewServeMux()
@@ -155,6 +166,66 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		texts[i] = string(arg)
 	}
 
+	if s.cache != nil {
+		results := make([][]byte, len(texts))
+		var missIdxs []int
+		for i, text := range texts {
+			key := modelName + ":" + text
+			if emb, ok := s.cache.Get(key); ok {
+				results[i] = emb
+			} else {
+				missIdxs = append(missIdxs, i)
+			}
+		}
+		if len(missIdxs) == 0 {
+			if len(results) == 1 {
+				conn.WriteBulk(results[0])
+			} else {
+				conn.WriteArray(len(results))
+				for _, emb := range results {
+					conn.WriteBulk(emb)
+				}
+			}
+			return
+		}
+
+		entry, err := s.reg.GetOrInit(modelName)
+		if err != nil {
+			conn.WriteError(fmt.Sprintf("ERR %v", err))
+			return
+		}
+
+		missTexts := make([]string, len(missIdxs))
+		for j, idx := range missIdxs {
+			missTexts[j] = texts[idx]
+		}
+
+		resp, err := entry.Pool.Embed(missTexts)
+		if err != nil {
+			conn.WriteError(fmt.Sprintf("ERR %v", err))
+			return
+		}
+		if resp.Err != nil {
+			conn.WriteError(fmt.Sprintf("ERR %v", resp.Err))
+			return
+		}
+
+		for j, idx := range missIdxs {
+			results[idx] = resp.Embeddings[j]
+			s.cache.Set(modelName+":"+texts[idx], resp.Embeddings[j])
+		}
+
+		if len(results) == 1 {
+			conn.WriteBulk(results[0])
+		} else {
+			conn.WriteArray(len(results))
+			for _, emb := range results {
+				conn.WriteBulk(emb)
+			}
+		}
+		return
+	}
+
 	entry, err := s.reg.GetOrInit(modelName)
 	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
@@ -212,7 +283,7 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 
 	stats := entry.Pool.Stats()
 
-	conn.WriteArray(22)
+	conn.WriteArray(28)
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
 	conn.WriteBulkString("max_length")
@@ -239,6 +310,28 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(stats.BatchingTimeout)
 	conn.WriteBulkString("batching_max_batch")
 	conn.WriteInt(stats.BatchingMaxBatch)
+	if s.cache != nil {
+		cs := s.cache.Stats()
+		hitRate := 0.0
+		total := cs.Hits + cs.Misses
+		if total > 0 {
+			hitRate = float64(cs.Hits) / float64(total) * 100
+		}
+		conn.WriteBulkString("cache_hits")
+		conn.WriteInt(int(cs.Hits))
+		conn.WriteBulkString("cache_misses")
+		conn.WriteInt(int(cs.Misses))
+		conn.WriteBulkString("cache_hit_rate")
+		conn.WriteBulkString(fmt.Sprintf("%.1f%%", hitRate))
+		conn.WriteBulkString("cache_evictions")
+		conn.WriteInt(int(cs.Evictions))
+		conn.WriteBulkString("cache_entries")
+		conn.WriteInt(cs.Entries)
+		conn.WriteBulkString("cache_max_bytes")
+		conn.WriteInt(int(cs.MaxBytes))
+		conn.WriteBulkString("cache_memory_bytes")
+		conn.WriteInt(int(cs.CurBytes))
+	}
 }
 
 func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
@@ -264,7 +357,17 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 
 	totalErrors := s.reg.TotalErrors()
 
-	conn.WriteArray(14)
+	totalCacheHits := int64(0)
+	totalCacheMisses := int64(0)
+	totalCacheEvictions := int64(0)
+	if s.cache != nil {
+		cs := s.cache.Stats()
+		totalCacheHits = cs.Hits
+		totalCacheMisses = cs.Misses
+		totalCacheEvictions = cs.Evictions
+	}
+
+	conn.WriteArray(20)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -279,6 +382,12 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(len(models))
 	conn.WriteBulkString("per_model")
 	conn.WriteBulkString(strings.Join(perModel, " | "))
+	conn.WriteBulkString("cache_hits")
+	conn.WriteInt(int(totalCacheHits))
+	conn.WriteBulkString("cache_misses")
+	conn.WriteInt(int(totalCacheMisses))
+	conn.WriteBulkString("cache_evictions")
+	conn.WriteInt(int(totalCacheEvictions))
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
@@ -306,6 +415,14 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 			model := string(pairs[idx*2])
 			text := string(pairs[idx*2+1])
 
+			if s.cache != nil {
+				key := model + ":" + text
+				if emb, ok := s.cache.Get(key); ok {
+					results[idx] = emb
+					return
+				}
+			}
+
 			entry, err := s.reg.GetOrInit(model)
 			if err != nil {
 				return
@@ -314,6 +431,10 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 			resp, err := entry.Pool.Embed([]string{text})
 			if err != nil || resp.Err != nil {
 				return
+			}
+
+			if s.cache != nil {
+				s.cache.Set(model+":"+text, resp.Embeddings[0])
 			}
 
 			results[idx] = resp.Embeddings[0]
@@ -333,9 +454,9 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 	help := strings.Join([]string{
-		"EMB <model> <text> [text...] - Generate embeddings for one or more texts",
+		"EMB <model> <text> [text...] - Generate embeddings for one or more texts (cached)",
 		"EMB.MODELS - List available models and their dimensions",
-		"EMB.INFO <model> - Show model details and statistics",
+		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
 		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics",
 		"EMB.HELP - Show this help message",

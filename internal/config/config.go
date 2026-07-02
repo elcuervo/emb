@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Listen   string                 `yaml:"listen"`
 	Password string                 `yaml:"password"`
+	Cache    string                 `yaml:"cache"`
 	Models   map[string]ModelConfig `yaml:"models"`
 }
 
@@ -100,6 +101,10 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		case arg == "-password" && i+1 < len(args):
 			i++
 			fc.Password = args[i]
+
+		case arg == "-cache" && i+1 < len(args):
+			i++
+			fc.Cache = args[i]
 
 		case arg == "-ort-lib" && i+1 < len(args):
 			i++

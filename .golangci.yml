@@ -2,17 +2,66 @@ version: "2"
 linters:
   default: none
   enable:
+    - errcheck
+    - gocritic
+    - gosec
     - govet
+    - ineffassign
+    - revive
     - staticcheck
+    - unused
   settings:
     staticcheck:
       checks:
         - all
         - -SA1019
         - -SA1029
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (net.Conn).Close
+        - (net.Conn).Write
+        - (net.Conn).Read
+        - (os.File).Close
+        - (io.ReadCloser).Close
+        - (github.com/yalue/onnxruntime_go.ArbitraryTensor).Destroy
+        - (github.com/yalue/onnxruntime_go.SessionOptions).Destroy
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetIntraOpNumThreads
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetInterOpNumThreads
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetGraphOptimizationLevel
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetCpuMemArena
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetMemPattern
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetExecutionMode
+        - (github.com/yalue/onnxruntime_go.SessionOptions).SetLogSeverityLevel
+        - (net.Listener).Close
+        - (github.com/elcuervo/emb/internal/pipeline.Pool).Close
+        - (github.com/elcuervo/emb/internal/pipeline.Worker).Close
+        - (github.com/elcuervo/emb/internal/registry.Registry).Close
+        - (github.com/elcuervo/emb/internal/server.Server).Shutdown
+        - (github.com/elcuervo/emb/internal/tokenizer.Tokenizer).Close
+        - github.com/elcuervo/emb/internal/onnx.DestroyEnvironment
+        - fmt.Sscanf
+    gosec:
+      excludes:
+        - G101
+        - G102
+        - G104
+        - G203
+        - G301
+        - G304
+        - G402
+        - G602
+        - G704
+        - G115
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
   exclusions:
     presets:
       - comments
+    paths:
+      - _test\.go$
 formatters:
   enable:
     - gofmt

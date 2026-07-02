@@ -43,7 +43,7 @@ func autoTuneWorkers(modelPath string, maxWorkers int) int {
 	if maxWorkers > 0 && maxWorkers < maxCores {
 		maxCores = maxWorkers
 	}
-	mem := totalSystemMemory()
+	mem := TotalSystemMemory()
 	if mem == 0 {
 		return maxCores
 	}
@@ -84,7 +84,7 @@ func (e *ModelEntry) ensurePool() error {
 
 	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
 	if err != nil {
-		tok.Close()
+		_ = tok.Close()
 		return fmt.Errorf("reading output info for %q: %w", e.Name, err)
 	}
 	out, ok := outInfo[cfg.OutputTensor]
@@ -98,7 +98,7 @@ func (e *ModelEntry) ensurePool() error {
 
 	inputNames, err := onnx.GetInputNames(cfg.ONNX)
 	if err != nil {
-		tok.Close()
+		_ = tok.Close()
 		return fmt.Errorf("reading input names for %q: %w", e.Name, err)
 	}
 	log.Printf("  %s: inputs=%v output=%q rank=%d", e.Name, inputNames, cfg.OutputTensor, out.Rank)
@@ -117,7 +117,7 @@ func (e *ModelEntry) ensurePool() error {
 
 	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, cfg.Batching.Timeout, cfg.Batching.MaxBatch)
 	if err != nil {
-		tok.Close()
+		_ = tok.Close()
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
 	}
 
@@ -318,7 +318,7 @@ func (r *Registry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, entry := range r.models {
-		entry.Pool.Close()
+		_ = entry.Pool.Close()
 	}
 	clear(r.models)
 	return nil

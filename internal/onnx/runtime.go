@@ -23,7 +23,7 @@ func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim i
 	if err != nil {
 		return nil, fmt.Errorf("creating session options: %w", err)
 	}
-	defer opts.Destroy()
+	defer func() { _ = opts.Destroy() }()
 
 	if intraOpThreads <= 0 {
 		intraOpThreads = 1
@@ -31,13 +31,13 @@ func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim i
 	if interOpThreads <= 0 {
 		interOpThreads = 2
 	}
-	opts.SetIntraOpNumThreads(intraOpThreads)
-	opts.SetInterOpNumThreads(interOpThreads)
-	opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll)
-	opts.SetCpuMemArena(true)
-	opts.SetMemPattern(true)
-	opts.SetExecutionMode(ort.ExecutionModeParallel)
-	opts.SetLogSeverityLevel(ort.LoggingLevelFatal)
+	_ = opts.SetIntraOpNumThreads(intraOpThreads)
+	_ = opts.SetInterOpNumThreads(interOpThreads)
+	_ = opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll)
+	_ = opts.SetCpuMemArena(true)
+	_ = opts.SetMemPattern(true)
+	_ = opts.SetExecutionMode(ort.ExecutionModeParallel)
+	_ = opts.SetLogSeverityLevel(ort.LoggingLevelFatal)
 
 	session, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, opts)
 	if err != nil {
@@ -69,7 +69,7 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 	if err != nil {
 		return nil, fmt.Errorf("creating input_ids tensor: %w", err)
 	}
-	defer inputTensor.Destroy()
+	defer func() { _ = inputTensor.Destroy() }()
 
 	inputs := []ort.Value{inputTensor}
 	if s.hasAttnMask {
@@ -77,7 +77,7 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 		if err != nil {
 			return nil, fmt.Errorf("creating attention_mask tensor: %w", err)
 		}
-		defer attnTensor.Destroy()
+		defer func() { _ = attnTensor.Destroy() }()
 		inputs = append(inputs, attnTensor)
 	}
 	if s.hasTokenType {
@@ -85,7 +85,7 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 		if err != nil {
 			return nil, fmt.Errorf("creating token_type_ids tensor: %w", err)
 		}
-		defer ttTensor.Destroy()
+		defer func() { _ = ttTensor.Destroy() }()
 		inputs = append(inputs, ttTensor)
 	}
 
@@ -103,7 +103,7 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 	if err != nil {
 		return nil, fmt.Errorf("creating output tensor: %w", err)
 	}
-	defer outputTensor.Destroy()
+	defer func() { _ = outputTensor.Destroy() }()
 
 	outputs := []ort.Value{outputTensor}
 
