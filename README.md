@@ -224,7 +224,8 @@ Ruby gems for emb:
 just format          # Format all Go code
 just lint            # Run linters
 just test            # Run tests
-just bench           # Run benchmarks
+just bench           # Run Go benchmarks
+just bench-all       # Run redis-benchmark suite (see [BENCHMARK.md](BENCHMARK.md))
 just build           # Build the emb binary
 just dev             # Build and run the server
 just download-model  # Download a model from HuggingFace

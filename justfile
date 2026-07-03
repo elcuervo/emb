@@ -143,8 +143,38 @@ bench-redis-multi: build
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
-# Run all redis-benchmark variants (single-threaded + multi-threaded)
+# Run redis-benchmark with cache enabled (cache hit benchmark)
+# Uses 1 client, 1 pipeline, 500 requests with same text (all cache hits after first)
+bench-cache: build
+    @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
+    @echo "Starting server with cache (GOMAXPROCS=0)..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml -cache auto & echo $! > /tmp/emb-srv.pid
+    sleep 10
+    @echo "Warming cache with first request..."
+    @{{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 1 EMB minilm "hello world" > /dev/null 2>&1
+    @echo "Running: redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"
+    {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid
+
+# Run redis-benchmark with cache enabled and specified cache size
+# Usage: just bench-cache-size size="256MB"
+bench-cache-size size="auto":
+    @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
+    @echo "Starting server with cache size {{size}} (GOMAXPROCS=0)..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml -cache {{size}} & echo $! > /tmp/emb-srv.pid
+    sleep 10
+    @{{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 1 EMB minilm "hello world" > /dev/null 2>&1
+    @echo "Running: redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"
+    {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"
+    -kill `cat /tmp/emb-srv.pid` 2>/dev/null
+    rm -f /tmp/emb-srv.pid
+
+# Run all redis-benchmark variants (single-threaded + multi-threaded + cache)
 bench-redis: bench-redis-single bench-redis-multi
+
+# Run all benchmarks
+bench-all: bench-redis bench-cache
 
 # Verify embeddings match Python reference (requires downloaded model)
 verify-embeddings: build

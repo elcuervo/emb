@@ -64,6 +64,7 @@
             ruby_3_4
             bundler
             act
+            xan
           ];
 
           shellHook = ''
