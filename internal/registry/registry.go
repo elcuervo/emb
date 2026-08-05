@@ -104,9 +104,15 @@ func (e *ModelEntry) ensurePool() error {
 	}
 	log.Printf("  %s: inputs=%v output=%q rank=%d", e.Name, inputNames, cfg.OutputTensor, out.Rank)
 
+	modelData, err := os.ReadFile(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return fmt.Errorf("reading model file for %q: %w", e.Name, err)
+	}
+
 	sessionFactory := func() (onnx.Session, error) {
-		return onnx.NewRuntimeSession(
-			cfg.ONNX,
+		return onnx.NewRuntimeSessionFromBytes(
+			modelData,
 			inputNames,
 			[]string{cfg.OutputTensor},
 			cfg.Dim,

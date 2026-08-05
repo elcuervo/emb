@@ -19,11 +19,40 @@ type RuntimeSession struct {
 }
 
 func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int) (*RuntimeSession, error) {
+	opts, err := newSessionOptions(intraOpThreads, interOpThreads)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = opts.Destroy() }()
+
+	session, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, opts)
+	if err != nil {
+		return nil, fmt.Errorf("creating session: %w", err)
+	}
+
+	return newRuntimeSession(session, inputNames, dim, outputRank), nil
+}
+
+func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int) (*RuntimeSession, error) {
+	opts, err := newSessionOptions(intraOpThreads, interOpThreads)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = opts.Destroy() }()
+
+	session, err := ort.NewDynamicAdvancedSessionWithONNXData(data, inputNames, outputNames, opts)
+	if err != nil {
+		return nil, fmt.Errorf("creating session: %w", err)
+	}
+
+	return newRuntimeSession(session, inputNames, dim, outputRank), nil
+}
+
+func newSessionOptions(intraOpThreads, interOpThreads int) (*ort.SessionOptions, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("creating session options: %w", err)
 	}
-	defer func() { _ = opts.Destroy() }()
 
 	if intraOpThreads <= 0 {
 		intraOpThreads = 1
@@ -39,11 +68,10 @@ func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim i
 	_ = opts.SetExecutionMode(ort.ExecutionModeParallel)
 	_ = opts.SetLogSeverityLevel(ort.LoggingLevelFatal)
 
-	session, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, opts)
-	if err != nil {
-		return nil, fmt.Errorf("creating session: %w", err)
-	}
+	return opts, nil
+}
 
+func newRuntimeSession(session *ort.DynamicAdvancedSession, inputNames []string, dim, outputRank int) *RuntimeSession {
 	hasAttnMask := false
 	hasTokenType := false
 	for _, name := range inputNames {
@@ -61,7 +89,7 @@ func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim i
 		hasAttnMask:  hasAttnMask,
 		hasTokenType: hasTokenType,
 		outputRank:   outputRank,
-	}, nil
+	}
 }
 
 func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
