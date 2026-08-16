@@ -16,7 +16,7 @@
           aarch64-darwin = { arch = "darwin-arm64";  hash = "sha256-+4S4suNJpZUnZ//oDM2GL8RAhN5H87DMPwt8nU5knPc="; };
           x86_64-darwin =  { arch = "darwin-x86_64"; hash = ""; };
           aarch64-linux =  { arch = "linux-aarch64"; hash = ""; };
-          x86_64-linux  =  { arch = "linux-x86_64";  hash = ""; };
+          x86_64-linux  =  { arch = "linux-x86_64";  hash = "sha256-clVs3KeY3U6nzaujCOXw1oqMuTtnyW7fSFt6Dt17B/Q="; };
         };
 
         ltInfo = builtins.getAttr system archMap;
