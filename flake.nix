@@ -72,7 +72,10 @@
             export CGO_LDFLAGS="-L${onnxruntime}/lib -lonnxruntime -L${libtokenizers}/lib"
             export C_INCLUDE_PATH="${onnxruntime}/include/onnxruntime:$C_INCLUDE_PATH"
             export LIBRARY_PATH="${onnxruntime}/lib:${libtokenizers}/lib:$LIBRARY_PATH"
+            # macOS runtime linker
             export DYLD_LIBRARY_PATH="${onnxruntime}/lib:$DYLD_LIBRARY_PATH"
+            # Linux runtime linker
+            export LD_LIBRARY_PATH="${onnxruntime}/lib:${libtokenizers}/lib:$LD_LIBRARY_PATH"
           '';
         };
       });

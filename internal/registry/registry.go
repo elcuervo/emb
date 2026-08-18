@@ -341,7 +341,9 @@ func (r *Registry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, entry := range r.models {
-		_ = entry.Pool.Close()
+		if entry.Pool != nil {
+			_ = entry.Pool.Close()
+		}
 	}
 	clear(r.models)
 	return nil
