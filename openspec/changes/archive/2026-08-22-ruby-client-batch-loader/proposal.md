@@ -9,6 +9,7 @@ Embedding N texts via `Emb[:minilm][text]` currently costs N round trips to the 
 - Add a `batch` configuration option (default `false`): when `true`, the existing `Emb[:model]["text"]` / `client[:model]["text"]` proxy calls return the lazy batched embedding instead of hitting the network immediately.
 - Behavior parity with the eager API: single text returns `Array<Float>`, multiple texts return `Array<Array<Float>>`, failures surface as `nil` per pair (MGET semantics).
 - Cache embeddings per execution scope (thread) with `cache: true`, so repeated uses of the same lazy value are free.
+- Ship `Emb::Middleware`, a Rack middleware that clears the per-thread batch scope at the end of each request — bounding cache growth in long-lived request threads and dropping never-consumed loaders per the materialize-on-use contract.
 - `Emb.multi` remains the explicit, eager batching API — unchanged and complementary.
 
 ## Capabilities
@@ -23,7 +24,7 @@ Embedding N texts via `Emb[:minilm][text]` currently costs N round trips to the 
 
 ## Impact
 
-- **Gem**: `gems/emb` — new dependency on `batch-loader` (zero-dependency gem), batch implementation in `lib/emb/batch.rb` (a single constant batch block keyed `:emb` plus `Emb::BatchProxy`), `Client#batch` config option, `Proxy#[]` behavior switch.
+- **Gem**: `gems/emb` — new dependency on `batch-loader` (zero-dependency gem), batch implementation in `lib/emb/batch.rb` (a single constant batch block keyed `:emb` plus `Emb::BatchProxy`), `lib/emb/middleware.rb` (`Emb::Middleware` Rack middleware), `Client#batch` config option, `Proxy#[]` behavior switch.
 - **Server**: none — reuses existing `EMB.MULTI`.
-- **Docs**: `gems/emb/README.md` gains batch usage and the batch-loader contract (create loaders, then consume; per-thread scope).
+- **Docs**: `gems/emb/README.md` gains batch usage and the batch-loader contract (create loaders, then consume; per-thread scope) plus `Emb::Middleware` integration.
 - **Tests**: `gems/emb/spec/` gains batch tests using a fake/stubbed client.

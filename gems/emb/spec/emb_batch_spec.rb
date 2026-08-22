@@ -381,4 +381,31 @@ RSpec.describe Emb do
       expect(log.first).to eq(['EMB.MULTI', 'minilm', 'hello', 'minilm', 'world'])
     end
   end
+
+  describe 'Emb::Middleware' do
+    it 'clears the per-thread scope at the end of each request' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'minilm', 'hello'] => [FakeEmbClient.vec(1.0)]
+      )
+      app = lambda do |_env|
+        Emb::BatchProxy.new(client)[:minilm]['hello'].first
+        [200, {}, []]
+      end
+      middleware = Emb::Middleware.new(app)
+
+      expect(middleware.call({})).to eq([200, {}, []])
+      expect(client.commands.size).to eq(1)
+
+      # A fresh request starts a new scope: the same pair must re-send.
+      expect(middleware.call({})).to eq([200, {}, []])
+      expect(client.commands.size).to eq(2)
+    end
+
+    it 'clears the scope even when the app raises' do
+      middleware = Emb::Middleware.new(->(_env) { raise 'boom' })
+
+      expect { middleware.call({}) }.to raise_error('boom')
+      expect(BatchLoader::Executor.current).to be_nil
+    end
+  end
 end

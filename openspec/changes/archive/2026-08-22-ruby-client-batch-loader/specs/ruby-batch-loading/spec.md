@@ -112,3 +112,23 @@ materialize normally.
 
 - **WHEN** a failed pair's loader is used
 - **THEN** the usage SHALL behave like operating on `nil`, consistent with the existing `Emb.multi` partial-failure behavior
+
+### Requirement: Request-scoped cache clearing
+
+The gem SHALL provide `Emb::Middleware`, a Rack middleware that clears the per-thread batch
+scope after each request via `BatchLoader::Executor.clear_current`. Clearing SHALL happen
+even when the wrapped application raises, and SHALL NOT leak cached values or pending
+loaders into the next request.
+
+#### Scenario: Middleware clears the scope after each request
+
+- **WHEN** `Emb::Middleware` wraps an application in the middleware stack
+- **AND** the first request creates and uses `Emb.batch[:minilm]["hello"]`
+- **AND** the second request creates and uses `Emb.batch[:minilm]["hello"]` again
+- **THEN** a new `EMB.MULTI` command SHALL be sent for the second request
+- **AND** the first request's cached value SHALL NOT be reused
+
+#### Scenario: Scope is cleared when the application raises
+
+- **WHEN** the wrapped application raises an exception
+- **THEN** the per-thread batch scope SHALL still be cleared

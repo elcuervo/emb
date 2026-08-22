@@ -248,6 +248,24 @@ With `batch: true`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
 sending `EMB` immediately. `Emb.batch` works regardless of the option, and
 `Emb.multi` remains the explicit, eager, deterministic batching API.
 
+### Clearing the cache per request
+
+The per-thread batch scope holds cached embeddings for the life of the thread. In
+request-shaped processes (Rails, Rack apps, Sidekiq) mount `Emb::Middleware` to
+clear the scope at the end of each request:
+
+```ruby
+# config/application.rb (Rails)
+config.middleware.use Emb::Middleware
+
+# Any Rack app
+use Emb::Middleware
+```
+
+The scope is cleared even when the app raises, and a fresh scope starts
+automatically with the next request. Loaders created but never used within a
+request are dropped — the create-then-consume contract applies per request.
+
 ### Commands
 
 ```ruby

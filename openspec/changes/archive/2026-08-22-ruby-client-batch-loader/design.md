@@ -105,6 +105,18 @@ today's eager `Emb.multi` on partial failure.
 changes at all. `Emb.multi` is the escape hatch when callers want deterministic,
 non-lazy batching (e.g., transactional updates, cross-thread coordination).
 
+### D8: `Emb::Middleware` clears the scope per request
+
+`Emb::Middleware` is a Rack middleware that clears the per-thread batch scope in an
+`ensure` block after each request — the same pattern batch-loader itself documents for
+HTTP apps. Within a request, loaders are consumed before the response
+(materialize-on-use), so the clear only ever drops never-consumed loaders (already the
+contract) and bounds cache growth in long-lived request threads.
+
+- **Alternative considered:** a per-scope LRU cap on loaded values. Rejected — it fights
+  batch-loader's internals (`loaded_values_by_block` is gem-owned per-thread state) and
+  adds eviction complexity for a risk a boundary clear already solves.
+
 ## Risks / Trade-offs
 
 - **[Silent drop / delayed work]** With `batch: true` or `Emb.batch`, a loader created but
@@ -120,9 +132,9 @@ non-lazy batching (e.g., transactional updates, cross-thread coordination).
   → Mitigation: implementation uses a single constant block + fixed `key:`; a spec test
   asserts two loaders created from different call sites still coalesce.
 - **[Unbounded per-thread cache]** Long-lived threads accumulate distinct-text embeddings.
-  → Mitigation: accepted for v1; repeal point is a per-scope LRU or explicit clear; `nil`
-  results are also memoized (server doesn't cache failures), so repeated failed pairs don't
-  re-send.
+  → Mitigation: `Emb::Middleware` (D8) clears the per-thread scope at the end of each
+  request, bounding growth in request-shaped processes; `nil` results are also memoized
+  (the server doesn't cache failures), so repeated failed pairs don't re-send.
 - **[Per-thread only]** Batching does not span threads; a multithreaded app still issues one
   MULTI per thread. → Mitigation: server-side smart batching coalesces concurrent inference
   server-side; this change targets round-trip reduction within a scope.

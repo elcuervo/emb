@@ -5,6 +5,7 @@ require_relative 'emb/client'
 require_relative 'emb/proxy'
 require_relative 'emb/multi'
 require_relative 'emb/batch'
+require_relative 'emb/middleware'
 
 module Emb
   class << self

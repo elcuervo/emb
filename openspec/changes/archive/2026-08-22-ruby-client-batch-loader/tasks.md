@@ -31,3 +31,11 @@
 - [x] 5.1 Update `gems/emb/README.md` with `Emb.batch` usage, the `batch` config option, and the create-then-consume + per-thread-scope contract (including the silent-drop caveat)
 - [x] 5.2 Run `just format`, `just lint`, and `just test` (or the gem's rubocop/rspec equivalents) and fix any issues
 - [x] 5.3 Confirm `openspec validate ruby-client-batch-loader --type change` passes and update the `emb-ruby-client` main spec via archive/sync when the change is complete
+
+## 6. Request-scoped clearing middleware
+
+- [x] 6.1 Create `gems/emb/lib/emb/middleware.rb` with `Emb::Middleware`: `initialize(app)`, and `call(env)` clearing the batch scope via `BatchLoader::Executor.clear_current` in an `ensure` block
+- [x] 6.2 Require `emb/middleware` from `lib/emb.rb`
+- [x] 6.3 Test `Emb::Middleware` against a stub rack app: the scope is cleared after each `call` (an already-synced pair re-sends in the next request) and is cleared even when the app raises
+- [x] 6.4 Document `Emb::Middleware` integration in `gems/emb/README.md`
+- [x] 6.5 Run the gem's rubocop/rspec equivalents and confirm `openspec validate ruby-client-batch-loader --type change` passes

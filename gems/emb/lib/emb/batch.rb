@@ -10,10 +10,14 @@ module Emb
       pairs = client_items.flat_map { |_, model, text| Array(text).flat_map { |t| [model.to_s, t] } }
       results = Array(client.send_command('EMB.MULTI', *pairs))
 
+      offset = 0
       client_items.each do |item|
         _, _, text = item
-        values = Array(text).map { results.shift&.unpack('e*') }
+        texts = Array(text)
+        values = results[offset, texts.size].map { |entry| entry&.unpack('e*') }
+        offset += texts.size
 
+        # eager Proxy#[] shape: vector for a single text, vectors for many
         loader.call(item, values.size == 1 ? values.first : values)
       end
     end
