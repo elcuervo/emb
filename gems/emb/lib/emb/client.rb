@@ -9,7 +9,9 @@ module Emb
   class Client
     attr_reader :pool
 
-    def initialize(pool: DEFAULTS[:pool], **redis_options)
+    def initialize(pool: DEFAULTS[:pool], batch: false, **redis_options)
+      @batch_enabled = batch
+
       url = extract_url!(redis_options)
       redis_options[:host] ||= DEFAULTS[:host] unless url
       redis_options[:port] ||= DEFAULTS[:port] unless url
@@ -39,6 +41,14 @@ module Emb
       @registry[name] ||= Proxy.new(self, name.to_sym)
     end
 
+    def batch
+      @batch ||= BatchProxy.new(self)
+    end
+
+    def batch?
+      @batch_enabled
+    end
+
     def models
       raw = send_command('EMB.MODELS')
       return [] if raw.nil?
@@ -66,7 +76,7 @@ module Emb
     def ready
       send_command('EMB.READY')
 
-      "ready"
+      'ready'
     rescue RedisClient::CommandError => e
       e.message
     end

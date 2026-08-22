@@ -5,7 +5,7 @@ Embedding N texts via `Emb[:minilm][text]` currently costs N round trips to the 
 ## What Changes
 
 - Add `batch-loader` as a dependency of the `emb` gem.
-- Add an explicit lazy batching API: `Emb.batch[:model]["text"]` (and `client.batch[...]` for instances) returns a lazy embedding that materializes on first use. Multiple lazy embeddings created in the same thread share one batch key and are sent as a single `EMB.MULTI` command, regardless of model — mixed-model batches are one round trip.
+- Add an explicit lazy batching API: `Emb.batch[:model]["text"]` (and `client.batch[...]` for instances) returns a lazy embedding that materializes on first use. Loaders created in the same thread share one batch key — a single constant batch block keyed `:emb` — and are sent as a single `EMB.MULTI` command per client, regardless of model: mixed-model batches are one round trip.
 - Add a `batch` configuration option (default `false`): when `true`, the existing `Emb[:model]["text"]` / `client[:model]["text"]` proxy calls return the lazy batched embedding instead of hitting the network immediately.
 - Behavior parity with the eager API: single text returns `Array<Float>`, multiple texts return `Array<Array<Float>>`, failures surface as `nil` per pair (MGET semantics).
 - Cache embeddings per execution scope (thread) with `cache: true`, so repeated uses of the same lazy value are free.
@@ -23,7 +23,7 @@ Embedding N texts via `Emb[:minilm][text]` currently costs N round trips to the 
 
 ## Impact
 
-- **Gem**: `gems/emb` — new dependency on `batch-loader` (zero-dependency gem), new `Emb::BatchProxy`/batch block implementation in `lib/emb/`, `Client#batch` config option, `Proxy#[]` behavior switch.
+- **Gem**: `gems/emb` — new dependency on `batch-loader` (zero-dependency gem), batch implementation in `lib/emb/batch.rb` (a single constant batch block keyed `:emb` plus `Emb::BatchProxy`), `Client#batch` config option, `Proxy#[]` behavior switch.
 - **Server**: none — reuses existing `EMB.MULTI`.
 - **Docs**: `gems/emb/README.md` gains batch usage and the batch-loader contract (create loaders, then consume; per-thread scope).
 - **Tests**: `gems/emb/spec/` gains batch tests using a fake/stubbed client.

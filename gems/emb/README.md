@@ -89,8 +89,8 @@ Emb.setup(
 ```
 
 See the [redis-client documentation](https://github.com/redis-rb/redis-client) for
-all available options. Only `pool` is handled by the gem — everything else passes
-through to `RedisClient.new`.
+all available options. Only `pool` and `batch` are handled by the gem — everything
+else passes through to `RedisClient.new`.
 
 ## Instance-based clients
 
@@ -176,6 +176,77 @@ client.multi do |m|
   m[:bge]["world"]
 end
 ```
+
+### Lazy batching (`Emb.batch`)
+
+Instead of collecting pairs by hand, `Emb.batch` returns lazy embeddings that all
+coalesce into a single `EMB.MULTI` round trip when the first one is used. This is
+powered by the [batch-loader](https://github.com/exAspArk/batch-loader) gem.
+
+```ruby
+users = User.all # some application objects
+
+# Create loaders first...
+l1 = Emb.batch[:minilm]["hello"]
+l2 = Emb.batch[:minilm]["world"]
+l3 = Emb.batch[:bge]["bonjour"]
+
+# ...then consume them. The first use sends ONE EMB.MULTI for all three.
+l1.sum  # => 12.345
+l2.sum  # => -0.678
+l3.sum  # => 3.141
+```
+
+Instance clients expose the same API:
+
+```ruby
+client.batch[:minilm]["hello"].sum
+```
+
+Each lazy value materializes to the same shape as the eager API: a single text
+yields an `Array<Float>`, multiple texts yield `Array<Array<Float>>`:
+
+```ruby
+vec   = Emb.batch[:minilm]["hello"]   # use -> Array of Float
+vecs  = Emb.batch[:minilm]["hello", "world"]  # use -> Array of Array of Float
+```
+
+Embeddings are cached per thread, so reusing a lazy value (or creating an
+identical pair again in the same scope) is free after the first use. A pair whose
+embedding fails materializes as `nil`, matching `EMB.MULTI`'s per-pair null
+behavior; siblings in the same batch still succeed.
+
+#### The create-then-consume contract
+
+Loaders only fire when a value is **used**. Create all loaders *first*, then
+consume them, so they share one round trip:
+
+```ruby
+texts.each { |t| process(Emb.batch[:minilm][t]) }   # wrong: one MULTI per item
+loaders = texts.map { |t| Emb.batch[:minilm][t] }   # right: ONE MULTI for all
+loaders.each { |l| process(l) }
+```
+
+A loader that is created but never used **never embeds** (unless a sibling batch
+fires first) and is silently dropped when the thread's scope ends. Duration and
+scope: batching is per-thread — a multithreaded app issues one `EMB.MULTI` per
+thread per flush.
+
+### `batch` configuration option
+
+Setting `batch: true` makes the standard proxy API lazy, so existing call sites
+batch automatically without restructuring:
+
+```ruby
+Emb.setup(url: "redis://localhost:6379", batch: true)
+# or
+Emb.new(url: "redis://localhost:6379", batch: true)
+```
+
+With `batch: true`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
+`EMB.MULTI` on first use. The default is `false` — the proxy API stays eager,
+sending `EMB` immediately. `Emb.batch` works regardless of the option, and
+`Emb.multi` remains the explicit, eager, deterministic batching API.
 
 ### Commands
 
