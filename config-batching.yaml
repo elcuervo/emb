@@ -1,0 +1,21 @@
+# Example config demonstrating request-path isolation for inference:
+#
+#   batching: {timeout, max_batch}  — coalesce concurrent pairs into shared
+#               ONNX runs (one session, windowed): fewer threads, better cache
+#               reuse, stable throughput under CPU load. See bench/bench.rb
+#               stability scenario.
+#   intra_op_threads                — leave CPUs for parsing/dispatch so a busy
+#               request path does not starve ONNX (and vice versa).
+#
+# Verify with:  bench-ruby (harness) — the stability gate should PASS here
+#               while the default (no batching) config fails it.
+listen: ":16379"
+
+models:
+  minilm:
+    onnx: ./models/minilm/model.onnx
+    tokenizer: ./models/minilm/tokenizer.json
+    batching:
+      timeout: 1
+      max_batch: 64
+    intra_op_threads: 6

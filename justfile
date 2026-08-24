@@ -8,6 +8,14 @@ image_tag := `cat VERSION 2>/dev/null || echo "dev"`
 docker_user := "elcuervo"
 image_name := "{{docker_user}}/emb"
 
+# CPU partition for benchmark runs (reference machine: 10 CPUs → 6 app / 4 bench).
+# The emb server runs in the app partition (GOMAXPROCS + intra_op_threads budget;
+# taskset -c on Linux) and the benchmark tooling (harness, parse-load generator,
+# redis-benchmark) runs in the disjoint benchmark partition. Override per run with
+# `just bench-ruby app_cpus=4 bench_cpus=6` or set inside a dev shell.
+app_cpus := "6"   # CPUs reserved for the server (app partition)
+bench_cpus := "4" # CPUs reserved for the benchmark tooling
+
 # Format all Go code with golangci-lint (gofmt + goimports)
 format:
     golangci-lint fmt ./...
@@ -122,11 +130,9 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
 # Requires: redis-benchmark, downloaded model at ./models/minilm
 bench-redis-single: build
     @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
-    @echo "Starting server (GOMAXPROCS=1)..."
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=1 ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; echo "Starting server (app partition: $(aff) GOMAXPROCS=1)..."; DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=1 $(aff) ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
     sleep 10
-    @echo "Running: redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"
-    {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world
+    @bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; echo "Running: redis-benchmark (bench partition: $(bench)) -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"; $(bench) {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
@@ -135,11 +141,9 @@ bench-redis-single: build
 # Requires: redis-benchmark, downloaded model at ./models/minilm
 bench-redis-multi: build
     @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
-    @echo "Starting server (GOMAXPROCS=0)..."
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; echo "Starting server (app partition: $(aff) GOMAXPROCS=0)..."; DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 $(aff) ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
     sleep 10
-    @echo "Running: redis-benchmark -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world"
-    {{redis_benchmark}} -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world
+    @bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; echo "Running: redis-benchmark (bench partition: $(bench)) -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world"; $(bench) {{redis_benchmark}} -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
@@ -172,6 +176,30 @@ bench-cache-size size="auto":
 
 # Run all redis-benchmark variants (single-threaded + multi-threaded + cache)
 bench-redis: bench-redis-single bench-redis-multi
+
+# Run the Ruby client benchmark harness under a CPU partition
+# (eager/lazy/pipelined/threaded + round-trip check + stability gate).
+#
+# The server starts in the app partition (GOMAXPROCS={{app_cpus}} + the config's
+# intra_op_threads; real pinning via `taskset -c` on Linux). The harness and its
+# parse-load generator run in the disjoint benchmark partition ({{bench_cpus}} CPUs).
+# On macOS (no taskset) the server is bounded by GOMAXPROCS and the tooling runs
+# unconstrained — see BENCHMARK.md for the partition layout.
+#
+# Requires: emb server model at ./models, Ruby gem deps installed
+bench-ruby config="bench-cpu-partition.yaml":
+    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; \
+    echo "Starting emb server in app partition: $(aff) GOMAXPROCS={{app_cpus}} (config={{config}})"; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS={{app_cpus}} $(aff) ./bin/emb -config {{config}} & echo $! > /tmp/emb-bench.pid; \
+    sleep 2; \
+    until redis-cli -p 16379 ping >/dev/null 2>&1; do sleep 1; done; \
+    bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; \
+    echo "Server ready — running client harness (benchmark partition: $(bench), EMB_BENCH_APP_CPUS={{app_cpus}} EMB_BENCH_BENCH_CPUS={{bench_cpus}})"; \
+    (cd gems/emb && EMB_BENCH_APP_CPUS={{app_cpus}} EMB_BENCH_BENCH_CPUS={{bench_cpus}} $(bench) bundle exec ruby bench/bench.rb); \
+    status=$?; \
+    kill `cat /tmp/emb-bench.pid` 2>/dev/null; \
+    rm -f /tmp/emb-bench.pid; \
+    exit $status
 
 # Run all benchmarks
 bench-all: bench-redis bench-cache

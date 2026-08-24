@@ -4,7 +4,16 @@
 
 Benchmarks use the standard `redis-benchmark` tool which formats positional arguments as RESP commands via `redisFormatCommandArgv`. All results use `EMB minilm hello world` as the benchmark command with `Xenova/all-MiniLM-L6-v2` (dim=384) via ONNX Runtime.
 
-**Hardware:** Apple M1 Pro, 32 GB RAM, macOS Sequoia 26.5.1
+**Hardware:** Apple M1 Pro, 32 GB RAM, macOS Sequoia 26.5.1 (10 CPUs = 4 performance + 6 efficiency)
+
+**CPU partition:** every result set below is measured under a fixed partition of the
+machine's CPUs. The **app partition** hosts the emb server (bounded by `GOMAXPROCS` +
+`intra_op_threads`; hard-pinned with `taskset -c` on Linux), the **benchmark partition**
+hosts the tooling (harness, parse-load generator, `redis-benchmark`). Default on the
+reference machine: **6 app / 4 benchmark**. macOS has no affinity tooling, so there the
+server is bounded by `GOMAXPROCS`/`intra_op_threads` only and the tooling runs free. The
+partition is measurement methodology (a deployment-shaped CPU budget), not a throughput
+knob.
 
 ## Prerequisites
 
@@ -205,6 +214,69 @@ xan plot clients req_s -c config -L bench-compare.csv
 xan plot clients p50_ms -c config -L --y-scale log bench-compare.csv
 ```
 
+## Client-side (Ruby)
+
+The Ruby benchmarks run the end-to-end harness against a live server via
+`just bench-ruby` (`gems/emb/bench/bench.rb`) and measure request handling from the
+client's perspective: requests/sec, p50/p99, and an overhead ratio
+`(per-embed e2e − warm inference baseline) / baseline`. A stability gate measures
+inference p50/p99 while a synthetic parse-heavy load (many-arg `EMB.MULTI` with unknown
+models) exercises the server's request path, and fails when
+`p99_with_load / p99_idle > 1.5`.
+
+### Partitioned (reference run, 6 app / 4 bench CPUs)
+
+Server: `bench-cpu-partition.yaml` (`GOMAXPROCS=6`, `intra_op_threads: 4`), 200 texts ×
+4 rounds, pool=5, 4 threads. Warm inference baseline 7.489 ms.
+
+| Scenario | Embed | per-embed | req/s | p50    | p99     | overhead |
+|----------|-------|-----------|-------|--------|---------|----------|
+| eager    | 800   | 6.395 ms  | 156.4 | 5.847  | 16.744  | −14.6%   |
+| lazy     | 800   | 6.532 ms  | 153.1 | 6.559  | 6.586   | −12.8%   |
+| pipelined| 800   | 6.365 ms  | 157.1 | 6.392  | 6.452   | −15.0%   |
+| threaded | 800   | 5.988 ms  | 167.0 | 12.382 | 116.497 | −20.0%   |
+
+Round-trip check: eager = 5 `EMB` / 0 `EMB.MULTI`; lazy = 1 `EMB.MULTI` / 0 `EMB` ✓
+(lazy collapses N calls into one round trip). Lazy's p99 ≈ p50 (~6.6 ms, no tail);
+eager's p99 (16.7 ms) shows the per-command round-trip tail.
+
+**Stability gate:** idle p50 333.6 / p99 359.4 → with parse load p50 369.9 / p99 411.3,
+**ratio 1.14 PASS** (≤ 1.5). The gate, which flaked on a noisy machine without a
+partition, is reproducible under the fixed CPU budget.
+
+The server is capped to its 6-CPU app partition, so raw req/s here is lower than the
+10-CPU run below — that is expected and is the point of the partition: a
+deployment-shaped budget with clean, reproducible tails.
+
+### Unpartitioned (comparison, 10 app / 0 bench CPUs)
+
+Server: default config, `GOMAXPROCS=0` (all 10 cores). Warm inference baseline 4.629 ms.
+
+| Scenario | Embed | per-embed | req/s | p50   | p99    | overhead |
+|----------|-------|-----------|-------|-------|--------|----------|
+| eager    | 800   | 3.917 ms  | 255.3 | 3.838 | 5.093  | −15.4%   |
+| lazy     | 800   | 3.977 ms  | 251.4 | 3.987 | 4.004  | −14.1%   |
+| pipelined| 800   | 3.530 ms  | 283.3 | 3.533 | 3.553  | −23.7%   |
+| threaded | 800   | 2.498 ms  | 400.3 | 7.653 | 37.607 | −46.0%   |
+
+**Stability gate:** idle p99 228.4 → loaded p99 275.3, **ratio 1.21 PASS** — on an idle
+machine the 10-core default also passes; the partition's value is reproducibility when
+the machine is busy or shared, where the unpartitioned gate has previously flaked.
+
+### Evidence-based client decisions
+
+- **Pool default stays 5.** Sweep {1,2,4,8,16}: single-connection regimes move ≤10%
+  (eager 104→116 req/s), threaded moves ~25% but keeps poor p99 across all sizes
+  (server-side 10-session thrash, not the pool). Small pools are fine for
+  inference-bound workloads; tune via `Emb.setup(pool:)`.
+- **Pure-Ruby driver stays default.** `driver: :hiredis` wins only the all-round-trip
+  eager path (+12% req/s) and is ~neutral for batched/pipelined/threaded — below the
+  15% gate. Enable per-deployment with `Emb.setup(driver: :hiredis)` + `require
+  "hiredis-client"`.
+- **Pipelining: document the pattern, ship no new API.** The raw
+  `pool.with { conn.pipelined { ... } }` expresses eager-burst pipelining
+  (p50 ~7.4–7.9 vs ~8.3–8.6 ms) with no convenience method.
+
 ## Reproduce
 
 ```bash
@@ -222,6 +294,12 @@ just bench-cache
 
 # Cache hit benchmark with explicit size
 just bench-cache-size size="64MB"
+
+# Client-side (Ruby) harness under the CPU partition (default 6 app / 4 bench CPUs)
+just bench-ruby
+
+# Client-side harness with a different partition on a 10-CPU box
+just bench-ruby app_cpus=6 bench_cpus=4 config="bench-cpu-partition.yaml"
 
 # All benchmarks
 just bench-all

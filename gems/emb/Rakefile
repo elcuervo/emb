@@ -8,6 +8,11 @@ RuboCop::RakeTask.new
 
 task default: :spec
 
+desc 'Run the end-to-end client benchmark harness (server must be running)'
+task :bench do
+  ruby 'bench/bench.rb'
+end
+
 desc 'Start an IRB console with the gem loaded'
 task :console do
   require 'irb'

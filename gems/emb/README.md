@@ -50,6 +50,12 @@ Emb.setup
 Emb.setup(url: "redis://localhost:6379", pool: 10)
 ```
 
+The default pool size is **5**. The pool is usually not the bottleneck for
+inference-bound workloads (small pools are fine); it becomes a knob only at high
+concurrency on a multi-model box — see [Performance](#performance). If a pool checkout
+would wait too long, `RedisClient`'s `connect_timeout`/`read_timeout` (above) bound the
+wait.
+
 ### Authentication
 
 If the server is configured with a password, include it in the URL:
@@ -265,6 +271,55 @@ use Emb::Middleware
 The scope is cleared even when the app raises, and a fresh scope starts
 automatically with the next request. Loaders created but never used within a
 request are dropped — the create-then-consume contract applies per request.
+
+## Performance
+
+### Eager-burst pipelining (no new API)
+
+For a burst of independent eager calls (feelers across call sites, fan-ins where
+batching doesn't fit), coalesce them into one packet with `RedisClient#pipelined`:
+
+```ruby
+client = Emb.new(url: "redis://localhost:6379")
+
+a = client.pool.with do |conn|
+  conn.pipelined do |pipe|
+    texts.each { |t| pipe.call("EMB", "minilm", t) }
+  end
+end
+# a -> Array of Float32-binary replies; unpack each with r.unpack("e*")
+```
+
+`Client#pool` exposes the pool's `RedisClient` connections. This measurably beats
+plain per-call round trips; use it for bursts, and `Emb.batch`/`Emb.multi` when you want
+server-side coalescing into one `EMB.MULTI`.
+
+### RESP driver: pure-Ruby default, `hiredis` on demand
+
+The pure-Ruby RESP parser is the default. The C `hiredis` driver only meaningfully helps
+the all-round-trip eager path (about +12% req/s) and is ~neutral for batched/pipelined
+workloads, so it is not worth the native-build dependency by default. Enable it when
+round-trip-heavy eager traffic dominates:
+
+```ruby
+require "hiredis-client"
+Emb.setup(url: "redis://localhost:6379", driver: :hiredis)
+```
+
+### Horizontal scaling
+
+emb instances are stateless — the model lives in memory and the LRU cache is per
+instance. Scale out without a cluster client:
+
+- **Model sharding** — run each instance with a subset of models; route by model via
+  dedicated clients (`Emb.new(url: "redis://model-a:6379")`).
+- **Text-keyed sharding** — several instances serving the same model behind an L4 /
+  load balancer for same-model scale.
+- **Cache warm-up** — because the cache is per instance, each new box starts cold
+  (optionally seed with `-cache` and a warmup pass).
+
+Lazy batching stays per server (a thread's loaders target one client), so batching and
+horizontal scale compose: each instance receives one `EMB.MULTI` per request.
 
 ### Commands
 
