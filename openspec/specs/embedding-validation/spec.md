@@ -1,5 +1,9 @@
-## ADDED Requirements
+# embedding-validation Specification
 
+## Purpose
+Specifies verification that Go server embeddings match a reference Python (sentence-transformers/torch) implementation within a similarity threshold.
+
+## Requirements
 ### Requirement: Embedding output matches reference Python implementation
 
 The server SHALL validate that its auto-configured embeddings match Python sentence-transformers output within a cosine similarity threshold.

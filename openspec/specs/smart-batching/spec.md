@@ -1,9 +1,9 @@
-<<<<<<< HEAD
-## ADDED Requirements
-=======
-## Requirements
->>>>>>> worktree/calm-river-71c1
+# smart-batching Specification
 
+## Purpose
+Specifies the optional smart-batching window that coalesces concurrent EMB requests for the same model into shared ONNX runs for higher throughput.
+
+## Requirements
 ### Requirement: Batch concurrent requests
 
 The server SHALL collect concurrent embedding requests for the same model and execute them as a single batched ONNX inference.

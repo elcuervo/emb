@@ -1,5 +1,9 @@
-## ADDED Requirements
+# emb-cmds Specification
 
+## Purpose
+Specifies the server's EMB.* introspection commands (EMB.INFO, EMB.STATS, EMB.MODELS, EMB.HELP) and the live statistics they expose.
+
+## Requirements
 ### Requirement: EMB.INFO shows real model statistics
 
 The server SHALL respond to `EMB.INFO <model>` with real request count and average latency from internal counters.

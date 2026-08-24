@@ -1,5 +1,9 @@
-## ADDED Requirements
+# pre-pooled-output Specification
 
+## Purpose
+Specifies support for pre-pooled (2D) model outputs via `pooling: none` and detection of pooling/output-rank mismatches at load time.
+
+## Requirements
 ### Requirement: pooling none strategy skips mean pooling
 The system SHALL support `pooling: none` as a strategy for models that return pre-pooled 2D output tensors. With this strategy the system SHALL NOT apply mean pooling; it SHALL treat each row of the output as the final embedding vector directly.
 

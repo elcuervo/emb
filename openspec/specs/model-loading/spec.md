@@ -1,5 +1,9 @@
-## ADDED Requirements
+# model-loading Specification
 
+## Purpose
+Specifies model configuration from YAML and downloading model repositories over HTTP.
+
+## Requirements
 ### Requirement: Model configuration from YAML
 
 The server SHALL load model configurations from a YAML file at startup. Only the model name and `onnx` path (or `model_repo`) are required. All other fields have sensible defaults or are auto-detected from the ONNX graph and tokenizer config:

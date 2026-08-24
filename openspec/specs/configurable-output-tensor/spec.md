@@ -1,5 +1,9 @@
-## ADDED Requirements
+# configurable-output-tensor Specification
 
+## Purpose
+Specifies the configurable ONNX output tensor: a model may select which tensor to embed via `output_tensor`, dim inference handles both 2D (pre-pooled) and 3D outputs, and an invalid tensor name fails at load time.
+
+## Requirements
 ### Requirement: Model config accepts output_tensor field
 The system SHALL allow each model to declare which ONNX output tensor to use via an `output_tensor` field in YAML config. When unset, the system SHALL default to `"last_hidden_state"`.
 

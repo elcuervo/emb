@@ -1,5 +1,9 @@
-## ADDED Requirements
+# model-lifecycle Specification
 
+## Purpose
+Specifies the model lifecycle: lazy loading on first request (or preload at startup) and auto-tuned worker counts bounded by memory.
+
+## Requirements
 ### Requirement: Lazy model loading
 
 Models SHALL be loaded on first `EMB <model>` request by default, not at server startup.

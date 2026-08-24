@@ -1,5 +1,9 @@
-## ADDED Requirements
+# tokenizer Specification
 
+## Purpose
+Specifies loading HuggingFace tokenizer.json files via the official tokenizers library.
+
+## Requirements
 ### Requirement: HuggingFace tokenizer via official library
 
 The server SHALL use the official `huggingface/tokenizers` Rust library (via `daulet/tokenizers` Go bindings) for all tokenization. The hand-rolled pure Go tokenizer is removed.
