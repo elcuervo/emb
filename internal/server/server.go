@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,6 +41,10 @@ type Server struct {
 	tlsConfig    *tls.Config
 	cache        *Cache
 	state        atomic.Int64
+	// fanOut bounds concurrent EMB.MULTI pair processing for a single command, so a
+	// request storm cannot spawn unbounded goroutines competing for inference cores.
+	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
+	fanOut int
 }
 
 func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config) *Server {
@@ -458,39 +463,27 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 
 	n := len(pairs) / 2
 	results := make([][]byte, n)
+
+	// Bound pair fan-out: at most `fanOut` goroutines process pairs concurrently,
+	// each pulling the next pair from jobs — so N pairs spawn O(fanOut) goroutines,
+	// not O(N), preserving MGET semantics and result ordering (results written by
+	// index).
+	fanOut := s.multiPairFanOut(n)
+	jobs := make(chan int)
 	var wg sync.WaitGroup
-	for i := range n {
+	for w := 0; w < fanOut; w++ {
 		wg.Add(1)
-		go func(idx int) {
+		go func() {
 			defer wg.Done()
-			model := string(pairs[idx*2])
-			text := string(pairs[idx*2+1])
-
-			if s.cache != nil {
-				key := model + ":" + text
-				if emb, ok := s.cache.Get(key); ok {
-					results[idx] = emb
-					return
-				}
+			for idx := range jobs {
+				s.processMultiPair(pairs, results, idx)
 			}
-
-			entry, err := s.reg.GetOrInit(model)
-			if err != nil {
-				return
-			}
-
-			resp, err := entry.Pool.Embed([]string{text})
-			if err != nil || resp.Err != nil {
-				return
-			}
-
-			if s.cache != nil {
-				s.cache.Set(model+":"+text, resp.Embeddings[0])
-			}
-
-			results[idx] = resp.Embeddings[0]
-		}(i)
+		}()
 	}
+	for i := range n {
+		jobs <- i
+	}
+	close(jobs)
 	wg.Wait()
 
 	conn.WriteArray(n)
@@ -501,6 +494,52 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteBulk(r)
 		}
 	}
+}
+
+// multiPairFanOut returns how many goroutines may process pairs of one command
+// concurrently: the configured fanOut, or the machine's GOMAXPROCS, capped at the
+// number of pairs.
+func (s *Server) multiPairFanOut(n int) int {
+	cap := s.fanOut
+	if cap <= 0 {
+		cap = runtime.GOMAXPROCS(0)
+	}
+	if cap < 1 {
+		cap = 1
+	}
+	if cap > n {
+		cap = n
+	}
+	return cap
+}
+
+func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
+	model := string(pairs[idx*2])
+	text := string(pairs[idx*2+1])
+
+	if s.cache != nil {
+		key := model + ":" + text
+		if emb, ok := s.cache.Get(key); ok {
+			results[idx] = emb
+			return
+		}
+	}
+
+	entry, err := s.reg.GetOrInit(model)
+	if err != nil {
+		return
+	}
+
+	resp, err := entry.Pool.Embed([]string{text})
+	if err != nil || resp.Err != nil {
+		return
+	}
+
+	if s.cache != nil {
+		s.cache.Set(model+":"+text, resp.Embeddings[0])
+	}
+
+	results[idx] = resp.Embeddings[0]
 }
 
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {

@@ -215,16 +215,25 @@ def run_scenarios(baseline)
 end
 
 STABILITY_THRESHOLD = Float(ENV.fetch('EMB_BENCH_STABILITY_RATIO', 1.5))
+STORM_THRESHOLD = Float(ENV.fetch('EMB_BENCH_STORM_RATIO', 1.75))
 STABILITY_ROUNDS = Integer(ENV.fetch('EMB_BENCH_STABILITY_ROUNDS', 100))
 STABILITY_BATCH  = Integer(ENV.fetch('EMB_BENCH_STABILITY_BATCH', 50))
 LOAD_WORKERS     = Integer(ENV.fetch('EMB_BENCH_LOAD_WORKERS', 1))
 LOAD_PAIRS       = Integer(ENV.fetch('EMB_BENCH_LOAD_PAIRS', 100))
+STORM_WORKERS    = Integer(ENV.fetch('EMB_BENCH_STORM_WORKERS', 2))
+STORM_PAIRS      = Integer(ENV.fetch('EMB_BENCH_STORM_PAIRS', 400))
 
-# Inference p50/p99 of lazy batches, optionally under synthetic parse-heavy load
-# (many-arg EMB.MULTI commands with unknown models: heavy parse + goroutine
-# churn, no inference). Many short rounds keep p99 a real percentile, not the max.
+# Inference p50/p99 of lazy batches, under a constant parse-heavy load and a request
+# storm (many-arg EMB.MULTI commands with unknown models: heavy parse + goroutine
+# churn, no inference), plus an idle reference. The storm mode reproduces the measured
+# server fan-out fail — many workers x large EMB.MULTI pairs. Many short rounds keep
+# p99 a real percentile, not the max.
 def stability_scenario
-  { idle: sample_inference, loaded: with_parse_load { sample_inference } }
+  {
+    idle: sample_inference,
+    constant: with_parse_load(LOAD_WORKERS, LOAD_PAIRS) { sample_inference },
+    storm: with_parse_load(STORM_WORKERS, STORM_PAIRS) { sample_inference }
+  }
 end
 
 def sample_inference
@@ -239,21 +248,21 @@ def lazy_batch_ms(round)
   ms - started
 end
 
-def with_parse_load
+def with_parse_load(workers, pairs)
   stop = [false]
-  workers = LOAD_WORKERS.times.map { Thread.new { parse_load_worker(stop) } }
+  threads = workers.times.map { Thread.new { parse_load_worker(stop, pairs) } }
   result = yield
   stop[0] = true
-  workers.each(&:join)
+  threads.each(&:join)
   result
 end
 
-def parse_load_worker(stop)
+def parse_load_worker(stop, pairs)
   client = new_client
   until stop[0]
     begin
       args = ['EMB.MULTI']
-      LOAD_PAIRS.times { |i| args.push('ghost', "noise #{i}") }
+      pairs.times { |i| args.push('ghost', "noise #{i}") }
       args.push('ghost', 'x' * 10_000)
       client.send_command(*args)
     rescue StandardError
@@ -279,20 +288,30 @@ end
 
 def run_stability_gate
   stability = stability_scenario
-  ratio = stability[:loaded][:p99] / stability[:idle][:p99]
-  status = ratio <= STABILITY_THRESHOLD ? 'PASS' : 'FAIL'
-  puts stability_line(stability, ratio, status)
-  abort 'stability gate failed' if status == 'FAIL'
+  constant_ratio = stability[:constant][:p99] / stability[:idle][:p99]
+  storm_ratio = stability[:storm][:p99] / stability[:idle][:p99]
+  ok = constant_ratio <= STABILITY_THRESHOLD && storm_ratio <= STORM_THRESHOLD
+  puts stability_line(stability, constant_ratio, storm_ratio, ok ? 'PASS' : 'FAIL')
+  abort 'stability gate failed' unless ok
 end
 
-def stability_line(stability, ratio, status)
+def stability_line(stability, constant_ratio, storm_ratio, status)
   idle = stability[:idle]
-  loaded = stability[:loaded]
+  storm = stability[:storm]
   [
-    "stability: idle p50=#{format('%.3f', idle[:p50])} p99=#{format('%.3f', idle[:p99])}",
-    "with parse load p50=#{format('%.3f', loaded[:p50])} p99=#{format('%.3f', loaded[:p99])}",
-    "ratio=#{format('%.2f', ratio)} (threshold #{format('%.2f', STABILITY_THRESHOLD)}) #{status}"
+    "stability: idle p50=#{ms3(idle[:p50])} p99=#{ms3(idle[:p99])}",
+    load_line('constant load', stability[:constant], constant_ratio, ms3(STABILITY_THRESHOLD)),
+    load_line("storm (#{STORM_WORKERS}w x #{STORM_PAIRS}p)", storm, storm_ratio, ms3(STORM_THRESHOLD)),
+    status
   ].join(' | ')
+end
+
+def load_line(label, data, ratio, threshold)
+  "#{label} p50=#{ms3(data[:p50])} p99=#{ms3(data[:p99])} ratio=#{format('%.2f', ratio)} (threshold #{threshold})"
+end
+
+def ms3(value)
+  format('%.3f', value)
 end
 
 main

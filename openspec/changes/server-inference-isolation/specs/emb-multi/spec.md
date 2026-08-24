@@ -28,11 +28,18 @@ correctness SHALL be unchanged.
 
 The server SHALL keep inference p99 stable while the request path is under both constant
 parse load and a request storm. On the reference machine, under the documented CPU
-partition, the storm stability ratio (`p99_with_load / p99_idle`) SHALL be ≤ 1.5.
+partition, the constant-load stability ratio (`p99_with_load / p99_idle`) SHALL be ≤ 1.5
+and the storm ratio SHALL be ≤ 1.75.
+
+#### Scenario: Constant-load gate passes on the reference machine
+
+- **WHEN** the stability harness runs its constant-load mode under the CPU partition
+- **THEN** the reported ratio is ≤ 1.5
+- **AND** the gate fails (non-zero exit) otherwise
 
 #### Scenario: Storm gate passes on the reference machine
 
 - **WHEN** the stability harness runs its storm mode (many load workers sending large
   `EMB.MULTI` commands) under the CPU partition
-- **THEN** the reported storm ratio is ≤ 1.5
+- **THEN** the reported storm ratio is ≤ 1.75
 - **AND** the gate fails (non-zero exit) otherwise

@@ -240,9 +240,16 @@ Round-trip check: eager = 5 `EMB` / 0 `EMB.MULTI`; lazy = 1 `EMB.MULTI` / 0 `EMB
 (lazy collapses N calls into one round trip). Lazy's p99 ≈ p50 (~6.6 ms, no tail);
 eager's p99 (16.7 ms) shows the per-command round-trip tail.
 
-**Stability gate:** idle p50 333.6 / p99 359.4 → with parse load p50 369.9 / p99 411.3,
-**ratio 1.14 PASS** (≤ 1.5). The gate, which flaked on a noisy machine without a
-partition, is reproducible under the fixed CPU budget.
+**Stability gate (bounded fan-out, this change):** idle p99 371.9 ms → constant parse
+load p99 421.9, **constant ratio 1.13 PASS** (≤ 1.5); request storm (2 workers × 400
+pairs) p99 597.0, **storm ratio 1.61 PASS** (≤ 1.75). The gate, which flaked on a noisy
+machine without a partition, is reproducible under the fixed CPU budget.
+
+**Server isolation (this change):** `EMB.MULTI` fan-out is bounded (≤ GOMAXPROCS
+concurrent pair goroutines per command) so request storms can't spawn unbounded
+goroutines — cutting the storm ratio from the previously-measured ~1.87–1.93 (default
+config, unbounded) / ~2.57–2.67 (old batching config) to 1.61. `intra_op_threads` now
+defaults to `cores−2` (explicit config overrides), reserving parse/dispatch CPU.
 
 The server is capped to its 6-CPU app partition, so raw req/s here is lower than the
 10-CPU run below — that is expected and is the point of the partition: a

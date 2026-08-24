@@ -168,7 +168,13 @@ models:
 | `preload` | `false` | Load model at startup instead of on first request |
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
 | `workers` | auto-tuned | Number of worker goroutines |
-| `batching` | `{timeout: 1, max_batch: 32}` | Smart batching settings (set `timeout: 0` to disable) |
+| `intra_op_threads` | `cores−2` | ONNX intra-op threads per session. Defaults to `cores−2` to reserve cores for request parsing/dispatch; set explicitly to override |
+| `batching` | `{timeout: 1, max_batch: 32}` | Smart batching settings (set `timeout: 0` to disable). When enabled, `EMB.MULTI` pairs for a model flow through the same batcher window |
+
+`batching` enables a window that coalesces concurrent requests (including `EMB.MULTI`
+pairs) into shared ONNX runs for better throughput. `EMB.MULTI` processes pairs with
+bounded concurrency (≤ the machine's `GOMAXPROCS`), so request storms can't spawn
+unbounded goroutines that starve inference.
 
 ## Clients
 
