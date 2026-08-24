@@ -39,6 +39,18 @@ func New() *Registry {
 	}
 }
 
+// defaultIntraOpThreads returns the default ONNX intra-op thread count when a model
+// leaves intra_op_threads unset: cores−2, reserving two cores for request
+// parsing/dispatch so a busy request path cannot starve inference (and vice versa).
+// Machines with ≤ 2 cores floor at 1.
+func defaultIntraOpThreads() int {
+	cores := runtime.GOMAXPROCS(0)
+	if cores <= 2 {
+		return 1
+	}
+	return cores - 2
+}
+
 func autoTuneWorkers(modelPath string, maxWorkers int) int {
 	maxCores := runtime.GOMAXPROCS(0)
 	if maxWorkers > 0 && maxWorkers < maxCores {
@@ -110,6 +122,13 @@ func (e *ModelEntry) ensurePool() error {
 		return fmt.Errorf("reading model file for %q: %w", e.Name, err)
 	}
 
+	// Default intra_op_threads to cores−2 (reserve parse/dispatch CPU) when unset;
+	// an explicit config value always wins.
+	intraThreads := cfg.IntraOpThreads
+	if intraThreads <= 0 {
+		intraThreads = defaultIntraOpThreads()
+	}
+
 	sessionFactory := func() (onnx.Session, error) {
 		return onnx.NewRuntimeSessionFromBytes(
 			modelData,
@@ -117,7 +136,7 @@ func (e *ModelEntry) ensurePool() error {
 			[]string{cfg.OutputTensor},
 			cfg.Dim,
 			out.Rank,
-			cfg.IntraOpThreads,
+			intraThreads,
 			cfg.InterOpThreads,
 		)
 	}

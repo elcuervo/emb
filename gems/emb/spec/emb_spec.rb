@@ -100,7 +100,7 @@ RSpec.describe Emb do
     end
 
     it 'is off by default' do
-      expect(described_class.debug?).to be_falsey
+      expect(described_class).not_to be_debug
     end
 
     it 'logs commands to stdout when enabled' do

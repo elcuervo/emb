@@ -1,5 +1,9 @@
-## ADDED Requirements
+# model-autoconfig Specification
 
+## Purpose
+Specifies auto-detection of model settings from the ONNX graph and tokenizer config: embedding dim, max sequence length, pooling/normalization, and output tensor — with explicit config overriding.
+
+## Requirements
 ### Requirement: Auto-detect embedding dimension from ONNX graph
 
 The server SHALL read the ONNX model's output tensor shape to determine the embedding dimension.

@@ -250,6 +250,208 @@ func TestServerEMBMULTIStats(t *testing.T) {
 	c.Close()
 }
 
+// countingSession reports the max number of concurrent Run calls, without serializing
+// them, so tests can assert bounded fan-out (not just bounded worker count).
+type countingSession struct {
+	mu  sync.Mutex
+	max int
+	cur int
+}
+
+func (s *countingSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	s.mu.Lock()
+	s.cur++
+	if s.cur > s.max {
+		s.max = s.cur
+	}
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		s.cur--
+		s.mu.Unlock()
+	}()
+
+	time.Sleep(2 * time.Millisecond) // encourage overlap across workers
+	data := make([]float32, batchSize*seqLen*dim)
+	return data, nil
+}
+
+func (s *countingSession) Close() error { return nil }
+
+func (s *countingSession) peekMax() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.max
+}
+
+// respCommand encodes arguments as a RESP array command.
+func respCommand(args ...string) []byte {
+	var b []byte
+	b = append(b, '*')
+	b = strconv.AppendInt(b, int64(len(args)), 10)
+	b = append(b, '\r', '\n')
+	for _, a := range args {
+		b = append(b, '$')
+		b = strconv.AppendInt(b, int64(len(a)), 10)
+		b = append(b, '\r', '\n')
+		b = append(b, a...)
+		b = append(b, '\r', '\n')
+	}
+	return b
+}
+
+// respArrayElements parses a RESP array of bulk/null strings into its elements,
+// using "<null>" for null bulk strings (for MGET-semantics assertions).
+func respArrayElements(t *testing.T, raw string) []string {
+	t.Helper()
+	if len(raw) == 0 || raw[0] != '*' {
+		t.Fatalf("expected RESP array, got %q", raw)
+	}
+	rest := raw[1:]
+	end := strings.IndexByte(rest, '\r')
+	count, err := strconv.Atoi(rest[:end])
+	if err != nil {
+		t.Fatalf("bad array count: %v", err)
+	}
+	stream := rest[end+2:]
+	out := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		if stream[0] == '$' {
+			if stream[1] == '-' { // $-1 null (5 bytes: $ - 1 \r \n)
+				out = append(out, "<null>")
+				stream = stream[5:]
+				continue
+			}
+			end := strings.IndexByte(stream, '\r')
+			l, err := strconv.Atoi(stream[1:end])
+			if err != nil {
+				t.Fatalf("bad bulk len: %v", err)
+			}
+			out = append(out, stream[end+2:end+2+l])
+			stream = stream[end+2+l+2:]
+		} else {
+			t.Fatalf("unexpected element in array: %q", stream)
+		}
+	}
+	return out
+}
+
+// TestServerEMBMULTIFanOutBounded proves a large EMB.MULTI does not spawn unbounded
+// concurrency: with fanOut=2 and 64 pairs it completes correctly while the number of
+// concurrent inference runs never exceeds 2 (bounded by fan-out, not by pair count).
+func TestServerEMBMULTIFanOutBounded(t *testing.T) {
+	sess := &countingSession{}
+	addr, srv := serveWithPool(t, func() (onnx.Session, error) { return sess, nil }, 8, 0, 32)
+	srv.fanOut = 2
+
+	args := []string{"EMB.MULTI"}
+	for i := 0; i < 64; i++ {
+		args = append(args, "test", "x")
+	}
+
+	c := dial(t, addr)
+	c.Write(respCommand(args...))
+	resp := readRESP(t, c)
+	c.Close()
+
+	elements := respArrayElements(t, resp)
+	if len(elements) != 64 {
+		t.Fatalf("expected 64 elements, got %d", len(elements))
+	}
+	for i, el := range elements {
+		if el == "<null>" {
+			t.Fatalf("element %d unexpectedly null", i)
+		}
+	}
+	if got := sess.peekMax(); got > 2 {
+		t.Fatalf("fan-out not bounded: %d concurrent runs (cap 2)", got)
+	}
+}
+
+// TestServerEMBMULTIMGETSemantics preserves per-pair nil (MGET) semantics under the
+// bounded fan-out path.
+func TestServerEMBMULTIMGETSemantics(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	c.Write(respCommand("EMB.MULTI", "test", "a", "nonexistent", "b", "test", "c"))
+	resp := readRESP(t, c)
+	c.Close()
+
+	elements := respArrayElements(t, resp)
+	if len(elements) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(elements))
+	}
+	if elements[0] == "<null>" || elements[2] == "<null>" {
+		t.Fatalf("known-model elements should be non-null")
+	}
+	if elements[1] != "<null>" {
+		t.Fatalf("unknown-model element should be null, got %q", elements[1])
+	}
+}
+
+// idBasedSession returns embeddings that depend only on the input ids, so the same text
+// yields the same embedding whether it runs alone (EMB) or batched inside a MULTI window.
+type idBasedSession struct{}
+
+func (idBasedSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	data := make([]float32, batchSize*seqLen*dim)
+	for b := 0; b < batchSize; b++ {
+		var sum int64
+		for j := 0; j < seqLen; j++ {
+			sum += inputIDs[b*seqLen+j]
+		}
+		for d := 0; d < dim; d++ {
+			data[b*seqLen*dim+d] = float32(sum)
+		}
+	}
+	return data, nil
+}
+
+func (idBasedSession) Close() error { return nil }
+
+// respBulk extracts the payload of a RESP bulk string (e.g. a single EMB reply).
+func respBulk(t *testing.T, raw string) string {
+	t.Helper()
+	if len(raw) == 0 || raw[0] != '$' || raw[1] == '-' {
+		t.Fatalf("expected RESP bulk, got %q", raw)
+	}
+	end := strings.IndexByte(raw, '\r')
+	l, err := strconv.Atoi(raw[1:end])
+	if err != nil {
+		t.Fatalf("bad bulk len: %v", err)
+	}
+	return raw[end+2 : end+2+l]
+}
+
+// TestServerMULTIBatchingMatchesSequential verifies windowed MULTI (batching enabled)
+// produces embeddings identical to the same texts via sequential EMB calls.
+func TestServerMULTIBatchingMatchesSequential(t *testing.T) {
+	addr, _ := serveWithPool(t, func() (onnx.Session, error) { return idBasedSession{}, nil }, 2, 1, 32)
+
+	c := dial(t, addr)
+
+	c.Write(respCommand("EMB.MULTI", "test", "alpha", "test", "beta"))
+	multi := respArrayElements(t, readRESP(t, c))
+	if len(multi) != 2 || multi[0] == "<null>" || multi[1] == "<null>" {
+		t.Fatalf("multi batching produced invalid elements: %v", multi)
+	}
+
+	c.Write(respCommand("EMB", "test", "alpha"))
+	seqA := respBulk(t, readRESP(t, c))
+	c.Write(respCommand("EMB", "test", "beta"))
+	seqB := respBulk(t, readRESP(t, c))
+	c.Close()
+
+	if multi[0] != seqA {
+		t.Fatalf("windowed MULTI alpha != sequential EMB alpha")
+	}
+	if multi[1] != seqB {
+		t.Fatalf("windowed MULTI beta != sequential EMB beta")
+	}
+}
+
 func TestAUTHNoPassword(t *testing.T) {
 	addr := serveTest(t)
 	c := dial(t, addr)
@@ -367,6 +569,26 @@ func serveTestWithServer(t *testing.T) (string, *Server) {
 		mockTokenizer{},
 		2, 4, 128, true, "mean", 0, 32,
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr, srv
+}
+
+// serveWithPool starts a server whose model "test" is backed by a pool built from the
+// given session factory. numWorkers is the pool worker count (a value >1 here means the
+// only bound on concurrent inference should come from the server's fan-out).
+func serveWithPool(t *testing.T, factory func() (onnx.Session, error), numWorkers, timeoutMS, maxBatch int) (string, *Server) {
+	t.Helper()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(factory, mockTokenizer{}, numWorkers, 4, 128, true, "mean", timeoutMS, maxBatch)
 	if err != nil {
 		t.Fatal(err)
 	}

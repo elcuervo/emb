@@ -1,0 +1,19 @@
+# CPU-partitioned benchmark config (reference machine: 10 CPUs → 6 app / 4 bench).
+# Run via `just bench-ruby` (default config).
+#
+# The app partition gives the server GOMAXPROCS=6 (set by just). intra_op_threads is
+# specified explicitly here for a hermetic, documented run; when unset the server now
+# defaults it to cores−2 (i.e. 8 on a 10-core box), reserving cores for parse/dispatch
+# so a busy request path does not starve ONNX inference — and vice versa. The benchmark
+# tooling (harness, parse-load generator, redis-benchmark) runs on the remaining 4 CPUs
+# (taskset -c on Linux).
+#
+# Adjust with `just bench-ruby app_cpus=<n> bench_cpus=<m>` and keep
+# intra_op_threads ≤ app_cpus so ONNX never competes with the parser for its budget.
+listen: ":16379"
+
+models:
+  minilm:
+    onnx: ./models/minilm/model.onnx
+    tokenizer: ./models/minilm/tokenizer.json
+    intra_op_threads: 4

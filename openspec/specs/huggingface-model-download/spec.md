@@ -1,5 +1,9 @@
-## ADDED Requirements
+# huggingface-model-download Specification
 
+## Purpose
+Specifies downloading models from HuggingFace Hub over HTTP (pre-converted ONNX + tokenizer.json) without requiring a local Python install.
+
+## Requirements
 ### Requirement: Model download from HuggingFace Hub via HTTP
 
 The server SHALL download models from HuggingFace Hub using pure Go HTTP calls, without shelling out to `optimum-cli` or requiring Python.

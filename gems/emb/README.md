@@ -50,6 +50,12 @@ Emb.setup
 Emb.setup(url: "redis://localhost:6379", pool: 10)
 ```
 
+The default pool size is **5**. The pool is usually not the bottleneck for
+inference-bound workloads (small pools are fine); it becomes a knob only at high
+concurrency on a multi-model box — see [Performance](#performance). If a pool checkout
+would wait too long, `RedisClient`'s `connect_timeout`/`read_timeout` (above) bound the
+wait.
+
 ### Authentication
 
 If the server is configured with a password, include it in the URL:
@@ -89,8 +95,8 @@ Emb.setup(
 ```
 
 See the [redis-client documentation](https://github.com/redis-rb/redis-client) for
-all available options. Only `pool` is handled by the gem — everything else passes
-through to `RedisClient.new`.
+all available options. Only `pool` and `batch` are handled by the gem — everything
+else passes through to `RedisClient.new`.
 
 ## Instance-based clients
 
@@ -176,6 +182,144 @@ client.multi do |m|
   m[:bge]["world"]
 end
 ```
+
+### Lazy batching (`Emb.batch`)
+
+Instead of collecting pairs by hand, `Emb.batch` returns lazy embeddings that all
+coalesce into a single `EMB.MULTI` round trip when the first one is used. This is
+powered by the [batch-loader](https://github.com/exAspArk/batch-loader) gem.
+
+```ruby
+users = User.all # some application objects
+
+# Create loaders first...
+l1 = Emb.batch[:minilm]["hello"]
+l2 = Emb.batch[:minilm]["world"]
+l3 = Emb.batch[:bge]["bonjour"]
+
+# ...then consume them. The first use sends ONE EMB.MULTI for all three.
+l1.sum  # => 12.345
+l2.sum  # => -0.678
+l3.sum  # => 3.141
+```
+
+Instance clients expose the same API:
+
+```ruby
+client.batch[:minilm]["hello"].sum
+```
+
+Each lazy value materializes to the same shape as the eager API: a single text
+yields an `Array<Float>`, multiple texts yield `Array<Array<Float>>`:
+
+```ruby
+vec   = Emb.batch[:minilm]["hello"]   # use -> Array of Float
+vecs  = Emb.batch[:minilm]["hello", "world"]  # use -> Array of Array of Float
+```
+
+Embeddings are cached per thread, so reusing a lazy value (or creating an
+identical pair again in the same scope) is free after the first use. A pair whose
+embedding fails materializes as `nil`, matching `EMB.MULTI`'s per-pair null
+behavior; siblings in the same batch still succeed.
+
+#### The create-then-consume contract
+
+Loaders only fire when a value is **used**. Create all loaders *first*, then
+consume them, so they share one round trip:
+
+```ruby
+texts.each { |t| process(Emb.batch[:minilm][t]) }   # wrong: one MULTI per item
+loaders = texts.map { |t| Emb.batch[:minilm][t] }   # right: ONE MULTI for all
+loaders.each { |l| process(l) }
+```
+
+A loader that is created but never used **never embeds** (unless a sibling batch
+fires first) and is silently dropped when the thread's scope ends. Duration and
+scope: batching is per-thread — a multithreaded app issues one `EMB.MULTI` per
+thread per flush.
+
+### `batch` configuration option
+
+Setting `batch: true` makes the standard proxy API lazy, so existing call sites
+batch automatically without restructuring:
+
+```ruby
+Emb.setup(url: "redis://localhost:6379", batch: true)
+# or
+Emb.new(url: "redis://localhost:6379", batch: true)
+```
+
+With `batch: true`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
+`EMB.MULTI` on first use. The default is `false` — the proxy API stays eager,
+sending `EMB` immediately. `Emb.batch` works regardless of the option, and
+`Emb.multi` remains the explicit, eager, deterministic batching API.
+
+### Clearing the cache per request
+
+The per-thread batch scope holds cached embeddings for the life of the thread. In
+request-shaped processes (Rails, Rack apps, Sidekiq) mount `Emb::Middleware` to
+clear the scope at the end of each request:
+
+```ruby
+# config/application.rb (Rails)
+config.middleware.use Emb::Middleware
+
+# Any Rack app
+use Emb::Middleware
+```
+
+The scope is cleared even when the app raises, and a fresh scope starts
+automatically with the next request. Loaders created but never used within a
+request are dropped — the create-then-consume contract applies per request.
+
+## Performance
+
+### Eager-burst pipelining (no new API)
+
+For a burst of independent eager calls (feelers across call sites, fan-ins where
+batching doesn't fit), coalesce them into one packet with `RedisClient#pipelined`:
+
+```ruby
+client = Emb.new(url: "redis://localhost:6379")
+
+a = client.pool.with do |conn|
+  conn.pipelined do |pipe|
+    texts.each { |t| pipe.call("EMB", "minilm", t) }
+  end
+end
+# a -> Array of Float32-binary replies; unpack each with r.unpack("e*")
+```
+
+`Client#pool` exposes the pool's `RedisClient` connections. This measurably beats
+plain per-call round trips; use it for bursts, and `Emb.batch`/`Emb.multi` when you want
+server-side coalescing into one `EMB.MULTI`.
+
+### RESP driver: pure-Ruby default, `hiredis` on demand
+
+The pure-Ruby RESP parser is the default. The C `hiredis` driver only meaningfully helps
+the all-round-trip eager path (about +12% req/s) and is ~neutral for batched/pipelined
+workloads, so it is not worth the native-build dependency by default. Enable it when
+round-trip-heavy eager traffic dominates:
+
+```ruby
+require "hiredis-client"
+Emb.setup(url: "redis://localhost:6379", driver: :hiredis)
+```
+
+### Horizontal scaling
+
+emb instances are stateless — the model lives in memory and the LRU cache is per
+instance. Scale out without a cluster client:
+
+- **Model sharding** — run each instance with a subset of models; route by model via
+  dedicated clients (`Emb.new(url: "redis://model-a:6379")`).
+- **Text-keyed sharding** — several instances serving the same model behind an L4 /
+  load balancer for same-model scale.
+- **Cache warm-up** — because the cache is per instance, each new box starts cold
+  (optionally seed with `-cache` and a warmup pass).
+
+Lazy batching stays per server (a thread's loaders target one client), so batching and
+horizontal scale compose: each instance receives one `EMB.MULTI` per request.
 
 ### Commands
 

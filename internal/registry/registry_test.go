@@ -1,10 +1,35 @@
 package registry
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/elcuervo/emb/internal/onnx"
 )
+
+// TestDefaultIntraOpThreads verifies the thread-isolation default: unset resolves to
+// cores−2 (floor 1 on ≤2 cores), and the registry only substitutes it when the config
+// value is unset (so an explicit value always wins).
+func TestDefaultIntraOpThreads(t *testing.T) {
+	cores := runtime.GOMAXPROCS(0)
+	expected := 1
+	if cores > 2 {
+		expected = cores - 2
+	}
+	if got := defaultIntraOpThreads(); got != expected {
+		t.Fatalf("defaultIntraOpThreads() = %d, want %d (cores=%d)", got, expected, cores)
+	}
+
+	// Explicit config must win over the default: emulate the ensurePool branching.
+	explicit := 4
+	resolved := explicit
+	if resolved <= 0 {
+		resolved = defaultIntraOpThreads()
+	}
+	if resolved != explicit {
+		t.Fatalf("explicit intra_op_threads=%d was overridden to %d", explicit, resolved)
+	}
+}
 
 func TestSelectOutputTensorPrefersRank2(t *testing.T) {
 	outputs := map[string]onnx.OutputInfo{

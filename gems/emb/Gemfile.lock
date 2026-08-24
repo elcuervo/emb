@@ -1,7 +1,8 @@
 PATH
   remote: .
   specs:
-    emb (0.2.1)
+    emb (0.2.2)
+      batch-loader (~> 2.0)
       connection_pool (~> 2.5)
       redis-client (~> 0.24)
 
@@ -9,6 +10,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.3)
+    batch-loader (2.0.6)
     connection_pool (2.5.5)
     diff-lcs (1.6.2)
     json (2.20.0)

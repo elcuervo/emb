@@ -4,6 +4,8 @@ require_relative 'emb/version'
 require_relative 'emb/client'
 require_relative 'emb/proxy'
 require_relative 'emb/multi'
+require_relative 'emb/batch'
+require_relative 'emb/middleware'
 
 module Emb
   class << self
@@ -16,6 +18,7 @@ module Emb
     alias config setup
 
     def [](name)    = default_client[name]
+    def batch       = default_client.batch
     def models      = default_client.models
     def info(name)  = default_client.info(name)
     def stats       = default_client.stats

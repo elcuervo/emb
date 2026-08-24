@@ -1,5 +1,9 @@
-## ADDED Requirements
+# docker-build Specification
 
+## Purpose
+Specifies building and pushing multi-arch Docker images for emb targeting linux/amd64 and linux/arm64.
+
+## Requirements
 ### Requirement: Multi-arch Docker image
 
 The project SHALL provide a `Dockerfile` that builds a multi-arch Docker image for linux/amd64 and linux/arm64.

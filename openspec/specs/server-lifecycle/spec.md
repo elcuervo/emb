@@ -1,5 +1,9 @@
-## ADDED Requirements
+# server-lifecycle Specification
 
+## Purpose
+Specifies server lifecycle: graceful shutdown on SIGINT/SIGTERM, a shutdown timeout that lets in-flight requests drain, and errors for requests arriving during shutdown.
+
+## Requirements
 ### Requirement: Graceful shutdown on SIGINT and SIGTERM
 
 The server SHALL gracefully shut down when it receives either SIGINT or SIGTERM.
