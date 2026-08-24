@@ -264,8 +264,25 @@ RSpec.describe Emb do
   end
 
   describe 'the batch configuration option' do
-    it 'defaults to eager: EMB sent immediately, Array of Float returned' do
+    it 'defaults to lazy batching: no command until the value is used' do
       client = Emb::Client.new
+      expect(client.batch?).to be true
+
+      log = []
+      client.define_singleton_method(:send_command) do |*args|
+        log << args
+        [FakeEmbClient.vec(4.0, dim: 384)]
+      end
+
+      result = client[:minilm]['hello world']
+      expect(log).to be_empty
+
+      expect(result.sum).to be_within(0.001).of(4.0 * 384)
+      expect(log).to eq([['EMB.MULTI', 'minilm', 'hello world']])
+    end
+
+    it 'opts out to eager with batch: false' do
+      client = Emb::Client.new(batch: false)
       expect(client.batch?).to be false
 
       log = []

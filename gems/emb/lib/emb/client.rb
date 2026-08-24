@@ -4,21 +4,17 @@ require 'connection_pool'
 require 'redis_client'
 
 module Emb
-  DEFAULTS = { host: 'localhost', port: 6379, pool: 5 }.freeze
-
   class Client
     attr_reader :pool
 
-    def initialize(pool: DEFAULTS[:pool], batch: false, **redis_options)
-      @batch_enabled = batch
+    def initialize(pool: nil, batch: nil, **redis_options)
+      cfg = Emb.configuration
+      @batch_enabled = batch.nil? ? cfg.batch : batch
+      size = pool.nil? ? cfg.pool : pool
+      url = extract_url!(redis_options, cfg)
+      redis_options = merged_redis_options(redis_options, cfg, url)
 
-      url = extract_url!(redis_options)
-      redis_options[:host] ||= DEFAULTS[:host] unless url
-      redis_options[:port] ||= DEFAULTS[:port] unless url
-      redis_options[:protocol] ||= 2
-      redis_options[:reconnect_attempts] ||= 3
-
-      @pool = ConnectionPool.new(size: pool) do
+      @pool = ConnectionPool.new(size: size) do
         RedisClient.new(url: url, **redis_options)
       end
 
@@ -101,9 +97,23 @@ module Emb
 
     private
 
-    def extract_url!(opts)
+    def merged_redis_options(opts, cfg, url)
+      defaults = cfg.to_h
+      keys = defaults.keys - %i[url pool batch]
+      keys -= %i[host port] if url
+
+      keys.each do |key|
+        opts[key] = defaults[key] if opts[key].nil? && !defaults[key].nil?
+      end
+
+      opts
+    end
+
+    def extract_url!(opts, cfg)
       url = opts.delete(:url)
-      url.nil? ? ENV.fetch('EMB_URL', nil) : url
+      return url unless url.nil?
+
+      cfg.url || ENV.fetch('EMB_URL', nil)
     end
   end
 end

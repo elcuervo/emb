@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'emb/version'
+require_relative 'emb/configuration'
 require_relative 'emb/client'
 require_relative 'emb/proxy'
 require_relative 'emb/multi'
@@ -16,6 +17,15 @@ module Emb
     end
 
     alias config setup
+
+    def configuration
+      @configuration ||= Configuration.new
+    end
+
+    def configure
+      yield configuration if block_given?
+      configuration
+    end
 
     def [](name)    = default_client[name]
     def batch       = default_client.batch

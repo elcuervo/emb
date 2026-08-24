@@ -272,6 +272,11 @@ the machine is busy or shared, where the unpartitioned gate has previously flake
 
 ### Evidence-based client decisions
 
+**Out-of-the-box client config:** the `emb` gem ships `batch: true` (lazy batching — every
+embed coalesces into one `EMB.MULTI`, the round-trip win above), `pool: 5`, and the
+pure-Ruby RESP driver. All are globally configurable via `Emb.configure` (`EMB_URL`
+remains the only env var; see the gem README); the results below are the rationale.
+
 - **Pool default stays 5.** Sweep {1,2,4,8,16}: single-connection regimes move ≤10%
   (eager 104→116 req/s), threaded moves ~25% but keeps poor p99 across all sizes
   (server-side 10-session thrash, not the pool). Small pools are fine for

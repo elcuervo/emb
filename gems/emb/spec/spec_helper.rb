@@ -6,7 +6,9 @@ EMB_PORT = 16_379
 
 RSpec.configure do |config|
   config.before(:suite) do
-    Emb.setup(port: EMB_PORT)
+    # The suite's default client stays eager (batch: false); lazy default behavior
+    # is covered explicitly in emb_batch_spec / emb_configuration_spec.
+    Emb.setup(port: EMB_PORT, batch: false)
     10.times do
       break if Emb.ping == 'PONG'
 

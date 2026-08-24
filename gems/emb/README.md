@@ -44,6 +44,37 @@ Emb.setup
 2. `EMB_URL` environment variable
 3. Default: `redis://localhost:6379`
 
+### Global configuration
+
+Every client (`Emb.setup`, `Emb.new`, and the lazily-created default client) inherits a
+shared global `Emb::Config` value object set with `Emb.configure`. Settings
+resolve in this order — the first one wins:
+
+1. **Explicit per-call option** (`Emb.setup(pool: 10)`)
+2. **`Emb.configure` value**
+3. **Built-in default**
+
+```ruby
+Emb.configure do |c|
+  c.pool = 8
+  c.batch = false   # opt out of lazy batching app-wide
+end
+
+Emb.configuration   # => the shared Emb::Configuration
+Emb::Client.new(pool: 20)  # per-call still wins
+```
+
+`EMB_URL` remains the only environment variable (connection URL fallback, as before);
+`Emb.configure { |c| c.url = ... }` or an explicit `url:` override it.
+
+### Out-of-the-box defaults
+
+The shipped defaults are benchmark-derived (see `BENCHMARK.md`): **lazy batching is on by
+default** (`batch: true` — each embed coalesces into one `EMB.MULTI`), pool `5`, pure-Ruby
+RESP driver, `protocol: 2`, `reconnect_attempts: 3`. To keep the eager behavior (immediate
+`EMB` per call), opt out globally via `Emb.configure { |c| c.batch = false }` or per client
+with `Emb.new(batch: false)`.
+
 ### Connection pool
 
 ```ruby
