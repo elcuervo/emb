@@ -19,7 +19,10 @@ type Config struct {
 }
 
 type BatchingConfig struct {
-	Timeout int `yaml:"timeout"`
+	// Timeout bounds the batching window. nil = enabled with a 1ms default (so
+	// any model gets the performance path); 0 = disabled (worker pool); >0 =
+	// the window in milliseconds.
+	Timeout *int `yaml:"timeout"`
 	// MaxBatch bounds a window by request count (default 32).
 	MaxBatch int `yaml:"max_batch"`
 	// MaxBatchTokens bounds a window by accumulated real tokens (mirrors TEI's

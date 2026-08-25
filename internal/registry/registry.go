@@ -166,7 +166,11 @@ func (e *ModelEntry) ensurePool() error {
 	if cfg.TokenizeWorkers != nil {
 		tokenizeWorkers = *cfg.TokenizeWorkers
 	}
-	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, cfg.Batching.Timeout, cfg.Batching.MaxBatch, maxBatchTokens, tokenizeWorkers)
+	timeoutMS := 0
+	if cfg.Batching.Timeout != nil {
+		timeoutMS = *cfg.Batching.Timeout
+	}
+	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, timeoutMS, cfg.Batching.MaxBatch, maxBatchTokens, tokenizeWorkers)
 	if err != nil {
 		_ = tok.Close()
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
@@ -176,8 +180,8 @@ func (e *ModelEntry) ensurePool() error {
 	e.loaded.Store(true)
 	workers := numWorkers
 	batchInfo := ""
-	if cfg.Batching.Timeout > 0 {
-		batchInfo = fmt.Sprintf(", batching=%dms/%d/%d", cfg.Batching.Timeout, cfg.Batching.MaxBatch, maxBatchTokens)
+	if timeoutMS > 0 {
+		batchInfo = fmt.Sprintf(", batching=%dms/%d/%d", timeoutMS, cfg.Batching.MaxBatch, maxBatchTokens)
 		workers = 1
 	}
 	log.Printf("  %s: %d workers ready (detected dim=%d%s)", e.Name, workers, cfg.Dim, batchInfo)
@@ -279,21 +283,25 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	if cfg.OutputTensor == "" {
 		cfg.OutputTensor = "last_hidden_state"
 	}
-	if cfg.Batching.Timeout < 0 {
-		cfg.Batching.Timeout = 1
+	// Batching is ON by default (1ms window) so every model gets the
+	// performance path (token budget + async tokenization); explicit
+	// `timeout: 0` opts back into the worker pool.
+	if cfg.Batching.Timeout == nil {
+		v := 1
+		cfg.Batching.Timeout = &v
 	}
 	if cfg.Batching.MaxBatch <= 0 {
 		cfg.Batching.MaxBatch = 32
 	}
 	// Unset max_batch_tokens defaults to TEI's 16384 when batching is enabled;
 	// explicit 0 keeps count-only behavior.
-	if cfg.Batching.Timeout > 0 && cfg.Batching.MaxBatchTokens == nil {
+	if *cfg.Batching.Timeout > 0 && cfg.Batching.MaxBatchTokens == nil {
 		v := 16384
 		cfg.Batching.MaxBatchTokens = &v
 	}
 	// Unset tokenize_workers defaults to min(4, cores) when batching is enabled;
 	// explicit 0 keeps serial tokenize-in-run behavior.
-	if cfg.Batching.Timeout > 0 && cfg.TokenizeWorkers == nil {
+	if *cfg.Batching.Timeout > 0 && cfg.TokenizeWorkers == nil {
 		v := min(4, runtime.GOMAXPROCS(0))
 		cfg.TokenizeWorkers = &v
 	}

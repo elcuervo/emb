@@ -315,6 +315,10 @@ func serverConfigYaml(o *options) string {
 	if o.batchingTimeout > 0 {
 		batching = fmt.Sprintf("    batching:\n      timeout: %d\n      max_batch: %d\n      max_batch_tokens: %d\n",
 			o.batchingTimeout, o.maxBatch, o.maxBatchTokens)
+	} else {
+		// Batching now defaults ON; emit an explicit timeout: 0 so harness
+		// pool-mode configs (baselines) keep pool semantics.
+		batching = "    batching:\n      timeout: 0\n"
 	}
 	return fmt.Sprintf(`listen: ":6379"
 

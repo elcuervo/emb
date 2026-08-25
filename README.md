@@ -169,12 +169,14 @@ models:
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
 | `workers` | auto-tuned | Number of worker goroutines |
 | `intra_op_threads` | `cores−2` | ONNX intra-op threads per session. Defaults to `cores−2` to reserve cores for request parsing/dispatch; set explicitly to override |
-| `batching` | `{timeout: 1, max_batch: 32}` | Smart batching settings (set `timeout: 0` to disable). When enabled, `EMB.MULTI` pairs for a model flow through the same batcher window |
+| `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies |
 
-`batching` enables a window that coalesces concurrent requests (including `EMB.MULTI`
-pairs) into shared ONNX runs for better throughput. `EMB.MULTI` processes pairs with
-bounded concurrency (≤ the machine's `GOMAXPROCS`), so request storms can't spawn
-unbounded goroutines that starve inference.
+`batching` is **on by default** for every model so no config is needed for the
+performance path: a window coalesces concurrent requests (including `EMB.MULTI`
+pairs) into shared ONNX runs, a token budget bounds each run, and dedicated
+tokenizer workers hide tokenization behind inference. `timeout: 0` opts out.
+`EMB.MULTI` processes pairs with bounded concurrency (≤ the machine's `GOMAXPROCS`),
+so request storms can't spawn unbounded goroutines that starve inference.
 
 ## Clients
 
