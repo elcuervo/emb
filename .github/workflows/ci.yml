@@ -65,3 +65,31 @@ jobs:
         env:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
+
+  # STAGED (manual trigger): Fargate-shaped harness noise gate on an ARM64 runner.
+  # Builds the linux/arm64 image, runs a short baseline twice, and asserts the
+  # per-cell noise tolerance (req/s >= -5%, p50 <= +10%). Enable once the harness
+  # is stable locally — keep it workflow_dispatch to avoid flakiness on every push.
+  fargate-bench:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - uses: DeterminateSystems/magic-nix-cache-action@v9
+
+      - name: Download benchmark model
+        run: nix develop -c just download-model
+
+      - name: Build image + run 1 (short baseline)
+        run: nix develop -c go run ./bench/fargate -mode run -cpus 2 -clients "1,8" -pipeline 1 -count 200
+
+      - name: Run 2 (short baseline, reuse image)
+        run: nix develop -c go run ./bench/fargate -mode run -cpus 2 -clients "1,8" -pipeline 1 -count 200 -skip-build true
+
+      - name: Noise gate (req/s >= -5%, p50 <= +10%)
+        run: |
+          A=$(ls bench/fargate/out/run.*.json | head -1)
+          B=$(ls bench/fargate/out/run.*.json | tail -1)
+          nix develop -c go run ./bench/fargate -mode diff -before "$A" -after "$B"

@@ -289,6 +289,35 @@ remains the only env var; see the gem README); the results below are the rationa
   `pool.with { conn.pipelined { ... } }` expresses eager-burst pipelining
   (p50 ~7.4–7.9 vs ~8.3–8.6 ms) with no convenience method.
 
+## Fargate (linux/arm64, Graviton)
+
+The sections above are measured on Apple M1 Pro (macOS). The deployment target is
+Fargate CPU tasks on **ARM** (`linux/arm64`, Graviton), where the ISA (NEON), the
+scheduler, and ONNX Runtime's MLAS kernels differ from both macOS and x86. The
+Fargate benchmark harness (`bench/fargate/`) is the methodology used to validate
+every performance proposal in this roadmap:
+
+1. **Build** the server image for `--platform linux/arm64` (Docker; the Dockerfile already maps `TARGETARCH=arm64` → ORT `aarch64` + libtokenizers `linux-aarch64`).
+2. **Run** the server in a container bounded by `docker run --cpus N --memory M` at the Fargate vCPU tiers (1/2/4/8) — Docker's cpuset quota models the Fargate CPU quota.
+3. **Drive** the workload matrix `{vCPU tier} × {clients 1/8/16} × {pipeline 1/8} × {fixed-length, mixed-length, unique-text, cache-hit}` with `redis-benchmark` and a pure-Ruby mixed-length RESP driver (`bench/fargate/load.rb`), all from the `nix develop` shell.
+4. **Emit** a versioned baseline (`bench/fargate/baseline.<sha>.json`) with per-cell req/s, p50/p90/p99, and **padding efficiency** (real tokens / processed token-slots, computed with the real tokenizer over a `max_batch` window).
+5. **Diff** any two results with `just bench-fargate-diff <a> <b>` for per-cell PASS/FAIL.
+
+```bash
+nix develop
+just bench-fargate-baseline          # run 1 + run 2 → noise gate (req/s ±5%, p50 ±10% median-of-3)
+just bench-fargate-diff <sha1> <sha2>
+```
+
+**Gold reference** is an ARM64 Linux host (real Graviton, or an ARM64 CI runner).
+Apple Silicon (darwin/arm64) runs the `linux/arm64` image natively (no emulation)
+and is a close approximation for iteration — the harness tags results with
+`host.gold: false` and warns when the host is not the gold reference.
+
+All harness tooling (Go build, redis-benchmark, redis-cli, ruby) runs inside
+`nix develop`; Docker is the only host-level dependency (used solely to emulate
+the Fargate CPU/memory quota).
+
 ## Reproduce
 
 ```bash

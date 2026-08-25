@@ -19,25 +19,34 @@ type Config struct {
 }
 
 type BatchingConfig struct {
-	Timeout  int `yaml:"timeout"`
+	Timeout int `yaml:"timeout"`
+	// MaxBatch bounds a window by request count (default 32).
 	MaxBatch int `yaml:"max_batch"`
+	// MaxBatchTokens bounds a window by accumulated real tokens (mirrors TEI's
+	// max-batch-tokens). nil = default 16384 when batching is enabled; 0 =
+	// disable token accounting (count-only behavior); >0 = the token budget.
+	MaxBatchTokens *int `yaml:"max_batch_tokens"`
 }
 
 type ModelConfig struct {
-	ONNX           string         `yaml:"onnx"`
-	Tokenizer      string         `yaml:"tokenizer"`
-	ModelRepo      string         `yaml:"model_repo"`
-	Pooling        string         `yaml:"pooling"`
-	Normalize      bool           `yaml:"normalize"`
-	MaxLength      int            `yaml:"max_length"`
-	Dim            int            `yaml:"dim"`
-	Preload        bool           `yaml:"preload"`
-	Workers        int            `yaml:"workers"`
-	OutputTensor   string         `yaml:"output_tensor"`
-	PadOutput      bool           `yaml:"pad_output"`
-	Batching       BatchingConfig `yaml:"batching"`
-	IntraOpThreads int            `yaml:"intra_op_threads"`
-	InterOpThreads int            `yaml:"inter_op_threads"`
+	ONNX         string `yaml:"onnx"`
+	Tokenizer    string `yaml:"tokenizer"`
+	ModelRepo    string `yaml:"model_repo"`
+	Pooling      string `yaml:"pooling"`
+	Normalize    bool   `yaml:"normalize"`
+	MaxLength    int    `yaml:"max_length"`
+	Dim          int    `yaml:"dim"`
+	Preload      bool   `yaml:"preload"`
+	Workers      int    `yaml:"workers"`
+	OutputTensor string `yaml:"output_tensor"`
+	PadOutput    bool   `yaml:"pad_output"`
+	// TokenizeWorkers dedicates tokenizer goroutines that overlap tokenization
+	// with inference (TEI-style). nil = default min(4, cores) when batching is
+	// enabled; 0 = serial tokenize-in-run behavior; >0 = producer workers.
+	TokenizeWorkers *int           `yaml:"tokenize_workers"`
+	Batching        BatchingConfig `yaml:"batching"`
+	IntraOpThreads  int            `yaml:"intra_op_threads"`
+	InterOpThreads  int            `yaml:"inter_op_threads"`
 }
 
 func Load(path string) (*Config, error) {
@@ -168,6 +177,9 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 				m.MaxLength, _ = strconv.Atoi(val())
 			case "-workers":
 				m.Workers, _ = strconv.Atoi(val())
+			case "-tokenize-workers":
+				v, _ := strconv.Atoi(val())
+				m.TokenizeWorkers = &v
 			case "-intra-op-threads":
 				m.IntraOpThreads, _ = strconv.Atoi(val())
 			case "-inter-op-threads":

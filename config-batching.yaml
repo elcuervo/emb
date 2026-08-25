@@ -18,4 +18,11 @@ models:
     batching:
       timeout: 1
       max_batch: 64
+      # max_batch_tokens bounds a window by accumulated real tokens (TEI-style
+      # token budget). Unset defaults to 16384; 0 disables token accounting and
+      # keeps count-only behavior.
+      max_batch_tokens: 16384
+    # tokenize_workers dedicates tokenizer goroutines that overlap tokenization
+    # with inference. Unset defaults to min(4, cores); 0 = serial.
+    tokenize_workers: 4
     intra_op_threads: 6

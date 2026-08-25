@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -16,6 +17,13 @@ type RuntimeSession struct {
 	hasAttnMask  bool
 	hasTokenType bool
 	outputRank   int // 2 (pre-pooled) or 3 (sequence)
+
+	// outTensor is reused across runs to avoid per-run output allocation and
+	// the post-run copy. Sessions serialize their runs, so the returned
+	// GetData() slice stays valid until the next Run.
+	outTensor *ort.Tensor[float32]
+	outShape  []int64
+	outFlat   int
 }
 
 func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int) (*RuntimeSession, error) {
@@ -127,25 +135,35 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 		flatSize = batchSize * seqLen * dim
 	}
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(outputShape...))
-	if err != nil {
-		return nil, fmt.Errorf("creating output tensor: %w", err)
+	if s.outTensor == nil || !slices.Equal(s.outShape, outputShape) || s.outFlat != flatSize {
+		if s.outTensor != nil {
+			_ = s.outTensor.Destroy()
+		}
+		tensor, err := ort.NewEmptyTensor[float32](ort.NewShape(outputShape...))
+		if err != nil {
+			return nil, fmt.Errorf("creating output tensor: %w", err)
+		}
+		s.outTensor = tensor
+		s.outShape = outputShape
+		s.outFlat = flatSize
 	}
-	defer func() { _ = outputTensor.Destroy() }()
 
-	outputs := []ort.Value{outputTensor}
+	outputs := []ort.Value{s.outTensor}
 
 	if err := s.session.Run(inputs, outputs); err != nil {
 		return nil, fmt.Errorf("onnx run: %w", err)
 	}
 
-	data := outputTensor.GetData()
-	result := make([]float32, flatSize)
-	copy(result, data)
-	return result, nil
+	// Zero-copy: the pooled tensor's backing slice is returned directly (no
+	// per-run make + copy). The caller must not retain it past pooling.
+	return s.outTensor.GetData(), nil
 }
 
 func (s *RuntimeSession) Close() error {
+	if s.outTensor != nil {
+		_ = s.outTensor.Destroy()
+		s.outTensor = nil
+	}
 	return s.session.Destroy()
 }
 

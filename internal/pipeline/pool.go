@@ -93,14 +93,14 @@ type Pool struct {
 	maxLen    int
 }
 
-func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string, timeoutMS, maxBatch int) (*Pool, error) {
+func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string, timeoutMS, maxBatch, maxBatchTokens, tokenizeWorkers int) (*Pool, error) {
 	if timeoutMS > 0 {
 		sess, err := sessionFactory()
 		if err != nil {
 			return nil, fmt.Errorf("creating batcher session: %w", err)
 		}
 		return &Pool{
-			batcher:   NewBatcher(sess, tok, dim, maxLen, normalize, pooling, timeoutMS, maxBatch),
+			batcher:   NewBatcher(sess, tok, dim, maxLen, normalize, pooling, timeoutMS, maxBatch, maxBatchTokens, tokenizeWorkers),
 			pooling:   pooling,
 			normalize: normalize,
 			maxLen:    maxLen,
@@ -138,16 +138,18 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 func (p *Pool) Stats() Stats {
 	if p.batcher != nil {
 		return Stats{
-			Requests:         p.batcher.Requests(),
-			AvgLatency:       p.batcher.AvgLatency(),
-			NumWorkers:       1,
-			Tokens:           p.batcher.Tokens(),
-			Errors:           p.batcher.Errors(),
-			Pooling:          p.pooling,
-			Normalize:        p.normalize,
-			MaxLen:           p.maxLen,
-			BatchingTimeout:  int(p.batcher.timeout.Milliseconds()),
-			BatchingMaxBatch: p.batcher.maxBatch,
+			Requests:          p.batcher.Requests(),
+			AvgLatency:        p.batcher.AvgLatency(),
+			NumWorkers:        1,
+			Tokens:            p.batcher.Tokens(),
+			Errors:            p.batcher.Errors(),
+			Pooling:           p.pooling,
+			Normalize:         p.normalize,
+			MaxLen:            p.maxLen,
+			BatchingTimeout:   int(p.batcher.timeout.Milliseconds()),
+			BatchingMaxBatch:  p.batcher.maxBatch,
+			BatchingMaxTokens: p.batcher.maxBatchTokens,
+			PaddingEfficiency: p.batcher.paddingEfficiency(),
 		}
 	}
 	var totalReqs int64

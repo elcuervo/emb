@@ -1,0 +1,95 @@
+{
+  "sha": "42cf74a",
+  "created": "2026-08-25T20:55:51Z",
+  "platform": "linux/arm64",
+  "host": {
+    "os": "darwin",
+    "arch": "arm64",
+    "gold": false
+  },
+  "count_per_cell": 300,
+  "cells": [
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 273.22,
+      "p50_ms": 2.247,
+      "p90_ms": 6.927,
+      "p99_ms": 29.567
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 137.3,
+      "p50_ms": 4.679,
+      "p90_ms": 29.727,
+      "p99_ms": 39.007
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 511.95,
+      "p50_ms": 8.511,
+      "p90_ms": 59.231,
+      "p99_ms": 66.175
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 232.74,
+      "p50_ms": 22.015,
+      "p90_ms": 76.287,
+      "p99_ms": 80.767
+    },
+    {
+      "tier": 2,
+      "workload": "mixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 80.57699574714643,
+      "p50_ms": 3.487000009045005,
+      "p90_ms": 38.48699992522597,
+      "p99_ms": 59.296000050380826,
+      "padding_efficiency": 0.23934426229508196
+    },
+    {
+      "tier": 2,
+      "workload": "mixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 12.618704150249481,
+      "p50_ms": 79.13700002245605,
+      "p90_ms": 175.05800002254546,
+      "p99_ms": 220.91199993155897,
+      "padding_efficiency": 0.23934426229508196
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 10593.22,
+      "p50_ms": 0.087,
+      "p90_ms": 0.119,
+      "p99_ms": 0.143
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 36764.7,
+      "p50_ms": 0.183,
+      "p90_ms": 0.263,
+      "p99_ms": 0.303
+    }
+  ]
+}

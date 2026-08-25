@@ -204,6 +204,20 @@ bench-ruby config="bench-cpu-partition.yaml":
 # Run all benchmarks
 bench-all: bench-redis bench-cache
 
+# Fargate-shaped benchmark harness (linux/arm64, Graviton CPU). Requires Docker
+# and a model at ./models; redis-benchmark/redis-cli/ruby run from `nix develop`.
+# Emits bench/fargate/out/run.<sha>.<ts>.json
+bench-fargate:
+    go run ./bench/fargate -mode run
+
+# Capture the golden Fargate baseline JSON (bench/fargate/baseline.<sha>.json)
+bench-fargate-baseline:
+    go run ./bench/fargate -mode baseline
+
+# Diff two result/baseline JSON files per-cell with PASS/FAIL tolerances
+bench-fargate-diff before after:
+    go run ./bench/fargate -mode diff -before {{before}} -after {{after}}
+
 # Verify embeddings match Python reference (requires downloaded model)
 verify-embeddings: build
     @echo "Generating reference embeddings..."

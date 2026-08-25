@@ -1,0 +1,40 @@
+# token-budget-batching Specification
+
+## Purpose
+Specifies the token-budget batching window that bounds padding waste and batch memory on ARM64/Graviton CPU serving, mirroring TEI's `max-batch-tokens`.
+
+## ADDED Requirements
+
+### Requirement: Token-budget flush bound
+The batcher SHALL flush a batch when accumulated real tokens across queued requests reach the configured `max_batch_tokens` budget.
+
+#### Scenario: Mixed-length budget flush
+- **WHEN** queued requests in the window accumulate to 16384 real tokens (one long + many short texts)
+- **THEN** the batcher SHALL start the ONNX run immediately, without waiting for the timeout or max batch count
+- **THEN** padding waste SHALL be bounded to the last partially-filled run
+
+#### Scenario: Budget overrides count
+- **WHEN** a window contains fewer requests than `max_batch` but their total tokens exceed `max_batch_tokens`
+- **THEN** the batcher SHALL flush on the token budget
+
+#### Scenario: Count remains a secondary bound
+- **WHEN** accumulated requests reach `max_batch` before the token budget
+- **THEN** the batcher SHALL flush on request count as before
+
+#### Scenario: Zero budget disables accounting
+- **WHEN** a model config sets `max_batch_tokens: 0` (or omits it and the default is considered off)
+- **THEN** the batcher SHALL behave exactly as the pre-change count-based window
+
+### Requirement: Single-request batches are never split
+A single `EMB` command's texts SHALL be processed in one run, even when their tokens exceed the budget.
+
+#### Scenario: Oversized single command
+- **WHEN** a single `EMB` command carries more real tokens than the budget
+- **THEN** the server SHALL run it as a single inference and return all its embeddings
+
+### Requirement: Budget observability
+The server SHALL expose the active token budget and padding efficiency through the stats commands.
+
+#### Scenario: EMB.INFO exposes budget and efficiency
+- **WHEN** a client calls `EMB.INFO <model>` on a model with token-budget batching
+- **THEN** the response SHALL include `batching_max_tokens` and padding efficiency (real tokens / processed token-slots)

@@ -542,7 +542,7 @@ func serveTestWithAuth(t *testing.T, password string) string {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true, "mean", 0, 32,
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -567,7 +567,7 @@ func serveTestWithServer(t *testing.T) (string, *Server) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true, "mean", 0, 32,
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -588,7 +588,7 @@ func serveTestWithServer(t *testing.T) (string, *Server) {
 func serveWithPool(t *testing.T, factory func() (onnx.Session, error), numWorkers, timeoutMS, maxBatch int) (string, *Server) {
 	t.Helper()
 	reg := registry.New()
-	pool, err := pipeline.NewPool(factory, mockTokenizer{}, numWorkers, 4, 128, true, "mean", timeoutMS, maxBatch)
+	pool, err := pipeline.NewPool(factory, mockTokenizer{}, numWorkers, 4, 128, true, "mean", timeoutMS, maxBatch, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +670,7 @@ func serveTestWithCache(t *testing.T, cacheConfig string) string {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true, "mean", 0, 32,
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -867,11 +867,11 @@ func TestServerINFOArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 22 {
-		t.Fatalf("expected 22 declared elements, got %d: %q", declared, resp)
+	if declared != 26 {
+		t.Fatalf("expected 26 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 22 {
-		t.Fatalf("expected 22 actual elements, got %d: %q", actual, resp)
+	if actual != 26 {
+		t.Fatalf("expected 26 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -885,11 +885,11 @@ func TestCacheInfoArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 36 {
-		t.Fatalf("expected 36 declared elements, got %d: %q", declared, resp)
+	if declared != 40 {
+		t.Fatalf("expected 40 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 36 {
-		t.Fatalf("expected 36 actual elements, got %d: %q", actual, resp)
+	if actual != 40 {
+		t.Fatalf("expected 40 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -911,7 +911,7 @@ func TestTLSEmptyConfigNew(t *testing.T) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true, "mean", 0, 32,
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -938,7 +938,7 @@ func TestTLSConnection(t *testing.T) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true, "mean", 0, 32,
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1032,7 +1032,7 @@ func BenchmarkRESP(b *testing.B) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		2, 4, 128, true, "mean", 0, 32,
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		b.Fatal(err)
@@ -1062,7 +1062,7 @@ func BenchmarkPoolEmbed(b *testing.B) {
 	pool, err := pipeline.NewPool(
 		func() (onnx.Session, error) { return &mockSession{}, nil },
 		mockTokenizer{},
-		4, 4, 128, true, "mean", 0, 32,
+		4, 4, 128, true, "mean", 0, 32, 0, 0,
 	)
 	if err != nil {
 		b.Fatal(err)

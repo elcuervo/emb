@@ -336,9 +336,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	stats := entry.Pool.Stats()
 
 	if s.cache != nil {
-		conn.WriteArray(36)
+		conn.WriteArray(40)
 	} else {
-		conn.WriteArray(22)
+		conn.WriteArray(26)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -366,6 +366,10 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(stats.BatchingTimeout)
 	conn.WriteBulkString("batching_max_batch")
 	conn.WriteInt(stats.BatchingMaxBatch)
+	conn.WriteBulkString("batching_max_tokens")
+	conn.WriteInt(stats.BatchingMaxTokens)
+	conn.WriteBulkString("padding_efficiency")
+	conn.WriteBulkString(fmt.Sprintf("%.4f", stats.PaddingEfficiency))
 	if s.cache != nil {
 		cs := s.cache.Stats()
 		hitRate := 0.0
@@ -404,7 +408,8 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			totalToks += st.Tokens
 			batchInfo := ""
 			if st.BatchingTimeout > 0 {
-				batchInfo = fmt.Sprintf(" batch=%d/%d", st.BatchingTimeout, st.BatchingMaxBatch)
+				batchInfo = fmt.Sprintf(" batch=%d/%d budget=%d eff=%.3f",
+					st.BatchingTimeout, st.BatchingMaxBatch, st.BatchingMaxTokens, st.PaddingEfficiency)
 			}
 			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d mem=%dmb pool=%s norm=%t%s",
 				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.MemoryMB, st.Pooling, st.Normalize, batchInfo))
