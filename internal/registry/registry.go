@@ -109,7 +109,10 @@ func (e *ModelEntry) ensurePool() error {
 	if st, statErr := os.Stat(cfg.ONNX); statErr == nil {
 		e.ModelSize = st.Size()
 	}
-	if strings.Contains(cfg.ONNX, "quantized") {
+	// Quantization label from the weight file name (int8/quantized) — the prod
+	// siglip2 file is text_model_int8.onnx.
+	base := filepath.Base(cfg.ONNX)
+	if strings.Contains(base, "quantized") || strings.Contains(base, "int8") {
 		e.Quantization = "int8"
 	} else {
 		e.Quantization = "fp32"
