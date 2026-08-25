@@ -38,6 +38,10 @@ fp32 (`models/minilm/model.onnx`, 92MB) vs int8 (`Xenova/all-MiniLM-L6-v2` `mode
 | long-txt (~500 tok) p50 | 25.8ms | 19.2ms | −26% |
 | 8-client req/s | 118 | 159 | +35% |
 
+**Quality:** int8 vs fp32 cosine over the fixed corpus ≈ **0.991** (min). This passes the
+qualitative 0.99 gate but NOT `emb-verify`'s 0.999 threshold, which asserts fp32-identical
+outputs — quantized weights deliberately use the relaxed 0.99 cosine gate.
+
 This validates the int8 direction on ARM64 CPU; the formal `quantize` config gates below
 (p50 ≤ 0.60×, req/s ≥ +60%, RSS ≤ 0.35×, cosine ≥ 0.99) remain to be measured with the
 full harness on the gold reference host.

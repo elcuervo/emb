@@ -1,9 +1,12 @@
 package registry
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
 )
 
@@ -91,5 +94,71 @@ func TestPoolingForRank3(t *testing.T) {
 func TestPoolingForRankOther(t *testing.T) {
 	if poolingForRank(4) != "mean" {
 		t.Fatalf("expected mean for rank 4, got %s", poolingForRank(4))
+	}
+}
+
+func TestResolveQuantize(t *testing.T) {
+	t.Run("auto picks quantized when present", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "model_quantized.onnx"), []byte("q"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model.onnx")}
+		if err := resolveQuantize(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Base(cfg.ONNX) != "model_quantized.onnx" {
+			t.Fatalf("expected quantized pick, got %s", cfg.ONNX)
+		}
+	})
+
+	t.Run("auto keeps fp32 when absent", func(t *testing.T) {
+		dir := t.TempDir()
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model.onnx")}
+		if err := resolveQuantize(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Base(cfg.ONNX) != "model.onnx" {
+			t.Fatalf("expected fp32 fallback, got %s", cfg.ONNX)
+		}
+	})
+
+	t.Run("on requires quantized", func(t *testing.T) {
+		dir := t.TempDir()
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model.onnx"), Quantize: "on"}
+		if err := resolveQuantize(cfg); err == nil {
+			t.Fatal("expected error for quantize=on without quantized weights")
+		}
+	})
+
+	t.Run("off never switches", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "model_quantized.onnx"), []byte("q"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model.onnx"), Quantize: "off"}
+		if err := resolveQuantize(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Base(cfg.ONNX) != "model.onnx" {
+			t.Fatalf("quantize=off must keep fp32, got %s", cfg.ONNX)
+		}
+	})
+
+	t.Run("invalid value rejected", func(t *testing.T) {
+		cfg := &config.ModelConfig{ONNX: "/x/model.onnx", Quantize: "banana"}
+		if err := resolveQuantize(cfg); err == nil {
+			t.Fatal("expected error for invalid quantize value")
+		}
+	})
+}
+
+func TestResolveQuantizeDefaultsAuto(t *testing.T) {
+	cfg := &config.ModelConfig{ONNX: "/x/model.onnx"}
+	if err := resolveQuantize(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Quantize != "auto" {
+		t.Fatalf("expected default auto, got %q", cfg.Quantize)
 	}
 }

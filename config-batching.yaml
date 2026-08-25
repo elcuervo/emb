@@ -25,4 +25,7 @@ models:
     # tokenize_workers dedicates tokenizer goroutines that overlap tokenization
     # with inference. Unset defaults to min(4, cores); 0 = serial.
     tokenize_workers: 4
+    # quantize: auto|on|off — auto prefers pre-quantized weights (model_quantized.onnx)
+    # when present, else fp32; on requires quantized; off always fp32.
+    quantize: auto
     intra_op_threads: 6

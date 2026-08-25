@@ -40,9 +40,9 @@ type ModelConfig struct {
 	Workers      int    `yaml:"workers"`
 	OutputTensor string `yaml:"output_tensor"`
 	PadOutput    bool   `yaml:"pad_output"`
-	// TokenizeWorkers dedicates tokenizer goroutines that overlap tokenization
-	// with inference (TEI-style). nil = default min(4, cores) when batching is
-	// enabled; 0 = serial tokenize-in-run behavior; >0 = producer workers.
+	// Quantize selects weight precision: auto (prefer pre-quantized ONNX when
+	// present), on (require quantized, fail otherwise), off (fp32 always).
+	Quantize        string         `yaml:"quantize"`
 	TokenizeWorkers *int           `yaml:"tokenize_workers"`
 	Batching        BatchingConfig `yaml:"batching"`
 	IntraOpThreads  int            `yaml:"intra_op_threads"`
@@ -175,6 +175,8 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 				m.Dim, _ = strconv.Atoi(val())
 			case "-max-length":
 				m.MaxLength, _ = strconv.Atoi(val())
+			case "-quantize":
+				m.Quantize = val()
 			case "-workers":
 				m.Workers, _ = strconv.Atoi(val())
 			case "-tokenize-workers":

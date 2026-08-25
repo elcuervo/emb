@@ -336,9 +336,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	stats := entry.Pool.Stats()
 
 	if s.cache != nil {
-		conn.WriteArray(40)
+		conn.WriteArray(44)
 	} else {
-		conn.WriteArray(26)
+		conn.WriteArray(30)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -370,6 +370,10 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(stats.BatchingMaxTokens)
 	conn.WriteBulkString("padding_efficiency")
 	conn.WriteBulkString(fmt.Sprintf("%.4f", stats.PaddingEfficiency))
+	conn.WriteBulkString("quantization")
+	conn.WriteBulkString(entry.Quantization)
+	conn.WriteBulkString("model_bytes")
+	conn.WriteInt(int(entry.ModelSize))
 	if s.cache != nil {
 		cs := s.cache.Stats()
 		hitRate := 0.0

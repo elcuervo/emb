@@ -83,6 +83,20 @@ func (c *Client) FindONNX(files []FileInfo) *FileInfo {
 	return &onnxFiles[0]
 }
 
+// FindQuantizedONNX prefers pre-quantized weights in the order Xenova-style
+// repos ship them: onnx/model_quantized.onnx → model_quantized.onnx →
+// onnx/quantized/model.onnx.
+func (c *Client) FindQuantizedONNX(files []FileInfo) *FileInfo {
+	for _, name := range []string{"onnx/model_quantized.onnx", "model_quantized.onnx", "onnx/quantized/model.onnx"} {
+		for _, f := range files {
+			if f.Path == name {
+				return &f
+			}
+		}
+	}
+	return nil
+}
+
 func (c *Client) Download(repo, filePath, destDir string) (string, error) {
 	destPath := filepath.Join(destDir, filepath.Base(filePath))
 
@@ -114,13 +128,22 @@ func (c *Client) Download(repo, filePath, destDir string) (string, error) {
 	return destPath, nil
 }
 
-func (c *Client) DownloadModel(repo, destDir string) error {
+// DownloadModel fetches an embedding model into destDir. When preferQuantized
+// is true it downloads the pre-quantized weights when the repo ships them,
+// falling back to fp32 otherwise.
+func (c *Client) DownloadModel(repo, destDir string, preferQuantized bool) error {
 	files, err := c.ListFiles(repo)
 	if err != nil {
 		return err
 	}
 
-	onnxFile := c.FindONNX(files)
+	var onnxFile *FileInfo
+	if preferQuantized {
+		onnxFile = c.FindQuantizedONNX(files)
+	}
+	if onnxFile == nil {
+		onnxFile = c.FindONNX(files)
+	}
 	if onnxFile == nil {
 		return fmt.Errorf("no ONNX files in repo %q (use optimum-cli to export manually)", repo)
 	}

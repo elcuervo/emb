@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -20,6 +21,11 @@ type ModelEntry struct {
 	Pool *pipeline.Pool
 	Dim  int
 	Name string
+
+	// Quantization is "int8" when quantized weights were resolved, else "fp32".
+	Quantization string
+	// ModelSize is the on-disk size of the resolved weights file.
+	ModelSize int64
 
 	once    sync.Once
 	cfg     config.ModelConfig
@@ -100,6 +106,14 @@ func (e *ModelEntry) ensurePool() error {
 		_ = tok.Close()
 		return fmt.Errorf("reading output info for %q: %w", e.Name, err)
 	}
+	if st, statErr := os.Stat(cfg.ONNX); statErr == nil {
+		e.ModelSize = st.Size()
+	}
+	if strings.Contains(cfg.ONNX, "quantized") {
+		e.Quantization = "int8"
+	} else {
+		e.Quantization = "fp32"
+	}
 	out, ok := outInfo[cfg.OutputTensor]
 	if !ok {
 		name, rank := selectOutputTensor(outInfo)
@@ -178,7 +192,8 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 		return nil
 	}
 	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
-	if err := hfhub.New().DownloadModel(cfg.ModelRepo, dir); err != nil {
+	preferQuantized := cfg.Quantize != "off" && cfg.Quantize != ""
+	if err := hfhub.New().DownloadModel(cfg.ModelRepo, dir, preferQuantized); err != nil {
 		return fmt.Errorf("downloading %s: %w", cfg.ModelRepo, err)
 	}
 	log.Printf("  downloaded %s to %s", name, dir)
@@ -282,6 +297,41 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	return nil
 }
 
+// resolveQuantize normalizes the quantize setting and, when enabled, points
+// cfg.ONNX at pre-quantized weights next to the current path when present.
+func resolveQuantize(cfg *config.ModelConfig) error {
+	if cfg.Quantize == "" {
+		cfg.Quantize = "auto"
+	}
+	switch cfg.Quantize {
+	case "auto", "on", "off":
+	default:
+		return fmt.Errorf("quantize must be auto|on|off, got %q", cfg.Quantize)
+	}
+	if cfg.Quantize == "off" || cfg.ONNX == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(cfg.ONNX)
+	for _, cand := range []string{
+		filepath.Join(dir, "model_quantized.onnx"),
+		filepath.Join(dir, "onnx", "model_quantized.onnx"),
+		filepath.Join(dir, "onnx", "quantized", "model.onnx"),
+	} {
+		if _, err := os.Stat(cand); err == nil {
+			if cand != cfg.ONNX {
+				log.Printf("  using int8 weights %s", cand)
+				cfg.ONNX = cand
+			}
+			return nil
+		}
+	}
+	if cfg.Quantize == "on" {
+		return fmt.Errorf("quantize=on but no quantized weights found next to %q", cfg.ONNX)
+	}
+	return nil
+}
+
 func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 	if cfg.ModelRepo != "" {
 		if err := downloadModel(&cfg, name); err != nil {
@@ -289,8 +339,18 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 		}
 	}
 
+	if err := resolveQuantize(&cfg); err != nil {
+		return nil, err
+	}
+
 	if err := resolveModelConfig(&cfg, name); err != nil {
 		return nil, err
+	}
+
+	if cfg.Quantize == "on" || cfg.Quantize == "auto" {
+		if strings.Contains(cfg.ONNX, "quantized") {
+			log.Printf("  %s: quantization=int8", name)
+		}
 	}
 
 	if err := cfg.Validate(); err != nil {
