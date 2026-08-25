@@ -70,6 +70,12 @@ numeric gates in tasks 4.2-4.4 are **not measurable at that scale**:
 Tasks 4.2-4.4 therefore remain pending until measured with a paired A/B on the
 4/8 vCPU tiers (and preferably on the gold ARM64 Linux reference).
 
+**Correction (later measurement on the same host):** a clean sequential A/B of
+the four configs showed the single-session batcher strongly winning under
+concurrency (8-client req/s 116→1048 fp32, →1397 with int8) and short-txt p50
+11.0ms→2.7ms full-config. The earlier "batcher ~30% slower than the pool on
+2 vCPU" reading was an artifact of n=300 run-to-run noise, not a real regression.
+
 ## Related work (captured during apply)
 
 Learnings from michaelfeil/infinity that inform this change and the roadmap:
