@@ -44,9 +44,14 @@ RSpec.describe Emb do
     end
   end
 
-  describe '.config_get' do
-    it 'returns string-keyed config with string values' do
-      config = described_class.config_get
+  describe '.config' do
+    it 'returns a RuntimeConfig view' do
+      expect(described_class.config).to be_a(Emb::RuntimeConfig)
+      expect(described_class.config).to equal(described_class.config)
+    end
+
+    it 'reads all parameters as string-keyed hash via to_h' do
+      config = described_class.config.to_h
       expect(config).to be_a(Hash)
       %w[cache password listen cache_file cache_save models tls_cert tls_key].each do |k|
         expect(config).to have_key(k)
@@ -54,28 +59,33 @@ RSpec.describe Emb do
       end
     end
 
-    it 'filters by glob' do
-      config = described_class.config_get('cache*')
+    it 'reads an exact key as a scalar via []' do
+      expect(described_class.config['listen']).to be_a(String)
+      expect(described_class.config['models']).to include('minilm')
+    end
+
+    it 'returns nil for an unknown key' do
+      expect(described_class.config['nope']).to be_nil
+    end
+
+    it 'returns a hash for a glob' do
+      config = described_class.config['cache*']
+      expect(config).to be_a(Hash)
       expect(config.keys).to all(start_with('cache'))
     end
 
-    it 'returns an empty hash for an unmatched pattern' do
-      expect(described_class.config_get('nope*')).to eq({})
-    end
-  end
-
-  describe '.config_set' do
-    it 'returns true on success' do
-      expect(described_class.config_set(:cache_file, '/tmp/emb-spec.rdb')).to be(true)
+    it 'writes via []= and reads back' do
+      described_class.config['cache_file'] = '/tmp/emb-spec.rdb'
+      expect(described_class.config['cache_file']).to eq('/tmp/emb-spec.rdb')
     end
 
     it 'raises on read-only parameters' do
-      expect { described_class.config_set(:listen, ':9999') }
+      expect { described_class.config['listen'] = ':9999' }
         .to raise_error(RedisClient::CommandError, /read-only/)
     end
 
     it 'raises when setting a cache that was disabled at boot' do
-      expect { described_class.config_set(:cache, '100MB') }
+      expect { described_class.config['cache'] = '100MB' }
         .to raise_error(RedisClient::CommandError, /disabled at boot/)
     end
   end

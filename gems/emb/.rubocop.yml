@@ -20,9 +20,6 @@ Layout/LineLength:
 Metrics/MethodLength:
   Max: 15
 
-Metrics/ClassLength:
-  Max: 115
-
 Metrics/BlockLength:
   Exclude:
     - spec/**/*

@@ -5,6 +5,8 @@ require 'redis_client'
 
 module Emb
   class Client
+    include Commands
+
     attr_reader :pool
 
     def initialize(pool: nil, batch: nil, **redis_options)
@@ -45,6 +47,11 @@ module Emb
       @batch_enabled
     end
 
+    # Live view of the server's runtime configuration (CONFIG GET/SET).
+    def config
+      @config ||= RuntimeConfig.new(self)
+    end
+
     def models
       raw = send_command('EMB.MODELS')
       return [] if raw.nil?
@@ -62,35 +69,6 @@ module Emb
         .each_slice(2)
         .to_h { |k, v| [k.to_sym, v] }
     end
-
-    def stats
-      raw = send_command('EMB.STATS')
-      raw.each_slice(2).to_h { |key, value| [key.to_sym, value] }
-    end
-
-    # Server-wide INFO (the Redis-style sectioned command). No sections =
-    # all sections; any number of sections filter the reply.
-    def server_info(*sections)
-      parse_info(send_command('INFO', *sections.map(&:to_s)))
-    end
-
-    # Hot config read: CONFIG GET with optional glob pattern(s).
-    # Returns a Hash of String parameter → String value (config is text; no
-    # numeric coercion so values round-trip into config_set).
-    def config_get(*patterns)
-      raw = send_command('CONFIG', 'GET', *patterns.map(&:to_s))
-      raw.each_slice(2).to_h { |key, value| [key, value] }
-    end
-
-    # Hot config change: CONFIG SET. Returns true on success; server errors
-    # (unknown/read-only parameter, invalid value, NOAUTH) propagate as
-    # exceptions.
-    # rubocop:disable Naming/PredicateMethod -- intentional API: success ⇒ true
-    def config_set(param, value)
-      send_command('CONFIG', 'SET', param.to_s, value.to_s)
-      true
-    end
-    # rubocop:enable Naming/PredicateMethod
 
     def help = send_command('EMB.HELP')
 
@@ -141,28 +119,6 @@ module Emb
       return url unless url.nil?
 
       cfg.url || ENV.fetch('EMB_URL', nil)
-    end
-
-    # Parse Redis INFO section text into a nested Hash:
-    #   {Server: {redis_version: "0.2.4", uptime_secs: "7"}, Cache: {…}, …}
-    # Section names and keys are Symbols; values pass through as the server
-    # sent them (redis_client decodes RESP integers as Integer already).
-    # Lines that don't fit the grammar are ignored.
-    def parse_info(text)
-      sections = {}
-      current = nil
-
-      text.split("\r\n").each do |line|
-        if line.start_with?('# ')
-          current = line[2..].to_sym
-          sections[current] ||= {}
-        elsif current && line.include?(':')
-          key, value = line.split(':', 2)
-          sections[current][key.to_sym] = value
-        end
-      end
-
-      sections
     end
   end
 end

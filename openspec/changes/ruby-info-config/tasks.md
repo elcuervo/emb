@@ -6,9 +6,9 @@
 ## 2. INFO and CONFIG wrappers
 
 - [x] 2.1 Add `Client#server_info(*sections)` (no args = all; args passed as-is to `INFO`), parsing `# Section` blocks into a nested Hash with Symbol section/key names and values as decoded; integration spec: full INFO gives `:Server`/`:Cache`/`:Keyspace`/`:Stats`/`:Clients`, `server_info(:server, :cache)` filters to two sections, `:redis_version` is a String, `:cache_hit_rate` a String
-- [x] 2.2 Add `Client#config_get(*patterns)` returning String-parameter → String-value Hash (no coercion), `:6379`-style values intact; integration spec: all params present via `config_get`, `config_get("cache*")` filters, unmatched pattern → `{}`
-- [x] 2.3 Add `Client#config_set(param, value)` → `CONFIG SET`, `true` on success, exceptions propagate on error; integration specs: `config_set(:cache_file, "/tmp/emb.rdb")` → `true`, `config_set(:listen, ":9999")` raises naming read-only, `config_set(:cache, "100MB")` raises on a cache-disabled-at-boot server
-- [x] 2.4 Add module-level `Emb.server_info`, `Emb.config_get`, `Emb.config_set` delegates in `emb.rb`; verify they delegate to the default client (mirror `stats`)
+- [x] 2.2 Implement `Emb::RuntimeConfig` (`emb/runtime_config.rb`): `to_h` (all params), `[](key)` (exact → String value, glob → Hash, unknown → nil), `[]=(key, value)` (CONFIG SET, returns reply); integration specs: `to_h` has all params as Strings, `config["listen"]` scalar, `config["nope"]` → nil, `config["cache*"]` → Hash, `config["listen"] = ":9999"` raises read-only, `config["cache"] = "100MB"` raises on a cache-disabled-at-boot server
+- [x] 2.3 Add `Client#config` (memoized `RuntimeConfig`) and repurpose module-level `Emb.config` to it (drop the `alias config setup`); verify a spec asserts `Emb.config` returns the same RuntimeConfig as the default client and `config["cache_file"] = v` round-trips through `config["cache_file"]` (assignment yields RHS; effect verified by read)
+- [x] 2.4 Add module-level `Emb.server_info` delegate in `emb.rb`; verify it delegates to the default client (mirror `stats`)
 
 ## 3. Docs + validation
 

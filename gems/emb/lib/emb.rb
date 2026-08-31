@@ -2,6 +2,8 @@
 
 require_relative 'emb/version'
 require_relative 'emb/configuration'
+require_relative 'emb/commands'
+require_relative 'emb/runtime_config'
 require_relative 'emb/client'
 require_relative 'emb/proxy'
 require_relative 'emb/multi'
@@ -15,8 +17,6 @@ module Emb
     def setup(...)
       @default_client = Client.new(...)
     end
-
-    alias config setup
 
     def configuration
       @configuration ||= Configuration.new
@@ -33,8 +33,7 @@ module Emb
     def info(name)  = default_client.info(name)
     def stats       = default_client.stats
     def server_info(*sections)  = default_client.server_info(*sections)
-    def config_get(*patterns)   = default_client.config_get(*patterns)
-    def config_set(param, value) = default_client.config_set(param, value)
+    def config                  = default_client.config
     def help        = default_client.help
     def ping        = default_client.ping
     def ready       = default_client.ready

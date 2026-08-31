@@ -24,8 +24,8 @@ The server just shipped Redis-style `INFO` (sectioned, with cache hit ratios) an
 
 ## Impact
 
-- **Code:** `gems/emb/lib/emb/client.rb` (stats shape, new wrappers, numeric coercion), new `gems/emb/lib/emb/types.rb` (field-type table shared by stats + INFO parsing) or equivalent, `gems/emb/lib/emb.rb` (module delegation), `gems/emb/spec/*` (unit + integration specs), `gems/emb/README.md`.
-- **BREAKING:** `Emb.stats`/`Client#stats` return type changes array → Hash; existing callers doing `stats.each_slice(2)` or `stats[0]` break. Mitigation: semver bump in the next gem release; README migration note.
+- **Code:** `gems/emb/lib/emb/client.rb` (+`config` memoized accessor), new `gems/emb/lib/emb/commands.rb` (stats/server_info module), new `gems/emb/lib/emb/runtime_config.rb` (`RuntimeConfig` view), `gems/emb/lib/emb.rb` (module delegation; `config` alias for `setup` removed), `gems/emb/spec/*` (unit + integration specs), `gems/emb/README.md`.
+- **BREAKING (two):** `Emb.stats`/`Client#stats` return type changes array → Hash (callers doing `each_slice(2)`/`stats[0]` break); `Emb.config` is no longer an alias for `Emb.setup` (it is now the server-config view — callers using `Emb.config { |c| … }` migrate to `Emb.setup { |c| … }`). Mitigation: semver bump in the next gem release; README migration note.
 - **Overlap with `ruby-client-observability` (active, unstarted):** that change's tasks 2.1–2.3 plan typed `info`/`stats` (`Emb::Types`, `Client#coerce`). Recommended sequencing: implement **this** change first (it owns typed stats + INFO/CONFIG wrappers); when `ruby-client-observability` is implemented, its typed-stats tasks are trimmed to logging/metrics/bench scope (its logger, metrics ring-buffer, and JSON/CSV bench output are unaffected and stay its own).
 - **Systems:** gem only; RESP2 protocol untouched; server features already shipped and validated.
 - **Auth:** `CONFIG` requires auth on password-protected servers — errors propagate as exceptions (no credential handling added).

@@ -36,8 +36,6 @@ Emb.setup(host: "localhost", port: 6379)
 Emb.setup
 ```
 
-`Emb.config` is an alias for `Emb.setup`.
-
 ### Configuration sources (priority order)
 
 1. Explicit `url:` or `host:`/`port:` arguments
@@ -203,28 +201,32 @@ Emb.server_info
 Emb.server_info(:server, :cache)   # only those two sections
 ```
 
-### `Emb.config_get` / `Emb.config_set` — hot config read & change
+### `Emb.config` — hot config read & change
 
-Read the server's runtime configuration (String keys and values, no coercion):
+`Emb.config` is a Hash-like live view of the server's runtime configuration
+(backed by `CONFIG GET` / `CONFIG SET`). **Note:** the former `Emb.config` alias
+for `Emb.setup` is gone — use `Emb.setup` to configure the client.
 
 ```ruby
-Emb.config_get                  # all parameters
+Emb.config.to_h                          # all parameters
 # => {"cache" => "auto", "cache_file" => "", "cache_save" => "", "listen" => ":6379",
 #     "password" => "", "models" => "minilm,bge", "tls_cert" => "", "tls_key" => ""}
-Emb.config_get("cache*")       # glob filter: only cache* parameters
+
+Emb.config['cache']                      # exact key => String value
+# => "auto"
+Emb.config['cache*']                     # glob => Hash of matching parameters
+Emb.config['listen']                     # unknown key => nil
+
+Emb.config['cache'] = '100MB'            # live change; returns "OK"
+Emb.config['cache_file'] = '/var/lib/emb/cache.rdb'
 ```
 
-Change parameters live — `cache` resizes immediately, `cache_file`/`cache_save`
-apply at the next snapshot save, `password` affects new connections:
-
-```ruby
-Emb.config_set(:cache, "100MB")      # => true (live resize)
-Emb.config_set(:cache_file, "/var/lib/emb/cache.rdb")
-```
-
-Errors surface as exceptions (`RedisClient::CommandError`): read-only parameters
-(`listen`, `tls_*`, `models`), invalid values, and `NOAUTH` on password-protected
-servers are not swallowed.
+Values are Strings (config is text, not metrics) and round-trip into writers
+unchanged. `cache` resizes immediately, `cache_file`/`cache_save` apply at the
+next snapshot save, `password` affects new connections. Errors surface as
+exceptions (`RedisClient::CommandError`): read-only parameters (`listen`, `tls_*`,
+`models`), invalid values, and `NOAUTH` on password-protected servers are not
+swallowed.
 
 ## Usage
 

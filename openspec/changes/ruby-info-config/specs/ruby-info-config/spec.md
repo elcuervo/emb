@@ -36,46 +36,56 @@ Ruby client wrappers for the server's Redis-style observability surface: a hash-
 - **WHEN** `Emb.server_info(:keyspace)` is called with two loaded models
 - **THEN** the result SHALL contain a `:Keyspace` value with one entry per model whose values are the server's decoded values (`keys`/`hits`/`misses` Integers, `hit_rate` String)
 
-### Requirement: Hot config read
+### Requirement: Hot config read via `config[]`
 
-`Emb.config_get(*patterns)` and `Client#config_get` SHALL send `CONFIG GET` (with the patterns when given) and return a Hash of String parameter → String value (e.g. `{"cache" => "auto", "listen" => ":6379"}`). No pattern SHALL fetch all parameters; an unmatched pattern SHALL return an empty Hash.
+`Emb.config` and `Client#config` SHALL return a `RuntimeConfig` view of the server's runtime configuration backed by `CONFIG GET`. `config.to_h` SHALL send `CONFIG GET` and return a Hash of String parameter → String value. `config[key]` SHALL send `CONFIG GET <key>` and return the String value for an exact key, `nil` when the server has no such parameter, and a Hash when the key is a glob matching several parameters.
 
-#### Scenario: All parameters as string values
+#### Scenario: to_h lists all parameters
 
-- **WHEN** `Emb.config_get` is called
-- **THEN** the result SHALL include `cache`, `password`, `listen`, `cache_file`, `cache_save`, `models`, `tls_cert`, `tls_key`
+- **WHEN** `Emb.config.to_h` is called
+- **THEN** the result SHALL be a Hash including `cache`, `password`, `listen`, `cache_file`, `cache_save`, `models`, `tls_cert`, `tls_key`
 - **THEN** every value SHALL be a String
 
-#### Scenario: Glob pattern filters
+#### Scenario: Exact key reads a scalar
 
-- **WHEN** `Emb.config_get("cache*")` is called
-- **THEN** the result SHALL contain only keys starting with `cache`
+- **WHEN** `Emb.config["listen"]` is called
+- **THEN** the result SHALL be the String value of that parameter
 
-### Requirement: Hot config change
+#### Scenario: Unknown key returns nil
 
-`Emb.config_set(param, value)` and `Client#config_set(param, value)` SHALL send `CONFIG SET <param> <value>` and return `true` on success. Failures (unknown or read-only parameter, invalid value, or `NOAUTH` when a password is configured) SHALL raise an exception carrying the server's error message.
+- **WHEN** `Emb.config["nope"]` is called
+- **THEN** the result SHALL be `nil`
 
-#### Scenario: Set success returns true
+#### Scenario: Glob returns a hash
 
-- **WHEN** `Emb.config_set(:cache_file, "/tmp/emb.rdb")` is called
+- **WHEN** `Emb.config["cache*"]` is called
+- **THEN** the result SHALL be a Hash containing only parameters starting with `cache`
+
+### Requirement: Hot config change via `config[]=`
+
+`config[key] = value` SHALL send `CONFIG SET <key> <value>` and take effect on the server (the assignment expression itself yields the assigned value, per Ruby setter semantics). Failures (unknown or read-only parameter, invalid value, or `NOAUTH` when a password is configured) SHALL raise an exception carrying the server's error message.
+
+#### Scenario: Write takes effect
+
+- **WHEN** `Emb.config["cache_file"] = "/tmp/emb.rdb"` is executed
 - **THEN** the command SHALL be `CONFIG SET cache_file /tmp/emb.rdb`
-- **THEN** the return value SHALL be `true`
+- **THEN** a subsequent `Emb.config["cache_file"]` SHALL return `"/tmp/emb.rdb"`
 
 #### Scenario: Read-only parameter raises
 
-- **WHEN** `Emb.config_set(:listen, ":9999")` is called
+- **WHEN** `Emb.config["listen"] = ":9999"` is executed
 - **THEN** an exception SHALL be raised whose message names the read-only parameter
 
 #### Scenario: Auth required surfaces as exception
 
-- **WHEN** `Emb.config_get` or `Emb.config_set` is called against a password-protected server without authenticating
+- **WHEN** `Emb.config` is read or written against a password-protected server without authenticating
 - **THEN** an exception SHALL be raised with the server's `NOAUTH` message
 
 ### Requirement: Module-level delegation
 
-The gem SHALL expose `Emb.stats` (pre-existing method, new return shape), `Emb.server_info`, `Emb.config_get`, and `Emb.config_set` delegating to the default client, mirroring the existing wrapper style.
+The gem SHALL expose `Emb.stats` (pre-existing method, new return shape), `Emb.server_info`, and `Emb.config` delegating to the default client, mirroring the existing wrapper style. `Emb.config` SHALL no longer alias `Emb.setup`.
 
 #### Scenario: Module methods delegate
 
-- **WHEN** `Emb.server_info`, `Emb.config_get`, and `Emb.config_set` are called
-- **THEN** each SHALL delegate to the default client's same-named method (same as `Emb.stats` delegates)
+- **WHEN** `Emb.server_info` and `Emb.config` are called
+- **THEN** each SHALL delegate to the default client's same-named accessor (same as `Emb.stats` delegates)

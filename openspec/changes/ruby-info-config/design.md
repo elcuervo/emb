@@ -40,11 +40,15 @@ See proposal.md — Why. Server side is shipped and validated (commit `aa91745`)
 
 **Why the name `server_info`:** it is the server-wide counterpart to `Emb.info(name)` (which is taken by `EMB.INFO <model>`); `server_info` names the Redis-compat `INFO` precisely and never ambiguates with per-model info. Bare `server_info` reads as "the whole server's info", matching the all-sections default.
 
-### 4. `config_get` / `config_set` are thin, loud wrappers
+### 4. `config` is a Hash-like `RuntimeConfig` view — not method pairs
 
-`config_get(*patterns)` → `CONFIG GET [p1 p2…]` (usually 0 or 1 pattern), reply `[param, value, …]` → `to_h` with **String values, no coercion** (config is text; `cache: "auto"` must not become `0`). `config_set(param, value)` → `CONFIG SET <param> <value>` → `true`; any `-ERR`/`-NOAUTH` reply raises with the server message (redis_client gem already raises `RedisClient::CommandError` — propagates as-is).
+`Emb::RuntimeConfig` (one file, included via `Client#config`) exposes the server's runtime config the way a Ruby settings object should: `to_h` (all params), `config[key]` (read one — exact key → String value, glob → Hash, unknown → `nil`), `config[key] = value` (write — the assignment expression yields the RHS per Ruby setter semantics; the effect is verified by a subsequent read). `Emb.config` stops aliasing `Emb.setup` and becomes this view; `Emb.setup` is the one way to configure the client.
 
-**Why no value coercion in config:** a config String is a round-trippable store (the user might feed `config_get[:cache]` straight back into `config_set`); coercion would corrupt that contract. Metrics coerce; config doesn't.
+**Why a Hash-like view over `config_get`/`config_set` methods:** it wins on all three axes the methods lost — no boolean-return method (`[key]=` returns the server reply, so no `Naming/PredicateMethod` override is needed), no client-class bloat (views are a separate object, so no `ClassLength` bump either), and a familiar surface (`config['cache'] = '100MB'` reads like `ENV['X'] = …`).
+
+**Why `[]` returns a Hash for globs but a String for exact keys:** exact-key reads are the common case and should be scalar; globs are a power-user escape hatch where multiple matches must all surface. `nil` for unknown keys matches `Hash#[]` semantics.
+
+**Why no value coercion in config:** a config String is a round-trippable store (`config['cache']` feeds straight back into `config['cache'] =`); coercion would corrupt that contract. Metrics decode; config doesn't.
 
 ### 5. Ordering and naming of module delegates
 

@@ -27,10 +27,8 @@ Instance clients SHALL expose the same methods.
 
 #### Scenario: Hot config read and change
 
-- **WHEN** `Emb.config_get` or `client.config_get` is called, with optional glob patterns
-- **THEN** it SHALL send `CONFIG GET` and return a Hash of parameter → String value
-- **WHEN** `Emb.config_set(param, value)` or `client.config_set(param, value)` is called
-- **THEN** it SHALL send `CONFIG SET param value`, return `true` on success, and raise on server error
+- **WHEN** `Emb.config` or `client.config` is accessed
+- **THEN** it SHALL return a `RuntimeConfig` view; `config.to_h` sends `CONFIG GET`, `config[key]` reads one parameter, `config[key] = value` sends `CONFIG SET`, returns `"OK"`, and raises on server error
 
 #### Scenario: Help text
 
