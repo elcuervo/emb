@@ -5,17 +5,63 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Listen   string                 `yaml:"listen"`
-	Password string                 `yaml:"password"`
-	TLSCert  string                 `yaml:"tls_cert"`
-	TLSKey   string                 `yaml:"tls_key"`
-	Cache    string                 `yaml:"cache"`
-	Models   map[string]ModelConfig `yaml:"models"`
+	Listen   string `yaml:"listen"`
+	Password string `yaml:"password"`
+	TLSCert  string `yaml:"tls_cert"`
+	TLSKey   string `yaml:"tls_key"`
+	Cache    string `yaml:"cache"`
+	// IdleTimeout closes connections that have not sent a command for the
+	// duration. nil (default) applies DefaultIdleTimeout; an explicit 0
+	// disables reaping entirely (strict Redis semantics).
+	IdleTimeout *Duration `yaml:"idle_timeout"`
+	// MaxConnections refuses new connections beyond the cap. 0 (default) is
+	// unlimited.
+	MaxConnections int `yaml:"max_connections"`
+	// MaxConcurrentRequests answers EMB/EMB.MULTI with a busy error beyond the
+	// cap. 0 (default) is unlimited.
+	MaxConcurrentRequests int                    `yaml:"max_concurrent_requests"`
+	Models                map[string]ModelConfig `yaml:"models"`
+}
+
+// DefaultIdleTimeout is the idle-connection TTL applied when idle_timeout is
+// unset: generous enough not to surprise pooled clients, bounded enough to
+// reap zombie sockets and bound file descriptors.
+const DefaultIdleTimeout = 15 * time.Minute
+
+// Duration is time.Duration with lenient YAML decoding: string scalars parse
+// with time.ParseDuration ("5m", "90s"), and an integer 0 is accepted as
+// "disabled". Other numeric scalars are rejected with a hint, since a bare
+// number's unit is ambiguous.
+type Duration time.Duration
+
+func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Tag {
+	case "!!str":
+		v, err := time.ParseDuration(node.Value)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", node.Value, err)
+		}
+		*d = Duration(v)
+		return nil
+	case "!!int":
+		n, err := strconv.ParseInt(node.Value, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", node.Value, err)
+		}
+		if n != 0 {
+			return fmt.Errorf("invalid duration %q: numeric values must be 0; use a duration string like \"5m\"", node.Value)
+		}
+		*d = 0
+		return nil
+	default:
+		return fmt.Errorf("invalid duration %q: expected a duration string like \"5m\" or 0", node.Value)
+	}
 }
 
 type BatchingConfig struct {
@@ -123,6 +169,26 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		case arg == "-cache" && i+1 < len(args):
 			i++
 			fc.Cache = args[i]
+
+		case arg == "-idle-timeout" && i+1 < len(args):
+			i++
+			d, err := time.ParseDuration(args[i])
+			if err != nil {
+				return nil, fmt.Errorf("parsing -idle-timeout: %w", err)
+			}
+			if d < 0 {
+				return nil, fmt.Errorf("-idle-timeout must not be negative")
+			}
+			dur := Duration(d)
+			fc.IdleTimeout = &dur
+
+		case arg == "-max-connections" && i+1 < len(args):
+			i++
+			fc.MaxConnections, _ = strconv.Atoi(args[i])
+
+		case arg == "-max-concurrent-requests" && i+1 < len(args):
+			i++
+			fc.MaxConcurrentRequests, _ = strconv.Atoi(args[i])
 
 		case arg == "-tls-cert" && i+1 < len(args):
 			i++

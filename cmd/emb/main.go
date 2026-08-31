@@ -63,7 +63,16 @@ func run() error {
 		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 	}
 
-	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig)
+	// idle_timeout defaults to a 15m TTL; an explicit 0 disables reaping.
+	idleTimeout := config.DefaultIdleTimeout
+	if fc.IdleTimeout != nil {
+		idleTimeout = time.Duration(*fc.IdleTimeout)
+	}
+	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig,
+		server.WithIdleTimeout(idleTimeout),
+		server.WithMaxConnections(fc.MaxConnections),
+		server.WithMaxConcurrentRequests(fc.MaxConcurrentRequests),
+	)
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
 	if modelCount > 0 {

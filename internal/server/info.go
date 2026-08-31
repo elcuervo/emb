@@ -101,7 +101,7 @@ func (s *Server) infoSnapshot() infoSnapshot {
 		totalTok: totalTok,
 		totalErr: s.reg.TotalErrors(),
 		models:   len(models),
-		active:   s.activeReq.Load(),
+		active:   s.activeReqs.Load(),
 		cache:    cacheStats,
 		byModel:  lines,
 	}

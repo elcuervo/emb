@@ -14,6 +14,7 @@ import (
 
 	"github.com/tidwall/redcon"
 
+	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/registry"
 )
 
@@ -49,16 +50,48 @@ type Server struct {
 	cacheFile string
 	cacheSave string
 	// version is the injected build version ("dev" when unset), reported by INFO.
-	version   string
-	activeReq atomic.Int64
-	state     atomic.Int64
+	version string
+	state   atomic.Int64
+	// conns counts accepted, unclosed connections (incremented in the redcon
+	// accept callback, decremented in the closed callback — rejected conns are
+	// never counted, keeping the two balanced).
+	conns atomic.Int64
+	// activeReqs counts EMB/EMB.MULTI commands currently being processed, used
+	// both for EMB.STATS and for the max_concurrent_requests gate.
+	activeReqs        atomic.Int64
+	idleTimeout       time.Duration
+	maxConns          int
+	maxConcurrentReqs int
 	// fanOut bounds concurrent EMB.MULTI pair processing for a single command, so a
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
 	fanOut int
 }
 
-func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config) *Server {
+// Option configures a Server.
+type Option func(*Server)
+
+// WithIdleTimeout closes connections that have not sent a command for the
+// given duration. Zero (the default) never closes idle connections, matching
+// Redis semantics.
+func WithIdleTimeout(d time.Duration) Option {
+	return func(s *Server) { s.idleTimeout = d }
+}
+
+// WithMaxConnections refuses and closes new connections beyond the cap.
+// Zero (the default) is unlimited.
+func WithMaxConnections(n int) Option {
+	return func(s *Server) { s.maxConns = n }
+}
+
+// WithMaxConcurrentRequests answers EMB/EMB.MULTI commands with a busy error
+// while this many are already in flight. Zero (the default) is unlimited.
+// Control commands (PING, AUTH, EMB.READY, EMB.STATS, …) stay reachable.
+func WithMaxConcurrentRequests(n int) Option {
+	return func(s *Server) { s.maxConcurrentReqs = n }
+}
+
+func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config, opts ...Option) *Server {
 	cacheBytes, err := parseCacheConfig(cacheConfig)
 	if err != nil {
 		log.Fatalf("parsing cache config: %v", err)
@@ -76,6 +109,10 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		cache:       c,
 		cacheConfig: cacheConfig,
 		version:     "dev",
+		idleTimeout: config.DefaultIdleTimeout,
+	}
+	for _, o := range opts {
+		o(s)
 	}
 	s.password.Store(password)
 
@@ -97,14 +134,44 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 			conn.WriteError("NOAUTH Authentication required.")
 			return
 		}
+		// Bounded concurrency: only EMB work goes through the gate; control
+		// commands keep answering during saturation so operators can still
+		// observe and probe. The counter increments for every EMB command so
+		// EMB.STATS/INFO report live in-flight counts even when the cap is 0.
+		if len(cmd.Args) > 0 {
+			name := strings.ToLower(string(cmd.Args[0]))
+			if name == "emb" || name == "emb.multi" {
+				if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
+					conn.WriteError(fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs))
+					return
+				}
+				s.activeReqs.Add(1)
+				defer s.activeReqs.Add(-1)
+			}
+		}
 		mux.ServeRESP(conn, cmd)
 	},
 		func(conn redcon.Conn) bool {
 			conn.SetContext(&connState{})
+			if s.maxConns > 0 && s.conns.Load() >= int64(s.maxConns) {
+				// redcon closes refused conns without firing the closed handler,
+				// so refusing before counting keeps the accounting balanced.
+				return false
+			}
+			s.conns.Add(1)
 			return true
 		},
-		func(conn redcon.Conn, err error) {},
+		func(conn redcon.Conn, err error) {
+			s.conns.Add(-1)
+		},
 	)
+
+	// Reap idle connections when configured; redcon applies a read deadline per
+	// command read (idleClose), and a reaped connection flows through the closed
+	// handler so `connections` stays accurate.
+	if s.idleTimeout > 0 {
+		s.srv.SetIdleClose(s.idleTimeout)
+	}
 
 	return s
 }
@@ -227,8 +294,6 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
-	s.activeReq.Add(1)
-	defer s.activeReq.Add(-1)
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
 		return
@@ -462,13 +527,13 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		totalCacheEvictions = cs.Evictions
 	}
 
-	conn.WriteArray(20)
+	conn.WriteArray(28)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
 	conn.WriteInt(int(totalReqs))
 	conn.WriteBulkString("active_requests")
-	conn.WriteBulkString("0") // TODO: track active via atomic counter
+	conn.WriteInt(int(s.activeReqs.Load()))
 	conn.WriteBulkString("total_tokens")
 	conn.WriteInt(int(totalToks))
 	conn.WriteBulkString("total_errors")
@@ -477,6 +542,14 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(len(models))
 	conn.WriteBulkString("per_model")
 	conn.WriteBulkString(strings.Join(perModel, " | "))
+	conn.WriteBulkString("connections")
+	conn.WriteInt(int(s.conns.Load()))
+	conn.WriteBulkString("idle_timeout_ms")
+	conn.WriteInt(int(s.idleTimeout.Milliseconds()))
+	conn.WriteBulkString("max_connections")
+	conn.WriteInt(s.maxConns)
+	conn.WriteBulkString("max_concurrent_requests")
+	conn.WriteInt(s.maxConcurrentReqs)
 	conn.WriteBulkString("cache_hits")
 	conn.WriteInt(int(totalCacheHits))
 	conn.WriteBulkString("cache_misses")
@@ -486,8 +559,6 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
-	s.activeReq.Add(1)
-	defer s.activeReq.Add(-1)
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
 		return

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -44,6 +45,13 @@ models:
 	}
 	if m.Dim != 384 {
 		t.Fatalf("expected 384, got %d", m.Dim)
+	}
+	// Unset idle_timeout: nil, meaning the default TTL applies at server build.
+	if cfg.IdleTimeout != nil {
+		t.Fatalf("expected nil IdleTimeout, got %v", cfg.IdleTimeout)
+	}
+	if cfg.MaxConnections != 0 || cfg.MaxConcurrentRequests != 0 {
+		t.Fatalf("expected zero caps, got %d/%d", cfg.MaxConnections, cfg.MaxConcurrentRequests)
 	}
 }
 
@@ -154,6 +162,114 @@ models:
 	}
 }
 
+func TestLoadConnectionKnobs(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+idle_timeout: 5m
+max_connections: 10
+max_concurrent_requests: 4
+models:
+  test:
+    onnx: ./model.onnx
+    tokenizer: ./tok.json
+    dim: 128
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.IdleTimeout == nil || time.Duration(*cfg.IdleTimeout) != 5*60*time.Second {
+		t.Fatalf("expected 5m, got %v", cfg.IdleTimeout)
+	}
+	if cfg.MaxConnections != 10 {
+		t.Fatalf("expected 10, got %d", cfg.MaxConnections)
+	}
+	if cfg.MaxConcurrentRequests != 4 {
+		t.Fatalf("expected 4, got %d", cfg.MaxConcurrentRequests)
+	}
+}
+
+func TestParseFlagsConnectionKnobs(t *testing.T) {
+	fc, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-idle-timeout", "90s",
+		"-max-connections", "7",
+		"-max-concurrent-requests", "3",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.IdleTimeout == nil || time.Duration(*fc.IdleTimeout) != 90*time.Second {
+		t.Fatalf("expected 90s, got %v", fc.IdleTimeout)
+	}
+	if fc.MaxConnections != 7 {
+		t.Fatalf("expected 7, got %d", fc.MaxConnections)
+	}
+	if fc.MaxConcurrentRequests != 3 {
+		t.Fatalf("expected 3, got %d", fc.MaxConcurrentRequests)
+	}
+}
+
+func TestParseFlagsIdleTimeoutInvalid(t *testing.T) {
+	_, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-idle-timeout", "banana",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid duration")
+	}
+}
+
+func TestParseFlagsIdleTimeoutZeroDisables(t *testing.T) {
+	fc, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-idle-timeout", "0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.IdleTimeout == nil || time.Duration(*fc.IdleTimeout) != 0 {
+		t.Fatalf("expected explicit 0 (disabled), got %v", fc.IdleTimeout)
+	}
+}
+
+func TestParseFlagsIdleTimeoutNegative(t *testing.T) {
+	_, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-idle-timeout", "-5m",
+	})
+	if err == nil {
+		t.Fatal("expected error for negative duration")
+	}
+}
+
+func TestLoadIdleTimeoutZeroDisables(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+idle_timeout: 0
+models:
+  test:
+    onnx: ./model.onnx
+    tokenizer: ./tok.json
+    dim: 128
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.IdleTimeout == nil || time.Duration(*cfg.IdleTimeout) != 0 {
+		t.Fatalf("expected explicit 0 (disabled), got %v", cfg.IdleTimeout)
+	}
+}
+
 func TestLoadTLSCertOnly(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -189,5 +305,22 @@ models:
 	}
 	if cfg.Listen != ":6379" {
 		t.Fatalf("expected :6379, got %s", cfg.Listen)
+	}
+}
+
+func TestLoadIdleTimeoutNumericRejected(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+idle_timeout: 300
+models:
+  test:
+    onnx: ./model.onnx
+    tokenizer: ./tok.json
+    dim: 128
+`), 0644)
+
+	if _, err := Load(cfgPath); err == nil {
+		t.Fatal("expected error for unit-less numeric idle_timeout")
 	}
 }
