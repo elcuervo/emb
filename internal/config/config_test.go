@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -322,5 +323,48 @@ models:
 
 	if _, err := Load(cfgPath); err == nil {
 		t.Fatal("expected error for unit-less numeric idle_timeout")
+	}
+}
+
+func TestParseFlagsRequestSizeCaps(t *testing.T) {
+	fc, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-model-tokenizer", "./tok.json", "-model-dim", "128",
+		"-max-texts", "1024",
+		"-max-pairs", "512",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.MaxTexts == nil || *fc.MaxTexts != 1024 {
+		t.Fatalf("expected max_texts 1024, got %v", fc.MaxTexts)
+	}
+	if fc.MaxPairs == nil || *fc.MaxPairs != 512 {
+		t.Fatalf("expected max_pairs 512, got %v", fc.MaxPairs)
+	}
+}
+
+func TestParseFlagsRequestSizeCapsUnset(t *testing.T) {
+	fc, err := ParseFlags([]string{"-model", "test", "-model-onnx", "./model.onnx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.MaxTexts != nil || fc.MaxPairs != nil {
+		t.Fatalf("expected unset caps to stay nil (default applied by server), got %v/%v", fc.MaxTexts, fc.MaxPairs)
+	}
+}
+
+func TestParseFlagsRequestSizeCapsNegative(t *testing.T) {
+	if _, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-max-texts", "-1",
+	}); err == nil || !strings.Contains(err.Error(), "non-negative") {
+		t.Fatalf("expected non-negative error for -max-texts -1, got %v", err)
+	}
+	if _, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-max-pairs", "-5",
+	}); err == nil || !strings.Contains(err.Error(), "non-negative") {
+		t.Fatalf("expected non-negative error for -max-pairs -5, got %v", err)
 	}
 }

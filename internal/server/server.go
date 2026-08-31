@@ -58,10 +58,21 @@ type Server struct {
 	conns atomic.Int64
 	// activeReqs counts EMB/EMB.MULTI commands currently being processed, used
 	// both for EMB.STATS and for the max_concurrent_requests gate.
-	activeReqs        atomic.Int64
-	idleTimeout       time.Duration
-	maxConns          int
+	activeReqs  atomic.Int64
+	idleTimeout time.Duration
+	maxConns    int
+	// maxConcurrentReqs int
 	maxConcurrentReqs int
+	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via New).
+	// Oversized commands are truncated: overflow texts are not processed and their
+	// reply slots are null.
+	maxTexts int
+	// maxPairs bounds pairs per EMB.MULTI command (0 = unlimited; default 4096).
+	// Oversized commands are truncated: overflow pairs are not processed and their
+	// reply slots are null.
+	maxPairs       int
+	truncatedTexts atomic.Int64
+	truncatedPairs atomic.Int64
 	// fanOut bounds concurrent EMB.MULTI pair processing for a single command, so a
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
@@ -91,6 +102,22 @@ func WithMaxConcurrentRequests(n int) Option {
 	return func(s *Server) { s.maxConcurrentReqs = n }
 }
 
+// WithMaxTexts bounds the texts processed per EMB command; commands beyond the
+// cap are truncated to the first maxTexts texts (overflow reply slots are null).
+// Zero disables the cap (unlimited, pre-change behavior). The default when
+// unset is 4096.
+func WithMaxTexts(n int) Option {
+	return func(s *Server) { s.maxTexts = n }
+}
+
+// WithMaxPairs bounds the pairs processed per EMB.MULTI command; commands beyond
+// the cap are truncated to the first maxPairs pairs (overflow reply slots are
+// null). Zero disables the cap (unlimited, pre-change behavior). The default
+// when unset is 4096.
+func WithMaxPairs(n int) Option {
+	return func(s *Server) { s.maxPairs = n }
+}
+
 func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config, opts ...Option) *Server {
 	cacheBytes, err := parseCacheConfig(cacheConfig)
 	if err != nil {
@@ -110,6 +137,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		cacheConfig: cacheConfig,
 		version:     "dev",
 		idleTimeout: config.DefaultIdleTimeout,
+		maxTexts:    4096,
+		maxPairs:    4096,
 	}
 	for _, o := range opts {
 		o(s)
@@ -313,6 +342,15 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		texts[i] = string(arg)
 	}
 
+	// Truncate oversized commands: process only the first maxTexts texts and
+	// reply with null slots for the overflow. Truncation bounds the inference
+	// work of a single command so the payload size cannot pin the task's cores.
+	total := len(texts)
+	if s.maxTexts > 0 && total > s.maxTexts {
+		s.truncatedTexts.Add(int64(total - s.maxTexts))
+		texts = texts[:s.maxTexts]
+	}
+
 	if s.cache != nil {
 		results := make([][]byte, len(texts))
 		var missIdxs []int
@@ -325,14 +363,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 			}
 		}
 		if len(missIdxs) == 0 {
-			if len(results) == 1 {
-				conn.WriteBulk(results[0])
-			} else {
-				conn.WriteArray(len(results))
-				for _, emb := range results {
-					conn.WriteBulk(emb)
-				}
-			}
+			writeEmbReply(conn, results, total)
 			return
 		}
 
@@ -390,13 +421,23 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	if len(resp.Embeddings) == 1 {
-		conn.WriteBulk(resp.Embeddings[0])
-	} else {
-		conn.WriteArray(len(resp.Embeddings))
-		for _, emb := range resp.Embeddings {
-			conn.WriteBulk(emb)
-		}
+	writeEmbReply(conn, resp.Embeddings, total)
+}
+
+// writeEmbReply writes one reply slot per requested text: bulks for the results
+// (the processed prefix) and nulls for truncated overflow texts after them. A
+// single-text request keeps its single-bulk reply shape.
+func writeEmbReply(conn redcon.Conn, results [][]byte, total int) {
+	if total == 1 && len(results) == 1 {
+		conn.WriteBulk(results[0])
+		return
+	}
+	conn.WriteArray(total)
+	for _, r := range results {
+		conn.WriteBulk(r)
+	}
+	for i := len(results); i < total; i++ {
+		conn.WriteNull()
 	}
 }
 
@@ -527,13 +568,17 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		totalCacheEvictions = cs.Evictions
 	}
 
-	conn.WriteArray(28)
+	conn.WriteArray(32)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
 	conn.WriteInt(int(totalReqs))
 	conn.WriteBulkString("active_requests")
 	conn.WriteInt(int(s.activeReqs.Load()))
+	conn.WriteBulkString("truncated_texts")
+	conn.WriteInt(int(s.truncatedTexts.Load()))
+	conn.WriteBulkString("truncated_pairs")
+	conn.WriteInt(int(s.truncatedPairs.Load()))
 	conn.WriteBulkString("total_tokens")
 	conn.WriteInt(int(totalToks))
 	conn.WriteBulkString("total_errors")
@@ -573,7 +618,16 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	s.active.Add(1)
 	defer s.active.Done()
 
-	n := len(pairs) / 2
+	// Truncate oversized commands: process only the first maxPairs pairs and
+	// reply with null slots for the overflow. Truncation bounds the inference
+	// work of a single command so the payload size cannot pin the task's cores.
+	total := len(pairs) / 2
+	n := total
+	if s.maxPairs > 0 && n > s.maxPairs {
+		s.truncatedPairs.Add(int64(n - s.maxPairs))
+		n = s.maxPairs
+		pairs = pairs[:n*2]
+	}
 	results := make([][]byte, n)
 
 	// Bound pair fan-out: at most `fanOut` goroutines process pairs concurrently,
@@ -598,13 +652,16 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	close(jobs)
 	wg.Wait()
 
-	conn.WriteArray(n)
+	conn.WriteArray(total)
 	for _, r := range results {
 		if r == nil {
 			conn.WriteNull()
 		} else {
 			conn.WriteBulk(r)
 		}
+	}
+	for i := n; i < total; i++ {
+		conn.WriteNull()
 	}
 }
 

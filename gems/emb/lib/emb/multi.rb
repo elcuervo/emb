@@ -12,11 +12,17 @@ module Emb
     end
 
     def run
-      args = @pairs.flat_map { |pair| [pair[:model].to_s, pair[:text]] }
+      chunk = @client.respond_to?(:batch_size) && @client.batch_size ? @client.batch_size : Emb.configuration.batch_size
 
-      @client
-        .send_command('EMB.MULTI', *args)
-        .map { |entry| entry.unpack('e*') }
+      # Chunk at batch_size pairs per EMB.MULTI so a single command stays well
+      # under the server's max_pairs cap and within client read timeouts.
+      @pairs.each_slice(chunk).flat_map do |slice|
+        args = slice.flat_map { |pair| [pair[:model].to_s, pair[:text]] }
+
+        @client
+          .send_command('EMB.MULTI', *args)
+          .map { |entry| entry&.unpack('e*') }
+      end
     end
 
     class PairCollector

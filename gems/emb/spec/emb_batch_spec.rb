@@ -4,6 +4,7 @@ require 'spec_helper'
 
 class FakeEmbClient
   attr_reader :commands
+  attr_accessor :batch_size
 
   def initialize(responses = {})
     @responses = responses
@@ -423,6 +424,90 @@ RSpec.describe Emb do
 
       expect { middleware.call({}) }.to raise_error('boom')
       expect(BatchLoader::Executor.current).to be_nil
+    end
+  end
+
+  describe 'Emb::BATCH_BLOCK chunking (unit)' do
+    it 'chunks a large scope into multiple MULTIs at batch_size pairs' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'] => [FakeEmbClient.vec(1.0), FakeEmbClient.vec(2.0)],
+        ['EMB.MULTI', 'minilm', 'c'] => [FakeEmbClient.vec(3.0)]
+      )
+      client.batch_size = 2
+      items = [[client, :minilm, 'a'], [client, :minilm, 'b'], [client, :minilm, 'c']]
+      loaded = []
+
+      Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
+
+      expect(client.commands).to eq(
+        [
+          ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'],
+          ['EMB.MULTI', 'minilm', 'c']
+        ]
+      )
+      expect(loaded.map(&:last)).to eq([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]])
+    end
+
+    it 'does not chunk when the scope fits within batch_size' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'] => [FakeEmbClient.vec(1.0), FakeEmbClient.vec(2.0)]
+      )
+      client.batch_size = 512
+      items = [[client, :minilm, 'a'], [client, :minilm, 'b']]
+      loaded = []
+
+      Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
+
+      expect(client.commands).to eq([['EMB.MULTI', 'minilm', 'a', 'minilm', 'b']])
+    end
+
+    it 'preserves MGET nil propagation across chunk boundaries' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'] => [FakeEmbClient.vec(1.0), nil],
+        ['EMB.MULTI', 'minilm', 'c'] => [FakeEmbClient.vec(3.0)]
+      )
+      client.batch_size = 2
+      items = [[client, :minilm, 'a'], [client, :minilm, 'b'], [client, :minilm, 'c']]
+      loaded = []
+
+      Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
+
+      expect(loaded.map(&:last)).to eq([[1.0, 1.0], nil, [3.0, 3.0]])
+    end
+  end
+
+  describe 'Emb::MultiProxy (unit)' do
+    it 'chunks collected pairs into multiple MULTIs at batch_size and reassembles in order' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'] => [FakeEmbClient.vec(1.0), FakeEmbClient.vec(2.0)],
+        ['EMB.MULTI', 'minilm', 'c', 'bge', 'd'] => [FakeEmbClient.vec(3.0), FakeEmbClient.vec(4.0)]
+      )
+      client.batch_size = 2
+      mp = Emb::MultiProxy.new(client)
+      mp[:minilm]['a']
+      mp[:minilm]['b']
+      mp[:minilm]['c']
+      mp[:bge]['d']
+
+      expect(mp.run).to eq([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0], [4.0, 4.0]])
+      expect(client.commands).to eq(
+        [
+          ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'],
+          ['EMB.MULTI', 'minilm', 'c', 'bge', 'd']
+        ]
+      )
+    end
+
+    it 'returns nil for null reply entries across chunks' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'minilm', 'a', 'minilm', 'b'] => [FakeEmbClient.vec(1.0), nil]
+      )
+      client.batch_size = 2
+      mp = Emb::MultiProxy.new(client)
+      mp[:minilm]['a']
+      mp[:minilm]['b']
+
+      expect(mp.run).to eq([[1.0, 1.0], nil])
     end
   end
 end

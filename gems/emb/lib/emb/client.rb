@@ -7,11 +7,12 @@ module Emb
   class Client
     include Commands
 
-    attr_reader :pool
+    attr_reader :pool, :batch_size
 
     def initialize(pool: nil, batch: nil, **redis_options)
       cfg = Emb.configuration
       @batch_enabled = batch.nil? ? cfg.batch : batch
+      @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
       size = pool.nil? ? cfg.pool : pool
       url = extract_url!(redis_options, cfg)
       redis_options = merged_redis_options(redis_options, cfg, url)
@@ -104,7 +105,7 @@ module Emb
 
     def merged_redis_options(opts, cfg, url)
       defaults = cfg.to_h
-      keys = defaults.keys - %i[url pool batch]
+      keys = defaults.keys - %i[url pool batch batch_size]
       keys -= %i[host port] if url
 
       keys.each do |key|

@@ -11,6 +11,12 @@ listen: ":6379"
 # max_connections: 100          # refuse new connections beyond this (0 = unlimited)
 # max_concurrent_requests: 32   # busy-error EMB requests beyond this (0 = unlimited)
 
+# Request size limits (default 4096; 0 = unlimited). Oversized EMB/EMB.MULTI
+# commands are truncated: the first N items are processed, overflow reply slots
+# are null. Live-tunable via CONFIG SET max_texts/max_pairs.
+# max_texts: 4096               # max texts processed per EMB command
+# max_pairs: 4096               # max pairs processed per EMB.MULTI command
+
 models:
   # Standard sentence-transformers model - 3D output, mean pooling
   minilm:

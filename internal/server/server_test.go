@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -1370,15 +1371,16 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 28 {
-				t.Fatalf("expected 28 declared elements, got %d: %q", declared, resp)
+			if declared != 32 {
+				t.Fatalf("expected 32 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 28 {
-				t.Fatalf("expected 28 actual elements, got %d: %q", actual, resp)
+			if actual != 32 {
+				t.Fatalf("expected 32 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
-				"uptime_secs", "total_requests", "active_requests", "total_tokens",
+				"uptime_secs", "total_requests", "active_requests", "truncated_texts",
+				"truncated_pairs", "total_tokens",
 				"total_errors", "models_loaded", "per_model", "connections",
 				"idle_timeout_ms", "max_connections", "max_concurrent_requests",
 				"cache_hits", "cache_misses", "cache_evictions",
@@ -1429,4 +1431,372 @@ func TestStatsDefaultIdleTimeout(t *testing.T) {
 		t.Fatalf("expected default idle_timeout_ms 900000 in stats: %q", resp)
 	}
 	c.Close()
+}
+
+// ---- request-size guardrails (truncation) ----
+
+// countableSession records the inference work performed (batchSize×seqLen per
+// run) — the CPU-cost proxy: real inference cost scales with processed token
+// slots, so this mirrors "CPU goes wild" deterministically.
+type countableSession struct {
+	mu    sync.Mutex
+	slots int64
+	runs  int64
+}
+
+func (c *countableSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	c.mu.Lock()
+	c.slots += int64(batchSize) * int64(seqLen)
+	c.runs++
+	c.mu.Unlock()
+	data := make([]float32, batchSize*seqLen*dim)
+	for i := range data {
+		data[i] = float32(i % dim)
+	}
+	return data, nil
+}
+
+func (c *countableSession) Close() error { return nil }
+
+func (c *countableSession) processedSlots() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.slots
+}
+
+// longText is 104 runes; the mock tokenizer yields [101]+104+[102]=106 tokens
+// (below serveWithPool's maxLength 128), so every text is exactly 106 tokens and
+// every batch's seqLen is exactly 106 (slots = texts×106).
+const longText = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+
+// buildMultiArgs returns (EMB.MULTI, test, text, ...) for n pairs.
+func buildMultiArgs(n int, text string) []string {
+	args := make([]string, 0, 1+n*2)
+	args = append(args, "EMB.MULTI")
+	for range n {
+		args = append(args, "test", text)
+	}
+	return args
+}
+
+func countArrayElements(t *testing.T, raw string) (bulks, nils int) {
+	t.Helper()
+	for _, e := range respArrayElements(t, raw) {
+		if e == "<null>" {
+			nils++
+		} else {
+			bulks++
+		}
+	}
+	return bulks, nils
+}
+
+func TestMaxPairsTruncatesOverCap(t *testing.T) {
+	addr, _ := serveWithPool(t, func() (onnx.Session, error) { return &mockSession{}, nil }, 4, 1, 32, WithMaxPairs(3))
+	c := dial(t, addr)
+
+	c.Write(respCommand(buildMultiArgs(5, "hello")...))
+	resp := readRESP(t, c)
+	bulks, nils := countArrayElements(t, resp)
+	if bulks != 3 || nils != 2 {
+		t.Fatalf("expected 3 bulks + 2 null tail slots, got %d bulks + %d nulls", bulks, nils)
+	}
+	if got := statsIntField(t, c, "truncated_pairs"); got != 2 {
+		t.Fatalf("truncated_pairs = %d, want 2", got)
+	}
+	if got := statsIntField(t, c, "total_requests"); got != 3 {
+		t.Fatalf("total_requests = %d, want 3 (truncated pairs must not count)", got)
+	}
+	c.Close()
+}
+
+func TestMaxTextsTruncatesOverCap(t *testing.T) {
+	addr, _ := serveWithPool(t, func() (onnx.Session, error) { return &mockSession{}, nil }, 4, 1, 32, WithMaxTexts(2))
+	c := dial(t, addr)
+
+	c.Write(respCommand("EMB", "test", "a", "b", "c", "d"))
+	resp := readRESP(t, c)
+	bulks, nils := countArrayElements(t, resp)
+	if bulks != 2 || nils != 2 {
+		t.Fatalf("expected 2 bulks + 2 null tail slots, got %d bulks + %d nulls", bulks, nils)
+	}
+	if got := statsIntField(t, c, "truncated_texts"); got != 2 {
+		t.Fatalf("truncated_texts = %d, want 2", got)
+	}
+
+	// Only the processed prefix counts toward the model's tokens (no work for
+	// overflow texts): 2 texts of 3 tokens each ([101]+rune+[102]).
+	info := arrayOf(t, redisCmd(t, addr, "EMB.INFO", "test"))
+	var gotTokens int
+	for i := 0; i+1 < len(info); i += 2 {
+		if info[i].val == "tokens" {
+			gotTokens = info[i+1].val.(int)
+		}
+	}
+	if gotTokens != 6 {
+		t.Fatalf("model tokens = %d, want 6 (2 texts × 3 tokens, overflow not tokenized)", gotTokens)
+	}
+
+	// Single-text commands keep the single-bulk reply shape (never truncated).
+	c.Write(respCommand("EMB", "test", "hello"))
+	resp = readRESP(t, c)
+	if len(resp) < 2 || resp[0] != '$' {
+		t.Fatalf("expected bulk reply for single text, got %q", resp)
+	}
+	c.Close()
+}
+
+// TestOversizedCommandWorkBounded reproduces the runaway workload and proves the
+// cap bounds the inference work: without a cap the full payload is processed
+// (the CPU-wild signature); with one, work is proportional to the cap and the
+// reply carries a null tail.
+func TestOversizedCommandWorkBounded(t *testing.T) {
+	const pairs = 2000
+	const cap = 256
+	const perText = 106 // mock tokenizer: [101] + 104 runes + [102], under maxLength 128
+
+	// Pre-change behavior (cap 0 = unlimited): the whole payload is inferred.
+	t.Run("unlimited processes the full payload", func(t *testing.T) {
+		sess := &countableSession{}
+		addr, _ := serveWithPool(t, func() (onnx.Session, error) { return sess, nil }, 4, 1, 32, WithMaxPairs(0))
+		c := dial(t, addr)
+
+		start := time.Now()
+		c.Write(respCommand(buildMultiArgs(pairs, longText)...))
+		resp := readRESPComplete(t, c)
+		elapsed := time.Since(start)
+		bulks, nils := countArrayElements(t, resp)
+		if bulks+nils != pairs {
+			t.Fatalf("expected %d reply slots, got %d", pairs, bulks+nils)
+		}
+		slots := sess.processedSlots()
+		t.Logf("unlimited: %d pairs -> %d processed slots (%.1f slots/pair) in %v", pairs, slots, float64(slots)/pairs, elapsed)
+		if slots < pairs*perText*9/10 {
+			t.Fatalf("expected near-full payload processing (%d slots), got %d", pairs*perText, slots)
+		}
+		c.Close()
+	})
+
+	// Post-change behavior: work proportional to the cap, null tail, counters.
+	t.Run("capped truncates work to the cap", func(t *testing.T) {
+		sess := &countableSession{}
+		addr, _ := serveWithPool(t, func() (onnx.Session, error) { return sess, nil }, 4, 1, 32, WithMaxPairs(cap))
+		c := dial(t, addr)
+
+		start := time.Now()
+		c.Write(respCommand(buildMultiArgs(pairs, longText)...))
+		resp := readRESPComplete(t, c)
+		elapsed := time.Since(start)
+		bulks, nils := countArrayElements(t, resp)
+		if bulks+nils != pairs {
+			t.Fatalf("expected %d reply slots, got %d", pairs, bulks+nils)
+		}
+		if nils != pairs-cap {
+			t.Fatalf("expected %d null tail slots, got %d", pairs-cap, nils)
+		}
+		slots := sess.processedSlots()
+		t.Logf("capped %d: %d pairs -> %d processed slots", cap, pairs, slots)
+		if slots > cap*perText*2 {
+			t.Fatalf("work not bounded by cap: %d slots > %d", slots, cap*perText*2)
+		}
+		if got := statsIntField(t, c, "truncated_pairs"); got != pairs-cap {
+			t.Fatalf("truncated_pairs = %d, want %d", got, pairs-cap)
+		}
+		if elapsed > 10*time.Second {
+			t.Fatalf("capped command took %v; work is not bounded", elapsed)
+		}
+		c.Close()
+	})
+}
+
+func TestConfigRuntimeMaxPairs(t *testing.T) {
+	addr, _ := serveTestWithOptions(t, WithMaxPairs(64))
+
+	// Live change via CONFIG SET.
+	tok := redisCmd(t, addr, "CONFIG", "SET", "max_pairs", "2")
+	if tok.kind != "status" || tok.val != "OK" {
+		t.Fatalf("CONFIG SET max_pairs failed: %+v", tok)
+	}
+	got := arrayOf(t, redisCmd(t, addr, "CONFIG", "GET", "max_pairs"))
+	if len(got) != 2 || got[1].val != "2" {
+		t.Fatalf("CONFIG GET max_pairs = %+v, want [max_pairs 2]", got)
+	}
+
+	// New cap applies to subsequent commands.
+	c := dial(t, addr)
+	c.Write(respCommand(buildMultiArgs(4, "hello")...))
+	resp := readRESP(t, c)
+	bulks, nils := countArrayElements(t, resp)
+	if bulks != 2 || nils != 2 {
+		t.Fatalf("expected 2 bulks + 2 nulls after CONFIG SET, got %d + %d", bulks, nils)
+	}
+
+	// Invalid values rejected, active value unchanged.
+	for _, bad := range []string{"abc", "-1", "1.5"} {
+		if e := errorOf(t, redisCmd(t, addr, "CONFIG", "SET", "max_pairs", bad)); e == "" {
+			t.Fatalf("expected error for CONFIG SET max_pairs %q", bad)
+		}
+	}
+	got = arrayOf(t, redisCmd(t, addr, "CONFIG", "GET", "max_pairs"))
+	if got[1].val != "2" {
+		t.Fatalf("max_pairs changed after rejected SET: %+v", got)
+	}
+	c.Close()
+}
+
+// readRESPComplete reads bytes until the buffer holds one complete top-level
+// RESP value (a 2000-element array reply is ~1MB, far beyond readRESP's single
+// 4KB read). Returns the raw reply; the caller parses it.
+func readRESPComplete(t *testing.T, c net.Conn) string {
+	t.Helper()
+	buf := make([]byte, 0, 1<<20)
+	tmp := make([]byte, 64*1024)
+	for {
+		n, err := c.Read(tmp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf = append(buf, tmp[:n]...)
+		if consumed, ok := respValueLen(buf); ok && consumed == len(buf) {
+			return string(buf)
+		}
+	}
+}
+
+// respValueLen reports whether s starts with one complete top-level RESP value
+// and, if so, its length. Understands arrays of bulk/null strings (what these
+// tests send) plus integers/status; scalar values report len(s)==consumed.
+func respValueLen(s []byte) (int, bool) {
+	if len(s) == 0 {
+		return 0, false
+	}
+	switch s[0] {
+	case '*':
+		i := bytes.IndexByte(s, '\r')
+		if i < 0 {
+			return 0, false
+		}
+		n, err := strconv.Atoi(string(s[1:i]))
+		if err != nil {
+			return 0, false
+		}
+		p := i + 2
+		for k := 0; k < n; k++ {
+			if p >= len(s) {
+				return 0, false
+			}
+			switch s[p] {
+			case '$':
+				j := bytes.IndexByte(s[p:], '\r')
+				if j < 0 {
+					return 0, false
+				}
+				l, err := strconv.Atoi(string(s[p+1 : p+j]))
+				if err != nil {
+					return 0, false
+				}
+				p += j + 2
+				if l >= 0 {
+					if p+l+2 > len(s) {
+						return 0, false
+					}
+					p += l + 2
+				}
+			case ':':
+				j := bytes.IndexByte(s[p:], '\r')
+				if j < 0 {
+					return 0, false
+				}
+				p += j + 2
+			default:
+				return 0, false
+			}
+		}
+		return p, true
+	case '$':
+		j := bytes.IndexByte(s, '\r')
+		if j < 0 {
+			return 0, false
+		}
+		l, err := strconv.Atoi(string(s[1:j]))
+		if err != nil {
+			return 0, false
+		}
+		if l >= 0 && j+2+l+2 > len(s) {
+			return 0, false
+		}
+		consumed := j + 2
+		if l >= 0 {
+			consumed += l + 2
+		}
+		return consumed, true
+	case '+', '-':
+		j := bytes.IndexByte(s, '\r')
+		if j < 0 {
+			return 0, false
+		}
+		return j + 2, true
+	}
+	return 0, false
+}
+
+// ---- per-model max_length input truncation ----
+
+// TestEmbTruncatesInputToPerModelMaxLength validates that each model truncates
+// input to its own configured max_length: the same over-long text tokenizes to
+// 64 tokens on a max_length 64 model and to 512 on a max_length 512 model,
+// while short texts stay untruncated.
+func TestEmbTruncatesInputToPerModelMaxLength(t *testing.T) {
+	reg := registry.New()
+	mkPool := func(maxLen int) *pipeline.Pool {
+		pool, err := pipeline.NewPool(
+			func() (onnx.Session, error) { return &mockSession{}, nil },
+			mockTokenizer{}, 1, 4, maxLen, true, "mean", 1, 32, 0, 0,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pool
+	}
+	reg.Add("short", &registry.ModelEntry{Pool: mkPool(64), Dim: 4, Name: "short"})
+	reg.Add("long", &registry.ModelEntry{Pool: mkPool(512), Dim: 4, Name: "long"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+
+	overlong := strings.Repeat("x", 512) // 1+512+1 = 514 ids → must truncate per model
+	short := "hi"                        // 1+2+1 = 4 ids → never truncated
+
+	expectTokens := func(model, text string, want int) {
+		t.Helper()
+		before := modelTokens(t, addr, model)
+		tok := redisCmd(t, addr, "EMB", model, text)
+		if tok.kind != "bulk" {
+			t.Fatalf("EMB %s failed: %+v", model, tok)
+		}
+		if got := modelTokens(t, addr, model) - before; got != want {
+			t.Fatalf("model %q tokens delta = %d, want %d (max-length truncation)", model, got, want)
+		}
+	}
+
+	expectTokens("short", overlong, 64) // truncated to its max_length
+	expectTokens("long", overlong, 512) // truncated to its max_length
+	expectTokens("short", short, 4)     // short input untouched
+	expectTokens("long", short, 4)      // short input untouched
+}
+
+// modelTokens reads the cumulative tokens counter of a model via EMB.INFO.
+func modelTokens(t *testing.T, addr, model string) int {
+	t.Helper()
+	info := arrayOf(t, redisCmd(t, addr, "EMB.INFO", model))
+	for i := 0; i+1 < len(info); i += 2 {
+		if info[i].val == "tokens" {
+			return info[i+1].val.(int)
+		}
+	}
+	t.Fatalf("no tokens field in EMB.INFO %s", model)
+	return 0
 }

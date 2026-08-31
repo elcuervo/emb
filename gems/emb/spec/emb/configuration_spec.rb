@@ -75,4 +75,25 @@ RSpec.describe Emb::Configuration do
       expect(Emb::Client.new(batch: false).batch?).to be false
     end
   end
+
+  describe 'batch_size' do
+    it 'defaults to 512' do
+      expect(Emb.configuration.batch_size).to eq(512)
+    end
+
+    it 'applies globally via Emb.configure' do
+      Emb.configure { |c| c.batch_size = 64 }
+
+      client = Emb::Client.new(port: 16_379)
+      expect(client.batch_size).to eq(64)
+      expect(client.pool.size).to eq(5)
+    end
+
+    it 'lets per-call options win' do
+      Emb.configure { |c| c.batch_size = 64 }
+
+      client = Emb::Client.new(port: 16_379, batch_size: 32)
+      expect(client.batch_size).to eq(32)
+    end
+  end
 end

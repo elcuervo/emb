@@ -72,6 +72,8 @@ func run() error {
 		server.WithIdleTimeout(idleTimeout),
 		server.WithMaxConnections(fc.MaxConnections),
 		server.WithMaxConcurrentRequests(fc.MaxConcurrentRequests),
+		server.WithMaxTexts(intPtrOrDefault(fc.MaxTexts, 4096)),
+		server.WithMaxPairs(intPtrOrDefault(fc.MaxPairs, 4096)),
 	)
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
@@ -98,4 +100,14 @@ func run() error {
 
 	log.Print("server stopped")
 	return nil
+}
+
+// intPtrOrDefault resolves a possibly-nil *int config value to def, so unset
+// config keys take the documented default while an explicit 0 stays meaningful
+// (0 = unlimited for max_texts/max_pairs).
+func intPtrOrDefault(v *int, def int) int {
+	if v == nil {
+		return def
+	}
+	return *v
 }

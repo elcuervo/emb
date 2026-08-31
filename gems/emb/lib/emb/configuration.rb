@@ -3,7 +3,7 @@
 module Emb
   class Configuration
     OPTIONS = %i[
-      host port url pool batch driver protocol
+      host port url pool batch batch_size driver protocol
       connect_timeout read_timeout write_timeout reconnect_attempts
     ].freeze
 
@@ -15,6 +15,7 @@ module Emb
       self.url = nil
       self.pool = 5
       self.batch = true
+      self.batch_size = 512
       self.driver = nil
       self.protocol = 2
       self.connect_timeout = nil

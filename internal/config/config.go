@@ -25,8 +25,14 @@ type Config struct {
 	MaxConnections int `yaml:"max_connections"`
 	// MaxConcurrentRequests answers EMB/EMB.MULTI with a busy error beyond the
 	// cap. 0 (default) is unlimited.
-	MaxConcurrentRequests int                    `yaml:"max_concurrent_requests"`
-	Models                map[string]ModelConfig `yaml:"models"`
+	MaxConcurrentRequests int `yaml:"max_concurrent_requests"`
+	// MaxTexts bounds texts per EMB command; commands beyond the cap are
+	// truncated (overflow reply slots null). nil = default 4096; 0 = unlimited.
+	MaxTexts *int `yaml:"max_texts"`
+	// MaxPairs bounds pairs per EMB.MULTI command; commands beyond the cap are
+	// truncated (overflow reply slots null). nil = default 4096; 0 = unlimited.
+	MaxPairs *int                   `yaml:"max_pairs"`
+	Models   map[string]ModelConfig `yaml:"models"`
 }
 
 // DefaultIdleTimeout is the idle-connection TTL applied when idle_timeout is
@@ -124,6 +130,13 @@ func Load(path string) (*Config, error) {
 		cfg.Models[name] = m
 	}
 
+	if cfg.MaxTexts != nil && *cfg.MaxTexts < 0 {
+		return nil, fmt.Errorf("max_texts must be non-negative")
+	}
+	if cfg.MaxPairs != nil && *cfg.MaxPairs < 0 {
+		return nil, fmt.Errorf("max_pairs must be non-negative")
+	}
+
 	return &cfg, nil
 }
 
@@ -189,6 +202,16 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		case arg == "-max-concurrent-requests" && i+1 < len(args):
 			i++
 			fc.MaxConcurrentRequests, _ = strconv.Atoi(args[i])
+
+		case arg == "-max-texts" && i+1 < len(args):
+			i++
+			v, _ := strconv.Atoi(args[i])
+			fc.MaxTexts = &v
+
+		case arg == "-max-pairs" && i+1 < len(args):
+			i++
+			v, _ := strconv.Atoi(args[i])
+			fc.MaxPairs = &v
 
 		case arg == "-tls-cert" && i+1 < len(args):
 			i++
@@ -272,6 +295,13 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		if m.ModelRepo == "" && m.ONNX == "" {
 			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
 		}
+	}
+
+	if fc.MaxTexts != nil && *fc.MaxTexts < 0 {
+		return nil, fmt.Errorf("max_texts must be non-negative")
+	}
+	if fc.MaxPairs != nil && *fc.MaxPairs < 0 {
+		return nil, fmt.Errorf("max_pairs must be non-negative")
 	}
 
 	return fc, nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/tidwall/redcon"
@@ -42,6 +43,16 @@ func (s *Server) configParams() []configParam {
 				s.cacheSave = v
 				return nil
 			},
+		},
+		{
+			name: "max_texts",
+			get:  func(s *Server) string { return strconv.Itoa(s.maxTexts) },
+			set:  (*Server).setConfigMaxTexts,
+		},
+		{
+			name: "max_pairs",
+			get:  func(s *Server) string { return strconv.Itoa(s.maxPairs) },
+			set:  (*Server).setConfigMaxPairs,
 		},
 		{
 			name: "password",
@@ -83,6 +94,29 @@ func (s *Server) setConfigCache(v string) error {
 		return fmt.Errorf("cache was disabled at boot; restart with a cache size to configure it at runtime")
 	}
 	s.cache.SetMaxBytes(bytes)
+	return nil
+}
+
+// setConfigMaxTexts bounds texts per EMB command (0 = unlimited). Non-integer
+// or negative values are rejected and leave the active cap unchanged.
+func (s *Server) setConfigMaxTexts(v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fmt.Errorf("max_texts must be a non-negative integer")
+	}
+	s.maxTexts = n
+	return nil
+}
+
+// setConfigMaxPairs bounds pairs per EMB.MULTI command (0 = unlimited).
+// Non-integer or negative values are rejected and leave the active cap
+// unchanged.
+func (s *Server) setConfigMaxPairs(v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fmt.Errorf("max_pairs must be a non-negative integer")
+	}
+	s.maxPairs = n
 	return nil
 }
 
