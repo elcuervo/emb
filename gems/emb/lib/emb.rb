@@ -32,6 +32,9 @@ module Emb
     def models      = default_client.models
     def info(name)  = default_client.info(name)
     def stats       = default_client.stats
+    def server_info(*sections)  = default_client.server_info(*sections)
+    def config_get(*patterns)   = default_client.config_get(*patterns)
+    def config_set(param, value) = default_client.config_set(param, value)
     def help        = default_client.help
     def ping        = default_client.ping
     def ready       = default_client.ready

@@ -160,7 +160,7 @@ Emb.setup
 Emb[:minilm]["hello"]   # proxy access
 Emb.models               # list models
 Emb.info(:minilm)        # model info
-Emb.stats                # server stats
+Emb.stats                # server stats (Hash of key => value)
 Emb.help                 # command reference
 Emb.ping                 # health check
 ```
@@ -168,6 +168,63 @@ Emb.ping                 # health check
 These all delegate to a lazily-initialized default client. No explicit `setup` call
 is required for simple cases — the default client connects to `redis://localhost:6379`
 automatically.
+
+## Server info & config
+
+The server exposes Redis-style `INFO` and `CONFIG` commands; the gem wraps them.
+
+### `Emb.stats` — server statistics as a hash
+
+`EMB.STATS` is decoded into a Symbol-keyed Hash with values as the server sent them
+(RESP integers stay Integer, everything else String):
+
+```ruby
+Emb.stats
+# => {uptime_secs: 3, total_requests: 0, active_requests: "0", total_tokens: 0,
+#     total_errors: 0, models_loaded: 1, per_model: "minilm: req=0 avg=0us tok=0 ...",
+#     cache_hits: 0, cache_misses: 0, cache_evictions: 0}
+```
+
+> **Breaking change (gem ≥ next release):** `Emb.stats` used to return the raw
+> RESP array (`["uptime_secs", 3, "total_requests", 0, ...]`). It now returns the
+> Hash above. Callers using `stats.each_slice(2)` or array indexing must migrate.
+
+### `Emb.server_info` — sectioned INFO, parsed
+
+The Redis-style `INFO` reply is parsed into a nested Hash. **No arguments = all
+sections**; pass section names to filter (`:server`, `:cache`, `:keyspace`, `:stats`, `:clients`):
+
+```ruby
+Emb.server_info
+# => {Server: {redis_version: "0.2.4", emb_version: "0.2.4", uptime_secs: "7", ...},
+#     Cache: {cache_hits: 0, cache_misses: 0, cache_hit_rate: "0.0%", ...},
+#     Keyspace: {db0: "model=minilm,keys=0,hits=0,misses=0,hit_rate=0.0%"}, ...}
+
+Emb.server_info(:server, :cache)   # only those two sections
+```
+
+### `Emb.config_get` / `Emb.config_set` — hot config read & change
+
+Read the server's runtime configuration (String keys and values, no coercion):
+
+```ruby
+Emb.config_get                  # all parameters
+# => {"cache" => "auto", "cache_file" => "", "cache_save" => "", "listen" => ":6379",
+#     "password" => "", "models" => "minilm,bge", "tls_cert" => "", "tls_key" => ""}
+Emb.config_get("cache*")       # glob filter: only cache* parameters
+```
+
+Change parameters live — `cache` resizes immediately, `cache_file`/`cache_save`
+apply at the next snapshot save, `password` affects new connections:
+
+```ruby
+Emb.config_set(:cache, "100MB")      # => true (live resize)
+Emb.config_set(:cache_file, "/var/lib/emb/cache.rdb")
+```
+
+Errors surface as exceptions (`RedisClient::CommandError`): read-only parameters
+(`listen`, `tls_*`, `models`), invalid values, and `NOAUTH` on password-protected
+servers are not swallowed.
 
 ## Usage
 
