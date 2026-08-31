@@ -5,6 +5,12 @@ listen: ":6379"
 # tls_key:  /etc/emb/key.pem
 # cache: "auto"   # auto ≈ 13% of RAM (safety-adjusted, no byte cap), or "1GB", "256MB", "25%". Empty = disabled
 
+# Connection lifecycle (idle_timeout defaults to 15m; explicit 0 disables it.
+# Caps default to 0 = unlimited.)
+# idle_timeout: 15m             # close connections idle this long (0 = never)
+# max_connections: 100          # refuse new connections beyond this (0 = unlimited)
+# max_concurrent_requests: 32   # busy-error EMB requests beyond this (0 = unlimited)
+
 models:
   # Standard sentence-transformers model - 3D output, mean pooling
   minilm:

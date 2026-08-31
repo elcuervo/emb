@@ -585,7 +585,7 @@ func serveTestWithServer(t *testing.T) (string, *Server) {
 // serveWithPool starts a server whose model "test" is backed by a pool built from the
 // given session factory. numWorkers is the pool worker count (a value >1 here means the
 // only bound on concurrent inference should come from the server's fan-out).
-func serveWithPool(t *testing.T, factory func() (onnx.Session, error), numWorkers, timeoutMS, maxBatch int) (string, *Server) {
+func serveWithPool(t *testing.T, factory func() (onnx.Session, error), numWorkers, timeoutMS, maxBatch int, opts ...Option) (string, *Server) {
 	t.Helper()
 	reg := registry.New()
 	pool, err := pipeline.NewPool(factory, mockTokenizer{}, numWorkers, 4, 128, true, "mean", timeoutMS, maxBatch, 0, 0)
@@ -595,7 +595,28 @@ func serveWithPool(t *testing.T, factory func() (onnx.Session, error), numWorker
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
 
 	addr := getFreeAddr()
-	srv := New(addr, reg, "", "", nil)
+	srv := New(addr, reg, "", "", nil, opts...)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr, srv
+}
+
+func serveTestWithOptions(t *testing.T, opts ...Option) (string, *Server) {
+	t.Helper()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil, opts...)
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
@@ -1149,4 +1170,263 @@ func BenchmarkPoolEmbed(b *testing.B) {
 			}
 		}
 	})
+}
+
+// statsIntField issues EMB.STATS on the given connection and returns the value
+// of one integer field, so connection/active counts can be read without
+// opening extra connections that would disturb the count.
+func statsIntField(t *testing.T, c net.Conn, field string) int {
+	t.Helper()
+	c.Write([]byte("*1\r\n$9\r\nEMB.STATS\r\n"))
+	resp := readRESP(t, c)
+	idx := strings.Index(resp, field)
+	if idx < 0 {
+		t.Fatalf("field %q not found in stats: %q", field, resp)
+	}
+	rest := resp[idx+len(field):]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		t.Fatalf("no int value after %q in stats: %q", field, resp)
+	}
+	j := colon + 1
+	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+		j++
+	}
+	v, err := strconv.Atoi(rest[colon+1 : j])
+	if err != nil {
+		t.Fatalf("bad int value for %q in stats: %q", field, resp)
+	}
+	return v
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("condition not met within timeout")
+}
+
+func TestConnAccounting(t *testing.T) {
+	addr, _ := serveTestWithOptions(t)
+	c1 := dial(t, addr)
+	c2 := dial(t, addr)
+
+	if got := statsIntField(t, c1, "connections"); got != 2 {
+		t.Fatalf("expected 2 connections, got %d", got)
+	}
+
+	c2.Close()
+	waitFor(t, func() bool {
+		return statsIntField(t, c1, "connections") == 1
+	})
+}
+
+func TestIdleClose(t *testing.T) {
+	addr, _ := serveTestWithOptions(t, WithIdleTimeout(200*time.Millisecond))
+	c := dial(t, addr)
+
+	c.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	if resp := readRESP(t, c); resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG, got %q", resp)
+	}
+
+	// Go idle: the server should reap us.
+	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 1)
+	_, err := c.Read(buf)
+	if err == nil {
+		t.Fatalf("expected connection closed after idle timeout")
+	}
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		t.Fatalf("connection was not reaped within 3s")
+	}
+}
+
+func TestIdleCloseActiveSurvives(t *testing.T) {
+	addr, _ := serveTestWithOptions(t, WithIdleTimeout(300*time.Millisecond))
+	c := dial(t, addr)
+
+	for i := range 4 {
+		c.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+		if resp := readRESP(t, c); resp != "+PONG\r\n" {
+			t.Fatalf("iteration %d: expected PONG, got %q", i, resp)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+}
+
+func TestMaxConnections(t *testing.T) {
+	addr, _ := serveTestWithOptions(t, WithMaxConnections(1))
+	c1 := dial(t, addr)
+
+	c1.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	if resp := readRESP(t, c1); resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG, got %q", resp)
+	}
+
+	// Second connection at the cap is refused and closed.
+	c2 := dial(t, addr)
+	c2.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	c2.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 1)
+	if _, err := c2.Read(buf); err == nil {
+		t.Fatalf("expected refused connection to be closed, got data")
+	}
+
+	// First connection is unaffected, and only it is counted.
+	c1.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	if resp := readRESP(t, c1); resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG, got %q", resp)
+	}
+	if got := statsIntField(t, c1, "connections"); got != 1 {
+		t.Fatalf("expected 1 connection (refused socket uncounted), got %d", got)
+	}
+
+	// Slots free up after close.
+	c1.Close()
+	waitFor(t, func() bool {
+		c3, err := net.Dial("tcp", addr)
+		if err != nil {
+			return false
+		}
+		defer c3.Close()
+		c3.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+		c3.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		buf := make([]byte, 16)
+		n, err := c3.Read(buf)
+		return err == nil && strings.Contains(string(buf[:n]), "PONG")
+	})
+}
+
+// blockingSession blocks in Run until released, so tests can hold a request
+// in flight and observe the concurrency gate.
+type blockingSession struct {
+	gate chan struct{}
+}
+
+func (b *blockingSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	<-b.gate
+	data := make([]float32, batchSize*seqLen*dim)
+	for i := range data {
+		data[i] = float32(i % dim)
+	}
+	return data, nil
+}
+
+func (b *blockingSession) Close() error { return nil }
+
+func TestMaxConcurrentRequests(t *testing.T) {
+	gate := make(chan struct{})
+	addr, _ := serveWithPool(t,
+		func() (onnx.Session, error) { return &blockingSession{gate: gate}, nil },
+		2, 0, 32,
+		WithMaxConcurrentRequests(1),
+	)
+	c1 := dial(t, addr)
+	c2 := dial(t, addr)
+
+	// c1 occupies the single in-flight slot.
+	c1.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	waitFor(t, func() bool {
+		return statsIntField(t, c2, "active_requests") == 1
+	})
+
+	// Second EMB request is busy-errored while c1 is in flight.
+	c2.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nworld\r\n"))
+	resp := readRESP(t, c2)
+	if !strings.HasPrefix(resp, "-ERR busy") {
+		t.Fatalf("expected busy error, got %q", resp)
+	}
+
+	// Control commands still answer during saturation.
+	c2.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	if resp := readRESP(t, c2); resp != "+PONG\r\n" {
+		t.Fatalf("expected PONG, got %q", resp)
+	}
+	if got := statsIntField(t, c2, "active_requests"); got != 1 {
+		t.Fatalf("expected active_requests 1, got %d", got)
+	}
+
+	// Release: c1 completes normally.
+	close(gate)
+	done := readRESP(t, c1)
+	if len(done) < 3 || done[0] != '$' {
+		t.Fatalf("expected bulk string for in-flight request, got %q", done)
+	}
+}
+
+func TestStatsRESPParity(t *testing.T) {
+	cacheCases := map[string]string{"no-cache": "", "cache": "1GB"}
+	for name, cacheCfg := range cacheCases {
+		t.Run(name, func(t *testing.T) {
+			addr := serveTestWithCache(t, cacheCfg)
+			c := dial(t, addr)
+			c.Write([]byte("*1\r\n$9\r\nEMB.STATS\r\n"))
+			resp := readRESP(t, c)
+
+			declared, actual := parseRESPArrayCount(resp)
+			if declared != 28 {
+				t.Fatalf("expected 28 declared elements, got %d: %q", declared, resp)
+			}
+			if actual != 28 {
+				t.Fatalf("expected 28 actual elements, got %d: %q", actual, resp)
+			}
+
+			for _, f := range []string{
+				"uptime_secs", "total_requests", "active_requests", "total_tokens",
+				"total_errors", "models_loaded", "per_model", "connections",
+				"idle_timeout_ms", "max_connections", "max_concurrent_requests",
+				"cache_hits", "cache_misses", "cache_evictions",
+			} {
+				if !strings.Contains(resp, f) {
+					t.Fatalf("missing field %q in stats: %q", f, resp)
+				}
+			}
+			if !strings.Contains(resp, "active_requests\r\n:0") {
+				t.Fatalf("expected active_requests 0 when idle: %q", resp)
+			}
+			c.Close()
+		})
+	}
+}
+
+func TestStatsPolicyEcho(t *testing.T) {
+	addr, _ := serveTestWithOptions(t,
+		WithIdleTimeout(5*time.Minute),
+		WithMaxConnections(10),
+		WithMaxConcurrentRequests(4),
+	)
+	c := dial(t, addr)
+	c.Write([]byte("*1\r\n$9\r\nEMB.STATS\r\n"))
+	resp := readRESP(t, c)
+
+	for _, want := range []string{
+		"idle_timeout_ms\r\n:300000",
+		"max_connections\r\n:10",
+		"max_concurrent_requests\r\n:4",
+		"connections\r\n:1",
+		"active_requests\r\n:0",
+	} {
+		if !strings.Contains(resp, want) {
+			t.Fatalf("expected %q in stats: %q", want, resp)
+		}
+	}
+	c.Close()
+}
+
+func TestStatsDefaultIdleTimeout(t *testing.T) {
+	// A server built without an idle-timeout option reports the default TTL.
+	addr, _ := serveTestWithOptions(t)
+	c := dial(t, addr)
+	c.Write([]byte("*1\r\n$9\r\nEMB.STATS\r\n"))
+	resp := readRESP(t, c)
+	if !strings.Contains(resp, "idle_timeout_ms\r\n:900000") {
+		t.Fatalf("expected default idle_timeout_ms 900000 in stats: %q", resp)
+	}
+	c.Close()
 }

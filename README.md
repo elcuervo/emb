@@ -91,7 +91,7 @@ redis-cli EMB minilm "hello world"
 | `EMB <model> <text> [text...]` | Embed one or more texts. Single text → bulk string, multiple → array of bulk strings |
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency |
-| `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown |
+| `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown |
 | `EMB.MULTI <model> <text> [<model> <text>...]` | Embed texts across different models in one call |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR loading` (loading), `-ERR draining` (shutting down) |
 | `EMB.HELP` | Command reference |
@@ -116,6 +116,31 @@ Emb.ready?
 Emb.ready
 # => "ready"
 ```
+
+### Connection lifecycle & observability
+
+Three knobs bound the server's connection and request surface. `idle_timeout` defaults to **15 minutes** (set `0` to disable reaping entirely); the two caps default to `0` (unlimited).
+
+```bash
+emb -config config.yaml \
+    -idle-timeout 15m \          # close connections idle for 15 minutes (0 = never)
+    -max-connections 100 \       # refuse new connections beyond 100 (0 = unlimited)
+    -max-concurrent-requests 32  # busy-error EMB requests beyond 32 in flight (0 = unlimited)
+```
+
+Or set them in `config.yaml`:
+
+```yaml
+idle_timeout: 15m
+max_connections: 100
+max_concurrent_requests: 32
+```
+
+- `idle_timeout` reaps connections that stop sending commands, bounding file descriptors and zombie-diagnosis noise. Pooled Redis clients reconnect transparently; a long-idle interactive session (e.g. an open `redis-cli` beyond the TTL) is closed and must reconnect.
+- `max_connections` refuses connections at the cap; refused sockets are closed immediately without being counted.
+- `max_concurrent_requests` answers `EMB`/`EMB.MULTI` with `ERR busy ...` while at the cap, giving consumers backpressure instead of unbounded queueing. Control commands (`PING`, `AUTH`, `EMB.READY`, `EMB.STATS`, `EMB.MODELS`, `EMB.INFO`, `EMB.HELP`) always answer so ops can still probe a saturated server.
+
+`EMB.STATS` reports live `connections` and `active_requests` (the real in-flight count), plus the effective `idle_timeout_ms`/`max_connections`/`max_concurrent_requests` — a 10-second check to classify a CPU/stuck-traffic incident as volume, saturation, or churn.
 
 ### EMB.MULTI example
 
