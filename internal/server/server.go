@@ -37,10 +37,21 @@ type Server struct {
 	shuttingDown atomic.Bool
 	started      time.Time
 	addr         string
-	password     string
+	password     atomic.Value // string; live-updatable via CONFIG SET
 	tlsConfig    *tls.Config
+	tlsCert      string
+	tlsKey       string
 	cache        *Cache
-	state        atomic.Int64
+	// cacheConfig retains the raw boot cache string so CONFIG GET echoes it.
+	cacheConfig string
+	// cacheFile/cacheSave are runtime-editable snapshot parameters (consumed by
+	// the cache-snapshot save loop; stored here even before that change lands).
+	cacheFile string
+	cacheSave string
+	// version is the injected build version ("dev" when unset), reported by INFO.
+	version   string
+	activeReq atomic.Int64
+	state     atomic.Int64
 	// fanOut bounds concurrent EMB.MULTI pair processing for a single command, so a
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
@@ -58,13 +69,15 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	s := &Server{
-		reg:       reg,
-		started:   time.Now(),
-		addr:      addr,
-		password:  password,
-		tlsConfig: tlsConfig,
-		cache:     c,
+		reg:         reg,
+		started:     time.Now(),
+		addr:        addr,
+		tlsConfig:   tlsConfig,
+		cache:       c,
+		cacheConfig: cacheConfig,
+		version:     "dev",
 	}
+	s.password.Store(password)
 
 	mux := redcon.NewServeMux()
 	mux.HandleFunc("ping", s.handlePING)
@@ -76,9 +89,11 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
 	mux.HandleFunc("emb.ready", s.handleREADY)
+	mux.HandleFunc("info", s.handleInfo)
+	mux.HandleFunc("config", s.handleConfig)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
-		if password != "" && !isExempt(cmd) && !isAuthenticated(conn) {
+		if s.password.Load().(string) != "" && !isExempt(cmd) && !isAuthenticated(conn) {
 			conn.WriteError("NOAUTH Authentication required.")
 			return
 		}
@@ -148,6 +163,19 @@ func (s *Server) SetDraining() {
 	s.state.Store(int64(stateDraining))
 }
 
+// SetVersion injects the build version (reported by INFO's redis_version /
+// emb_version). The default is "dev", matching the -version flag default.
+func (s *Server) SetVersion(v string) {
+	s.version = v
+}
+
+// SetTLSConfigPaths records the raw TLS cert/key paths for CONFIG GET. The
+// loaded tls.Config is boot-only; the paths are informational.
+func (s *Server) SetTLSConfigPaths(cert, key string) {
+	s.tlsCert = cert
+	s.tlsKey = key
+}
+
 func (s *Server) handleREADY(conn redcon.Conn, cmd redcon.Command) {
 	state := serverState(s.state.Load())
 	if state == stateLoading && len(s.reg.List()) == 0 {
@@ -169,7 +197,7 @@ func isExempt(cmd redcon.Command) bool {
 		return false
 	}
 	name := strings.ToLower(string(cmd.Args[0]))
-	return name == "auth" || name == "ping" || name == "emb.ready"
+	return name == "auth" || name == "ping" || name == "emb.ready" || name == "info"
 }
 
 func isAuthenticated(conn redcon.Conn) bool {
@@ -178,7 +206,7 @@ func isAuthenticated(conn redcon.Conn) bool {
 }
 
 func (s *Server) handleAUTH(conn redcon.Conn, cmd redcon.Command) {
-	if s.password == "" {
+	if s.password.Load().(string) == "" {
 		conn.WriteError("ERR Client sent AUTH, but no password is set")
 		return
 	}
@@ -186,7 +214,7 @@ func (s *Server) handleAUTH(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteError("ERR wrong number of arguments for 'AUTH' command")
 		return
 	}
-	if string(cmd.Args[1]) != s.password {
+	if string(cmd.Args[1]) != s.password.Load().(string) {
 		conn.WriteError("ERR invalid password")
 		return
 	}
@@ -199,6 +227,8 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
+	s.activeReq.Add(1)
+	defer s.activeReq.Add(-1)
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
 		return
@@ -456,6 +486,8 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
+	s.activeReq.Add(1)
+	defer s.activeReq.Add(-1)
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
 		return
@@ -560,6 +592,9 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.STATS - Show server statistics",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.HELP - Show this help message",
+		"INFO [section ...] - Redis-style server info (version, stats, cache hit ratios)",
+		"CONFIG GET [pattern] - List runtime configuration parameters",
+		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 	}, "\n")

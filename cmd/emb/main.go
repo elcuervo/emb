@@ -64,6 +64,8 @@ func run() error {
 	}
 
 	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig)
+	srv.SetVersion(version)
+	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
 	if modelCount > 0 {
 		srv.SetReady()
 	}
