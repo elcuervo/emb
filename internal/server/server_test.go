@@ -1026,6 +1026,74 @@ func TestParseCacheConfig(t *testing.T) {
 	}
 }
 
+func TestAutoTuneCache(t *testing.T) {
+	mem := registry.TotalSystemMemory()
+	budget := autoTuneCache()
+
+	if budget < 64*1024*1024 {
+		t.Fatalf("auto budget %d below the 64MB floor", budget)
+	}
+	if budget > int64(mem/2) {
+		t.Fatalf("auto budget %d above the mem/2 ceiling (mem %d)", budget, mem)
+	}
+
+	if mem >= 4*1024*1024*1024 {
+		if budget <= 500*1024*1024 {
+			t.Fatalf("auto budget %d did not exceed the old 500MB cap on a >=4GB machine", budget)
+		}
+	} else {
+		t.Logf("skipping >500MB check: total mem %d < 4GB", mem)
+	}
+}
+
+func TestParseCacheConfigPercent(t *testing.T) {
+	mem := registry.TotalSystemMemory()
+
+	for _, tt := range []struct {
+		in   string
+		want int64
+		err  bool
+	}{
+		{in: "10%", want: int64(0.10 * float64(mem))},
+		{in: "25%", want: int64(0.25 * float64(mem))},
+		{in: "100%", want: int64(1.0 * float64(mem))},
+		{in: "0%", err: true},
+		{in: "-5%", err: true},
+		{in: "150%", err: true},
+		{in: "abc%", err: true},
+		{in: "%", err: true},
+	} {
+		got, err := parseCacheConfig(tt.in)
+		if tt.err {
+			if err == nil {
+				t.Errorf("%q: expected error, got %d", tt.in, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: unexpected error: %v", tt.in, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("%q: got %d, want %d", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestPercentCacheBudgetZeroMem(t *testing.T) {
+	if _, err := percentCacheBudget(10, 0); err == nil {
+		t.Fatal("expected error when system memory is unavailable")
+	}
+	got, err := percentCacheBudget(10, 8*1024*1024*1024)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mem8 := 8 * 1024 * 1024 * 1024
+	if want := int64(0.10 * float64(mem8)); got != want {
+		t.Fatalf("10%% of 8GB: got %d, want %d", got, want)
+	}
+}
+
 func BenchmarkRESP(b *testing.B) {
 	addr := getFreeAddr()
 	reg := registry.New()

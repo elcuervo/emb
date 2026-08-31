@@ -5,7 +5,7 @@ TBD - created by archiving change 2026-07-02-emb-lru-cache. Update Purpose after
 ## Requirements
 ### Requirement: Cache configuration
 
-The server SHALL accept a cache configuration via the YAML `cache` field or the `-cache` CLI flag. The value SHALL be a string: empty (disabled), `"auto"` (auto-tune), or a human-readable size (e.g., `"1GB"`, `"256MB"`).
+The server SHALL accept a cache configuration via the YAML `cache` field or the `-cache` CLI flag. The value SHALL be a string: empty (disabled), `"auto"` (auto-tune), a human-readable size (e.g., `"1GB"`, `"256MB"`), or a percentage of total system RAM (e.g., `"25%"`).
 
 #### Scenario: Default is disabled
 
@@ -16,9 +16,9 @@ The server SHALL accept a cache configuration via the YAML `cache` field or the 
 
 - **WHEN** `cache: "auto"` is set
 - **THEN** the cache SHALL use `totalSystemMemory()` to estimate available memory
-- **THEN** the cache budget SHALL be `max(totalMem / 2 - modelEstimate, totalMem × 0.05)`
-- **THEN** the max entries SHALL be `min(budget / entrySize, 100000)`
-- **THEN** the entrySize SHALL be `dim × 4 + 128` bytes
+- **THEN** the budget SHALL be 20% of remaining memory after a 10% safety margin and a 25% model reserve (~13% of total RAM)
+- **THEN** the budget SHALL be floored at 64MB and capped at 50% of total RAM
+- **THEN** no fixed byte ceiling (e.g., 500MB) SHALL be applied
 
 #### Scenario: Explicit size
 
@@ -26,9 +26,14 @@ The server SHALL accept a cache configuration via the YAML `cache` field or the 
 - **THEN** the cache SHALL parse `"1GB"` via `docker/go-units.FromHumanSize()`
 - **THEN** the cache budget SHALL be the parsed byte value
 
+#### Scenario: Percentage size
+
+- **WHEN** `cache: "25%"` is set
+- **THEN** the cache budget SHALL be 25% of total system RAM (explicit operator choice, no auto margin applied)
+
 #### Scenario: Invalid size
 
-- **WHEN** `cache: "invalid"` is set
+- **WHEN** `cache: "invalid"` or `cache: "150%"` or `cache: "0%"` is set
 - **THEN** the server SHALL fail to start with a clear error message
 
 ### Requirement: Cache behavior
@@ -82,7 +87,7 @@ The server SHALL expose cache statistics.
 #### Scenario: EMB.INFO shows cache stats
 
 - **WHEN** a client sends `EMB.INFO minilm`
-- **THEN** the response SHALL include `cache_hits`, `cache_misses`, `cache_hit_rate`, `cache_evictions`, `cache_entries`, `cache_max_entries`, `cache_memory_bytes`
+- **THEN** the response SHALL include `cache_hits`, `cache_misses`, `cache_hit_rate`, `cache_evictions`, `cache_entries`, `cache_max_bytes`, `cache_memory_bytes`
 
 #### Scenario: EMB.STATS includes cache totals
 

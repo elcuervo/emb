@@ -133,6 +133,7 @@ listen: ":6379"
 # password: "hunter2"
 # tls_cert: /etc/emb/cert.pem
 # tls_key:  /etc/emb/key.pem
+# cache: "auto"   # or "1GB", "256MB", "25%". Empty = disabled
 
 models:
   minilm:
@@ -177,6 +178,31 @@ pairs) into shared ONNX runs, a token budget bounds each run, and dedicated
 tokenizer workers hide tokenization behind inference. `timeout: 0` opts out.
 `EMB.MULTI` processes pairs with bounded concurrency (≤ the machine's `GOMAXPROCS`),
 so request storms can't spawn unbounded goroutines that starve inference.
+
+### Caching
+
+Embeddings are cached by `model:text` key in an in-process LRU cache, so repeated
+texts skip ONNX inference entirely. Configure via the `cache:` YAML key or the
+`-cache` CLI flag:
+
+| Value | Behavior |
+|-------|----------|
+| *(empty)* | Cache disabled (default) |
+| `auto` | ~13% of total RAM: 20% of memory left after a 10% safety margin and a 25% model reserve, floored at 64MB. No fixed byte cap — scales with the machine |
+| `1GB`, `256MB`, … | Explicit byte budget (`docker/go-units` sizes) |
+| `25%` | Percentage of total system RAM (explicit operator choice — no safety margins applied) |
+
+```bash
+./bin/emb -config config.yaml -cache auto   # ~13% of RAM on this machine
+./bin/emb -config config.yaml -cache 25%    # a quarter of RAM
+./bin/emb -config config.yaml -cache 2GB    # fixed budget
+```
+
+Invalid sizes or percentages (e.g. `150%`, `abc`) fail startup with a clear error.
+`EMB.INFO <model>` reports live cache stats: `cache_hits`, `cache_misses`,
+`cache_hit_rate`, `cache_evictions`, `cache_entries`, `cache_max_bytes`,
+`cache_memory_bytes`. See `BENCHMARK.md` → *Cache* for hit-rate measurements.
+
 
 ## Clients
 

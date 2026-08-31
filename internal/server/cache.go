@@ -3,7 +3,7 @@ package server
 import (
 	"container/list"
 	"fmt"
-	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -107,7 +107,7 @@ func (c *Cache) Stats() CacheStats {
 	}
 }
 
-func autoTuneCache(defaultDim int) int64 {
+func autoTuneCache() int64 {
 	mem := registry.TotalSystemMemory()
 	if mem == 0 {
 		return 100 * 1024 * 1024
@@ -121,8 +121,24 @@ func autoTuneCache(defaultDim int) int64 {
 		budget = 64 * 1024 * 1024
 	}
 
-	maxBytes := int64(math.Min(float64(budget), float64(500*1024*1024)))
-	return maxBytes
+	// Ceiling of half the machine: never binds at the current constants
+	// (auto is ~13% of RAM) but keeps a future formula change from pushing
+	// the cache past half of total memory.
+	ceiling := mem / 2
+	if budget > int64(ceiling) {
+		budget = int64(ceiling)
+	}
+	return budget
+}
+
+// percentCacheBudget converts a percentage of total system memory into a byte
+// budget. pct must already be validated to (0, 100]; mem == 0 means the
+// platform could not report system memory.
+func percentCacheBudget(pct float64, mem uint64) (int64, error) {
+	if mem == 0 {
+		return 0, fmt.Errorf("cannot determine system memory for a percentage cache size")
+	}
+	return int64(pct / 100 * float64(mem)), nil
 }
 
 func parseCacheConfig(s string) (int64, error) {
@@ -131,7 +147,14 @@ func parseCacheConfig(s string) (int64, error) {
 		return 0, nil
 	}
 	if strings.EqualFold(s, "auto") {
-		return autoTuneCache(384), nil
+		return autoTuneCache(), nil
+	}
+	if strings.HasSuffix(s, "%") {
+		pct, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
+		if err != nil || pct <= 0 || pct > 100 {
+			return 0, fmt.Errorf("invalid cache percentage %q: must be a number greater than 0 and at most 100", s)
+		}
+		return percentCacheBudget(pct, registry.TotalSystemMemory())
 	}
 	bytes, err := units.FromHumanSize(s)
 	if err != nil {

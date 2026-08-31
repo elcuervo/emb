@@ -70,7 +70,7 @@ EMB minilm hello world: 417.01 requests per second, p50=31.119 msec
 
 The LRU cache (`-cache` flag or `cache` config key) can optionally cache embeddings by `model:text` key. This avoids ONNX inference for repeated texts — a common pattern when the same queries arrive from multiple clients or across pipeline batches.
 
-Enable with `-cache auto` (auto-tunes to ~20% of available RAM) or `-cache 256MB`:
+Enable with `-cache auto` (auto-tunes to ~13% of total RAM — 20% of memory after a 10% safety margin and a 25% model reserve, floored at 64MB — with no fixed byte cap), a human size (`-cache 1GB`), or a percentage of total RAM (`-cache 25%`):
 
 ```
 $ ./bin/emb -config config.yaml -cache auto
@@ -118,6 +118,19 @@ cache_entries: 5000
 cache_max_bytes: 107374182
 cache_memory_bytes: 49200000
 ```
+
+### Working-set retention: the 500MB cap vs `auto`
+
+The old `auto` sizing capped the budget at 500MB, which evicts entries once the distinct-text working set exceeds ~310k entries (384-dim, ~1.6KB/entry). On a 24GB machine `-cache auto` now sizes to ~3.1GB (~13% of RAM): the same working set fits with zero evictions.
+
+Experiment (macOS, 24GB RAM, minilm 384-dim): warm 400k distinct texts (~223s both runs), then replay the 10k *oldest* texts and read the replay-phase deltas from `EMB.INFO`:
+
+| Cache | Warm | Replay (oldest 10k) | Replay hit rate | Evictions | Entries retained | Actual memory |
+|-------|------|--------------------|-----------------|-----------|------------------|---------------|
+| `500MB` (old cap) | 400k distinct | 10k | 0% | 98,085 | 311,915 | ~500MB (capped) |
+| `auto` (3.1GB) | 400k distinct | 10k | 100% | 0 | 400,000 | ~640MB |
+
+The 500MB run evicted the LRU tail (including all 10k replayed texts) before the replay; `auto` retained the entire working set. On larger instances the gap widens further since `auto` scales with RAM, and the retention ceiling is now ~half the machine, not 500MB.
 
 ### Visualize with xan
 
