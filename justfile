@@ -257,6 +257,7 @@ docker:
     @echo "Building {{image_name}}:{{image_tag}} for $(shell uname -m)..."
     docker buildx build \
         --load \
+        --build-arg EMB_VERSION={{image_tag}} \
         -t {{image_name}}:{{image_tag}} \
         -t {{image_name}}:latest \
         .
@@ -267,6 +268,7 @@ docker-push:
     docker buildx build \
         --platform linux/amd64,linux/arm64 \
         --push \
+        --build-arg EMB_VERSION={{image_tag}} \
         -t {{image_name}}:{{image_tag}} \
         -t {{image_name}}:latest \
         .

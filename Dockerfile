@@ -4,6 +4,11 @@ FROM golang:1.25-bookworm AS builder
 ARG TARGETARCH
 ARG ORT_VERSION=v1.27.0
 ARG TOKENIZERS_VERSION=v1.27.0
+# Build version injected into the binary (reported by INFO / -version).
+# Defaults to the repo VERSION file, so the image never silently reports "dev"
+# when git tags are unavailable in the build context. Override per build, e.g.
+# --build-arg EMB_VERSION=v0.2.5 (CI/releases).
+ARG EMB_VERSION=""
 
 # Install ONNX Runtime pre-built shared library
 RUN set -eux; \
@@ -43,10 +48,11 @@ RUN set -eux; \
     esac; \
     ORT_VER="${ORT_VERSION#v}"; \
     ORT_DIR=/opt/onnxruntime-linux-${ORT_ARCH}-${ORT_VER}; \
+    EMB_VER="${EMB_VERSION:-$(cat /src/VERSION 2>/dev/null || echo dev)}"; \
     CGO_ENABLED=1 \
     CGO_CFLAGS="-I${ORT_DIR}/include" \
     CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime -L/opt/libtokenizers -Wl,-rpath,\$ORIGIN" \
-    go build -ldflags="-X main.version=$(git describe --tags --dirty --always 2>/dev/null || echo dev)" -o /emb ./cmd/emb
+    go build -ldflags="-X main.version=${EMB_VER}" -o /emb ./cmd/emb
 
 # Copy ONNX libs to a version-independent path for the runtime stage
 RUN set -eux; \
