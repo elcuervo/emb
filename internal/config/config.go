@@ -102,6 +102,10 @@ type ModelConfig struct {
 	Batching        BatchingConfig `yaml:"batching"`
 	IntraOpThreads  int            `yaml:"intra_op_threads"`
 	InterOpThreads  int            `yaml:"inter_op_threads"`
+	// ExecutionMode selects the ORT execution mode: "sequential" (default; the
+	// right choice for mostly-serial encoder graphs) or "parallel". Empty
+	// resolves to sequential.
+	ExecutionMode string `yaml:"execution_mode"`
 }
 
 func Load(path string) (*Config, error) {
@@ -126,6 +130,9 @@ func Load(path string) (*Config, error) {
 	for name, m := range cfg.Models {
 		if m.ModelRepo == "" && m.ONNX == "" {
 			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
+		}
+		if m.ExecutionMode != "" && m.ExecutionMode != "sequential" && m.ExecutionMode != "parallel" {
+			return nil, fmt.Errorf("model %q: execution_mode must be \"sequential\", \"parallel\", or unset, got %q", name, m.ExecutionMode)
 		}
 		cfg.Models[name] = m
 	}

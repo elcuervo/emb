@@ -22,15 +22,20 @@ models:
   minilm:
     onnx: ./models/minilm/model.onnx
 
-  # Pre-pooled model (e.g., siglip2, E5) - 2D output, skip mean pooling
+  # Pre-pooled model (e.g., siglip2 text encoder) - 2D output, skip mean pooling.
+  # The actual export names its output "text_embeds" (768-dim); if you set an
+  # output_tensor not in the graph the server falls back to the detected output
+  # and logs which name it auto-selected.
   # siglip2:
-  #   onnx: ./models/siglip2/model.onnx
-  #   output_tensor: pooler_output
+  #   onnx: ./models/siglip2/text_model_int8.onnx
+  #   output_tensor: text_embeds
   #   pooling: none
   #   normalize: true
   #   dim: 768
+  #   max_length: 64
 
-  # Another pre-pooled example (E5)
+  # Another pre-pooled example (custom e5 export with pooling/output layers
+  # baked into the graph; normalize: false -> pure buffer export).
   # e5:
   #   onnx: ./models/e5/model.onnx
   #   output_tensor: pooled_sentence_embeddings_debiased_normalized

@@ -94,21 +94,36 @@ func TestBatcherFushesOnTokenBudget(t *testing.T) {
 		}
 	}
 
-	if len(sess.calls) != 1 {
-		t.Fatalf("expected exactly 1 run, got %d: %v", len(sess.calls), sess.calls)
+	// Idle-flush (batcher) serves the first arrival immediately, so a strict
+	// "every arrival order ends in one run" is no longer guaranteed — the drain
+	// coalesces what is already queued, and near-simultaneous goroutine starts
+	// may land either side of the drain. Contract: no request is ever split, all
+	// tokens count, and at most one split run beyond the fully-coalesced case is
+	// possible.
+	if len(sess.calls) > 2 {
+		t.Fatalf("expected ≤2 runs (idle-flush), got %d: %v", len(sess.calls), sess.calls)
 	}
-	if sess.calls[0].batchSize != 3 {
-		t.Fatalf("expected batchSize 3, got %d", sess.calls[0].batchSize)
+	totalBatch := 0
+	for _, c := range sess.calls {
+		totalBatch += c.batchSize
 	}
-	if sess.calls[0].seqLen != 5 {
-		t.Fatalf("expected seqLen 5 (padded to longest), got %d", sess.calls[0].seqLen)
-	}
-	// Real tokens 1+1+5=7, padded slots 3*5=15.
-	if eff := b.paddingEfficiency(); eff != 7.0/15.0 {
-		t.Fatalf("expected padding efficiency 7/15, got %f", eff)
+	if totalBatch != 3 {
+		t.Fatalf("expected 3 texts across runs, got %d: %v", totalBatch, sess.calls)
 	}
 	if got := b.Tokens(); got != 7 {
 		t.Fatalf("expected 7 total tokens, got %d", got)
+	}
+	if len(sess.calls) == 1 {
+		// Fully coalesced: verify padding accounting and longest-seq padding.
+		if sess.calls[0].batchSize != 3 {
+			t.Fatalf("expected batchSize 3, got %d", sess.calls[0].batchSize)
+		}
+		if sess.calls[0].seqLen != 5 {
+			t.Fatalf("expected seqLen 5 (padded to longest), got %d", sess.calls[0].seqLen)
+		}
+		if eff := b.paddingEfficiency(); eff != 7.0/15.0 {
+			t.Fatalf("expected padding efficiency 7/15, got %f", eff)
+		}
 	}
 }
 
@@ -181,11 +196,21 @@ func TestBatcherDistributesEmbeddingsToRightRequests(t *testing.T) {
 			}
 		}
 	}
-	if len(sess.calls) != 1 {
-		t.Fatalf("expected 1 run over all 3 texts, got %d", len(sess.calls))
+	// Distributions must be correct regardless of run boundaries; idle-flush
+	// means near-simultaneous arrivals may coalesce into one run or split into
+	// two, but a single request is never split and nothing runs oversized.
+	if len(sess.calls) > 2 {
+		t.Fatalf("expected ≤2 runs (idle-flush), got %d", len(sess.calls))
 	}
-	if sess.calls[0].batchSize != 3 {
-		t.Fatalf("expected batchSize 3, got %d", sess.calls[0].batchSize)
+	totalBatch := 0
+	for _, c := range sess.calls {
+		totalBatch += c.batchSize
+		if c.batchSize > 3 {
+			t.Fatalf("run exceeded 3 texts: %+v", sess.calls)
+		}
+	}
+	if totalBatch != 3 {
+		t.Fatalf("expected 3 texts across runs, got %d: %v", totalBatch, sess.calls)
 	}
 }
 

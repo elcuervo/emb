@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -120,7 +121,12 @@ func (e *ModelEntry) ensurePool() error {
 	out, ok := outInfo[cfg.OutputTensor]
 	if !ok {
 		name, rank := selectOutputTensor(outInfo)
-		log.Printf("  %s: output %q not found, auto-selected %q", e.Name, cfg.OutputTensor, name)
+		available := make([]string, 0, len(outInfo))
+		for n := range outInfo {
+			available = append(available, n)
+		}
+		sort.Strings(available)
+		log.Printf("  %s: output %q not found in graph (available: %v), auto-selected %q — set output_tensor to silence this", e.Name, cfg.OutputTensor, available, name)
 		cfg.OutputTensor = name
 		cfg.Pooling = poolingForRank(rank)
 		out = outInfo[name]
@@ -146,6 +152,11 @@ func (e *ModelEntry) ensurePool() error {
 		intraThreads = defaultIntraOpThreads()
 	}
 
+	execMode := onnx.ExecModeSequential
+	if cfg.ExecutionMode == "parallel" {
+		execMode = onnx.ExecModeParallel
+	}
+
 	sessionFactory := func() (onnx.Session, error) {
 		return onnx.NewRuntimeSessionFromBytes(
 			modelData,
@@ -155,6 +166,7 @@ func (e *ModelEntry) ensurePool() error {
 			out.Rank,
 			intraThreads,
 			cfg.InterOpThreads,
+			execMode,
 		)
 	}
 

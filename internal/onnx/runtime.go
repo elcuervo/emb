@@ -11,6 +11,15 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+// Execution-mode selectors for NewRuntimeSession(…). Sequential (the ORT
+// default) is the documented choice for mostly-serial encoder graphs; the
+// inter-op thread pool only exists in parallel mode, so interOpThreads is
+// effectively ignored under sequential execution.
+const (
+	ExecModeSequential = iota
+	ExecModeParallel
+)
+
 type RuntimeSession struct {
 	session      *ort.DynamicAdvancedSession
 	dim          int
@@ -26,8 +35,8 @@ type RuntimeSession struct {
 	outFlat   int
 }
 
-func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int) (*RuntimeSession, error) {
-	opts, err := newSessionOptions(intraOpThreads, interOpThreads)
+func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int) (*RuntimeSession, error) {
+	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode)
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +50,8 @@ func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim i
 	return newRuntimeSession(session, inputNames, dim, outputRank), nil
 }
 
-func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int) (*RuntimeSession, error) {
-	opts, err := newSessionOptions(intraOpThreads, interOpThreads)
+func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int) (*RuntimeSession, error) {
+	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +65,7 @@ func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, d
 	return newRuntimeSession(session, inputNames, dim, outputRank), nil
 }
 
-func newSessionOptions(intraOpThreads, interOpThreads int) (*ort.SessionOptions, error) {
+func newSessionOptions(intraOpThreads, interOpThreads int, execMode int) (*ort.SessionOptions, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("creating session options: %w", err)
@@ -73,7 +82,11 @@ func newSessionOptions(intraOpThreads, interOpThreads int) (*ort.SessionOptions,
 	_ = opts.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll)
 	_ = opts.SetCpuMemArena(true)
 	_ = opts.SetMemPattern(true)
-	_ = opts.SetExecutionMode(ort.ExecutionModeParallel)
+	if execMode == ExecModeParallel {
+		// Only opt into parallel graph execution explicitly; sequential is the
+		// ORT default and the documented fit for mostly-serial encoder graphs.
+		_ = opts.SetExecutionMode(ort.ExecutionModeParallel)
+	}
 	_ = opts.SetLogSeverityLevel(ort.LoggingLevelFatal)
 
 	return opts, nil
