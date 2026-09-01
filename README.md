@@ -8,8 +8,10 @@ A simple yet powerful text embeddings generator.
 [![emb-server gem](https://img.shields.io/gem/v/emb-server?logo=rubygems&color=red&label=emb-server)](https://rubygems.org/gems/emb-server)
 
 `emb` is a text-embeddings server speaking the Redis protocol. Every Redis
-client — `redis-cli`, `redis-py`, `redis-rb`, … — can call it without special
+client: `redis-cli`, `redis-py`, `redis-rb`, … — can call it without special
 libraries, and embeddings come back as raw float32 bytes:
+
+![](https://images.unsplash.com/photo-1582137696617-4031a8e3e268?q=80&w=2428&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D)
 
 ```bash
 redis-cli EMB minilm "hello world"
