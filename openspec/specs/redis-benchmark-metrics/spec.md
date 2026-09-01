@@ -27,19 +27,22 @@ The project SHALL provide a single-command recipe to reproduce benchmark results
 
 #### Scenario: just bench-redis runs end-to-end
 
-- **WHEN** user runs `just bench-redis` or `just bench-redis-all`
+- **WHEN** user runs `just bench-redis` (or `just bench-all`, which composes `bench-redis` + `bench-cache`)
 - **THEN** the server SHALL start, `redis-benchmark` SHALL run, the server SHALL stop
 - **THEN** benchmark output SHALL be printed to stdout
 
 #### Scenario: Single-threaded benchmark
 
-- **WHEN** the server runs with `GOMAXPROCS=1`
-- **THEN** `redis-benchmark -n 100000 -q -P 512 -c 512 EMB minilm hello world` SHALL produce a valid requests/sec result
+- **WHEN** the server runs with `GOMAXPROCS=1` (`GOMAXPROCS=1 ./bin/emb -config config.yaml`)
+- **THEN** `redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"` SHALL produce a valid requests/sec result
+- **THEN** the same holds for the higher-concurrency cells used by `just bench-redis-single` (`-c 8/16 -P 1 -n 2000`, `-c 1 -P 8 -n 2000`) — see BENCHMARK.md
 
 #### Scenario: Multi-threaded benchmark
 
 - **WHEN** the server runs with `GOMAXPROCS=0` (all cores)
-- **THEN** `redis-benchmark -n 1000000 -q -P 512 -c 512 EMB minilm hello world` SHALL produce a valid requests/sec result
+- **THEN** `redis-benchmark -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm "hello world"` SHALL produce a valid requests/sec result
+- **THEN** the same holds for the cells used by `just bench-redis-multi` (`-c 1/8/64 -P 1 -n 500/2000`) — see BENCHMARK.md
+- **NOTE** the high-pipeline invocations of the original proposal (`-P 512 -c 512 -n 100000/-n 1000000`) are intentionally NOT used: BENCHMARK.md documents that `-P 512` queues hundreds of inferences behind a single worker and produces misleading throughput numbers.
 
 ### Requirement: Published benchmark results
 
@@ -56,11 +59,11 @@ The project SHALL publish benchmark results in BENCHMARK.md following the tidwal
 - **WHEN** a contributor reads BENCHMARK.md
 - **THEN** they SHALL find requests/sec numbers for each tested configuration
 
-### Requirement: emb-bench deprecated
+### Requirement: emb-bench deprecated (removed)
 
-The hand-rolled `emb-bench` Go benchmark tool SHALL be deprecated in favor of `redis-benchmark`.
+The hand-rolled `emb-bench` Go benchmark tool SHALL NOT exist in the repository; `redis-benchmark` is the sole benchmark driver (completed deprecation by removal).
 
-#### Scenario: emb-bench deprecation notice
+#### Scenario: emb-bench is gone
 
-- **WHEN** a contributor reads `cmd/emb-bench/main.go`
-- **THEN** they SHALL find a deprecation notice recommending `redis-benchmark` as the replacement
+- **WHEN** a contributor searches the repository or the `justfile` for the `emb-bench` benchmark command
+- **THEN** they SHALL not find it — the tool was removed and `redis-benchmark` became the sole driver (see the first requirement of this spec)
