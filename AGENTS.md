@@ -58,15 +58,15 @@ golangci-lint run ./...
 - Lint: `cd gems/emb && bundle exec rubocop`.
 - Bench harness: `bundle exec rake bench` (server must be running).
 
-## Known pre-existing issue — do not chase it
+## Timing-sensitive batcher tests (fixed, keep deterministic)
 
-`TestAsyncTokenizerOverlapsWork` (`internal/pipeline/batcher_budget_test.go`) is a
-timing-sensitive test that **fails on this machine even on clean `main`**
-(measured: wall ≈ 81ms vs "fully serialized ~105ms" expectation). It is unrelated
-to cache/config/INFO work. `go test ./...` / `just all` will show this single
-failure; verify your change with the targeted package (`go test ./internal/server/`)
-and note the flake instead of "fixing" it. Its assertion is a relative-overlap
-timing check that needs a faster/larger machine or a tolerance bump.
+The batcher tests in `internal/pipeline/batcher_budget_test.go` were
+timing/ordering-sensitive and flaked on this machine and in CI. They now use
+gated fakes (`gatedTok`/`gatedSession`) plus white-box queue observation
+(`waitQueued`) instead of sleeps, so run boundaries and the
+async-tokenization overlap proof are deterministic regardless of machine
+speed or load. Keep them that way: don't reintroduce `time.Sleep`-based
+wall-clock assertions there.
 
 ## Working with OpenSpec changes
 

@@ -78,15 +78,23 @@ func embedAsync(b *Batcher, texts []string, out chan<- Response) {
 
 func TestBatcherFushesOnTokenBudget(t *testing.T) {
 	sess := &recordingSession{dim: 2}
-	b := NewBatcher(sess, fakeTok{}, 2, 16, false, "mean", 100000, 100, 7, 0)
+	tok := &gatedTok{started: make(chan struct{}, 8), allowed: make(chan struct{}, 8)}
+	b := NewBatcher(sess, tok, 2, 16, false, "mean", 100000, 100, 7, 0)
 	defer b.Close()
 
 	out := make(chan Response, 3)
-	// Tokens {1,1,5} sum to exactly the budget; no prefix reaches 7, so every
-	// arrival order flushes all three in one run.
+	// Tokens {1,1,5} sum to exactly the budget; no prefix reaches 7. The first
+	// request parks the serial run loop inside Encode; the other two queue while
+	// it is blocked, so the idle-flush drain (which encodes inline in serial
+	// mode) is guaranteed to see all three and flush one padded run.
 	go embedAsync(b, []string{"a"}, out)
+	waitOn(t, tok.started)
 	go embedAsync(b, []string{"b"}, out)
 	go embedAsync(b, []string{"efghi"}, out)
+	waitQueued(t, b, 2)
+	tok.allowed <- struct{}{}
+	tok.allowed <- struct{}{}
+	tok.allowed <- struct{}{}
 	for range 3 {
 		r := <-out
 		if r.Err != nil {
@@ -94,36 +102,22 @@ func TestBatcherFushesOnTokenBudget(t *testing.T) {
 		}
 	}
 
-	// Idle-flush (batcher) serves the first arrival immediately, so a strict
-	// "every arrival order ends in one run" is no longer guaranteed — the drain
-	// coalesces what is already queued, and near-simultaneous goroutine starts
-	// may land either side of the drain. Contract: no request is ever split, all
-	// tokens count, and at most one split run beyond the fully-coalesced case is
-	// possible.
-	if len(sess.calls) > 2 {
-		t.Fatalf("expected ≤2 runs (idle-flush), got %d: %v", len(sess.calls), sess.calls)
+	// All three requests were queued before the drain ran, so they must flush
+	// as one run: budget 7 admits {1,1,5} and the padded run is 3×5 slots.
+	if len(sess.calls) != 1 {
+		t.Fatalf("expected one fully-coalesced run, got %d: %v", len(sess.calls), sess.calls)
 	}
-	totalBatch := 0
-	for _, c := range sess.calls {
-		totalBatch += c.batchSize
+	if sess.calls[0].batchSize != 3 {
+		t.Fatalf("expected batchSize 3, got %d: %v", sess.calls[0].batchSize, sess.calls)
 	}
-	if totalBatch != 3 {
-		t.Fatalf("expected 3 texts across runs, got %d: %v", totalBatch, sess.calls)
+	if sess.calls[0].seqLen != 5 {
+		t.Fatalf("expected seqLen 5 (padded to longest), got %d", sess.calls[0].seqLen)
 	}
 	if got := b.Tokens(); got != 7 {
 		t.Fatalf("expected 7 total tokens, got %d", got)
 	}
-	if len(sess.calls) == 1 {
-		// Fully coalesced: verify padding accounting and longest-seq padding.
-		if sess.calls[0].batchSize != 3 {
-			t.Fatalf("expected batchSize 3, got %d", sess.calls[0].batchSize)
-		}
-		if sess.calls[0].seqLen != 5 {
-			t.Fatalf("expected seqLen 5 (padded to longest), got %d", sess.calls[0].seqLen)
-		}
-		if eff := b.paddingEfficiency(); eff != 7.0/15.0 {
-			t.Fatalf("expected padding efficiency 7/15, got %f", eff)
-		}
+	if eff := b.paddingEfficiency(); eff != 7.0/15.0 {
+		t.Fatalf("expected padding efficiency 7/15, got %f", eff)
 	}
 }
 
@@ -148,21 +142,35 @@ func TestBatcherNeverSplitsOversizedRequest(t *testing.T) {
 
 func TestBatcherCountOnlyMode(t *testing.T) {
 	sess := &recordingSession{dim: 2}
-	// maxBatchTokens = 0 -> count-only flush at maxBatch=2. Short timeout so the
-	// leftover third request flushes via the window instead of awaiting Close.
-	b := NewBatcher(sess, fakeTok{}, 2, 16, false, "mean", 50, 2, 0, 0)
+	tok := &gatedTok{started: make(chan struct{}, 8), allowed: make(chan struct{}, 8)}
+	// maxBatchTokens = 0 -> count-only flush at maxBatch=2. The first request
+	// parks the run loop in Encode; the other two queue while it is blocked, so
+	// the idle-flush drain deterministically pairs two requests and the third
+	// flushes alone.
+	b := NewBatcher(sess, tok, 2, 16, false, "mean", 100000, 2, 0, 0)
 	defer b.Close()
 
 	out := make(chan Response, 3)
 	go embedAsync(b, []string{"a"}, out)
+	waitOn(t, tok.started)
 	go embedAsync(b, []string{"b"}, out)
 	go embedAsync(b, []string{"c"}, out)
+	waitQueued(t, b, 2)
+	tok.allowed <- struct{}{}
+	tok.allowed <- struct{}{}
+	tok.allowed <- struct{}{}
 	for range 3 {
 		r := <-out
 		if r.Err != nil {
 			t.Fatalf("unexpected error: %v", r.Err)
 		}
+		if len(r.Embeddings) != 1 {
+			t.Fatalf("request was split: expected 1 embedding, got %d", len(r.Embeddings))
+		}
 	}
+	// Count-only mode truncates the first drain at maxBatch 2; the third queued
+	// request flushes on its own. Two runs of sizes {2,1}, nothing oversized,
+	// no request split.
 	if len(sess.calls) != 2 {
 		t.Fatalf("expected 2 runs (2+1), got %d: %v", len(sess.calls), sess.calls)
 	}
@@ -246,34 +254,165 @@ func (t slowTok) Encode(text string, maxLength int) ([]int64, []int64, error) {
 	return t.fakeTok.Encode(text, maxLength)
 }
 
-// TestAsyncTokenizerOverlapsWork proves dedicated tokenizer workers hide
-// tokenization behind inference: with a slow tokenizer and a slow session,
-// 3 concurrent 1-token requests should complete in less than the fully
-// serialized encode+run time (3×(15ms+20ms) = 105ms).
-func TestAsyncTokenizerOverlapsWork(t *testing.T) {
-	sess := &recordingSession{dim: 2, sleep: 20 * time.Millisecond}
-	b := NewBatcher(sess, slowTok{delay: 15 * time.Millisecond}, 2, 16, false, "mean", 100000, 100, 1, 1)
-	defer b.Close()
+// gatedTok blocks each Encode until the test releases it, letting the test
+// control exactly when tokenized results become available to the batcher.
+type gatedTok struct {
+	fakeTok
+	started chan struct{}
+	allowed chan struct{}
+}
 
-	out := make(chan Response, 3)
-	start := time.Now()
-	go embedAsync(b, []string{"a"}, out)
-	go embedAsync(b, []string{"b"}, out)
-	go embedAsync(b, []string{"c"}, out)
-	for range 3 {
-		r := <-out
-		if r.Err != nil {
-			t.Fatalf("unexpected error: %v", r.Err)
+func (t *gatedTok) Encode(text string, maxLength int) ([]int64, []int64, error) {
+	t.started <- struct{}{}
+	<-t.allowed
+	return t.fakeTok.Encode(text, maxLength)
+}
+
+// gatedSession blocks each Run until released, letting the test hold an
+// inference in flight while inspecting whether tokenization is progressing.
+type gatedSession struct {
+	recordingSession
+	runStarted chan struct{}
+	runRelease chan struct{}
+}
+
+func (s *gatedSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	s.runStarted <- struct{}{}
+	<-s.runRelease
+	return s.recordingSession.Run(inputIDs, attnMask, batchSize, seqLen, dim)
+}
+
+var _ onnx.Session = (*gatedSession)(nil)
+var _ tokenizer.Tokenizer = (*gatedTok)(nil)
+
+// waitOn waits for a gated signal with a generous timeout so a regression
+// fails the test (via t.Fatal) instead of hanging the suite.
+func waitOn(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for gated signal")
+	}
+}
+
+// waitQueued waits until n requests sit in the batcher's pending queue. Used
+// with the serial (tokenizeWorkers=0) path, where the run loop encodes from
+// reqChan inline: guaranteeing the queue is full before releasing the gate
+// makes the idle-flush drain's coalescing deterministic.
+func waitQueued(t *testing.T, b *Batcher, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(b.reqChan) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d queued requests, have %d", n, len(b.reqChan))
 		}
+		time.Sleep(time.Millisecond)
 	}
-	wall := time.Since(start)
+}
 
-	if len(sess.calls) != 3 {
-		t.Fatalf("expected 3 runs, got %d", len(sess.calls))
-	}
-	if wall > 80*time.Millisecond {
-		t.Fatalf("expected tokenization to overlap inference, wall=%v (fully serialized ~105ms)", wall)
-	}
+// TestAsyncTokenizerOverlapsWork proves dedicated tokenizer workers hide
+// tokenization behind inference. Instead of wall-clock timing (which is
+// machine- and load-dependent), it uses gates: with tokenizeWorkers >= 1 the
+// producer keeps tokenizing the next queued request while the batcher's Run is
+// blocked mid-inference; with tokenizeWorkers == 0 the single run loop cannot
+// encode while it is inside Run.
+func TestAsyncTokenizerOverlapsWork(t *testing.T) {
+	t.Run("async tokenization overlaps inference", func(t *testing.T) {
+		sess := &gatedSession{runStarted: make(chan struct{}, 8), runRelease: make(chan struct{}, 8)}
+		sess.dim = 2
+		tok := &gatedTok{started: make(chan struct{}, 8), allowed: make(chan struct{}, 8)}
+		b := NewBatcher(sess, tok, 2, 16, false, "mean", 100000, 100, 1, 1)
+		defer b.Close()
+
+		out := make(chan Response, 3)
+		go embedAsync(b, []string{"a"}, out)
+		go embedAsync(b, []string{"b"}, out)
+		go embedAsync(b, []string{"c"}, out)
+
+		// req1 is tokenized, then handed to the run loop which blocks in Run.
+		waitOn(t, tok.started)
+		tok.allowed <- struct{}{}
+		waitOn(t, sess.runStarted)
+
+		// While inference of req1 is held in flight, the producer must already
+		// be tokenizing req2 — the definitive overlap signal.
+		waitOn(t, tok.started)
+
+		// Drain the remainder one result at a time: R1, E2, R2, E3, R3.
+		sess.runRelease <- struct{}{}
+		tok.allowed <- struct{}{}
+		waitOn(t, sess.runStarted)
+		sess.runRelease <- struct{}{}
+		waitOn(t, tok.started)
+		tok.allowed <- struct{}{}
+		waitOn(t, sess.runStarted)
+		sess.runRelease <- struct{}{}
+
+		for range 3 {
+			r := <-out
+			if r.Err != nil {
+				t.Fatalf("unexpected error: %v", r.Err)
+			}
+		}
+		if len(sess.calls) != 3 {
+			t.Fatalf("expected 3 runs (budget 1), got %d: %v", len(sess.calls), sess.calls)
+		}
+	})
+
+	t.Run("serial path cannot overlap", func(t *testing.T) {
+		sess := &gatedSession{runStarted: make(chan struct{}, 8), runRelease: make(chan struct{}, 8)}
+		sess.dim = 2
+		tok := &gatedTok{started: make(chan struct{}, 8), allowed: make(chan struct{}, 8)}
+		b := NewBatcher(sess, tok, 2, 16, false, "mean", 100000, 100, 1, 0)
+		defer b.Close()
+
+		out := make(chan Response, 3)
+
+		// The run loop tokenizes req1 inline, then blocks inside Run.
+		go embedAsync(b, []string{"a"}, out)
+		waitOn(t, tok.started)
+		tok.allowed <- struct{}{}
+		waitOn(t, sess.runStarted)
+
+		// Send the next request only while inference is blocked: in serial mode
+		// the single run loop cannot tokenize it, so a short probe must see
+		// nothing start.
+		go embedAsync(b, []string{"b"}, out)
+		select {
+		case <-tok.started:
+			t.Fatal("serial path tokenized a later request while running")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		sess.runRelease <- struct{}{}
+		waitOn(t, tok.started)
+		tok.allowed <- struct{}{}
+		waitOn(t, sess.runStarted)
+
+		go embedAsync(b, []string{"c"}, out)
+		select {
+		case <-tok.started:
+			t.Fatal("serial path tokenized a later request while running")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		sess.runRelease <- struct{}{}
+		waitOn(t, tok.started)
+		tok.allowed <- struct{}{}
+		waitOn(t, sess.runStarted)
+		sess.runRelease <- struct{}{}
+
+		for range 3 {
+			r := <-out
+			if r.Err != nil {
+				t.Fatalf("unexpected error: %v", r.Err)
+			}
+		}
+		if len(sess.calls) != 3 {
+			t.Fatalf("expected 3 runs (budget 1), got %d: %v", len(sess.calls), sess.calls)
+		}
+	})
 }
 
 // TestSerialTokenizerIsDesiredOverlap shows tokenize_workers=0 keeps the
