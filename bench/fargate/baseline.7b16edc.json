@@ -1,0 +1,865 @@
+{
+  "sha": "7b16edc",
+  "created": "2026-09-01T01:55:29Z",
+  "platform": "linux/arm64",
+  "host": {
+    "os": "darwin",
+    "arch": "arm64",
+    "gold": false
+  },
+  "count_per_cell": 500,
+  "cells": [
+    {
+      "tier": 1,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 239.35,
+      "p50_ms": 1.367,
+      "p90_ms": 1.871,
+      "p99_ms": 70.783
+    },
+    {
+      "tier": 1,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 194.78,
+      "p50_ms": 1.647,
+      "p90_ms": 50.879,
+      "p99_ms": 72.191
+    },
+    {
+      "tier": 1,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 317.06,
+      "p50_ms": 7.311,
+      "p90_ms": 86.463,
+      "p99_ms": 91.455
+    },
+    {
+      "tier": 1,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 263.85,
+      "p50_ms": 8.711,
+      "p90_ms": 88.575,
+      "p99_ms": 92.543
+    },
+    {
+      "tier": 1,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 315.26,
+      "p50_ms": 58.047,
+      "p90_ms": 101.119,
+      "p99_ms": 105.343
+    },
+    {
+      "tier": 1,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 263.85,
+      "p50_ms": 84.991,
+      "p90_ms": 101.375,
+      "p99_ms": 105.727
+    },
+    {
+      "tier": 1,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 277.99,
+      "p50_ms": 9.719,
+      "p90_ms": 82.111,
+      "p99_ms": 85.887
+    },
+    {
+      "tier": 1,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 203.47,
+      "p50_ms": 13.455,
+      "p90_ms": 86.271,
+      "p99_ms": 89.151
+    },
+    {
+      "tier": 1,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 320,
+      "p50_ms": 196.223,
+      "p90_ms": 284.159,
+      "p99_ms": 292.351
+    },
+    {
+      "tier": 1,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 263.13,
+      "p50_ms": 214.399,
+      "p90_ms": 305.407,
+      "p99_ms": 393.983
+    },
+    {
+      "tier": 1,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 316.58,
+      "p50_ms": 395.007,
+      "p90_ms": 483.071,
+      "p99_ms": 494.335
+    },
+    {
+      "tier": 1,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 264.15,
+      "p50_ms": 486.911,
+      "p90_ms": 581.631,
+      "p99_ms": 609.791
+    },
+    {
+      "tier": 1,
+      "workload": "mixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 113.90126173005777,
+      "p50_ms": 1.5190000003713067,
+      "p90_ms": 10.076999999910186,
+      "p99_ms": 79.05699999992066,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 1,
+      "workload": "mixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 19.784134516917813,
+      "p50_ms": 24.816000000100757,
+      "p90_ms": 100.0690000000759,
+      "p99_ms": 183.62600000000384,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 1,
+      "workload": "mixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 10.313271819479668,
+      "p50_ms": 96.45999999975174,
+      "p90_ms": 195.64700000046287,
+      "p99_ms": 290.60200000003533,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 1,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 19685.04,
+      "p50_ms": 0.047,
+      "p90_ms": 0.055,
+      "p99_ms": 0.063
+    },
+    {
+      "tier": 1,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 64102.56,
+      "p50_ms": 0.111,
+      "p90_ms": 0.167,
+      "p99_ms": 0.207
+    },
+    {
+      "tier": 1,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 81967.21,
+      "p50_ms": 0.159,
+      "p90_ms": 0.287,
+      "p99_ms": 0.359
+    },
+    {
+      "tier": 1,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 135135.14,
+      "p50_ms": 0.055,
+      "p90_ms": 0.063,
+      "p99_ms": 0.071
+    },
+    {
+      "tier": 1,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 416666.66,
+      "p50_ms": 0.127,
+      "p90_ms": 0.223,
+      "p99_ms": 0.319
+    },
+    {
+      "tier": 1,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 500000,
+      "p50_ms": 0.207,
+      "p90_ms": 0.383,
+      "p99_ms": 0.615
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 558.04,
+      "p50_ms": 1.215,
+      "p90_ms": 1.287,
+      "p99_ms": 34.111
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 432.9,
+      "p50_ms": 1.543,
+      "p90_ms": 1.615,
+      "p99_ms": 34.719
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 667.56,
+      "p50_ms": 6.375,
+      "p90_ms": 55.647,
+      "p99_ms": 68.351
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 578.7,
+      "p50_ms": 7.871,
+      "p90_ms": 59.999,
+      "p99_ms": 68.991
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 649.35,
+      "p50_ms": 13.583,
+      "p90_ms": 69.759,
+      "p99_ms": 74.111
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 564.33,
+      "p50_ms": 15.463,
+      "p90_ms": 73.983,
+      "p99_ms": 81.919
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 587.41,
+      "p50_ms": 8.951,
+      "p90_ms": 43.263,
+      "p99_ms": 47.711
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 456.11,
+      "p50_ms": 11.575,
+      "p90_ms": 47.103,
+      "p99_ms": 51.135
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 654.55,
+      "p50_ms": 98.495,
+      "p90_ms": 152.447,
+      "p99_ms": 168.191
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 563.76,
+      "p50_ms": 105.727,
+      "p90_ms": 170.879,
+      "p99_ms": 189.055
+    },
+    {
+      "tier": 2,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 657.96,
+      "p50_ms": 188.927,
+      "p90_ms": 230.655,
+      "p99_ms": 277.759
+    },
+    {
+      "tier": 2,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 562.5,
+      "p50_ms": 210.559,
+      "p90_ms": 276.735,
+      "p99_ms": 284.415
+    },
+    {
+      "tier": 2,
+      "workload": "mixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 258.901419140561,
+      "p50_ms": 1.374999999825377,
+      "p90_ms": 7.5679999999920256,
+      "p99_ms": 40.098999999827356,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 2,
+      "workload": "mixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 44.303645489979374,
+      "p50_ms": 13.492999999471067,
+      "p90_ms": 66.30200000017794,
+      "p99_ms": 83.02300000013929,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 2,
+      "workload": "mixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 23.267174827965164,
+      "p50_ms": 29.250999999931082,
+      "p90_ms": 87.30699999978242,
+      "p99_ms": 103.0879999998433,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 19607.84,
+      "p50_ms": 0.047,
+      "p90_ms": 0.055,
+      "p99_ms": 0.063
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 64935.07,
+      "p50_ms": 0.111,
+      "p90_ms": 0.167,
+      "p99_ms": 0.207
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 81967.21,
+      "p50_ms": 0.159,
+      "p90_ms": 0.295,
+      "p99_ms": 0.367
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 135135.14,
+      "p50_ms": 0.055,
+      "p90_ms": 0.063,
+      "p99_ms": 0.079
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 416666.66,
+      "p50_ms": 0.135,
+      "p90_ms": 0.231,
+      "p99_ms": 0.367
+    },
+    {
+      "tier": 2,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 500000,
+      "p50_ms": 0.207,
+      "p90_ms": 0.399,
+      "p99_ms": 0.743
+    },
+    {
+      "tier": 4,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 217.86,
+      "p50_ms": 1.879,
+      "p90_ms": 4.935,
+      "p99_ms": 60.479
+    },
+    {
+      "tier": 4,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 184.84,
+      "p50_ms": 2.287,
+      "p90_ms": 51.743,
+      "p99_ms": 60.575
+    },
+    {
+      "tier": 4,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 318.07,
+      "p50_ms": 7.375,
+      "p90_ms": 88.895,
+      "p99_ms": 98.239
+    },
+    {
+      "tier": 4,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 308.83,
+      "p50_ms": 8.887,
+      "p90_ms": 89.983,
+      "p99_ms": 101.183
+    },
+    {
+      "tier": 4,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 351.12,
+      "p50_ms": 18.847,
+      "p90_ms": 112.191,
+      "p99_ms": 176.127
+    },
+    {
+      "tier": 4,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 301.57,
+      "p50_ms": 14.927,
+      "p90_ms": 190.719,
+      "p99_ms": 267.263
+    },
+    {
+      "tier": 4,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 239.43,
+      "p50_ms": 14.895,
+      "p90_ms": 75.839,
+      "p99_ms": 80.383
+    },
+    {
+      "tier": 4,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 194.97,
+      "p50_ms": 18.879,
+      "p90_ms": 81.343,
+      "p99_ms": 83.967
+    },
+    {
+      "tier": 4,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 341.46,
+      "p50_ms": 184.959,
+      "p90_ms": 294.399,
+      "p99_ms": 409.343
+    },
+    {
+      "tier": 4,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 314.5,
+      "p50_ms": 196.735,
+      "p90_ms": 306.943,
+      "p99_ms": 378.879
+    },
+    {
+      "tier": 4,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 317.58,
+      "p50_ms": 394.239,
+      "p90_ms": 591.871,
+      "p99_ms": 614.911
+    },
+    {
+      "tier": 4,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 321.22,
+      "p50_ms": 375.551,
+      "p90_ms": 596.479,
+      "p99_ms": 689.151
+    },
+    {
+      "tier": 4,
+      "workload": "mixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 142.03250214944308,
+      "p50_ms": 3.0470000001514563,
+      "p90_ms": 10.209999999460706,
+      "p99_ms": 52.69499999940308,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 4,
+      "workload": "mixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 27.800445952505363,
+      "p50_ms": 16.172999999980675,
+      "p90_ms": 88.96100000038132,
+      "p99_ms": 121.99599999985367,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 4,
+      "workload": "mixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 15.180417285989096,
+      "p50_ms": 56.38199999975768,
+      "p90_ms": 174.86600000029284,
+      "p99_ms": 273.81399999921996,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 4,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 19685.04,
+      "p50_ms": 0.047,
+      "p90_ms": 0.055,
+      "p99_ms": 0.063
+    },
+    {
+      "tier": 4,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 62500,
+      "p50_ms": 0.111,
+      "p90_ms": 0.175,
+      "p99_ms": 0.215
+    },
+    {
+      "tier": 4,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 80645.16,
+      "p50_ms": 0.167,
+      "p90_ms": 0.287,
+      "p99_ms": 0.343
+    },
+    {
+      "tier": 4,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 135135.14,
+      "p50_ms": 0.055,
+      "p90_ms": 0.063,
+      "p99_ms": 0.071
+    },
+    {
+      "tier": 4,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 416666.66,
+      "p50_ms": 0.127,
+      "p90_ms": 0.215,
+      "p99_ms": 0.351
+    },
+    {
+      "tier": 4,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 500000,
+      "p50_ms": 0.199,
+      "p90_ms": 0.383,
+      "p99_ms": 0.951
+    },
+    {
+      "tier": 8,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 144.09,
+      "p50_ms": 6.359,
+      "p90_ms": 13.567,
+      "p99_ms": 20.015
+    },
+    {
+      "tier": 8,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 127.88,
+      "p50_ms": 6.999,
+      "p90_ms": 15.711,
+      "p99_ms": 22.575
+    },
+    {
+      "tier": 8,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 293.94,
+      "p50_ms": 23.487,
+      "p90_ms": 58.943,
+      "p99_ms": 78.015
+    },
+    {
+      "tier": 8,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 254.32,
+      "p50_ms": 27.183,
+      "p90_ms": 64.511,
+      "p99_ms": 85.247
+    },
+    {
+      "tier": 8,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 326.37,
+      "p50_ms": 35.007,
+      "p90_ms": 121.983,
+      "p99_ms": 168.319
+    },
+    {
+      "tier": 8,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 268.38,
+      "p50_ms": 46.207,
+      "p90_ms": 152.703,
+      "p99_ms": 177.791
+    },
+    {
+      "tier": 8,
+      "workload": "fixed-length",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 154.32,
+      "p50_ms": 52.575,
+      "p90_ms": 69.439,
+      "p99_ms": 79.039
+    },
+    {
+      "tier": 8,
+      "workload": "unique-text",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 133.9,
+      "p50_ms": 56.895,
+      "p90_ms": 80.639,
+      "p99_ms": 82.495
+    },
+    {
+      "tier": 8,
+      "workload": "fixed-length",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 288.99,
+      "p50_ms": 201.087,
+      "p90_ms": 297.983,
+      "p99_ms": 375.039
+    },
+    {
+      "tier": 8,
+      "workload": "unique-text",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 253.14,
+      "p50_ms": 232.831,
+      "p90_ms": 325.119,
+      "p99_ms": 377.087
+    },
+    {
+      "tier": 8,
+      "workload": "fixed-length",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 335.33,
+      "p50_ms": 346.623,
+      "p90_ms": 514.047,
+      "p99_ms": 596.991
+    },
+    {
+      "tier": 8,
+      "workload": "unique-text",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 274.51,
+      "p50_ms": 413.439,
+      "p90_ms": 635.903,
+      "p99_ms": 1033.727
+    },
+    {
+      "tier": 8,
+      "workload": "mixed-length",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 106.6846238222107,
+      "p50_ms": 7.5980000001436565,
+      "p90_ms": 18.407999999908498,
+      "p99_ms": 29.017999999268795,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 8,
+      "workload": "mixed-length",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 20.866849841429456,
+      "p50_ms": 33.647999999629974,
+      "p90_ms": 105.2479999998468,
+      "p99_ms": 201.60500000019965,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 8,
+      "workload": "mixed-length",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 11.866332786037972,
+      "p50_ms": 70.12800000029529,
+      "p90_ms": 180.48799999996845,
+      "p99_ms": 317.03899999956775,
+      "padding_efficiency": 0.24062295081967214
+    },
+    {
+      "tier": 8,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 1,
+      "req_s": 20080.32,
+      "p50_ms": 0.047,
+      "p90_ms": 0.055,
+      "p99_ms": 0.055
+    },
+    {
+      "tier": 8,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 1,
+      "req_s": 61728.39,
+      "p50_ms": 0.111,
+      "p90_ms": 0.175,
+      "p99_ms": 0.223
+    },
+    {
+      "tier": 8,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 1,
+      "req_s": 79365.08,
+      "p50_ms": 0.175,
+      "p90_ms": 0.279,
+      "p99_ms": 0.343
+    },
+    {
+      "tier": 8,
+      "workload": "cache-hit",
+      "clients": 1,
+      "pipeline": 8,
+      "req_s": 138888.89,
+      "p50_ms": 0.055,
+      "p90_ms": 0.063,
+      "p99_ms": 0.071
+    },
+    {
+      "tier": 8,
+      "workload": "cache-hit",
+      "clients": 8,
+      "pipeline": 8,
+      "req_s": 416666.66,
+      "p50_ms": 0.135,
+      "p90_ms": 0.215,
+      "p99_ms": 0.327
+    },
+    {
+      "tier": 8,
+      "workload": "cache-hit",
+      "clients": 16,
+      "pipeline": 8,
+      "req_s": 555555.56,
+      "p50_ms": 0.191,
+      "p90_ms": 0.351,
+      "p99_ms": 0.591
+    }
+  ]
+}

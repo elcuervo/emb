@@ -19,6 +19,24 @@ performance proposal can be validated pre/post.
 - The harness prints a warning when the host is not the gold reference and tags
   emitted results with `"host": {"gold": false}`.
 
+## CPU quota emulation
+
+Every tier container runs with `--cpus <tier>` **and** `GOMAXPROCS=<tier>`
+(container env). The env pin matters on hosts where the container CPU quota is
+invisible to Go (Docker Desktop / OrbStack on macOS): there `runtime.GOMAXPROCS`
+otherwise reports the host core count and the measured tiers would not match the
+gold host, where Go honors the task cgroup quota. The env pin makes tier behavior
+deterministic on every host.
+
+Note that pinning GOMAXPROCS to the tier does **not** make throughput monotonic
+in the tier: `intra_op_threads` defaults to `cores−2` (6 threads at tier 8), and
+for small models (dim ≤ 768) more than ~2 intra-op threads loses to thread sync —
+measured: tier8 c1 ≈ 140 req/s (6 threads) vs ≈ 550 at tier 2 (1 thread), and an
+isolated 1-thread tier-8 run hits ≈ 680 req/s. On the gold host the same default
+applies (cgroup quota → tier cores), so the non-monotonic curve is real deployment
+behavior, not a harness artifact; operators should set `intra_op_threads`
+explicitly (≤ 2 for small models) in production configs.
+
 ## Workloads
 
 | Workload       | Driver             | Purpose                                                       |

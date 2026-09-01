@@ -4,7 +4,7 @@
 
 Benchmarks use the standard `redis-benchmark` tool which formats positional arguments as RESP commands via `redisFormatCommandArgv`. All results use `EMB minilm hello world` as the benchmark command with `Xenova/all-MiniLM-L6-v2` (dim=384) via ONNX Runtime.
 
-**Hardware:** Apple M1 Pro, 32 GB RAM, macOS Sequoia 26.5.1 (10 CPUs = 4 performance + 6 efficiency)
+**Hardware:** Apple M4, 24 GB RAM, macOS Sequoia 26.6.2 (10 CPUs = 4 performance + 6 efficiency). All tables were re-measured on this machine on 2026-08-31; the earlier M1 Pro / 32 GB numbers they replace are preserved in git history.
 
 **CPU partition:** every result set below is measured under a fixed partition of the
 machine's CPUs. The **app partition** hosts the emb server (bounded by `GOMAXPROCS` +
@@ -31,19 +31,19 @@ $ GOMAXPROCS=1 ./bin/emb -config config.yaml
 
 | Clients | Pipeline | Requests | Req/s  | p50     |
 |---------|----------|----------|--------|---------|
-| 1       | 1        | 500      | 283.61 | 3.111ms |
-| 8       | 1        | 2000     | 336.42 | 23.76ms |
-| 16      | 1        | 2000     | 333.67 | 47.68ms |
-| 1       | 8        | 2000     | 332.45 | 23.98ms |
+| 1       | 1        | 500      | 347.46 | 2.855ms |
+| 8       | 1        | 2000     | 734.48 | 10.839ms|
+| 16      | 1        | 2000     | 785.55 | 20.335ms|
+| 1       | 8        | 2000     | 355.43 | 22.415ms|
 
 ```
 $ redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world
-EMB minilm hello world: 283.61 requests per second, p50=3.111 msec
+EMB minilm hello world: 347.46 requests per second, p50=2.855 msec
 ```
 
 ```
 $ redis-benchmark -p 6379 -q -c 8 -P 1 -n 2000 EMB minilm hello world
-EMB minilm hello world: 336.42 requests per second, p50=23.759 msec
+EMB minilm hello world: 734.48 requests per second, p50=10.839 msec
 ```
 
 ## Multi-threaded
@@ -56,14 +56,14 @@ $ GOMAXPROCS=0 ./bin/emb -config config.yaml
 
 | Clients | Pipeline | Requests | Req/s  | p50      |
 |---------|----------|----------|--------|----------|
-| 1       | 1        | 500      | 184.98 | 3.359ms  |
-| 8       | 1        | 2000     | 383.80 | 17.49ms  |
-| 16      | 1        | 2000     | 417.01 | 31.12ms  |
-| 64      | 1        | 2000     | 522.88 | 110.14ms |
+| 1       | 1        | 500      | 420.17 | 2.343ms  |
+| 8       | 1        | 2000     | 1655.63 | 4.807ms  |
+| 16      | 1        | 2000     | 2010.05 | 7.663ms  |
+| 64      | 1        | 2000     | 2541.30 | 24.207ms |
 
 ```
 $ redis-benchmark -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world
-EMB minilm hello world: 417.01 requests per second, p50=31.119 msec
+EMB minilm hello world: 2010.05 requests per second, p50=7.663 msec
 ```
 
 ## Cache
@@ -82,26 +82,23 @@ All requests send the same text. The first inference populates the cache; subseq
 
 | Clients | Pipeline | Requests | Req/s      | p50      |
 |---------|----------|----------|------------|----------|
-| 1       | 1        | 500      | 123,456.78 | 8.1µs    |
-| 8       | 1        | 2000     | 456,789.12 | 17.5µs   |
-| 16      | 1        | 2000     | 512,345.67 | 31.2µs   |
-| 1       | 8        | 2000     | 789,012.34 | 10.1µs   |
+| 1       | 1        | 500      | 23,809.52  | 31µs     |
+| 8       | 1        | 2000     | 133,333.34 | 63µs     |
+| 16      | 1        | 2000     | 124,999.99 | 119µs    |
+| 1       | 8        | 2000     | 400,000.00 | 23µs     |
 
 ```
 $ redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"
-EMB minilm hello world: 123456.78 requests per second, p50=0.008 msec
+EMB minilm hello world: 23809.52 requests per second, p50=0.031 msec
 ```
 
 ### Cache miss (unique texts)
 
-When every text is unique, the cache provides no benefit. Throughput matches the no-cache baseline (small overhead from cache lookup + insert).
-
-| Clients | Pipeline | Requests | Req/s  | p50      |
-|---------|----------|----------|--------|----------|
-| 1       | 1        | 500      | 281.23 | 3.142ms  |
-| 16      | 1        | 2000     | 412.89 | 31.45ms  |
-
-Because `redis-benchmark` sends the same command every time, simulate unique texts by running without cache and treating the result as the miss baseline.
+When every text is unique, the cache provides no benefit: throughput matches the
+no-cache baseline (small lookup/insert overhead per request). Because
+`redis-benchmark` sends the same command every time, simulate unique texts by
+running without cache and treating the result as the miss baseline — see the
+multi-threaded c1/c16 cells above (420 → c1, 2010 → c16 req/s).
 
 ### Cache hit rate
 
@@ -237,51 +234,36 @@ inference p50/p99 while a synthetic parse-heavy load (many-arg `EMB.MULTI` with 
 models) exercises the server's request path, and fails when
 `p99_with_load / p99_idle > 1.5`.
 
-### Partitioned (reference run, 6 app / 4 bench CPUs)
+### Reference run (6 app CPUs, fixed harness)
 
-Server: `bench-cpu-partition.yaml` (`GOMAXPROCS=6`, `intra_op_threads: 4`), 200 texts ×
-4 rounds, pool=5, 4 threads. Warm inference baseline 7.489 ms.
+Server: `bench-cpu-partition.yaml` (`GOMAXPROCS=6`), 200 texts × 4 rounds, pool=5,
+run via `just bench-ruby`. Validated 2026-08-31 after a harness fix: baseline /
+eager / threaded previously timed lazy-loader *construction* (the gem ships
+`batch: true`, and `Emb::Proxy#[]` returns a loader that sends nothing until
+materialized) — the three now force `batch: false` and measure real inference.
+Warm inference baseline: **2.838 ms**.
 
 | Scenario | Embed | per-embed | req/s | p50    | p99     | overhead |
 |----------|-------|-----------|-------|--------|---------|----------|
-| eager    | 800   | 6.395 ms  | 156.4 | 5.847  | 16.744  | −14.6%   |
-| lazy     | 800   | 6.532 ms  | 153.1 | 6.559  | 6.586   | −12.8%   |
-| pipelined| 800   | 6.365 ms  | 157.1 | 6.392  | 6.452   | −15.0%   |
-| threaded | 800   | 5.988 ms  | 167.0 | 12.382 | 116.497 | −20.0%   |
+| eager    | 800   | 2.726 ms  | 366.9 | 2.631  | 3.969   | −4.0%    |
+| lazy     | 800   | 2.916 ms  | 342.9 | 2.902  | 3.025   | +2.8%    |
+| pipelined| 800   | 2.257 ms  | 443.1 | 2.277  | 2.286   | −20.5%   |
+| threaded | 800   | 1.270 ms  | 787.4 | 4.559  | 13.834  | −55.3%   |
 
 Round-trip check: eager = 5 `EMB` / 0 `EMB.MULTI`; lazy = 1 `EMB.MULTI` / 0 `EMB` ✓
-(lazy collapses N calls into one round trip). Lazy's p99 ≈ p50 (~6.6 ms, no tail);
-eager's p99 (16.7 ms) shows the per-command round-trip tail.
+(lazy collapses N calls into one round trip; its per-embed p50 ≈ p99 — no tail).
+Pipelining wins latency (p50 2.28 ms, tightest tail); threaded wins aggregate
+throughput (787 req/s over the pool) at the cost of a 13.8 ms p99 tail
+(server-side session thrash).
 
-**Stability gate (bounded fan-out, this change):** idle p99 371.9 ms → constant parse
-load p99 421.9, **constant ratio 1.13 PASS** (≤ 1.5); request storm (2 workers × 400
-pairs) p99 597.0, **storm ratio 1.61 PASS** (≤ 1.75). The gate, which flaked on a noisy
-machine without a partition, is reproducible under the fixed CPU budget.
-
-**Server isolation (this change):** `EMB.MULTI` fan-out is bounded (≤ GOMAXPROCS
-concurrent pair goroutines per command) so request storms can't spawn unbounded
-goroutines — cutting the storm ratio from the previously-measured ~1.87–1.93 (default
-config, unbounded) / ~2.57–2.67 (old batching config) to 1.61. `intra_op_threads` now
-defaults to `cores−2` (explicit config overrides), reserving parse/dispatch CPU.
-
-The server is capped to its 6-CPU app partition, so raw req/s here is lower than the
-10-CPU run below — that is expected and is the point of the partition: a
-deployment-shaped budget with clean, reproducible tails.
-
-### Unpartitioned (comparison, 10 app / 0 bench CPUs)
-
-Server: default config, `GOMAXPROCS=0` (all 10 cores). Warm inference baseline 4.629 ms.
-
-| Scenario | Embed | per-embed | req/s | p50   | p99    | overhead |
-|----------|-------|-----------|-------|-------|--------|----------|
-| eager    | 800   | 3.917 ms  | 255.3 | 3.838 | 5.093  | −15.4%   |
-| lazy     | 800   | 3.977 ms  | 251.4 | 3.987 | 4.004  | −14.1%   |
-| pipelined| 800   | 3.530 ms  | 283.3 | 3.533 | 3.553  | −23.7%   |
-| threaded | 800   | 2.498 ms  | 400.3 | 7.653 | 37.607 | −46.0%   |
-
-**Stability gate:** idle p99 228.4 → loaded p99 275.3, **ratio 1.21 PASS** — on an idle
-machine the 10-core default also passes; the partition's value is reproducibility when
-the machine is busy or shared, where the unpartitioned gate has previously flaked.
+**Stability gate:** idle p99 181.5 ms → constant parse load 241.7, **constant ratio
+1.33 PASS** (≤ 1.5); request storm (2 workers × 400 pairs) p99 568.3, **storm ratio
+3.13 FAIL** (≤ 1.75). The storm gate needs a CPU partition to pass: on macOS there is
+no `taskset`, so the load generators and the sampler share all cores and the p99
+inflation is client-side. A server-side probe under the same storm shows inference
+p99 unaffected (3.0 vs 2.5 ms idle) with the server pinned to ~1.5 cores — bounded
+`EMB.MULTI` fan-out and the `max_pairs` cap hold, so the failure is client contention
+on the unpartitioned host, not unbounded server work.
 
 ### Evidence-based client decisions
 
@@ -362,8 +344,8 @@ just bench-all
 ## Notes
 
 - Unlike SET/GET (~1µs), each EMB runs an ONNX inference (~5ms). High pipelining (`-P 512`) queues hundreds of inferences behind a single worker and produces misleading throughput numbers.
-- Multi-worker throughput peaks at 10 workers (M1 Pro has 10 cores). Adding more clients beyond 16 increases queueing with diminishing returns.
+- Multi-worker throughput peaks at 10 workers (M4 has 10 cores). Adding more clients beyond 16 increases queueing with diminishing returns.
 - The model is loaded lazily on first request. The first request includes ~800ms model-loading overhead.
 - **Cache hit** throughput is bounded by RESP serialization and network I/O, not ONNX. Expect 2–4 orders of magnitude improvement over inference.
 - The cache uses an LRU eviction policy. If the working set exceeds `cache_max_bytes`, evictions begin. Monitor `cache_evictions` and `cache_hit_rate` via `EMB.INFO` to tune the cache size.
-- `-cache auto` reserves ~20% of available system RAM (after a safety margin and model memory estimate), capped at 500 MB.
+- `-cache auto` sizes to ~13% of system RAM (20% of the memory left after a 10% safety margin and a 25% model reserve), floored at 64 MB and capped at 50% of total RAM — **no fixed byte ceiling** (the old 500 MB cap was removed; see the working-set section above).

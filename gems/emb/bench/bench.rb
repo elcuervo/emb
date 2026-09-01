@@ -47,6 +47,14 @@ def new_client
   Emb::Client.new(pool: POOL, port: EMB_PORT, driver: DRIVER)
 end
 
+# Eager scenarios (baseline, eager, threaded) measure raw per-command inference
+# and must force client batching OFF: the gem's shipped `batch: true` default
+# turns Emb::Proxy#[] into a lazy loader that sends nothing until materialized,
+# which would time loader construction (~µs) instead of the embed.
+def eager_client
+  Emb::Client.new(pool: POOL, port: EMB_PORT, driver: DRIVER, batch: false)
+end
+
 # Counts EMB vs EMB.MULTI commands at the client boundary, delegating to a
 # real client — used to assert round-trip reduction (lazy = one MULTI).
 class CountingClient
@@ -70,7 +78,7 @@ end
 def inference_baseline_ms
   latencies = distinct_texts(BASELINE, "baseline-#{Process.pid}").map do |t|
     started = ms
-    Emb::Proxy.new(new_client, MODEL)[t]
+    Emb::Proxy.new(eager_client, MODEL)[t]
     ms - started
   end
   percentile(latencies.sort, 50)
@@ -113,7 +121,7 @@ end
 
 def eager_round(round)
   distinct_texts(TEXTS, round).map do |t|
-    timed_call { Emb::Proxy.new(new_client, MODEL)[t] }
+    timed_call { Emb::Proxy.new(eager_client, MODEL)[t] }
   end
 end
 
@@ -151,7 +159,7 @@ end
 def worker(thread)
   Thread.new do
     distinct_texts(TEXTS, thread).each do |t|
-      timed_call { Emb::Proxy.new(new_client, MODEL)[t] }.then { SAMPLE_QUEUE << _1 }
+      timed_call { Emb::Proxy.new(eager_client, MODEL)[t] }.then { SAMPLE_QUEUE << _1 }
     end
   end
 end

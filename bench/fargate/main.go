@@ -360,6 +360,13 @@ func startServer(o *options, tier int, cache bool) (port int, name string, err e
 	args := []string{"run", "-d", "--name", name,
 		"--cpus", strconv.Itoa(tier),
 		"--memory", tierMemory(tier),
+		// Pin GOMAXPROCS to the tier so the server's Go runtime sees the same
+		// CPU quota Fargate would expose via the task cgroup. Without this, hosts
+		// where the container CPU quota is invisible to Go (Docker/OrbStack on
+		// macOS) run every tier with host GOMAXPROCS, so intra_op_threads and
+		// fan-out defaults are computed from the wrong core count. The env mirrors
+		// the gold (linux/arm64) cgroup behavior on every host.
+		"-e", "GOMAXPROCS=" + strconv.Itoa(tier),
 		"-p", fmt.Sprintf("%d:6379", port),
 		"-v", absModel + ":/model",
 		"-v", absOut + ":/etc/emb",
