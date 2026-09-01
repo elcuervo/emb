@@ -143,19 +143,34 @@ models:
   minilm:
     onnx: ./models/minilm/model.onnx
 
+  # Pre-pooled siglip2 text encoder (int8 used in production). The graph
+  # exports its final embedding as "text_embeds" (768-dim); if you configure
+  # an output tensor name that is not in the graph, the server falls back to
+  # the detected output and logs which name it auto-selected.
   siglip2:
-    onnx: ./models/siglip2/text_model.onnx
+    onnx: ./models/siglip2/text_model_int8.onnx
     tokenizer: ./models/siglip2/tokenizer.json
-    output_tensor: pooler_output
+    output_tensor: text_embeds
     pooling: none
     normalize: true
     dim: 768
+    max_length: 64
+    pad_output: true   # graph has a fixed [batch, 64] input; pad to max_length
 
-  # Auto-download from HuggingFace
+  # Custom e5 export with pooling + output layers baked into the graph (2D
+  # pooled output, already normalized), served with no server-side arithmetic:
+  # pooling: none + normalize: false is a pure buffer export.
   e5:
-    model_repo: intfloat/e5-small-v2
+    onnx: ./models/e5/model.onnx
+    tokenizer: ./models/e5/tokenizer.json
+    output_tensor: pooled_sentence_embeddings_debiased_normalized
     pooling: none
     normalize: false
+
+  # WARNING: the stock HuggingFace export intfloat/e5-small-v2 (and similar)
+  # outputs a 3D last_hidden_state. It must NOT be configured with
+  # pooling: none — that would slice a 3D buffer (correct only at batch=1).
+  # Use pooling: mean (auto-detected) or a pre-pooled 2D export instead.
 ```
 
 ### Model options
@@ -167,7 +182,7 @@ models:
 | `model_repo` | — | HuggingFace repo (auto-downloads ONNX + tokenizer) |
 | `dim` | auto-detected | Embedding dimension |
 | `max_length` | auto-detected (or 512) | Max token sequence length |
-| `pooling` | auto-detected | `mean` (3D output) or `none` (2D pre-pooled) |
+| `pooling` | auto-detected | `mean` (3D output), `cls` (first token) or `none` (2D pre-pooled) |
 | `normalize` | `false` | L2-normalize the output |
 | `output_tensor` | auto-detected | ONNX output tensor name |
 | `preload` | `false` | Load model at startup instead of on first request |
@@ -209,6 +224,32 @@ error. Live cache stats — hits, misses, hit rate, evictions, entries, and byte
 usage — are visible per model via `EMB.INFO <model>` and globally via
 [`INFO`](#operations) and `EMB.STATS`. See `BENCHMARK.md` → *Cache* for
 hit-rate measurements.
+
+## Embeddings & vector indexes (OpenSearch)
+
+`emb` always emits **fp32 little-endian float vectors** (`dim * 4` bytes per
+text), so vectors can be stored directly in an OpenSearch `knn_vector` field
+with `data_type: float` (or any float-vector index). This holds **even when the
+backbone runs int8** (e.g. `siglip2`/`text_model_int8.onnx`): quantization
+applies to the model's compute; pooling/normalization and the wire format stay
+fp32. There is no `byte`-vector mode and no on-wire precision loss.
+
+Retrieval-correctness notes:
+
+- **Near-identical is the contract, not byte-identity.** SIMD pooling,
+  pooling-in-graph, and int8 backbones shift vectors within ~0.99 cosine of the
+  fp32 reference while preserving top-k retrieval ranking (validated by
+  `cmd/emb-verify-performance`; siglip2 int8 measures 0.9992 mean cosine vs its
+  fp32 export with identical top-10 ranking). If you require exact byte equality
+  with a previous deployment, reindex with the same configuration instead.
+- **Changing precision requires a one-time reindex.** fp32→int8 (or any
+  pooling/normalize change) alters vector values. **Version your embedding
+  function** (model id + precision + normalizer) into the index metadata and
+  rebuild the index in the new precision; never mix vectors of different
+  precisions in one `knn_vector` field.
+- **Int8 artifact discovery is deliberately unchanged** (`quantize: auto` still
+  picks `model_quantized.onnx`/`onnx/quantized/*` by name); quantized-model
+  autodiscovery is out of scope for this change.
 
 ## Operations
 

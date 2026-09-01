@@ -151,9 +151,64 @@ func (b *Batcher) run() {
 		budget = 0
 	}
 
-	enqueue := func(it batchItem) {
+	// appendItem adds a ready item to the window.
+	appendItem := func(it batchItem) {
 		batch = append(batch, it)
 		budget += it.tokens
+	}
+
+	// With dedicated tokenizer producers, the run loop must never pull raw
+	// requests itself: encoding inline here would serialize tokenization into
+	// the dispatch path (and idle-flush draining reqChan would bypass the
+	// async producers). A nil channel disables that select case.
+	var reqCh chan Request
+	if b.tokenizeWorkers == 0 {
+		reqCh = b.reqChan
+	}
+
+	// tryAppendOne non-blockingly pulls one queued request (raw or
+	// pre-tokenized) into the window; returns false when nothing is ready.
+	tryAppendOne := func() bool {
+		select {
+		case req := <-reqCh:
+			encs, toks, err := encodeTexts(b.tokenizer, req.Texts, b.maxLen)
+			if err != nil {
+				b.errors.Add(1)
+				req.Result <- Response{Err: err}
+				return true
+			}
+			appendItem(batchItem{req: req, encs: encs, tokens: toks})
+			return true
+		case tr := <-b.workChan:
+			if tr.err != nil {
+				b.errors.Add(1)
+				tr.req.Result <- Response{Err: tr.err}
+				return true
+			}
+			appendItem(batchItem{req: tr.req, encs: tr.encs, tokens: tr.tokens})
+			return true
+		default:
+			return false
+		}
+	}
+
+	enqueue := func(it batchItem) {
+		// Idle-flush: when no batch is collecting, serve the first pending
+		// request immediately — draining whatever is already queued so bursts
+		// still coalesce — instead of waiting out the batching window. A lone
+		// request therefore incurs no artificial delay when the run loop is
+		// idle.
+		if len(batch) == 0 && !timerRunning {
+			appendItem(it)
+			for tryAppendOne() && len(batch) < b.maxBatch {
+				if b.maxBatchTokens > 0 && budget >= b.maxBatchTokens {
+					break
+				}
+			}
+			flush()
+			return
+		}
+		appendItem(it)
 		// Budget reached OR count reached — flush as one run.
 		if len(batch) >= b.maxBatch || (b.maxBatchTokens > 0 && budget >= b.maxBatchTokens) {
 			flush()
@@ -169,7 +224,7 @@ func (b *Batcher) run() {
 
 	for {
 		select {
-		case req := <-b.reqChan:
+		case req := <-reqCh:
 			// Serial (tokenizeWorkers == 0): encode inline like pre-change behavior.
 			encs, toks, err := encodeTexts(b.tokenizer, req.Texts, b.maxLen)
 			if err != nil {

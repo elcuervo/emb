@@ -224,6 +224,86 @@ xan plot clients req_s -c config -L bench-compare.csv
 xan plot clients p50_ms -c config -L --y-scale log bench-compare.csv
 ```
 
+## Twin EMB.MULTI (inference-performance change)
+
+The dominant production workload is `EMB.MULTI` with **two models and the same input text**
+(`EMB.MULTI siglip2 "<t>" minilm "<t>"`). Benchmarked on the same machine (Apple M4,
+16 clients, 3000 requests per run, **cache-miss unique texts** via `__rand_int__` so the
+numbers measure real inference, not cache hits). The `idle-flush` battcher change serves a
+lone request immediately instead of waiting out the 1ms batching window when the run loop
+is idle, while bursts still coalesce (64 concurrent requests → 4 ONNX runs, measured).
+
+### Before / after (twin EMB.MULTI, siglip2 int8 + minilm fp32)
+
+| Metric | HEAD baseline | With change (sequential, intra=cores−2) | Δ |
+|--------|---------------|------------------------------------------|-----|
+| Throughput | 8,400–8,900 req/s | **68,000–75,000 req/s** | **≈ 8×** |
+| p50 | 0.111 ms | 0.135 ms | ≈ same |
+| p99 | 0.295 ms | 0.367 ms | ≈ same |
+| max tail | 330 ms | ~11 ms | **30× lower** |
+
+Baseline was measured from a clean worktree at `HEAD` (pre-change code, 1ms window
+behavior, parallel execution mode). The p50/p99 staying flat at 8× the throughput means
+more batches per second at the same latency, with the pathological 330 ms stall removed.
+
+### Execution-mode × intra-thread matrix (post-change)
+
+`execution_mode` defaults to `sequential` (A/B: sequential ≈ parallel; parallel's inter-op
+pool adds nothing for serial encoder graphs). `intra_op_threads` matters: 4 ≈ 1.5× over 1
+below; the configured default is `cores−2`.
+
+| execution_mode | intra_op_threads | Req/s |
+|----------------|------------------|-------|
+| sequential | 1 | 49,180 |
+| sequential | 4 | **75,000** |
+| parallel | 1 | 47,619 |
+| parallel | 4 | 71,429 |
+
+### Pooling / post-processing kernels (dim 768 mean-pool; pre-pooled extraction)
+
+| Kernel | Before | After |
+|--------|--------|-------|
+| Mean-pool, batch=1 | 12,708 ns/op | 7,559 ns/op (1.68×) |
+| Mean-pool, batch=4 | 35,956 ns/op | 22,233 ns/op (1.62×) |
+| Pre-pooled extraction, batch=1 (768-d, normalize) | — | 1,308 ns/op |
+
+The mean-pool/L2 results are **bit-identical** to the pre-change scalar code (SIMD
+`AddFloat32s` accumulation preserves per-dimension, per-token summation order); the fast
+path replaces per-row allocations with a single buffer and per-element byte marshalling
+with `unsafe.Slice` memmove views.
+
+### Retrieval-correctness gate (int8 vs fp32, `cmd/emb-verify-performance`)
+
+```
+$ go run ./cmd/emb-verify-performance 127.0.0.1:16383 siglip2 siglip2fp32
+model A: siglip2 | model B: siglip2fp32
+docs=30 queries=5
+pairwise cosine mean=0.999216 min=0.998598
+nDCG@10 retention (B ranking vs A ranking) = 1.0000
+PASS
+```
+
+`siglip2` int8 (`text_model_int8.onnx`) retains 0.9992 mean cosine vs the fp32 model with
+identical top-10 ranking (nDCG 1.0) — comfortably inside the ≥ 0.99 / ≥ 0.95 gates.
+
+### Reproduce
+
+```bash
+# server config with two preloaded models (see models/siglip2 + models/minilm)
+./bin/emb -config /tmp/emb-ab1.yaml -listen :16382 &
+
+# before/after twin-MULTI benchmark (cache-miss texts)
+redis-benchmark -h 127.0.0.1 -p 16382 -c 16 -n 3000 \
+  EMB.MULTI siglip2 "text __rand_int__" minilm "text __rand_int__"
+
+# A/B matrix helper
+bash bench/tune-execution.sh
+```
+
+Caveat: the second model leg was measured with `minilm` (fp32, 3D) as an available
+stand-in; the operator's custom `e5` export should be substituted for the production twin.
+With the LRU cache enabled and repeated texts, cache hits dominate regardless.
+
 ## Client-side (Ruby)
 
 The Ruby benchmarks run the end-to-end harness against a live server via

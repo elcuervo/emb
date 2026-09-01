@@ -64,6 +64,8 @@ func runEncodings(sess onnx.Session, encs []Encoding, dim int, normalize bool, p
 	switch pooling {
 	case "none":
 		embeddings = ExtractPrePooled(hidden, batchSize, dim, normalize)
+	case "cls":
+		embeddings = ExtractCLS(hidden, batchSize, dim, seqLen, normalize)
 	default:
 		embeddings = MeanPoolAndNormalize(hidden, attnMask, dim, seqLen, batchSize, normalize)
 	}
