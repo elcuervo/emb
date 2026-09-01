@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    emb (0.2.6)
+    emb (0.3.0)
       batch-loader (~> 2.0)
       connection_pool (~> 2.5)
       redis-client (~> 0.24)
