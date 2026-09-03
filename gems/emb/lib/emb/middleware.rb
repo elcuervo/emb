@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'batch_loader'
+require_relative 'batch_scope'
 
 module Emb
   # Rack middleware that clears the per-thread batch scope at the end of each
@@ -12,9 +13,7 @@ module Emb
     end
 
     def call(env)
-      @app.call(env)
-    ensure
-      BatchLoader::Executor.clear_current
+      BatchScope.wrap { @app.call(env) }
     end
   end
 end
