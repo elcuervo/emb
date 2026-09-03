@@ -21,7 +21,6 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'batch-loader', '~> 2.0'
-  spec.add_dependency 'connection_pool', '~> 2.5'
   spec.add_dependency 'redis-client', '~> 0.24'
 
   spec.metadata['rubygems_mfa_required'] = 'true'

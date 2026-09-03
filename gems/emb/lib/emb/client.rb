@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'connection_pool'
+require_relative 'round_robin_pool'
 require 'redis_client'
 
 module Emb
@@ -13,11 +13,11 @@ module Emb
       cfg = Emb.configuration
       @batch_enabled = batch.nil? ? cfg.batch : batch
       @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
-      size = pool.nil? ? cfg.pool : pool
       url = extract_url!(redis_options, cfg)
       redis_options = merged_redis_options(redis_options, cfg, url)
 
-      @pool = ConnectionPool.new(size: size) do
+      size = pool.nil? ? cfg.pool : pool
+      @pool = RoundRobinPool.new(size) do
         RedisClient.new(url: url, **redis_options)
       end
 

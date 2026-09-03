@@ -90,11 +90,34 @@ you raise `batch_size`; opt into one automatic retry with
 Emb.setup(url: "redis://localhost:6379", pool: 10)
 ```
 
-The default pool size is **5**. The pool is usually not the bottleneck for
-inference-bound workloads (small pools are fine); it becomes a knob only at high
-concurrency on a multi-model box — see [Performance](#performance). If a pool checkout
-would wait too long, `RedisClient`'s `connect_timeout`/`read_timeout` (above) bound the
-wait.
+The default pool size is **5**. The client keeps `pool` persistent connections and
+routes commands through them **in round-robin order** — consecutive commands use
+different connections instead of reusing one hot connection.
+
+This matters when emb runs as a pool of instances behind a **connection-level load
+balancer** (AWS Service Connect, an NLB, or Envoy): the balancer assigns each
+keep-alive connection to exactly one instance for its lifetime, so relying on a
+single connection would pin all of a process's embedding traffic to one instance —
+and queue it there even while other instances sit idle. Round-robin spreading across
+`pool` connections spreads traffic across up to `pool` instances, so set `pool` to
+**at least your expected emb instance count** (e.g. `pool: 10` for 10 instances).
+
+Commands beyond the pool's parallelism do **not** time out: when `pool` commands are
+already in flight, later commands wait on the shared connections until one frees
+(there is no checkout timeout — unlike the previous pool's 5s
+`ConnectionPool::TimeoutError`). Only the wait for a free pool connection is
+unbounded — once a command runs, `RedisClient`'s `connect_timeout`,
+`read_timeout`, and `write_timeout` still apply. For inference workloads this
+lets commands ride out token-budget batching instead of erroring.
+
+Locally (a single server) only the backend selection is identical whatever the
+pool size — every command reaches the same server. The pool size still controls
+how many persistent connections the client holds and how many commands run in
+parallel. The pool is usually not the bottleneck for
+inference-bound workloads (small pools are fine); it becomes a knob at high
+concurrency on a multi-model box — see [Performance](#performance). With
+round-robin selection up to `pool` commands run in parallel; beyond that, commands
+share connections and serialize on them.
 
 ### Authentication
 
@@ -179,6 +202,12 @@ is required for simple cases — the default client connects to `redis://localho
 automatically.
 
 ## Server info & config
+
+> **Per-instance data.** `Emb.server_info`, `stats`, `info`, and `config` read
+> from ONE instance, and with round-robin connection selection that instance
+> may change between calls (with `pool: 1` it never does) — each call is a
+> sample. `Emb.config[key] = value` mutates one (arbitrary) instance. Use
+> per-connection queries if you need a specific or aggregated view.
 
 The server exposes Redis-style `INFO` and `CONFIG` commands; the gem wraps them.
 
