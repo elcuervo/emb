@@ -1,6 +1,6 @@
 ## Context
 
-emb's production config at `unsplash-api/config/emb-config.yaml` runs both models with `batching: timeout: 0` (disabled batching) and default thread counts (`intra_op_threads: 0` → 1, `inter_op_threads: 0` → 2). The Ruby onnxruntime gem (v0.10.1) links CoreML+Metal for GPU acceleration; emb's Nix-provided ORT is CPU-only.
+emb's production config at `config/emb-config.yaml` runs both models with `batching: timeout: 0` (disabled batching) and default thread counts (`intra_op_threads: 0` → 1, `inter_op_threads: 0` → 2). The Ruby onnxruntime gem (v0.10.1) links CoreML+Metal for GPU acceleration; emb's Nix-provided ORT is CPU-only.
 
 Benchmarks on M1 Pro with production models:
 
