@@ -11,7 +11,7 @@ The server SHALL respond to `INFO` (and `INFO <section>...`) with a RESP2 bulk s
 #### Scenario: No arguments returns all sections
 
 - **WHEN** a Redis client sends `INFO` with no arguments
-- **THEN** the reply SHALL be a bulk string containing at least `# Server`, `# Cache`, `# Keyspace`, `# Stats`, and `# Clients` sections in that order
+- **THEN** the reply SHALL be a bulk string containing at least `# Server`, `# Cache`, `# Keyspace`, `# Stats`, `# Memory`, `# CPU`, and `# Clients` sections in that order
 
 #### Scenario: Section argument filters
 

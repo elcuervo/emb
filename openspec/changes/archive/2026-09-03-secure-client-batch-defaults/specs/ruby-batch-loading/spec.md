@@ -2,7 +2,7 @@
 
 ### Requirement: Batch failures fail closed
 
-When a batch command fails (timeout, connection error, or protocol error), the gem SHALL surface the error to the code that forced the batch, SHALL remove every deferred item of that batch from the scope's pending set, and SHALL NOT re-send the failed batch on any later resolution attempt. Re-resolving an item from a failed batch SHALL return `nil` and SHALL NOT perform I/O. New batches created in the same scope afterwards SHALL contain only items deferred after the failure.
+When a batch command fails (timeout, connection error, or protocol error), the gem SHALL surface the error to the code that forced the batch, SHALL remove every deferred item of that batch from the scope's pending set, and SHALL NOT re-send the failed batch on any later resolution attempt. Re-resolving an item from a failed batch SHALL return an empty array (`[]`) and SHALL NOT perform I/O. New batches created in the same scope afterwards SHALL contain only items deferred after the failure.
 
 #### Scenario: Error surfaces once and pending is cleared
 
@@ -10,10 +10,10 @@ When a batch command fails (timeout, connection error, or protocol error), the g
 - **THEN** the forced value SHALL raise the original error
 - **AND** the scope's pending set SHALL be empty afterwards
 
-#### Scenario: Retry resolves to nil without I/O
+#### Scenario: Retry resolves to [] without I/O
 
 - **WHEN** an item of a failed batch is resolved again after the failure
-- **THEN** it SHALL return `nil`
+- **THEN** it SHALL return an empty array (`[]`)
 - **AND** no command SHALL be sent to the server
 
 #### Scenario: Subsequent batches exclude failed items
