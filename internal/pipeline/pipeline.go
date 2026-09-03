@@ -23,7 +23,6 @@ type Stats struct {
 	NumWorkers        int
 	Tokens            int64
 	Errors            int64
-	MemoryMB          int64
 	Pooling           string
 	Normalize         bool
 	MaxLen            int

@@ -3,11 +3,14 @@ package server
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/tidwall/redcon"
+
+	"github.com/elcuervo/emb/internal/registry"
 )
 
 // cacheHitRate formats hits/(hits+misses) as "%.1f%%"; 0.0% when there is no
@@ -34,6 +37,37 @@ type infoSnapshot struct {
 	active   int64
 	cache    *CacheStats // nil when the cache is disabled at boot
 	byModel  []modelInfoLine
+	// res holds the live process resource sample (memory/CPU/goroutines).
+	res resourceStats
+	// netIn/netOut are aggregate RESP bytes received/sent since start.
+	netIn  uint64
+	netOut uint64
+}
+
+// resourceStats is one snapshot of the process resource samplers, gathered
+// atomically-ish for a single INFO/EMB.STATS render so the sections agree.
+type resourceStats struct {
+	rssBytes    uint64
+	heapBytes   uint64
+	totalSysMem uint64
+	goroutines  int64
+	cpuUserUsec uint64
+	cpuSysUsec  uint64
+}
+
+// resourceStats samples the live process resource usage. rssBytes is the
+// resident set (incl. CGo/ONNX allocations); on platforms without an RSS
+// source it falls back to the Go heap (registry.CurrentMemoryUsage semantics).
+func (s *Server) resourceStats() resourceStats {
+	rss, _ := registry.CurrentMemoryUsage()
+	return resourceStats{
+		rssBytes:    rss,
+		heapBytes:   registry.HeapInUseBytes(),
+		totalSysMem: registry.TotalSystemMemory(),
+		goroutines:  registry.NumGoroutines(),
+		cpuUserUsec: registry.CPUUserUsec(),
+		cpuSysUsec:  registry.CPUSysUsec(),
+	}
 }
 
 // modelInfoLine is one row of the Keyspace section (per-loaded-model cache
@@ -104,6 +138,9 @@ func (s *Server) infoSnapshot() infoSnapshot {
 		active:   s.activeReqs.Load(),
 		cache:    cacheStats,
 		byModel:  lines,
+		res:      s.resourceStats(),
+		netIn:    s.netIn.Load(),
+		netOut:   s.netOut.Load(),
 	}
 }
 
@@ -121,7 +158,7 @@ type registryEntrySnapshot struct {
 func buildInfoSections(which []string, snap infoSnapshot) string {
 	selected := map[string]bool{}
 	if len(which) == 0 {
-		selected = map[string]bool{"server": true, "cache": true, "keyspace": true, "stats": true, "clients": true}
+		selected = map[string]bool{"server": true, "cache": true, "keyspace": true, "stats": true, "memory": true, "cpu": true, "clients": true}
 	} else {
 		for _, w := range which {
 			selected[strings.ToLower(w)] = true
@@ -173,7 +210,22 @@ func buildInfoSections(which []string, snap infoSnapshot) string {
 		fmt.Fprintf(&b, "total_requests:%d\r\n", snap.totalReq)
 		fmt.Fprintf(&b, "total_tokens:%d\r\n", snap.totalTok)
 		fmt.Fprintf(&b, "total_errors:%d\r\n", snap.totalErr)
-		fmt.Fprintf(&b, "models_loaded:%d\r\n\r\n", snap.models)
+		fmt.Fprintf(&b, "models_loaded:%d\r\n", snap.models)
+		fmt.Fprintf(&b, "total_net_input_bytes:%d\r\n", snap.netIn)
+		fmt.Fprintf(&b, "total_net_output_bytes:%d\r\n\r\n", snap.netOut)
+	}
+	if selected["memory"] {
+		b.WriteString("# Memory\r\n")
+		fmt.Fprintf(&b, "used_memory_rss_bytes:%d\r\n", snap.res.rssBytes)
+		fmt.Fprintf(&b, "used_memory_heap_bytes:%d\r\n", snap.res.heapBytes)
+		fmt.Fprintf(&b, "goroutines:%d\r\n", snap.res.goroutines)
+		fmt.Fprintf(&b, "total_system_memory_bytes:%d\r\n\r\n", snap.res.totalSysMem)
+	}
+	if selected["cpu"] {
+		b.WriteString("# CPU\r\n")
+		fmt.Fprintf(&b, "used_cpu_user_usec:%d\r\n", snap.res.cpuUserUsec)
+		fmt.Fprintf(&b, "used_cpu_sys_usec:%d\r\n", snap.res.cpuSysUsec)
+		fmt.Fprintf(&b, "gomaxprocs:%d\r\n\r\n", runtime.GOMAXPROCS(0))
 	}
 	if selected["clients"] {
 		b.WriteString("# Clients\r\n")

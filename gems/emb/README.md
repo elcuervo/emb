@@ -67,11 +67,22 @@ Emb::Client.new(pool: 20)  # per-call still wins
 
 ### Out-of-the-box defaults
 
-The shipped defaults are benchmark-derived (see `BENCHMARK.md`): **lazy batching is on by
-default** (`batch: true` — each embed coalesces into one `EMB.MULTI`), pool `5`, pure-Ruby
-RESP driver, `protocol: 2`, `reconnect_attempts: 3`. To keep the eager behavior (immediate
-`EMB` per call), opt out globally via `Emb.configure { |c| c.batch = false }` or per client
-with `Emb.new(batch: false)`.
+The shipped defaults are benchmark-derived (see `BENCHMARK.md`) with secure-by-default
+network behavior: **lazy batching is on by default** (`batch: true` — each embed
+coalesces into one `EMB.MULTI`), pool `5`, pure-Ruby RESP driver, `protocol: 2`,
+`read_timeout`/`write_timeout` both **10s**, and `reconnect_attempts: 0`. To keep the
+eager behavior (immediate `EMB` per call), opt out globally via
+`Emb.configure { |c| c.batch = false }` or per client with `Emb.new(batch: false)`.
+
+**Why the timeout and reconnect defaults matter:** batched `EMB.MULTI` (up to 512 pairs)
+can take over a second of inference on a shared CPU, and redis-client's silent default is
+1.0s — a slower reply times out and (because `ReadTimeoutError` is a `ConnectionError`)
+redis-client **re-sends the whole command** `reconnect_attempts + 1` times, duplicating
+server inference. The gem therefore defaults to an explicit 10s timeout and **no
+automatic re-send** (`reconnect_attempts: 0`); recovery is the caller's choice, and batch
+failures fail closed (see [Lazy batching](#lazy-batching-embbatch)). Raise the timeouts if
+you raise `batch_size`; opt into one automatic retry with
+`Emb.configure { |c| c.reconnect_attempts = 1 }` if you accept the duplicate-work risk.
 
 ### Connection pool
 
@@ -219,15 +230,18 @@ Emb.stats
 ### `Emb.server_info` — sectioned INFO, parsed
 
 The Redis-style `INFO` reply is parsed into a nested Hash. **No arguments = all
-sections**; pass section names to filter (`:server`, `:cache`, `:keyspace`, `:stats`, `:clients`):
+sections**; pass section names to filter (`:server`, `:cache`, `:keyspace`, `:stats`, `:memory`, `:cpu`, `:clients`):
 
 ```ruby
 Emb.server_info
 # => {Server: {redis_version: "0.2.4", emb_version: "0.2.4", uptime_secs: "7", ...},
 #     Cache: {cache_hits: 0, cache_misses: 0, cache_hit_rate: "0.0%", ...},
-#     Keyspace: {db0: "model=minilm,keys=0,hits=0,misses=0,hit_rate=0.0%"}, ...}
+#     Keyspace: {db0: "model=minilm,keys=0,hits=0,misses=0,hit_rate=0.0%"},
+#     Memory: {used_memory_rss_bytes: 262438912, used_memory_heap_bytes: 154960,
+#              goroutines: 4, total_system_memory_bytes: 25769803776},
+#     CPU: {used_cpu_user_usec: 188900, used_cpu_sys_usec: 50462, gomaxprocs: 10}, ...}
 
-Emb.server_info(:server, :cache)   # only those two sections
+Emb.server_info(:memory, :cpu)   # live process resources only
 ```
 
 ### `Emb.config` — hot config read & change
@@ -330,6 +344,18 @@ client.batch[:minilm]["hello"].sum
 
 Each lazy value materializes to the same shape as the eager API: a single text
 yields an `Array<Float>`, multiple texts yield `Array<Array<Float>>`:
+
+The batch executes in the current thread's scope; the Rack/ActiveJob middleware
+clears that scope after every request/job (`Emb::BatchScope`), so deferred work
+can never accumulate across requests.
+
+**Fail-closed batches.** If an `EMB.MULTI` fails (timeout, connection error), the
+error is raised to the code that first used the batch, and every deferred item of
+that batch is removed from the scope — retrying (or using other items of the
+failed batch) **does not re-send the batch** and resolves to `[]` instead. This
+prevents a slow server from turning one failed batch into endless duplicate work
+(retries re-running the whole batch) or growth of the pending set across retries.
+Pair-level failures the server reports as `null` (MGET semantics) are unaffected.
 
 ```ruby
 vec   = Emb.batch[:minilm]["hello"]   # use -> Array of Float

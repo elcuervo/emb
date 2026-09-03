@@ -273,13 +273,122 @@ func TestServerRedisINFO(t *testing.T) {
 	addr := serveTest(t)
 	tok := redisCmd(t, addr, "INFO")
 	body := bulkOf(t, tok)
-	for _, want := range []string{"# Server", "redis_version:dev", "# Cache", "# Keyspace", "# Stats", "# Clients"} {
+	for _, want := range []string{"# Server", "redis_version:dev", "# Cache", "# Keyspace", "# Stats", "# Memory", "# CPU", "# Clients"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("INFO missing %q in:\n%s", want, body)
 		}
 	}
 	if !strings.Contains(body, "db0:model=test,keys=0,hits=0,misses=0,hit_rate=0.0%") {
 		t.Errorf("expected a keyspace line for the loaded test model:\n%s", body)
+	}
+
+	// Default no-args INFO renders sections in the fixed order
+	// Server → Cache → Keyspace → Stats → Memory → CPU → Clients.
+	order := []string{"# Server", "# Cache", "# Keyspace", "# Stats", "# Memory", "# CPU", "# Clients"}
+	prev := -1
+	for _, sec := range order {
+		idx := strings.Index(body, sec)
+		if idx < 0 {
+			t.Errorf("INFO missing section %q in:\n%s", sec, body)
+			continue
+		}
+		if idx < prev {
+			t.Errorf("INFO section order broken: %q before a previous section:\n%s", sec, body)
+		}
+		prev = idx
+	}
+}
+
+func TestInfoMemoryAndCPUSections(t *testing.T) {
+	addr := serveTest(t)
+
+	body := bulkOf(t, redisCmd(t, addr, "INFO", "memory"))
+	for _, field := range []string{"used_memory_rss_bytes", "used_memory_heap_bytes", "goroutines", "total_system_memory_bytes"} {
+		if !strings.Contains(body, field) {
+			t.Errorf("INFO memory missing %q in:\n%s", field, body)
+		}
+	}
+	if strings.Contains(body, "# CPU") {
+		t.Errorf("INFO memory must not include the CPU section:\n%s", body)
+	}
+
+	body = bulkOf(t, redisCmd(t, addr, "INFO", "cpu"))
+	for _, field := range []string{"used_cpu_user_usec", "used_cpu_sys_usec", "gomaxprocs"} {
+		if !strings.Contains(body, field) {
+			t.Errorf("INFO cpu missing %q in:\n%s", field, body)
+		}
+	}
+	if strings.Contains(body, "# Memory") {
+		t.Errorf("INFO cpu must not include the Memory section:\n%s", body)
+	}
+
+	// Union: INFO memory cpu returns both sections, Memory before CPU, and no
+	// other sections.
+	body = bulkOf(t, redisCmd(t, addr, "INFO", "memory", "cpu"))
+	memIdx := strings.Index(body, "# Memory")
+	cpuIdx := strings.Index(body, "# CPU")
+	if memIdx < 0 || cpuIdx < 0 || memIdx > cpuIdx {
+		t.Fatalf("INFO memory cpu should contain # Memory then # CPU:\n%s", body)
+	}
+	if strings.Contains(body, "# Server") {
+		t.Fatalf("INFO memory cpu must not include other sections:\n%s", body)
+	}
+
+	// Unknown section contributes nothing.
+	body = bulkOf(t, redisCmd(t, addr, "INFO", "memory", "bogus"))
+	if strings.Contains(body, "# CPU") || !strings.Contains(body, "# Memory") {
+		t.Fatalf("INFO memory bogus should contain only Memory:\n%s", body)
+	}
+}
+
+// infoIntField extracts an integer `field:value` line from an INFO body.
+func infoIntField(t *testing.T, body, field string) int64 {
+	t.Helper()
+	idx := strings.Index(body, field+":")
+	if idx < 0 {
+		t.Fatalf("field %q not found in INFO body:\n%s", field, body)
+	}
+	rest := body[idx+len(field)+1:]
+	j := 0
+	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+		j++
+	}
+	v, err := strconv.ParseInt(rest[:j], 10, 64)
+	if err != nil {
+		t.Fatalf("bad int value for %q: %q", field, body)
+	}
+	return v
+}
+
+// TestServerNetByteCounters checks the aggregate RX/TX counters in INFO stats:
+// they increase by at least the wire size of an exchange and never decrease.
+func TestServerNetByteCounters(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+
+	stats := func() (int64, int64) {
+		body := bulkOf(t, redisCmd(t, addr, "INFO", "stats"))
+		return infoIntField(t, body, "total_net_input_bytes"),
+			infoIntField(t, body, "total_net_output_bytes")
+	}
+
+	in0, out0 := stats()
+
+	cmd := respCommand("EMB", "test", "hello")
+	c.Write(cmd)
+	replyRaw := readRESP(t, c)
+
+	in1, out1 := stats()
+	if in1-in0 < int64(len(cmd)) {
+		t.Errorf("net input delta %d < command wire size %d", in1-in0, len(cmd))
+	}
+	if out1-out0 < int64(len(replyRaw)) {
+		t.Errorf("net output delta %d < reply wire size %d", out1-out0, len(replyRaw))
+	}
+
+	in2, out2 := stats()
+	if in2 < in1 || out2 < out1 {
+		t.Errorf("byte counters decreased: in %d→%d, out %d→%d", in1, in2, out1, out2)
 	}
 }
 
