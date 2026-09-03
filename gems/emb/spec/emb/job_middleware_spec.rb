@@ -67,4 +67,11 @@ RSpec.describe Emb::JobMiddleware do
 
     expect(middleware.call(:worker, {}, 'default') { 42 }).to eq(42)
   end
+
+  it 'accepts any framework middleware arity (Shoryuken passes 4 args)' do
+    middleware = described_class.new
+
+    expect(middleware.call(:worker, :queue, :sqs_msg, :body) { 7 }).to eq(7)
+    expect(BatchLoader::Executor.current).to be_nil
+  end
 end

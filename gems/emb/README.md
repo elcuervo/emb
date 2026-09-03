@@ -363,6 +363,10 @@ Opt out if you want to manage the stack yourself:
 config.emb.middleware = false
 ```
 
+If your Gemfile loads `emb` before Rails is required (non-standard boot order), the
+guarded railtie require in `emb.rb` is skipped — add `require "emb/railtie"` in
+`config/application.rb` right after `require "rails/all"` (or in an initializer).
+
 The middleware is also safe to mount manually in any Rack app (the Railtie
 skips insertion when it is already present):
 
@@ -407,6 +411,12 @@ Shoryuken.configure_server do |config|
   config.server_middleware { |chain| chain.add Emb::JobMiddleware }
 end
 ```
+
+The Railtie also registers `Emb::JobMiddleware` into the `Sidekiq::Testing` middleware
+chain when `Sidekiq::Testing` is loaded *before the app finishes booting* (e.g. a dev
+`INLINE_SIDEKIQ` initializer). For RSpec test modes, `sidekiq/testing` typically loads
+after the app boots, so require it before your environment to get per-job clearing in
+fake/inline tests — e.g. `gem "sidekiq", require: ["sidekiq", "sidekiq/testing"]`.
 
 ## Performance
 

@@ -92,8 +92,9 @@ module RailtieFakeRails
       @entries = []
     end
 
+    # use always appends; idempotency comes from the caller's include? guard.
     def use(middleware)
-      @entries << middleware unless include?(middleware)
+      @entries << middleware
     end
 
     def include?(middleware)
@@ -150,6 +151,11 @@ module RailtieFakeRails
     class << self
       attr_reader :server_added, :testing_added
 
+      def reset!
+        @server_added = nil
+        @testing_added = nil
+      end
+
       def configure_server(&block)
         block.call(self)
       end
@@ -166,6 +172,10 @@ module RailtieFakeRails
     module Testing
       class << self
         attr_reader :testing_added
+
+        def reset!
+          @testing_added = nil
+        end
 
         def server_middleware(&block)
           block.call(self)
@@ -184,14 +194,13 @@ RSpec.describe 'Emb::Railtie' do
   # spec_helper skipped the railtie because Rails was not defined there), loads
   # emb/railtie.rb, applies any config adjustments, then runs the initializer
   # and after_initialize phases against a fake app.
-  def boot_railtie
+  def boot_railtie(app = RailtieFakeRails::App.new)
     stub_const('Rails', RailtieFakeRails)
     stub_const('ActiveSupport', RailtieFakeRails::ActiveSupport)
     load_railtie!
 
     yield Emb::Railtie.config if block_given?
 
-    app = RailtieFakeRails::App.new
     run_railtie(app)
     app
   end
@@ -199,6 +208,8 @@ RSpec.describe 'Emb::Railtie' do
   def load_railtie!
     RailtieFakeRails::ActiveSupport.hooks.clear
     RailtieFakeRails::ActiveJobBase.blocks.clear
+    RailtieFakeRails::SidekiqWithTesting.reset!
+    RailtieFakeRails::SidekiqWithTesting::Testing.reset!
     load File.expand_path('../../lib/emb/railtie.rb', __dir__)
   end
 
@@ -220,6 +231,22 @@ RSpec.describe 'Emb::Railtie' do
 
     expect(Emb::Railtie).to be < RailtieFakeRails::Railtie
     expect(app.middleware.entries).to eq([Emb::Middleware])
+  end
+
+  it 'does not duplicate a manually mounted Emb::Middleware' do
+    app = RailtieFakeRails::App.new
+    app.middleware.use Emb::Middleware # manual mount before boot
+
+    boot_railtie(app)
+
+    expect(app.middleware.entries).to eq([Emb::Middleware])
+  end
+
+  it 'is not defined when the gem loads without Rails (guarded require)' do
+    lib = File.expand_path('../../lib', __dir__)
+    ok = system(RbConfig.ruby, '-I', lib, '-e', "require 'emb'; exit(defined?(Emb::Railtie) ? 1 : 0)")
+
+    expect(ok).to be true
   end
 
   it 'registers the ActiveJob perform callback that clears the job scope' do

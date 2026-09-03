@@ -4,9 +4,8 @@ require 'batch_loader'
 require_relative 'batch_scope'
 
 module Emb
-  # Rack middleware that clears the per-thread batch scope at the end of each
-  # request, bounding cache growth in long-lived request threads. The scope is
-  # cleared even when the app raises; a fresh scope starts with the next request.
+  # Rack middleware: clears the per-thread batch scope after each request,
+  # even when the app raises.
   class Middleware
     def initialize(app)
       @app = app

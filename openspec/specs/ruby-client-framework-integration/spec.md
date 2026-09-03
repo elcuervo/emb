@@ -36,7 +36,7 @@ When the gem is loaded in a Rails application, the Railtie SHALL register `Emb::
 
 #### Scenario: Sidekiq testing modes are protected
 
-- **WHEN** a Rails application boots with `Sidekiq::Testing` loaded (dev INLINE_SIDEKIQ or test modes)
+- **WHEN** a Rails application boots with `Sidekiq::Testing` loaded before the Railtie's `after_initialize` runs (e.g. dev `INLINE_SIDEKIQ` required during app boot)
 - **THEN** `Emb::JobMiddleware` SHALL be added to the Sidekiq testing middleware chain
 - **AND** inline/faked job executions SHALL have their batch scope cleared on completion
 

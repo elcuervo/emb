@@ -3,12 +3,10 @@
 See proposal.md "Why" for motivation. Current client state: `Emb::Middleware` is a
 Rack middleware that clears the per-thread batch scope (`BatchLoader::Executor.clear_current`)
 in an `ensure`; batching is on by default so every embedding call in a lazy scope
-creates thread-local state; the server signals saturation with
-`ERR busy: max concurrent requests exceeded (N)` and the client currently lets that
-error propagate into application code; there is no job-processor boundary and no
-client-side overload control. Requirements for this change live in
-`specs/ruby-batch-loading` (job-scoped clearing), `specs/ruby-client-framework-integration`
-(Railtie wiring), and `specs/ruby-client-overload-protection` (cap + retry).
+creates thread-local state; there is no job-processor boundary beyond the manually
+mounted Rack middleware, so worker threads leak per-job scope state. Requirements
+for this change live in `specs/ruby-batch-loading` (job-scoped clearing) and
+`specs/ruby-client-framework-integration` (Railtie wiring).
 
 ## Goals / Non-Goals
 
