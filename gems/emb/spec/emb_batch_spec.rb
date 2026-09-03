@@ -22,6 +22,14 @@ class FakeEmbClient
   end
 end
 
+# FailingEmbClient records commands and always raises like a timed-out server.
+class FailingEmbClient < FakeEmbClient
+  def send_command(*args)
+    @commands << args
+    raise RedisClient::ReadTimeoutError, 'simulated timeout'
+  end
+end
+
 RSpec.describe Emb do
   after { BatchLoader::Executor.clear_current }
 
@@ -508,6 +516,47 @@ RSpec.describe Emb do
       mp[:minilm]['b']
 
       expect(mp.run).to eq([[1.0, 1.0], nil])
+    end
+  end
+
+  describe 'fail-closed batches (secure-client-batch-defaults)' do
+    it 'surfaces the error once and clears the pending batch' do
+      client = FailingEmbClient.new
+      l1 = described_class.build_batch_loader(client, :minilm, 'a')
+      described_class.build_batch_loader(client, :minilm, 'b')
+
+      expect { l1.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+      expect(client.commands.length).to eq(1)
+      expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+    end
+
+    it 'resolves failed items to [] afterwards, with no further I/O' do
+      client = FailingEmbClient.new
+      l1 = described_class.build_batch_loader(client, :minilm, 'a')
+      expect { l1.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+
+      expect(l1.__send__(:__sync)).to eq([])
+      expect(client.commands.length).to eq(1) # no re-send
+    end
+
+    it 'excludes failed items from subsequent batches in the same scope' do
+      client = FailingEmbClient.new
+      l1 = described_class.build_batch_loader(client, :minilm, 'a')
+      expect { l1.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+
+      l2 = described_class.build_batch_loader(client, :minilm, 'c')
+      expect { l2.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+      expect(client.commands.length).to eq(2)
+      expect(client.commands.last).to eq(['EMB.MULTI', 'minilm', 'c'])
+    end
+
+    it 'keeps the pending set bounded across repeated failed batches' do
+      client = FailingEmbClient.new
+      3.times do |i|
+        loader = described_class.build_batch_loader(client, :minilm, "t#{i}")
+        expect { loader.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+        expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+      end
     end
   end
 end

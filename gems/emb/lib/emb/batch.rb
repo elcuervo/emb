@@ -13,7 +13,19 @@ module Emb
       # under the server's max_pairs cap and within client read timeouts.
       client_items.each_slice(chunk) do |slice|
         pairs = slice.flat_map { |_, model, text| Array(text).flat_map { |t| [model.to_s, t] } }
-        results = Array(client.send_command('EMB.MULTI', *pairs))
+
+        begin
+          results = Array(client.send_command('EMB.MULTI', *pairs))
+        rescue StandardError => e
+          # Fail closed: surface the error to the forcing caller once, and drop
+          # every deferred item of this batch from the scope's pending set.
+          # batch-loader only prunes pending items after a *successful* batch
+          # block, so without this a retry would re-run the whole batch (and
+          # each redis-client timeout would already have auto-re-sent it).
+          # Post-failure resolutions yield the default ([]) with no I/O.
+          clear_batch_pending!
+          raise e
+        end
 
         offset = 0
         slice.each do |item|
@@ -31,7 +43,20 @@ module Emb
 
   class << self
     def build_batch_loader(client, model, text)
-      BatchLoader.for([client, model, text]).batch(key: BATCH_KEY, &BATCH_BLOCK)
+      # default_value []: an item whose batch failed (fail-closed) resolves to
+      # an empty vector collection instead of nil, so resolver methods like
+      # `loader.sum` do not blow up with NoMethodError-on-nil.
+      BatchLoader.for([client, model, text]).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
+    end
+
+    # Removes every pending item of the batch scope. batch-loader prunes
+    # pending items only after a successful batch block, so failed batches
+    # would otherwise stay queued: retries would re-run the whole batch and
+    # stale items would be re-sent by later batches in the same scope. Guarded
+    # for a nil executor (no batch scope).
+    def clear_batch_pending!
+      key = [BATCH_BLOCK.source_location, BATCH_KEY]
+      BatchLoader::Executor.current&.items_by_block&.delete(key)
     end
   end
 

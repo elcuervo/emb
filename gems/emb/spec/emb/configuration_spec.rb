@@ -20,7 +20,9 @@ RSpec.describe Emb::Configuration do
       expect(Emb.configuration.pool).to eq(5)
       expect(Emb.configuration.batch).to be true
       expect(Emb.configuration.protocol).to eq(2)
-      expect(Emb.configuration.reconnect_attempts).to eq(3)
+      expect(Emb.configuration.read_timeout).to eq(10)
+      expect(Emb.configuration.write_timeout).to eq(10)
+      expect(Emb.configuration.reconnect_attempts).to eq(0)
       expect(Emb.configuration.driver).to be_nil
     end
   end

@@ -187,5 +187,14 @@ RSpec.describe Emb do
       client = described_class.new(port: 16_379, write_timeout: 3)
       expect(client.ping).to eq('PONG')
     end
+
+    it 'defaults to safe timeouts and no reconnect resend' do
+      client = described_class.new(port: 16_379)
+      config = client.pool.with(&:config)
+      expect(config.read_timeout).to eq(10)
+      expect(config.write_timeout).to eq(10)
+      # reconnect_attempts 0 → redis-client must not auto re-send the command
+      expect(config.retry_connecting?(0, nil)).to be(false)
+    end
   end
 end
