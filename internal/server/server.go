@@ -77,6 +77,12 @@ type Server struct {
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
 	fanOut int
+	// netIn/netOut are aggregate RESP bytes received from and sent to all
+	// connections since process start, exposed as INFO's
+	// total_net_input_bytes/total_net_output_bytes. RX is counted from the raw
+	// command bytes at dispatch; TX is counted by countingConn around every reply.
+	netIn  atomic.Uint64
+	netOut atomic.Uint64
 }
 
 // Option configures a Server.
@@ -159,6 +165,15 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("config", s.handleConfig)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
+		// Account the received command: cmd.Raw is the full RESP bytes including
+		// framing. Counted before auth so ALL traffic is reflected in INFO.
+		if len(cmd.Raw) > 0 {
+			s.netIn.Add(uint64(len(cmd.Raw)))
+		}
+		// Wrap the connection so every reply written by any handler is counted
+		// towards total_net_output_bytes.
+		conn = s.wrapConn(conn)
+
 		if s.password.Load().(string) != "" && !isExempt(cmd) && !isAuthenticated(conn) {
 			conn.WriteError("NOAUTH Authentication required.")
 			return
@@ -551,8 +566,8 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 				batchInfo = fmt.Sprintf(" batch=%d/%d budget=%d eff=%.3f",
 					st.BatchingTimeout, st.BatchingMaxBatch, st.BatchingMaxTokens, st.PaddingEfficiency)
 			}
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d mem=%dmb pool=%s norm=%t%s",
-				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.MemoryMB, st.Pooling, st.Normalize, batchInfo))
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t%s",
+				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize, batchInfo))
 		}
 	}
 
@@ -568,7 +583,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		totalCacheEvictions = cs.Evictions
 	}
 
-	conn.WriteArray(32)
+	conn.WriteArray(40)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -595,6 +610,17 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(s.maxConns)
 	conn.WriteBulkString("max_concurrent_requests")
 	conn.WriteInt(s.maxConcurrentReqs)
+	// Process resource usage: mem is process RSS in MB (heap fallback on
+	// platforms without RSS), and CPU/goroutines are live runtime values.
+	res := s.resourceStats()
+	conn.WriteBulkString("mem")
+	conn.WriteInt(int(res.rssBytes / (1024 * 1024)))
+	conn.WriteBulkString("cpu_user_usec")
+	conn.WriteInt(int(res.cpuUserUsec))
+	conn.WriteBulkString("cpu_sys_usec")
+	conn.WriteInt(int(res.cpuSysUsec))
+	conn.WriteBulkString("goroutines")
+	conn.WriteInt(int(res.goroutines))
 	conn.WriteBulkString("cache_hits")
 	conn.WriteInt(int(totalCacheHits))
 	conn.WriteBulkString("cache_misses")
@@ -720,7 +746,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.STATS - Show server statistics",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.HELP - Show this help message",
-		"INFO [section ...] - Redis-style server info (version, stats, cache hit ratios)",
+		"INFO [section ...] - Redis-style server info (version, stats, memory, cpu, cache hit ratios)",
 		"CONFIG GET [pattern] - List runtime configuration parameters",
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
 		"AUTH <password> - Authenticate with the server",
