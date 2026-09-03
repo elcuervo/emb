@@ -743,7 +743,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.MODELS - List available models and their dimensions",
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
 		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
-		"EMB.STATS - Show server statistics",
+		"EMB.STATS - Show server statistics (requests, connections, mem/cpu, goroutines)",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.HELP - Show this help message",
 		"INFO [section ...] - Redis-style server info (version, stats, memory, cpu, cache hit ratios)",

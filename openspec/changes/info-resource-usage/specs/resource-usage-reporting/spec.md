@@ -16,7 +16,7 @@ The `# Memory` section SHALL report measured process memory as `used_memory_rss_
 #### Scenario: RSS reflects native allocations
 
 - **WHEN** the server has performed inference (which allocates outside the Go heap via CGo)
-- **THEN** `used_memory_rss_bytes` SHALL be read from the platform's process-RSS source (Linux `/proc/self/status`), never from Go heap statistics alone
+- **THEN** `used_memory_rss_bytes` SHALL be read from the platform's process-RSS source (Linux `/proc/self/statm`, macOS `proc_pidinfo`, …), never from Go heap statistics alone
 
 #### Scenario: Fallback when RSS is unavailable
 

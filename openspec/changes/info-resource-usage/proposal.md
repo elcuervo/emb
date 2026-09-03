@@ -5,8 +5,8 @@ In production the operator sees TX/RX traffic spikes that coincide with CPU incr
 ## What Changes
 
 - **`INFO` gains `# Memory` and `# CPU` sections** (Redis-format, added to the default no-args section set):
-  - `# Memory`: process RSS (Linux `/proc/self/status` VmRSS; macOS `mach_task_basic_info`; fallback Go heap), Go heap in-use, goroutine count, and total system memory. RSS, not Go memstats, is the truthful figure because ONNX Runtime allocations live outside the Go heap (CGo).
-  - `# CPU`: cumulative user/system CPU seconds from `runtime/metrics` (cross-platform, covers cgo work) and `GOMAXPROCS`.
+  - `# Memory`: process RSS via gopsutil (`process.MemoryInfo().RSS` — Linux `/proc/self/statm`, macOS `proc_pidinfo`, …; no per-OS files), Go heap in-use, goroutine count, and total system memory. RSS, not Go memstats, is the truthful figure because ONNX Runtime allocations live outside the Go heap (CGo).
+  - `# CPU`: cumulative user/system CPU seconds from gopsutil process times (kernel-accounted from boot, covers cgo work) and `GOMAXPROCS`.
 - **Total net RX/TX byte counters** (`total_net_input_bytes`, `total_net_output_bytes`) in `# Stats`, summed per connection via a counting wrapper — lets the operator overlay bytes-in/out on CPU seconds and request rates to diagnose the TX/RX-spike-vs-CPU correlation directly.
 - **`EMB.STATS` fixes the dead `mem` field** to real RSS and gains `cpu_user_usec`/`cpu_sys_usec` and `goroutines`, keeping RESP array-count parity.
 - **A leak regression test** (white-box, gated-fake pattern used by the batcher budget tests) asserting goroutine count and heap/RSS stay flat across many batches — an automated "no memory leak" guard, plus test coverage for the new INFO sections and filter behavior.
@@ -24,8 +24,8 @@ All fields report only measured or real-configuration values (the `redis-style-i
 
 ## Impact
 
-- **Code**: `internal/server/info.go` (sections, snapshot), `internal/server/server.go` (stats, counting wrapper, dispatch), `internal/registry/sysmem_*.go` (new `CurrentMemoryUsage()` on linux/darwin/fallback), new `internal/registry/resources.go` or equivalent (`runtime/metrics` CPU + heap sampling), `internal/pipeline/pipeline.go` (wire `MemoryMB` rather than leaving it dead).
+- **Code**: `internal/server/info.go` (sections, snapshot), `internal/server/server.go` (stats, counting wrapper, dispatch), `internal/registry/resources.go` (gopsutil-backed process samplers + `runtime/metrics` heap + `NumGoroutine`; the hand-rolled `sysmem_*.go` files are deleted), `internal/pipeline/pipeline.go` (the dead `MemoryMB` field removed).
 - **Tests**: `internal/server/info_config_test.go`, new leak-regression test in `internal/server/` or `internal/pipeline/`; `go vet`/`golangci-lint` clean.
 - **Clients**: Ruby gems parse INFO generically (`parse_info`) — no client changes required.
-- **Dependencies**: none new — `runtime/metrics`, `os`, `syscall` are stdlib.
+- **Dependencies**: `+github.com/shirou/gopsutil/v4` (cross-platform process CPU/RSS/mem; pure Go, shares the already-present `golang.org/x/sys` — no new transitive deps). `runtime/metrics` remains for Go-heap accounting.
 - **Ops**: new fields are readable via existing `INFO` / `EMB.STATS`; no config or wire-format breaks (`INFO <section>` filtering unchanged, unknown sections still return empty).

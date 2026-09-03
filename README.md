@@ -106,10 +106,10 @@ redis-cli EMB minilm "hello world"
 | `EMB.MULTI <model> <text> [<model> <text>...]` | Embed texts across different models in one call |
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, live cache stats |
-| `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown |
+| `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown, **mem (RSS MB), cpu user/sys usec, goroutines** |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
 | `EMB.HELP` | Command reference |
-| `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `clients` |
+| `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `memory`, `cpu`, `clients` |
 | `CONFIG GET [glob]` / `CONFIG SET` | Read or live-tune runtime settings (see [Operations](#operations)) |
 | `AUTH <password>` | Authenticate the connection (required if `password` is set) |
 | `PING` | PONG |
@@ -299,10 +299,12 @@ Equivalent flags: `-idle-timeout 15m`, `-max-connections 100`,
 
 `EMB.STATS` reports uptime, total requests, live `connections` and
 `active_requests` (the real in-flight count), a per-model breakdown
-(requests, avg latency, tokens, errors, memory, pooling), the cache counters,
-and the effective `idle_timeout_ms`/`max_connections`/`max_concurrent_requests`
-— a 10-second check to classify a CPU/stuck-traffic incident as volume,
-saturation, or churn.
+(requests, avg latency, tokens, errors, pooling), live process resources
+(`mem` = RSS MB, `cpu_user_usec`/`cpu_sys_usec`, `goroutines`), the cache
+counters, and the effective
+`idle_timeout_ms`/`max_connections`/`max_concurrent_requests` — a 10-second
+check to classify a CPU/stuck-traffic incident as volume, saturation, or
+churn (and to confirm no memory leak: RSS/goroutines flat between polls).
 
 `INFO [section...]` renders Redis-format sections; with no argument it returns
 all of them:
@@ -310,7 +312,9 @@ all of them:
 - **# Server** — `redis_version`, `emb_version`, `uptime_secs`, `process_id`
 - **# Cache** — hits, misses, hit rate, evictions, entries, byte usage
 - **# Keyspace** — per-model `db0:model=…,keys=…,hits=…,misses=…,hit_rate=…`
-- **# Stats** — `total_requests`, `total_tokens`, `total_errors`, `models_loaded`
+- **# Stats** — `total_requests`, `total_tokens`, `total_errors`, `models_loaded`, `total_net_input_bytes`, `total_net_output_bytes`
+- **# Memory** — `used_memory_rss_bytes` (process RSS incl. ONNX/CGo), `used_memory_heap_bytes`, `goroutines`, `total_system_memory_bytes`
+- **# CPU** — `used_cpu_user_usec`, `used_cpu_sys_usec`, `gomaxprocs`
 - **# Clients** — `active_requests`
 
 `CONFIG GET [glob]` reads the live configuration registry (`CONFIG GET cache*`),

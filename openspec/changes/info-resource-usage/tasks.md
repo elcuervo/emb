@@ -1,8 +1,8 @@
 ## 1. Memory sampling primitives
 
-- [x] 1.1 Add `CurrentMemoryUsage() (rss bytes, fromRSS bool)` to `internal/registry/sysmem_linux.go` (parse `VmRSS` from `/proc/self/status`) and verify with a unit test / quick `go test ./internal/registry/` that the value is positive and grows after allocation
-- [x] 1.2 Implement the same func for darwin (`mach_task_basic_info` via syscall/unsafe, else heap fallback) and fallback (Go heap) build tags, and verify the package compiles with `GOOS=darwin go build ./internal/registry/` and `GOOS=linux go build ./internal/registry/`
-- [x] 1.3 Add a non-blocking Go-heap and CPU sampler (`internal/registry/resources.go`): heap in-use bytes and cumulative user/system CPU microseconds from `runtime/metrics`, plus `NumGoroutine()`, guarding NaN around startup, and verify unit tests cover the guards and monotonicity
+- [x] 1.1 Add `CurrentMemoryUsage() (rss bytes, fromRSS bool)` and `TotalSystemMemory()` backed by gopsutil (`process.MemoryInfo().RSS`, `mem.VirtualMemory().Total`; heap fallback for unsupported platforms) in `internal/registry/resources.go`, replacing the per-OS `sysmem_*.go` files; verify with a unit test / quick `go test ./internal/registry/` that the value is positive and grows after allocation
+- [x] 1.2 Confirm the package builds with `GOOS=darwin go build ./internal/registry/` and `GOOS=linux go build ./internal/registry/` (no build-tagged files remain — gopsutil handles all platforms, including real RSS on macOS)
+- [x] 1.3 Add CPU (`process.Times()` user/system usec — kernel-accounted from boot, no runtime/metrics NaN window) and keep the non-blocking Go-heap sampler + `NumGoroutine()`; verify unit tests cover monotonicity and heap growth
 
 ## 2. INFO sections
 

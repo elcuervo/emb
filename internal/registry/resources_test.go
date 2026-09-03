@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-// TestCurrentMemoryUsageGrowsAfterAllocation verifies the RSS/heap sampler
-// returns a positive value that grows when the process allocates.
+// TestCurrentMemoryUsageGrowsAfterAllocation verifies the RSS sampler returns a
+// positive value that grows when the process allocates (real RSS on Linux and
+// macOS via gopsutil; heap fallback elsewhere).
 func TestCurrentMemoryUsageGrowsAfterAllocation(t *testing.T) {
 	before, fromRSS := CurrentMemoryUsage()
 	if before == 0 {
@@ -27,8 +28,7 @@ func TestCurrentMemoryUsageGrowsAfterAllocation(t *testing.T) {
 	}
 }
 
-// heapInUse is verified separately so the heap-based fallback path is covered
-// on every platform, including ones without an RSS source.
+// heapInUse is verified separately so the heap-based code path is covered.
 func TestHeapInUseBytesPositive(t *testing.T) {
 	if HeapInUseBytes() == 0 {
 		t.Fatal("HeapInUseBytes returned 0")
@@ -43,20 +43,15 @@ func TestHeapInUseBytesPositive(t *testing.T) {
 
 // TestCPUTimeNonDecreasing verifies the CPU sampler returns realistic,
 // monotonic cumulative values (user+system never decrease across calls).
+// gopsutil reads the kernel's process accounting, so no GC is required to
+// prime the sampler.
 func TestCPUTimeNonDecreasing(t *testing.T) {
-	// CPU-class metrics are NaN until the first GC, so initialize them first.
-	runtime.GC()
 	a := CPUUserUsec() + CPUSysUsec()
-	if a == 0 {
-		t.Fatal("cumulative CPU time is 0 at start; expected already-burned runtime CPU")
-	}
 
-	// Burn ~80ms of user CPU, then force a GC: the CPU-class metrics are only
-	// flushed at GC/exit, so without it the second read would miss the work.
+	// Burn ~80ms of user CPU.
 	deadline := time.Now().Add(80 * time.Millisecond)
 	for time.Now().Before(deadline) {
 	}
-	runtime.GC()
 
 	b := CPUUserUsec() + CPUSysUsec()
 	if b < a {
@@ -67,11 +62,9 @@ func TestCPUTimeNonDecreasing(t *testing.T) {
 	}
 }
 
-// TestCPUTimeGuard covers the non-float64/unknown-metric guard: a metric that
-// does not exist must yield 0, never garbage.
-func TestCPUTimeGuard(t *testing.T) {
-	if got := cpuUsec("/no/such/metric:seconds"); got != 0 {
-		t.Errorf("cpuUsec on unknown metric = %d, want 0", got)
+func TestTotalSystemMemoryPositive(t *testing.T) {
+	if TotalSystemMemory() == 0 {
+		t.Fatal("TotalSystemMemory returned 0")
 	}
 }
 

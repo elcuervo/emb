@@ -6,10 +6,10 @@ See `proposal.md` Why and the `resource-usage-reporting` spec for the full requi
 
 - `INFO` is built from an immutable `infoSnapshot` gathered in `infoSnapshot()` and rendered by the pure `buildInfoSections()` (`internal/server/info.go`); five sections, no resource fields.
 - `pipeline.Stats.MemoryMB` (`internal/pipeline/pipeline.go:26`) is declared but never assigned — `EMB.STATS` prints `mem=0mb` (`server.go:555`).
-- `internal/registry/sysmem_{linux,darwin,fallback}.go` expose only `TotalSystemMemory()` (host RAM); no RSS reader exists.
+- `internal/registry/sysmem_{linux,darwin,fallback}.go` (pre-change) exposed only `TotalSystemMemory()` (host RAM); no RSS reader existed. The shipped implementation replaces them with a single gopsutil-backed `resources.go`.
 - The server uses `redcon` v1.6.2: per-command handlers on a `redcon.ServeMux`, all replies via `redcon.Conn` write methods. redcon does no byte accounting.
 - ONNX Runtime is CGo — its allocations live outside the Go heap, so Go memstats alone would under-report true process memory.
-- Go 1.25: `runtime/metrics` provides non-blocking, cross-platform heap and CPU-class samples.
+- Go 1.25: `runtime/metrics` provides non-blocking, cross-platform heap samples (kept for the Go heap); gopsutil/v4 provides cross-platform process RSS and CPU times (the shipped source for the new sections).
 
 ## Goals / Non-Goals
 
@@ -26,24 +26,25 @@ See `proposal.md` Why and the `resource-usage-reporting` spec for the full requi
 
 ## Decisions
 
-### D1 — RSS source: Linux `/proc/self/status` VmRSS, macOS `mach_task_basic_info`, fallback Go heap
+### D1 — RSS source: gopsutil `process.MemoryInfo().RSS` (one file, all platforms)
 
-Process RSS is the only number that includes ONNX Runtime's native arena (`internal/onnx/runtime.go` sets an ORT CPU memory arena; Go `runtime.ReadMemStats` would miss it). This matches the archived `metrics-and-cleanup`/`redis-style-info` design intent ("real RSS via `registry/sysmem`") that never landed.
+Process RSS is the only number that includes ONNX Runtime's native arena (`internal/onnx/runtime.go` sets an ORT CPU memory arena; Go `runtime.ReadMemStats` would miss it). This matches the archived `metrics-and-cleanup`/`redis-style-info` design intent ("real RSS") that never landed.
 
-- Linux: parse `VmRSS` from `/proc/self/status` (zero syscalls beyond one file read; cheapest truthful source).
-- macOS: heap fallback is the shipped implementation (`CurrentMemoryUsage` in `sysmem_darwin.go` returns `HeapInUseBytes()`); a true `mach_task_basic_info` source requires cgo and is a documented future option (build-tagged cgo would also break `GOOS=darwin` cross-builds from non-mac hosts).
-- Other GOOS: fall back to Go heap in-use.
-- Alternatives: `runtime.ReadMemStats` (STW cost and misses CGo — rejected), `Getrusage(RUSAGE_SELF)` (non-portable and granularity quirks — rejected in favor of `/proc`).
+`github.com/shirou/gopsutil/v4` is the general-purpose process-metrics library (pure Go, no cgo; the Go `psutil`). `CurrentMemoryUsage()` calls `process.NewProcess(os.Getpid()).MemoryInfo()` — Linux reads `/proc/self/statm`, macOS `proc_pidinfo`, Windows/BSD equivalents — and falls back to the Go heap only when the platform is unsupported or the call errors. This removed the per-OS `sysmem_*.go` build-tagged files (and the macOS heap-fallback gap: gopsutil reports real RSS on macOS, verified live at ~262 MB including the loaded ONNX model).
 
-New funcs in `internal/registry/sysmem_*.go` (build-tagged, same files as `TotalSystemMemory`): `CurrentMemoryUsage() uint64` returning RSS bytes and a `SupportsRSS() bool` — or a single `CurrentMemoryUsage() (rssBytes uint64, fromRSS bool)` so the INFO renderer can decide fallback semantics (spec: RSS field equals heap when platform lacks RSS).
+Alternatives: `runtime.ReadMemStats` (STW cost and misses CGo — rejected); hand-rolled `/proc` parser (what this change originally shipped — replaced by gopsutil to avoid custom platform code and to fix macOS RSS).
 
-### D2 — CPU sampling: `runtime/metrics` CPU classes (derived system time)
+### D2 — CPU sampling: gopsutil process times (kernel-accounted from boot)
 
-Cumulative processor time via `runtime/metrics` (non-blocking, no STW). Go 1.26's metric set exposes `/cpu/classes/total:cpu-seconds` and `/cpu/classes/user:cpu-seconds` only (there is no system class), so `used_cpu_sys_usec` is derived as **total − user**. The classes are NaN until the first GC, so `resources.go` runs one startup `runtime.GC()` via `init()` (standard practice) to make INFO CPU meaningful from boot. Heap sampling uses `/memory/classes/heap/objects:bytes` (the in-use heap; the older `heap/in-use` name is gone from recent metric sets).
+### D2 — CPU sampling: gopsutil process times (kernel-accounted from boot)
 
-- Convert to microseconds (`used_cpu_user_usec`, `used_cpu_sys_usec`) to match the Redis `used_cpu_user`/`used_cpu_sys` semantics while keeping explicit units (emb convention).
+`process.Times()` returns the process's cumulative user/system CPU seconds directly from the kernel (Linux `/proc/self/stat`, macOS `proc_pidinfo`/getrusage) — real values **from boot**, covering cgo execution windows, with no sampling quirk. This replaced the original `runtime/metrics` approach, which had two warts: Go 1.26's metric set exposes only total+user classes (system had to be derived as total − user) and the classes stay NaN until the first GC (requiring a startup `runtime.GC()` hack in `init()`).
+
+- Convert to microseconds (`used_cpu_user_usec`, `used_cpu_sys_usec`).
 - `gomaxprocs` echoes `runtime.GOMAXPROCS(0)` — real config, explains thread pressure (investigation: two model sessions each run `intra_op_threads=cores−2`, so `2×(cores−2)` ONNX threads can oversubscribe).
-- Alternatives: `syscall.Getrusage` (Linux/darwin only — rejected for portability), `runtime.ReadMemStats` CPU fields (none).
+- Heap sampling stays on `runtime/metrics` `/memory/classes/heap/objects:bytes` (the Go heap is Go-runtime-only knowledge; non-blocking).
+- `TotalSystemMemory()` via gopsutil `mem.VirtualMemory().Total` (replaces the `unix.Sysinfo`/`SysctlUint64` helpers).
+- Alternatives: `syscall.Getrusage` directly (Linux/darwin only — gopsutil wraps it and adds the other platforms), `runtime/metrics` CPU classes (NaN-until-GC + derived system — rejected as the shipped version).
 
 ### D3 — Net byte counters via handler + connection wrappers in `server.go`
 
@@ -86,9 +87,9 @@ Pattern from the deterministic batcher tests (`.pi/`-documented: gated fakes, no
 ## Risks / Trade-offs
 
 - [INFO is auth-exempt] → The new Memory/CPU fields remain world-readable on password-protected servers (existing probe semantics, consistent with `EMB.READY`/`PING`). → No secret material is leaked (RSS/CPU are not credentials); document in `EMB.HELP` as part of INFO. AUTH-gating INFO would be a separate change.
-- [RSS parse cost on every INFO call] → `/proc/self/status` read is sub-microsecond; INFO is not hot-path (operators poll at Hz rates).
+- [Metric sampling cost per INFO call] → one gopsutil process handle + syscall per call; INFO is not hot-path (operators poll at Hz rates).
 - [Counter drift] → `len(cmd.Raw)` counts exact wire bytes; `countingConn` counts every reply byte, including multiplexed replies that bypass individual `Write*` returns — verify with a count-parity test comparing a measured exchange (send/receive known bytes, assert counters ≥ that).
-- [runtime/metrics cumulative seconds can be NaN in early startup before first GC] → guard: treat NaN as 0.
+- [gopsutil process handle overhead] → the handle is per-call and tiny; could be memoized on the Server if profiling ever shows it. gopsutil is the standard abstraction (Docker, exporters) and pure Go — no cgo or per-OS code to maintain.
 - [goroutines baseline noise] → leak test asserts return-to-baseline after work completes, not during; tolerance for runtime-internal goroutines.
 - [Write-method byte counts may not include RESP framing in all redcon versions] → the TX count is a lower bound on wire bytes; spec's "at least reply wire size" scenario accommodates this; verified against redcon v1.6.2 at implementation time — sizing is computed from the exact RESP2 encoding rules, matching framing exactly.
 

@@ -230,15 +230,18 @@ Emb.stats
 ### `Emb.server_info` — sectioned INFO, parsed
 
 The Redis-style `INFO` reply is parsed into a nested Hash. **No arguments = all
-sections**; pass section names to filter (`:server`, `:cache`, `:keyspace`, `:stats`, `:clients`):
+sections**; pass section names to filter (`:server`, `:cache`, `:keyspace`, `:stats`, `:memory`, `:cpu`, `:clients`):
 
 ```ruby
 Emb.server_info
 # => {Server: {redis_version: "0.2.4", emb_version: "0.2.4", uptime_secs: "7", ...},
 #     Cache: {cache_hits: 0, cache_misses: 0, cache_hit_rate: "0.0%", ...},
-#     Keyspace: {db0: "model=minilm,keys=0,hits=0,misses=0,hit_rate=0.0%"}, ...}
+#     Keyspace: {db0: "model=minilm,keys=0,hits=0,misses=0,hit_rate=0.0%"},
+#     Memory: {used_memory_rss_bytes: 262438912, used_memory_heap_bytes: 154960,
+#              goroutines: 4, total_system_memory_bytes: 25769803776},
+#     CPU: {used_cpu_user_usec: 188900, used_cpu_sys_usec: 50462, gomaxprocs: 10}, ...}
 
-Emb.server_info(:server, :cache)   # only those two sections
+Emb.server_info(:memory, :cpu)   # live process resources only
 ```
 
 ### `Emb.config` — hot config read & change
