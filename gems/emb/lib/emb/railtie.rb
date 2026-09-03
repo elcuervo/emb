@@ -40,6 +40,12 @@ if defined?(Rails::Railtie)
           end
         end
 
+        if defined?(Sidekiq::Testing)
+          # Testing modes (dev INLINE_SIDEKIQ, RSpec fake/inline) execute jobs
+          # through their own middleware chain, not the server chain.
+          Sidekiq::Testing.server_middleware { |chain| chain.add Emb::JobMiddleware }
+        end
+
         if defined?(Shoryuken)
           Shoryuken.configure_server do |shoryuken_config|
             shoryuken_config.server_middleware { |chain| chain.add Emb::JobMiddleware }

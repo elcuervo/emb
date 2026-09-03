@@ -86,6 +86,10 @@ abstraction with no behavioral value.
   before or after the railtie initializer runs.
 - Sidekiq/Shoryuken server-middleware registration is conditional on
   `defined?(Sidekiq)`/`defined?(Shoryuken)` in `after_initialize`.
+- `Sidekiq::Testing` (dev INLINE_SIDEKIQ, fake/inline test modes) executes jobs
+  through its own middleware chain (`Sidekiq::Testing.server_middleware`), so the
+  middleware is registered there too when testing is loaded — server and testing
+  chains each get the clear per job run.
 
 ### D4. Railtie wiring and load-order safety
 

@@ -20,8 +20,8 @@ goal is batching by default, cleanly scoped to request and worker lifecycles.
   per-thread batch scope after each job execution, mirroring `Emb::Middleware`'s
   guarantee for requests (cleared even on exception). Registered automatically for
   ActiveJob (via `around_perform` on `ActiveJob::Base` — covering SolidQueue and
-  every ActiveJob adapter), Sidekiq server middleware, and Shoryuken server
-  middleware.
+  every ActiveJob adapter), Sidekiq server middleware (including
+  `Sidekiq::Testing`/inline modes), and Shoryuken server middleware.
 - **Shared scope-clear helper** (`Emb::BatchScope`) used by both middlewares so
   request and job boundaries guarantee identical semantics.
 - **README fixes**: correct the stale "default is `false`" claim about the `batch`

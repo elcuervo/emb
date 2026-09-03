@@ -143,6 +143,40 @@ module RailtieFakeRails
       (@added ||= []) << middleware
     end
   end
+
+  # Sidekiq stand-in that also exposes a nested Testing module (mirroring
+  # Sidekiq::Testing) so the testing-chain registration is exercised.
+  class SidekiqWithTesting
+    class << self
+      attr_reader :server_added, :testing_added
+
+      def configure_server(&block)
+        block.call(self)
+      end
+
+      def server_middleware(&block)
+        block.call(self)
+      end
+
+      def add(middleware)
+        (@server_added ||= []) << middleware
+      end
+    end
+
+    module Testing
+      class << self
+        attr_reader :testing_added
+
+        def server_middleware(&block)
+          block.call(self)
+        end
+
+        def add(middleware)
+          (@testing_added ||= []) << middleware
+        end
+      end
+    end
+  end
 end
 
 RSpec.describe 'Emb::Railtie' do
@@ -214,6 +248,16 @@ RSpec.describe 'Emb::Railtie' do
 
     expect(sidekiq.added).to eq([Emb::JobMiddleware])
     expect(shoryuken.added).to eq([Emb::JobMiddleware])
+  end
+
+  it 'registers Emb::JobMiddleware in the Sidekiq::Testing chain when testing is loaded' do
+    sidekiq = RailtieFakeRails::SidekiqWithTesting
+    stub_const('Sidekiq', sidekiq)
+
+    boot_railtie
+
+    expect(sidekiq.server_added).to eq([Emb::JobMiddleware])
+    expect(sidekiq::Testing.testing_added).to eq([Emb::JobMiddleware])
   end
 
   it 'skips all job protection when config.emb.job_middleware is false' do

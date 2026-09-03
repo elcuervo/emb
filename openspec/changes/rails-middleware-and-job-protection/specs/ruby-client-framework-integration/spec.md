@@ -32,6 +32,12 @@ When the gem is loaded in a Rails application, the Railtie SHALL register `Emb::
 - **WHEN** a Rails application defines and performs an ActiveJob job with lazy embeddings
 - **THEN** the per-thread batch scope SHALL be cleared after the job completes, even on exception
 
+#### Scenario: Sidekiq testing modes are protected
+
+- **WHEN** a Rails application boots with `Sidekiq::Testing` loaded (dev INLINE_SIDEKIQ or test modes)
+- **THEN** `Emb::JobMiddleware` SHALL be added to the Sidekiq testing middleware chain
+- **AND** inline/faked job executions SHALL have their batch scope cleared on completion
+
 #### Scenario: Sidekiq server middleware is registered
 
 - **WHEN** a Rails application boots with Sidekiq loaded

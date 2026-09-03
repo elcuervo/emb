@@ -7,6 +7,7 @@
 
 - [x] 2.1 Add `Emb::Railtie` (file guarded by `defined?(Rails::Railtie)`, `config.emb` OrderedOptions defaults `middleware: true`/`job_middleware: true`) that inlines all wiring sentry-rails style: idempotent `app.middleware.use Emb::Middleware` initializer, ActiveJob `around_perform` via `ActiveSupport.on_load(:active_job)`, conditional `Sidekiq`/`Shoryuken` server-middleware registration in `after_initialize`; verify `emb.rb` conditional require loads cleanly with no Rails present
 - [x] 2.2 Verify the Railtie with the fake-Rails boot harness in `railtie_spec.rb` (load order, middleware mounting, ActiveJob/Sidekiq/Shoryuken registration, both opt-outs) — this harness is the single test surface for registration (no separate integrations module/spec)
+- [x] 2.3 Register `Emb::JobMiddleware` into `Sidekiq::Testing.server_middleware` (guarded by `defined?(Sidekiq::Testing)`) so dev INLINE_SIDEKIQ and fake/inline test modes clear per job run; verify with a harness spec asserting both the server and testing chains receive the middleware
 
 ## 3. Documentation
 
