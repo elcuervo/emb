@@ -6,9 +6,12 @@ require_relative 'emb/commands'
 require_relative 'emb/runtime_config'
 require_relative 'emb/client'
 require_relative 'emb/proxy'
+require_relative 'emb/batch_scope'
+require_relative 'emb/middleware'
+require_relative 'emb/job_middleware'
 require_relative 'emb/multi'
 require_relative 'emb/batch'
-require_relative 'emb/middleware'
+require_relative 'emb/railtie' if defined?(Rails::Railtie)
 
 module Emb
   class << self

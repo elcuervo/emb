@@ -124,8 +124,8 @@ Emb.setup(
 ```
 
 See the [redis-client documentation](https://github.com/redis-rb/redis-client) for
-all available options. Only `pool` and `batch` are handled by the gem — everything
-else passes through to `RedisClient.new`.
+all available options. Only `pool`, `batch`, and `batch_size` are handled by the
+gem — everything else passes through to `RedisClient.new`.
 
 ## Instance-based clients
 
@@ -340,27 +340,83 @@ Emb.new(url: "redis://localhost:6379", batch: true)
 ```
 
 With `batch: true`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
-`EMB.MULTI` on first use. The default is `false` — the proxy API stays eager,
-sending `EMB` immediately. `Emb.batch` works regardless of the option, and
-`Emb.multi` remains the explicit, eager, deterministic batching API.
+`EMB.MULTI` on first use. Batching is **on by default**; the proxy API stays
+eager only when you opt out with `batch: false`. `Emb.batch` works regardless
+of the option, and `Emb.multi` remains the explicit, eager, deterministic
+batching API.
 
 ### Clearing the cache per request
 
-The per-thread batch scope holds cached embeddings for the life of the thread. In
-request-shaped processes (Rails, Rack apps, Sidekiq) mount `Emb::Middleware` to
-clear the scope at the end of each request:
+The per-thread batch scope holds cached embeddings for the life of the thread.
+In a Rails application the bundled Railtie mounts `Emb::Middleware`
+automatically, so the scope is cleared at the end of every request with no
+configuration:
 
 ```ruby
-# config/application.rb (Rails)
-config.middleware.use Emb::Middleware
+# nothing to do — Emb::Railtie inserts Emb::Middleware for you
+```
 
-# Any Rack app
+Opt out if you want to manage the stack yourself:
+
+```ruby
+# config/application.rb
+config.emb.middleware = false
+```
+
+If your Gemfile loads `emb` before Rails is required (non-standard boot order), the
+guarded railtie require in `emb.rb` is skipped — add `require "emb/railtie"` in
+`config/application.rb` right after `require "rails/all"` (or in an initializer).
+
+The middleware is also safe to mount manually in any Rack app (the Railtie
+skips insertion when it is already present):
+
+```ruby
 use Emb::Middleware
 ```
 
 The scope is cleared even when the app raises, and a fresh scope starts
 automatically with the next request. Loaders created but never used within a
 request are dropped — the create-then-consume contract applies per request.
+
+### Job-scoped cache clearing
+
+The Railtie also registers `Emb::JobMiddleware` — the same per-scope clearing
+for background work — for every job framework present. Each job execution
+starts with a fresh batch scope: cached embeddings and loaders created but
+never used are dropped at the end of the job (even when it raises), so worker
+threads never leak scope state between jobs.
+
+- **ActiveJob** (SolidQueue, Sidekiq, Shoryuken, async, test adapters): an
+  `around_perform` callback on `ActiveJob::Base` registered by the Railtie.
+- **Plain Sidekiq workers** (non-ActiveJob): a server middleware added by the
+  Railtie.
+- **Plain Shoryuken workers** (non-ActiveJob): a server middleware added by the
+  Railtie.
+
+```ruby
+# opt out of all job-scope protection
+config.emb.job_middleware = false
+```
+
+In a non-Rails process, register the middleware manually:
+
+```ruby
+# sidekiq.rb / an initializer
+Sidekiq.configure_server do |config|
+  config.server_middleware { |chain| chain.add Emb::JobMiddleware }
+end
+
+# Shoryuken
+Shoryuken.configure_server do |config|
+  config.server_middleware { |chain| chain.add Emb::JobMiddleware }
+end
+```
+
+The Railtie also registers `Emb::JobMiddleware` into the `Sidekiq::Testing` middleware
+chain when `Sidekiq::Testing` is loaded *before the app finishes booting* (e.g. a dev
+`INLINE_SIDEKIQ` initializer). For RSpec test modes, `sidekiq/testing` typically loads
+after the app boots, so require it before your environment to get per-job clearing in
+fake/inline tests — e.g. `gem "sidekiq", require: ["sidekiq", "sidekiq/testing"]`.
 
 ## Performance
 

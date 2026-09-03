@@ -1,6 +1,6 @@
 ## Why
 
-The Go `emb` server currently strips trailing [PAD] tokens from tokenizer output and passes the correct attention mask to ONNX Runtime. This produces mathematically correct embeddings. However, the existing Ruby `Siglip2Text` implementation (`unsplash-api/lib/siglip2_text.rb`) was written without an attention mask — it passes padded token sequences to ONNX with no mask, defaulting to all-1s attention.
+The Go `emb` server currently strips trailing [PAD] tokens from tokenizer output and passes the correct attention mask to ONNX Runtime. This produces mathematically correct embeddings. However, the existing Ruby `Siglip2Text` implementation (`lib/siglip2_text.rb`) was written without an attention mask — it passes padded token sequences to ONNX with no mask, defaulting to all-1s attention.
 
 This means emb's correct output doesn't match the Ruby production output. All vectors previously indexed by `Siglip2Text.encode` would need re-indexing if emb were deployed with the current correct behavior.
 

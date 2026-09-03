@@ -2,7 +2,7 @@
 
 The current tokenizer (`internal/tokenizer/huggingface.go`) is a hand-rolled implementation of WordPiece and BPE. This creates a maintenance burden: every HuggingFace tokenizer quirk, new model type, or tokenization edge case must be manually reimplemented and kept in sync with the upstream `huggingface/tokenizers` Rust library. The pure Go tokenizer only supports WordPiece and BPE — Unigram models (used by T5, ALBERT, XLNet) are not supported at all.
 
-The Ruby PoC at `unsplash-api/tmp/emb-poc/` shows the intended validation flow: the Ruby `tokenizers` gem (wrapping the official Rust library) produces embeddings matching emb-server's output. But this only validates one model type. Every new model format requires manual scrutiny.
+The Ruby PoC at `tmp/emb-poc/` shows the intended validation flow: the Ruby `tokenizers` gem (wrapping the official Rust library) produces embeddings matching emb-server's output. But this only validates one model type. Every new model format requires manual scrutiny.
 
 Using `daulet/tokenizers` (Go bindings for the official `huggingface/tokenizers` Rust library) means emb supports **any** HuggingFace tokenizer format out of the box — WordPiece, BPE, Unigram — with no manual reimplementation, no drift, no sync burden.
 

@@ -101,21 +101,28 @@ the same lazy embedding more than once SHALL NOT trigger additional server comma
 
 ### Requirement: Batch mode configuration
 
-The gem SHALL accept a `batch` option in its client configuration, defaulting to `false`.
-When `true`, the standard proxy API (`Emb[:model]["text"]` / `client[:model]["text"]`)
+The gem SHALL accept a `batch` option in its client configuration, defaulting to `true`.
+When `true` (the default), the standard proxy API (`Emb[:model]["text"]` / `client[:model]["text"]`)
 SHALL return lazy batched embeddings instead of sending commands immediately.
-When `false`, the standard proxy API SHALL behave exactly as before this capability.
+When `false`, the standard proxy API SHALL send `EMB` immediately (eager), exactly as
+before batching was introduced.
 
-#### Scenario: Default is eager
+#### Scenario: Default is lazy
 
 - **WHEN** `client = Emb.new` is created without a `batch` option
-- **THEN** `client[:minilm]["hello"]` SHALL send `EMB` immediately and return an Array of Float
+- **THEN** `client[:minilm]["hello"]` SHALL NOT send a command at call time
+- **AND** using the returned value SHALL send `EMB.MULTI` and return an Array of Float
 
-#### Scenario: Batch mode makes the proxy lazy
+#### Scenario: Batch mode makes the proxy lazy (explicit)
 
 - **WHEN** `client = Emb.new(batch: true)` is created
 - **THEN** `client[:minilm]["hello"]` SHALL NOT send a command at call time
 - **AND** using the returned value SHALL send `EMB.MULTI` and return an Array of Float
+
+#### Scenario: Opt-out restores eager sends
+
+- **WHEN** `client = Emb.new(batch: false)` is created
+- **THEN** `client[:minilm]["hello"]` SHALL send `EMB` immediately and return an Array of Float
 
 ### Requirement: Failure handling follows MGET semantics
 
@@ -155,3 +162,35 @@ loaders into the next request.
 
 - **WHEN** the wrapped application raises an exception
 - **THEN** the per-thread batch scope SHALL still be cleared
+### Requirement: Job-scoped cache clearing
+
+The gem SHALL provide `Emb::JobMiddleware`, a background-job middleware that clears
+the per-thread batch scope after each job execution via `BatchLoader::Executor.clear_current`,
+mirroring the guarantee `Emb::Middleware` provides for Rack requests. Clearing SHALL
+happen even when the job raises, and each job SHALL start with a fresh batch scope.
+The middleware SHALL be execution-framework agnostic: it SHALL wrap a job callback
+and yield to the job body, so the same class can be registered in any job processor
+(ActiveJob, Sidekiq, Shoryuken, and adapters built on them such as SolidQueue).
+
+#### Scenario: Scope is cleared after each job
+
+- **WHEN** `Emb::JobMiddleware` wraps a job body that creates and uses lazy embeddings
+- **THEN** the batch scope SHALL be empty after the job completes
+- **AND** a second job on the same thread SHALL start with a fresh scope (the same pair re-sends `EMB.MULTI`)
+
+#### Scenario: Scope is cleared when the job raises
+
+- **WHEN** `Emb::JobMiddleware` wraps a job body that raises after creating lazy embeddings
+- **THEN** the per-thread batch scope SHALL still be cleared
+
+#### Scenario: Unused loaders are dropped at job end
+
+- **WHEN** a job creates lazy loaders that are never used
+- **THEN** no `EMB.MULTI` SHALL be sent for them
+- **AND** they SHALL be dropped when the job ends, not carried into the next job
+
+#### Scenario: Middleware yields to the job body
+
+- **WHEN** `Emb::JobMiddleware` wraps job execution with the framework's middleware signature (e.g. `call(worker, job, queue)` for Sidekiq, `call(worker, queue, sqs_msg, body)` for Shoryuken)
+- **THEN** it SHALL invoke the rest of the middleware chain (yield) and the job body regardless of the number of positional arguments
+- **AND** it SHALL pass through the job body's return value or exception unchanged
