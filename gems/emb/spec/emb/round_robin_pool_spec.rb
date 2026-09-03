@@ -198,6 +198,24 @@ RSpec.describe Emb::RoundRobinPool do
       pool.with { |_conn| inner = pool.with { |c| c } }
       expect(inner).to equal(pool.connections[0])
     end
+
+    it 'keeps held state per pool when pools nest (regression: shared thread slot)' do
+      big = described_class.new(2) { RecordingRedisClient.new }
+      small = described_class.new(1) { RecordingRedisClient.new }
+
+      # Advance big's rotation so the nested big.with holds index 1, then call
+      # small.with inside: with a thread-wide index slot the index would leak
+      # across pools and yield nil (or an unlocked shared connection).
+      big.with { |_conn| :advance }
+
+      held = nil
+      big.with do |conn|
+        expect(conn).to equal(big.connections[1])
+        held = small.with { |c| c }
+      end
+
+      expect(held).to equal(small.connections[0])
+    end
   end
 
   describe 'fork safety' do

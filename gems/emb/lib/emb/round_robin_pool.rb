@@ -41,20 +41,14 @@ module Emb
 
     # Yields the next connection in rotation order. Safe from multiple threads:
     # up to `size` commands run in parallel, each on its own connection. A
-    # nested `with` from the same thread re-enters the held connection without
-    # re-locking.
-    def with
+    # nested `with` from the same thread re-enters the connection this pool
+    # already holds without re-locking; other pools are unaffected.
+    def with(&)
       held = Thread.current[THREAD_KEY]
-      if held
-        yield @connections[held]
+      if held&.key?(self)
+        yield @connections[held[self]]
       else
-        idx, connection = pick
-        Thread.current[THREAD_KEY] = idx
-        begin
-          @locks[idx].synchronize { yield connection }
-        ensure
-          Thread.current[THREAD_KEY] = nil
-        end
+        take(held, &)
       end
     end
 
@@ -79,6 +73,21 @@ module Emb
     end
 
     private
+
+    # Acquires the next connection, records it as held by this thread/pool, and
+    # releases both on exit — even when the block raises.
+    def take(held)
+      idx, connection = pick
+      held ||= {}
+      Thread.current[THREAD_KEY] = held
+      held[self] = idx
+      begin
+        @locks[idx].synchronize { yield connection }
+      ensure
+        held.delete(self)
+        Thread.current[THREAD_KEY] = nil if held.empty?
+      end
+    end
 
     def pick
       @index_mutex.synchronize do

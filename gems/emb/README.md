@@ -94,11 +94,15 @@ and queue it there even while other instances sit idle. Round-robin spreading ac
 Commands beyond the pool's parallelism do **not** time out: when `pool` commands are
 already in flight, later commands wait on the shared connections until one frees
 (there is no checkout timeout — unlike the previous pool's 5s
-`ConnectionPool::TimeoutError`). For inference workloads this lets commands ride out
-token-budget batching instead of erroring.
+`ConnectionPool::TimeoutError`). Only the wait for a free pool connection is
+unbounded — once a command runs, `RedisClient`'s `connect_timeout`,
+`read_timeout`, and `write_timeout` still apply. For inference workloads this
+lets commands ride out token-budget batching instead of erroring.
 
-Locally (a single server) any pool size behaves identically: every command simply
-rounds through the same connections. The pool is usually not the bottleneck for
+Locally (a single server) only the backend selection is identical whatever the
+pool size — every command reaches the same server. The pool size still controls
+how many persistent connections the client holds and how many commands run in
+parallel. The pool is usually not the bottleneck for
 inference-bound workloads (small pools are fine); it becomes a knob at high
 concurrency on a multi-model box — see [Performance](#performance). With
 round-robin selection up to `pool` commands run in parallel; beyond that, commands
@@ -190,9 +194,9 @@ automatically.
 
 > **Per-instance data.** `Emb.server_info`, `stats`, `info`, and `config` read
 > from ONE instance, and with round-robin connection selection that instance
-> changes between calls — each call is a sample. `Emb.config[key] = value`
-> mutates one (arbitrary) instance. Use per-connection queries if you need a
-> specific or aggregated view.
+> may change between calls (with `pool: 1` it never does) — each call is a
+> sample. `Emb.config[key] = value` mutates one (arbitrary) instance. Use
+> per-connection queries if you need a specific or aggregated view.
 
 The server exposes Redis-style `INFO` and `CONFIG` commands; the gem wraps them.
 
