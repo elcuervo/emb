@@ -4,7 +4,6 @@ source 'https://rubygems.org'
 
 gemspec
 
-gem 'connection_pool'
 gem 'redis-client'
 
 gem 'rake', require: false

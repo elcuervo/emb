@@ -3,7 +3,6 @@ PATH
   specs:
     emb (0.3.0)
       batch-loader (~> 2.0)
-      connection_pool (~> 2.5)
       redis-client (~> 0.24)
 
 GEM
@@ -71,7 +70,6 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  connection_pool
   emb!
   rake
   redis-client
