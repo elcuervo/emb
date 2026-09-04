@@ -1,12 +1,20 @@
 # frozen_string_literal: true
 
 require 'batch_loader'
+require 'redis_client'
 require_relative 'batch_dispatch'
 
 module Emb
   extend BatchDispatch
 
   BATCH_KEY = :emb
+
+  # Raised by resolve_slice when the server reply carries fewer entries than
+  # the slice's texts. Subclasses RedisClient::ProtocolError so the existing
+  # fail-closed rescue/wrap paths treat it as a client error, but stays
+  # distinct so transient_error? does not count it as a transport retry: the
+  # reply shape was wrong on the single send — nothing was re-sent.
+  ShortReplyError = Class.new(RedisClient::ProtocolError)
 
   BATCH_BLOCK = lambda do |items, loader, _args|
     items.group_by(&:first).each do |client, client_items|
@@ -32,6 +40,11 @@ module Emb
   end
 
   class << self
+    # BatchDispatch mechanics (pack_slices, dispatch_parallel, resolve_slice,
+    # ...) are internal to BATCH_BLOCK; nothing outside Emb calls them with an
+    # explicit receiver.
+    private(*BatchDispatch.instance_methods(false))
+
     def build_batch_loader(client, model, text)
       # default_value []: an item whose batch failed (fail-closed) resolves to
       # an empty vector collection instead of nil, so resolver methods like
@@ -90,10 +103,12 @@ module Emb
     # reconnect_attempts: ConnectionError (connect/transport breaks) and
     # ProtocolError. ReadTimeoutError is intercepted before the retry loop
     # (a timed-out command may already have executed server work), so it is
-    # terminal and counts a single attempt.
+    # terminal and counts a single attempt. Emb::ShortReplyError is raised
+    # locally by resolve_slice (reply shape wrong on the single send), so it
+    # is likewise terminal and counts one attempt.
     def transient_error?(error)
       (error.is_a?(RedisClient::ConnectionError) && !error.is_a?(RedisClient::ReadTimeoutError)) ||
-        error.is_a?(RedisClient::ProtocolError)
+        (error.is_a?(RedisClient::ProtocolError) && !error.is_a?(ShortReplyError))
     end
 
     private :clear_batch_pending!, :fail_batch!, :retry_budget, :transient_error?

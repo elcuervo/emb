@@ -27,11 +27,13 @@ module Emb
     # Maps a slice's reply entries onto its items in deferral order. Runs on
     # the forcing thread (batch-loader's executor is per-thread), so workers
     # never resolve loaders. A reply shorter than the slice's texts is a
-    # protocol violation: fail the batch via RedisClient::ProtocolError.
+    # protocol violation: fail the batch via Emb::ShortReplyError (distinct
+    # from a client-raised ProtocolError so it is not counted as a transport
+    # retry).
     def resolve_slice(loader, slice, results)
       expected = slice.sum { |_, _, text| Array(text).size }
       unless results.size >= expected
-        raise RedisClient::ProtocolError, "expected #{expected} reply entries, got #{results.size}"
+        raise ShortReplyError, "expected #{expected} reply entries, got #{results.size}"
       end
 
       offset = 0
@@ -123,15 +125,20 @@ module Emb
 
     # Packs items into shares by accumulated text count so one command stays
     # within `chunk` texts. An item larger than the chunk goes alone; the
-    # server truncates it with null reply slots, as in the eager path.
+    # server truncates it with null reply slots, as in the eager path. `used`
+    # carries the running text count of the current slice instead of
+    # re-summing it for every item (O(n) per item would be O(n²)).
     def pack_slices(items, chunk)
       slices = []
+      used = 0
       items.each do |item|
         size = Array(item[2]).size
-        if slices.empty? || slices.last.sum { |i| Array(i[2]).size } + size > chunk
+        if slices.empty? || used + size > chunk
           slices << [item]
+          used = size
         else
           slices.last << item
+          used += size
         end
       end
       slices

@@ -105,9 +105,10 @@ end
 # Warm inference baseline: median latency of a few sequential eager embeds of
 # distinct texts (server cache-cold for these texts).
 def inference_baseline_ms
+  client = eager_client # one client; construction is excluded from the timer
   latencies = distinct_texts(BASELINE, "baseline-#{Process.pid}").map do |t|
     started = ms
-    Emb::Proxy.new(eager_client, MODEL)[t]
+    Emb::Proxy.new(client, MODEL)[t]
     ms - started
   end
   percentile(latencies.sort, 50)

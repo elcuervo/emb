@@ -659,7 +659,9 @@ RSpec.describe Emb do
 
       Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
 
-      expect(client.commands).to eq([%w[EMB minilm x y], %w[EMB minilm z]])
+      # Worker threads append to @commands concurrently: order is not
+      # guaranteed even though resolution stays in deferral order.
+      expect(client.commands).to match_array([%w[EMB minilm x y], %w[EMB minilm z]])
       expect(loaded.map(&:last)).to eq([[[1.0, 1.0], [2.0, 2.0]], [3.0, 3.0]])
     end
 
@@ -667,10 +669,15 @@ RSpec.describe Emb do
       short_client = FakeEmbClient.new(
         %w[EMB minilm a b] => [FakeEmbClient.vec(1.0)] # 2 texts, 1 entry
       )
+      # A locally detected reply-shape failure is not a transport retry: even
+      # with a retry budget configured, it reports a single attempt (the
+      # resolve_slice guard raises before any re-send).
+      short_client.define_singleton_method(:reconnect_attempts) { 2 }
       l1 = described_class.build_batch_loader(short_client, :minilm, 'a')
       described_class.build_batch_loader(short_client, :minilm, 'b')
 
       expect { l1.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
         expect(e.cause).to be_a(RedisClient::ProtocolError)
         expect(e.message).to include('expected 2 reply entries, got 1')
       end
