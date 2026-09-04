@@ -3,18 +3,32 @@
 module Emb
   class Configuration
     OPTIONS = %i[
-      host port url pool batch batch_size driver protocol
+      host port url pool lazy batch_size driver protocol
       connect_timeout read_timeout write_timeout reconnect_attempts
     ].freeze
 
+    # Execution modes for embed calls. false = eager (default, one EMB round
+    # trip per call); :multi = defer and coalesce into EMB.MULTI, serial;
+    # :batch = defer and execute chunk shares concurrently. Mutually exclusive
+    # by construction.
+    LAZY_MODES = [false, :multi, :batch].freeze
+
     attr_accessor(*OPTIONS)
+
+    def lazy=(value)
+      unless LAZY_MODES.include?(value)
+        raise ArgumentError, "lazy must be false, :multi, or :batch (got #{value.inspect})"
+      end
+
+      @lazy = value
+    end
 
     def initialize
       self.host = 'localhost'
       self.port = 6379
       self.url = nil
       self.pool = 5
-      self.batch = true
+      self.lazy = false
       self.batch_size = 512
       self.driver = nil
       self.protocol = 2

@@ -239,9 +239,9 @@ RSpec.describe Emb::RoundRobinPool do
   describe 'Emb::Client integration' do
     it 'creates exactly pool RedisClients, eagerly' do
       client = Emb::Client.new(port: 16_379, pool: 3)
-      expect(client.pool).to be_a(described_class)
-      expect(client.pool.size).to eq(3)
-      expect(client.pool.connections).to all(be_a(RedisClient))
+      expect(client.pools).to contain_exactly(be_a(described_class))
+      expect(client.pools.first.size).to eq(3)
+      expect(client.pools.first.connections).to all(be_a(RedisClient))
     end
 
     it 'forwards redis options to every pooled connection' do
@@ -253,7 +253,7 @@ RSpec.describe Emb::RoundRobinPool do
         driver: :hiredis,
         ssl: true, ssl_params: { verify_mode: 0 }
       )
-      options = client.pool.connections.map(&:options)
+      options = client.pools.first.connections.map(&:options)
       expect(options.size).to eq(2)
       expect(options).to all(include(
                                reconnect_attempts: 2, protocol: 2,
@@ -265,15 +265,71 @@ RSpec.describe Emb::RoundRobinPool do
     end
   end
 
+  describe 'multi-instance distribution' do
+    it 'rotates across instances first, then across connections within an instance' do
+      conns = %w[a1 a2 b1 b2 c1 c2].map do |id|
+        RecordingRedisClient.new.tap { |c| c.instance_variable_set(:@id, id) }
+      end
+      # queue.shift drains the array it is handed; feed it a copy so `conns`
+      # still names every connection for the assertions below.
+      QueuedRedisClient.queue = conns.dup
+      stub_const('RedisClient', QueuedRedisClient)
+      client = Emb::Client.new(url: %w[redis://a redis://b redis://c], pool: 2)
+
+      expect(client.pools.size).to eq(3)
+      ids = 6.times.map do |n|
+        client.send_command('PING', n)
+        conns.find { |c| c.calls.last == ['PING', n] }.instance_variable_get(:@id)
+      end
+
+      expect(ids).to eq(%w[a1 b1 c1 a2 b2 c2])
+    end
+
+    it 'sends each command to the instance selected in rotation' do
+      conns = [RecordingRedisClient.new, RecordingRedisClient.new]
+      QueuedRedisClient.queue = conns.dup
+      stub_const('RedisClient', QueuedRedisClient)
+      # pool 1 keeps construction at exactly one connection per instance; the
+      # default pool (5) would drain the two-entry queue into nil connections.
+      client = Emb::Client.new(url: %w[redis://a redis://b], pool: 1)
+
+      client.send_command('PING')
+      client.send_command('PING')
+      first, second = conns.map { |c| c.calls.size }
+
+      expect(first).to eq(1)
+      expect(second).to eq(1) # one command per instance
+    end
+
+    it 'keeps working in the child after fork with multiple per-instance pools' do
+      skip 'Process.fork unavailable' unless Process.respond_to?(:fork)
+
+      client = Emb::Client.new(
+        url: ['redis://localhost:16379', 'redis://localhost:16379'], pool: 1
+      )
+      expect(client.pools.size).to eq(2)
+      expect(client.ping).to eq('PONG')
+
+      pid = Process.fork do
+        result = client.ping
+        exit!(result == 'PONG' ? 0 : 1)
+      rescue StandardError
+        exit!(2)
+      end
+      _, status = Process.wait2(pid)
+      expect(status.exitstatus).to eq(0)
+    end
+  end
+
   describe 'Emb::Batch chunk rotation' do
     after { BatchLoader::Executor.clear_current }
 
-    it 'spreads EMB.MULTI chunks across rotated connections within one window' do
+    it 'spreads EMB chunks across rotated connections within one window (serial :multi mode)' do
       conn_a = VecRedisClient.new
       conn_b = VecRedisClient.new
       QueuedRedisClient.queue = [conn_a, conn_b]
       stub_const('RedisClient', QueuedRedisClient)
-      client = Emb::Client.new(pool: 2, batch: true, batch_size: 1)
+      client = Emb::Client.new(pool: 2, lazy: :multi, batch_size: 1)
 
       first = client[:minilm]['a']
       second = client[:minilm]['b']
@@ -281,8 +337,8 @@ RSpec.describe Emb::RoundRobinPool do
       expect(first.first).to eq(1.0)
       expect(second.first).to eq(1.0)
 
-      expect(conn_a.calls).to eq([['EMB.MULTI', 'minilm', 'a']])
-      expect(conn_b.calls).to eq([['EMB.MULTI', 'minilm', 'b']])
+      expect(conn_a.calls).to eq([%w[EMB minilm a]])
+      expect(conn_b.calls).to eq([%w[EMB minilm b]])
     end
   end
 end

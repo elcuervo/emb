@@ -128,7 +128,7 @@ RSpec.describe Emb do
 
     it 'supports pool size parameter' do
       client = described_class.new(port: 16_379, pool: 3)
-      expect(client.pool.size).to eq(3)
+      expect(client.pools.first.size).to eq(3)
     end
 
     it 'defaults to EMB_URL env var' do
@@ -190,7 +190,7 @@ RSpec.describe Emb do
 
     it 'defaults to safe timeouts and no reconnect resend' do
       client = described_class.new(port: 16_379)
-      config = client.pool.with(&:config)
+      config = client.pools.first.with(&:config)
       expect(config.read_timeout).to eq(10)
       expect(config.write_timeout).to eq(10)
       # reconnect_attempts 0 → redis-client must not auto re-send the command

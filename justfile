@@ -201,6 +201,29 @@ bench-ruby config="bench-cpu-partition.yaml":
     rm -f /tmp/emb-bench.pid; \
     exit $status
 
+# Run the Ruby client harness against TWO emb instances (url-array mechanisms:
+# eager-2node distribution and batch-2node concurrent fan-out). Splits the app
+# partition in half — node 0 on :16379, node 1 on :16380, each with
+# GOMAXPROCS=app_cpus/2 — and keeps the bench partition for the harness.
+bench-ruby-multi config="bench-cpu-partition.yaml":
+    @half=$(expr {{app_cpus}} / 2); \
+    [ "$half" -ge 1 ] || { echo "ERROR: app_cpus must be >= 2 for a two-node run"; exit 1; }; \
+    aff0() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(expr $half - 1)"; }; \
+    aff1() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c $half-$(expr {{app_cpus}} - 1)"; }; \
+    sed 's/^listen:.*/listen: ":16380"/' {{config}} > /tmp/emb-bench-node2.yaml; \
+    echo "Starting emb node 0 on :16379 (GOMAXPROCS=$half $(aff0)) and node 1 on :16380 (GOMAXPROCS=$half $(aff1))"; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=$half $(aff0) ./bin/emb -config {{config}} & echo $! > /tmp/emb-bench.pid0; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=$half $(aff1) ./bin/emb -config /tmp/emb-bench-node2.yaml & echo $! > /tmp/emb-bench.pid1; \
+    sleep 2; \
+    until redis-cli -p 16379 ping >/dev/null 2>&1 && redis-cli -p 16380 ping >/dev/null 2>&1; do sleep 1; done; \
+    bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(expr {{app_cpus}} + {{bench_cpus}} - 1)"; }; \
+    echo "Both nodes ready — running client harness (benchmark partition: $(bench), EMB_BENCH_PORT2=16380)"; \
+    (cd gems/emb && EMB_BENCH_PORT2=16380 EMB_BENCH_APP_CPUS={{app_cpus}} EMB_BENCH_BENCH_CPUS={{bench_cpus}} $(bench) bundle exec ruby bench/bench.rb); \
+    status=$?; \
+    kill `cat /tmp/emb-bench.pid0` `cat /tmp/emb-bench.pid1` 2>/dev/null; \
+    rm -f /tmp/emb-bench.pid0 /tmp/emb-bench.pid1 /tmp/emb-bench-node2.yaml; \
+    exit $status
+
 # Run all benchmarks
 bench-all: bench-redis bench-cache
 
