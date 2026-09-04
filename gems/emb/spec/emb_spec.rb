@@ -183,6 +183,12 @@ RSpec.describe Emb do
       expect(client.ping).to eq('PONG')
     end
 
+    it 'exposes the effective reconnect_attempts' do
+      expect(described_class.new(port: 16_379, reconnect_attempts: 2).reconnect_attempts).to eq(2)
+      expect(described_class.new(port: 16_379).reconnect_attempts).to eq(0) # global default
+      expect(described_class.new(port: 16_379, reconnect_attempts: false).reconnect_attempts).to be(false)
+    end
+
     it 'forwards unknown redis-client options without error' do
       client = described_class.new(port: 16_379, write_timeout: 3)
       expect(client.ping).to eq('PONG')
@@ -195,6 +201,13 @@ RSpec.describe Emb do
       expect(config.write_timeout).to eq(10)
       # reconnect_attempts 0 → redis-client must not auto re-send the command
       expect(config.retry_connecting?(0, nil)).to be(false)
+    end
+
+    it 'engages bounded re-sends when reconnect_attempts is configured' do
+      client = described_class.new(port: 16_379, reconnect_attempts: 2)
+      config = client.pool.with(&:config)
+      expect(config.retry_connecting?(0, nil)).to be(true)
+      expect(config.retry_connecting?(2, nil)).to be(false) # budget exhausted
     end
   end
 end
