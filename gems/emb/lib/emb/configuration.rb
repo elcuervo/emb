@@ -25,10 +25,13 @@ module Emb
       # shared CPUs; scale up if you raise batch_size.
       self.read_timeout = 10
       self.write_timeout = 10
-      # 0 = never auto-send the failed command again. EMB.MULTI is not
-      # idempotent: redis-client treats ReadTimeoutError as a ConnectionError
-      # and would re-send the whole batch up to N+1 times (duplicate inference).
-      # Recovery is the app's decision (retries now fail closed).
+      # 0 = default: a failing EMB.MULTI batch fails closed after one attempt
+      # and raises Emb::ServerError. Set > 0 to opt into bounded retries:
+      # redis-client re-sends transient failures (timeouts, connection errors)
+      # up to that many extra times — EMB.MULTI is not idempotent, so each
+      # re-send duplicates inference — and the batch still terminates in
+      # Emb::ServerError. Operation errors (server error replies) are never
+      # retried.
       self.reconnect_attempts = 0
     end
 

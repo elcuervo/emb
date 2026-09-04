@@ -2,6 +2,7 @@
 
 require_relative 'emb/version'
 require_relative 'emb/configuration'
+require_relative 'emb/errors'
 require_relative 'emb/commands'
 require_relative 'emb/runtime_config'
 require_relative 'emb/client'

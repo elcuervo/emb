@@ -17,14 +17,9 @@ module Emb
         begin
           results = Array(client.send_command('EMB.MULTI', *pairs))
         rescue StandardError => e
-          # Fail closed: surface the error to the forcing caller once, and drop
-          # every deferred item of this batch from the scope's pending set.
-          # batch-loader only prunes pending items after a *successful* batch
-          # block, so without this a retry would re-run the whole batch (and
-          # each redis-client timeout would already have auto-re-sent it).
-          # Post-failure resolutions yield the default ([]) with no I/O.
-          clear_batch_pending!
-          raise e
+          # Fail closed: raise Emb::ServerError (cause = the original error) and
+          # drop the batch's pending items. Post-failure resolutions yield [].
+          fail_batch!(e, slice: slice, budget: retry_budget(client))
         end
 
         offset = 0
@@ -58,6 +53,40 @@ module Emb
       key = [BATCH_BLOCK.source_location, BATCH_KEY]
       BatchLoader::Executor.current&.items_by_block&.delete(key)
     end
+
+    # Fail-closed tail for a failed batch: clear the pending set, then raise
+    # Emb::ServerError carrying the cause and the models/texts/attempts
+    # context. Transient errors were already re-sent `budget` extra times by
+    # redis-client; operation errors surface on the first attempt.
+    def fail_batch!(error, slice:, budget:)
+      clear_batch_pending!
+      attempts = transient_error?(error) ? budget + 1 : 1
+      models = slice.map { |_, model, _| model }.uniq.join(', ')
+      texts = slice.sum { |_, _, text| Array(text).size }
+      raise ServerError.new(
+        "EMB.MULTI failed after #{attempts} attempt(s) " \
+        "(models: #{models}, #{texts} text(s)) #{error.class}: #{error.message}",
+        attempts: attempts
+      )
+    end
+
+    # How many additional re-sends redis-client performs for transient
+    # failures: the per-client option when set, else the global default.
+    # Normalized to an Integer (redis-client also accepts a delay Array, whose
+    # truthy slots each grant one retry).
+    def retry_budget(client)
+      value = client.reconnect_attempts if client.respond_to?(:reconnect_attempts)
+      value ||= Emb.configuration.reconnect_attempts
+      return value if value.is_a?(Integer)
+
+      value.is_a?(Array) ? value.count(&:itself) : 0
+    end
+
+    def transient_error?(error)
+      error.is_a?(RedisClient::ConnectionError) || error.is_a?(RedisClient::ProtocolError)
+    end
+
+    private :clear_batch_pending!, :fail_batch!, :retry_budget, :transient_error?
   end
 
   class BatchProxy

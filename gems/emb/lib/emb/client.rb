@@ -7,16 +7,20 @@ module Emb
   class Client
     include Commands
 
-    attr_reader :pool, :batch_size
+    attr_reader :pool, :batch_size, :reconnect_attempts
 
     def initialize(pool: nil, batch: nil, **redis_options)
       cfg = Emb.configuration
       @batch_enabled = batch.nil? ? cfg.batch : batch
       @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
+
       url = extract_url!(redis_options, cfg)
       redis_options = merged_redis_options(redis_options, cfg, url)
 
+      @reconnect_attempts = redis_options.fetch(:reconnect_attempts, cfg.reconnect_attempts)
+
       size = pool.nil? ? cfg.pool : pool
+
       @pool = RoundRobinPool.new(size) do
         RedisClient.new(url: url, **redis_options)
       end

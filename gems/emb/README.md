@@ -77,12 +77,15 @@ eager behavior (immediate `EMB` per call), opt out globally via
 **Why the timeout and reconnect defaults matter:** batched `EMB.MULTI` (up to 512 pairs)
 can take over a second of inference on a shared CPU, and redis-client's silent default is
 1.0s — a slower reply times out and (because `ReadTimeoutError` is a `ConnectionError`)
-redis-client **re-sends the whole command** `reconnect_attempts + 1` times, duplicating
-server inference. The gem therefore defaults to an explicit 10s timeout and **no
-automatic re-send** (`reconnect_attempts: 0`); recovery is the caller's choice, and batch
-failures fail closed (see [Lazy batching](#lazy-batching-embbatch)). Raise the timeouts if
-you raise `batch_size`; opt into one automatic retry with
-`Emb.configure { |c| c.reconnect_attempts = 1 }` if you accept the duplicate-work risk.
+redis-client would **re-send the whole command** per `reconnect_attempts`, duplicating
+server inference. The gem therefore defaults to an explicit 10s timeout and
+`reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
+`Emb::ServerError` (see [Lazy batching](#lazy-batching-embbatch)). Set
+`Emb.configure { |c| c.reconnect_attempts = 2 }` and redis-client re-sends
+transient failures (timeouts, connection drops, protocol errors) up to that many
+extra times before the batch fails closed — each re-send re-runs server inference,
+so keep the budget small — but operation errors (unknown model, auth, bad pairs)
+are never retried. Raise the timeouts if you raise `batch_size`.
 
 ### Connection pool
 
@@ -349,13 +352,21 @@ The batch executes in the current thread's scope; the Rack/ActiveJob middleware
 clears that scope after every request/job (`Emb::BatchScope`), so deferred work
 can never accumulate across requests.
 
-**Fail-closed batches.** If an `EMB.MULTI` fails (timeout, connection error), the
-error is raised to the code that first used the batch, and every deferred item of
-that batch is removed from the scope — retrying (or using other items of the
-failed batch) **does not re-send the batch** and resolves to `[]` instead. This
+**Fail-closed batches.** If an `EMB.MULTI` fails, the batch raises **`Emb::ServerError`**
+to the code that first used it, and every deferred item of that batch is removed from the
+scope — retrying (or using other items of the failed batch) **does not re-send the batch**
+and resolves to `[]` instead. The error's `cause` is the underlying redis error
+(`RedisClient::ReadTimeoutError`, `RedisClient::CommandError`, ...) and its message
+includes the model(s), text count, and attempt count. Transient failures (timeout,
+connection error, protocol error) re-send up to `reconnect_attempts` extra times when that option is set
+above 0 (default 0 = a single attempt); operation errors are never retried. This
 prevents a slow server from turning one failed batch into endless duplicate work
 (retries re-running the whole batch) or growth of the pending set across retries.
 Pair-level failures the server reports as `null` (MGET semantics) are unaffected.
+
+> **Breaking change (gem ≥ next release):** a failed batch raises `Emb::ServerError`
+> instead of the raw `RedisClient::*` error. Rescue `Emb::ServerError` and read `cause`
+> for the original error. Eager `Emb.multi` and `batch: false` paths are unchanged.
 
 ```ruby
 vec   = Emb.batch[:minilm]["hello"]   # use -> Array of Float
