@@ -55,7 +55,7 @@ resolve in this order — the first one wins:
 ```ruby
 Emb.configure do |c|
   c.pool = 8
-  c.batch = false   # opt out of lazy batching app-wide
+  c.lazy = :multi   # defer and coalesce embed calls app-wide
 end
 
 Emb.configuration   # => the shared Emb::Configuration
@@ -68,27 +68,27 @@ Emb::Client.new(pool: 20)  # per-call still wins
 ### Out-of-the-box defaults
 
 The shipped defaults are benchmark-derived (see `BENCHMARK.md`) with secure-by-default
-network behavior: **lazy batching is on by default** (`batch: true` — each embed
-coalesces into one `EMB.MULTI`), pool `5`, pure-Ruby RESP driver, `protocol: 2`,
-`read_timeout`/`write_timeout` both **10s**, and `reconnect_attempts: 0`. To keep the
-eager behavior (immediate `EMB` per call), opt out globally via
-`Emb.configure { |c| c.batch = false }` or per client with `Emb.new(batch: false)`.
+network behavior: **eager execution by default** (`lazy: false` — every `Emb[:model][t]`
+sends one `EMB` round trip), pool `5`, pure-Ruby RESP driver, `protocol: 2`,
+`read_timeout`/`write_timeout` both **10s**, and `reconnect_attempts: 0`. Opt into
+coalescing with `lazy: :multi` or concurrent fan-out with `lazy: :batch` — globally via
+`Emb.configure { |c| c.lazy = :batch }` or per client with `Emb.new(lazy: :batch)`.
 
 **Why the timeout and reconnect defaults matter:** batched `EMB.MULTI` (up to 512 pairs)
 can take over a second of inference on a shared CPU, and redis-client's silent default is
-1.0s — a slower reply times out and (because `ReadTimeoutError` is a `ConnectionError`)
-redis-client would **re-send the whole command** per `reconnect_attempts`, duplicating
-server inference. The gem therefore defaults to an explicit 10s timeout and
-`reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
-`Emb::ServerError` (see [Lazy batching](#lazy-batching-embbatch)). Set
+1.0s — a slower reply times out. The gem therefore defaults to an explicit 10s timeout
+and `reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
+`Emb::ServerError` (see [Lazy execution modes](#lazy-execution-modes)). Set
 `Emb.configure { |c| c.reconnect_attempts = 2 }` and redis-client re-sends
-transient failures (timeouts, connection drops, protocol errors) up to that many
-extra times before the batch fails closed — each re-send re-runs server inference,
-so keep the budget small — but operation errors (unknown model, auth, bad pairs)
-are never retried. Raise the timeouts if you raise `batch_size`.
-`reconnect_attempts` also accepts an Array of per-retry delays (a redis-client
-passthrough); each entry grants one retry and counts toward
-`Emb::ServerError#attempts`.
+**connection and protocol failures** up to that many extra times before the batch fails
+closed — each re-send re-runs server inference, so keep the budget small. Operation
+errors (unknown model, auth, bad pairs) are never retried, and neither are **read
+timeouts**: redis-client treats `ReadTimeoutError` as terminal, and re-sending a timed-out
+command could duplicate inference the server already did. `lazy: :batch` shares
+additionally retry a refused connection on the next configured instance. Raise the
+timeouts if you raise `batch_size`. `reconnect_attempts` also accepts an Array of
+per-retry delays (a redis-client passthrough); each entry grants one retry and counts
+toward `Emb::ServerError#attempts`.
 
 ### Connection pool
 
@@ -96,9 +96,23 @@ passthrough); each entry grants one retry and counts toward
 Emb.setup(url: "redis://localhost:6379", pool: 10)
 ```
 
-The default pool size is **5**. The client keeps `pool` persistent connections and
-routes commands through them **in round-robin order** — consecutive commands use
-different connections instead of reusing one hot connection.
+The default pool size is **5**. The client keeps `pool` persistent connections per
+emb **instance** and routes commands through them **in round-robin order** —
+consecutive commands use different connections instead of reusing one hot connection.
+
+`url` also accepts an **array of instances** (interchangeable replicas serving the same
+model set); commands then round-robin across instances first, then across connections
+within the selected instance:
+
+```ruby
+Emb.setup(url: ["redis://emb-a:6379", "redis://emb-b:6379", "redis://emb-c:6379"], pool: 5)
+```
+
+Each url gets its own pool of `pool` connections, so `pool: 5` with three urls maintains
+15 connections total. If an instance refuses a connection **before a command is sent**
+(connection refused/unreachable), the command is retried on the next instance — this is
+why `reconnect_attempts` stays `0`: a retry after a *sent* command could duplicate
+inference, but a never-sent command is safe to move elsewhere.
 
 This matters when emb runs as a pool of instances behind a **connection-level load
 balancer** (AWS Service Connect, an NLB, or Envoy): the balancer assigns each
@@ -164,7 +178,7 @@ Emb.setup(
 ```
 
 See the [redis-client documentation](https://github.com/redis-rb/redis-client) for
-all available options. Only `pool`, `batch`, and `batch_size` are handled by the
+all available options. Only `pool`, `lazy`, and `batch_size` are handled by the
 gem — everything else passes through to `RedisClient.new`.
 
 ## Instance-based clients
@@ -322,61 +336,73 @@ client.multi do |m|
 end
 ```
 
-### Lazy batching (`Emb.batch`)
+### Lazy execution modes
 
-Instead of collecting pairs by hand, `Emb.batch` returns lazy embeddings that all
-coalesce into a single `EMB.MULTI` round trip when the first one is used. This is
-powered by the [batch-loader](https://github.com/exAspArk/batch-loader) gem.
+Embed-call behavior is governed by a single `lazy` mode — `false` (default, eager),
+`:multi` (defer and coalesce into one `EMB` for a single model / one `EMB.MULTI` for mixed scopes, serial), or `:batch` (defer and execute
+the coalesced chunk shares **concurrently**). The three are mutually exclusive.
+
+| mode | `Emb[:model][text]` | execution |
+|---|---|---|
+| `false` (default) | immediate `EMB` round trip | serial, per call |
+| `:multi` | deferred → coalesces into one `EMB` (single model) or `EMB.MULTI` (mixed) | serial, one command at a time |
+| `:batch` | deferred → coalesces into `EMB`/`EMB.MULTI` chunks | **concurrent** — chunk shares run in parallel |
+
+In `:batch` mode the shares fan out across the configured instances (one share per
+instance when the share count allows) or across the instance's pool connections when a
+single url is configured — a batch whose pieces take 60ms and 10ms completes in roughly
+the slowest share (~60ms) instead of the sum (~70ms). Deferred work is powered by the
+[batch-loader](https://github.com/exAspArk/batch-loader) gem:
 
 ```ruby
+Emb.setup(lazy: :multi)  # or :batch — Emb[:minilm] now defers
+
 users = User.all # some application objects
 
 # Create loaders first...
-l1 = Emb.batch[:minilm]["hello"]
-l2 = Emb.batch[:minilm]["world"]
-l3 = Emb.batch[:bge]["bonjour"]
+l1 = Emb[:minilm]["hello"]
+l2 = Emb[:minilm]["world"]
+l3 = Emb[:bge]["bonjour"]
 
-# ...then consume them. The first use sends ONE EMB.MULTI for all three.
+# ...then consume them. The first use sends ONE EMB (single-model scope)
+# or ONE EMB.MULTI (mixed-model scope) for all three.
 l1.sum  # => 12.345
 l2.sum  # => -0.678
 l3.sum  # => 3.141
 ```
 
-Instance clients expose the same API:
-
-```ruby
-client.batch[:minilm]["hello"].sum
-```
-
 Each lazy value materializes to the same shape as the eager API: a single text
-yields an `Array<Float>`, multiple texts yield `Array<Array<Float>>`:
+yields an `Array<Float>`, multiple texts yield `Array<Array<Float>>`. For explicit
+composition that always sends immediately regardless of mode, use `Emb.multi { }`
+(see [Multi-model queries](#multi-model-queries)).
 
 The batch executes in the current thread's scope; the Rack/ActiveJob middleware
 clears that scope after every request/job (`Emb::BatchScope`), so deferred work
-can never accumulate across requests.
+can never accumulate across requests (in eager mode there is nothing to clear).
 
-**Fail-closed batches.** If an `EMB.MULTI` fails, the batch raises **`Emb::ServerError`**
-to the code that first used it, and every deferred item of that batch is removed from the
-scope — retrying (or using other items of the failed batch) **does not re-send the batch**
-and resolves to `[]` instead. The error's `cause` is the underlying redis error
-(`RedisClient::ReadTimeoutError`, `RedisClient::CommandError`, ...) and its message
-includes the model(s), text count, and attempt count. Transient failures (timeout,
-connection error, protocol error) re-send up to `reconnect_attempts` extra times when that option is set
-above 0 (default 0 = a single attempt); operation errors are never retried. A non-redis
-error raised by the batch call itself (e.g. a `TypeError` from bad arguments) is a local
-bug, not a server failure: the batch's pending items are still cleared, but the original
-error is re-raised. This
+**Fail-closed batches.** If a batch command fails — a timeout, an operation error, or in
+`:batch` mode a share failure after pre-send retries are exhausted — the batch raises
+**`Emb::ServerError`** to the code that first used it, and every deferred item of that
+batch is removed from the scope — retrying (or using other items of the failed batch)
+**does not re-send the batch** and resolves to `[]` instead. The error's `cause` is the
+underlying redis error (`RedisClient::ReadTimeoutError`, `RedisClient::CommandError`, ...)
+and its message includes the model(s), text count, and attempt count. Transient failures
+(timeout, connection error, protocol error) re-send up to `reconnect_attempts` extra
+times when that option is set above 0 (default 0 = a single attempt); operation errors
+are never retried. A non-redis error raised by the batch call itself (e.g. a `TypeError`
+from bad arguments) is a local bug, not a server failure: the batch's pending items are
+still cleared, but the original error is re-raised. This
 prevents a slow server from turning one failed batch into endless duplicate work
 (retries re-running the whole batch) or growth of the pending set across retries.
 Pair-level failures the server reports as `null` (MGET semantics) are unaffected.
 
 > **Breaking change (gem ≥ next release):** a failed batch raises `Emb::ServerError`
 > instead of the raw `RedisClient::*` error. Rescue `Emb::ServerError` and read `cause`
-> for the original error. Eager `Emb.multi` and `batch: false` paths are unchanged.
+> for the original error. Eager `Emb.multi` and the `lazy: false` path are unchanged.
 
 ```ruby
-vec   = Emb.batch[:minilm]["hello"]   # use -> Array of Float
-vecs  = Emb.batch[:minilm]["hello", "world"]  # use -> Array of Array of Float
+vec   = Emb[:minilm]["hello"]            # use -> Array of Float
+vecs  = Emb[:minilm]["hello", "world"]  # use -> Array of Array of Float
 ```
 
 Embeddings are cached per thread, so reusing a lazy value (or creating an
@@ -390,32 +416,32 @@ Loaders only fire when a value is **used**. Create all loaders *first*, then
 consume them, so they share one round trip:
 
 ```ruby
-texts.each { |t| process(Emb.batch[:minilm][t]) }   # wrong: one MULTI per item
-loaders = texts.map { |t| Emb.batch[:minilm][t] }   # right: ONE MULTI for all
+texts.each { |t| process(Emb[:minilm][t]) }   # wrong: one EMB per item
+loaders = texts.map { |t| Emb[:minilm][t] }   # right: ONE EMB for all
 loaders.each { |l| process(l) }
 ```
 
 A loader that is created but never used **never embeds** (unless a sibling batch
 fires first) and is silently dropped when the thread's scope ends. Duration and
-scope: batching is per-thread — a multithreaded app issues one `EMB.MULTI` per
+scope: batching is per-thread — a multithreaded app issues one `EMB`/`EMB.MULTI` per
 thread per flush.
 
-### `batch` configuration option
+### `lazy` configuration option
 
-Setting `batch: true` makes the standard proxy API lazy, so existing call sites
-batch automatically without restructuring:
+Setting `lazy: :multi` or `lazy: :batch` makes the standard proxy API defer, so
+existing call sites batch automatically without restructuring:
 
 ```ruby
-Emb.setup(url: "redis://localhost:6379", batch: true)
+Emb.setup(url: "redis://localhost:6379", lazy: :multi)
 # or
-Emb.new(url: "redis://localhost:6379", batch: true)
+Emb.new(url: "redis://localhost:6379", lazy: :batch)
 ```
 
-With `batch: true`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
-`EMB.MULTI` on first use. Batching is **on by default**; the proxy API stays
-eager only when you opt out with `batch: false`. `Emb.batch` works regardless
-of the option, and `Emb.multi` remains the explicit, eager, deterministic
-batching API.
+Under `lazy: :multi`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
+`EMB` on first use (serial chunks; `EMB.MULTI` only for mixed-model scopes). Under `lazy: :batch`, the chunk shares
+execute concurrently — with multiple `url`s they fan out across instances. The
+default is eager (`lazy: false`). `Emb.multi` remains the explicit, eager,
+deterministic composition API in every mode.
 
 ### Clearing the cache per request
 
@@ -500,7 +526,7 @@ batching doesn't fit), coalesce them into one packet with `RedisClient#pipelined
 ```ruby
 client = Emb.new(url: "redis://localhost:6379")
 
-a = client.pool.with do |conn|
+a = client.pools.first.with do |conn|
   conn.pipelined do |pipe|
     texts.each { |t| pipe.call("EMB", "minilm", t) }
   end
@@ -508,9 +534,22 @@ end
 # a -> Array of Float32-binary replies; unpack each with r.unpack("e*")
 ```
 
-`Client#pool` exposes the pool's `RedisClient` connections. This measurably beats
-plain per-call round trips; use it for bursts, and `Emb.batch`/`Emb.multi` when you want
-server-side coalescing into one `EMB.MULTI`.
+`Client#pools` exposes the per-instance pools' `RedisClient` connections (the
+first pool for a single-instance client). This measurably beats
+plain per-call round trips; use it for bursts, and `Emb.multi` or a deferred `lazy`
+mode when you want
+server-side coalescing into one packed inference.
+
+### Benchmark harness coverage
+
+The client benchmark harness (`gems/emb/bench/bench.rb`, `just bench-ruby`)
+reports one row per execution mechanism: `eager` (one `EMB` per call), `multi`
+(coalesced `EMB`, or `EMB.MULTI` for mixed models), `batch` (concurrent `EMB` chunk shares),
+`pipelined` (raw RESP pipelining), and `threaded` (eager across threads).
+`just bench-ruby-multi` starts two partitioned emb instances and adds the
+url-array rows `eager-2node` (round-robin distribution) and `batch-2node`
+(concurrent fan-out across instances); the two-node rows are skipped unless a
+second instance is reachable (`EMB_BENCH_PORT2`).
 
 ### RESP driver: pure-Ruby default, `hiredis` on demand
 
@@ -537,7 +576,7 @@ instance. Scale out without a cluster client:
   (optionally seed with `-cache` and a warmup pass).
 
 Lazy batching stays per server (a thread's loaders target one client), so batching and
-horizontal scale compose: each instance receives one `EMB.MULTI` per request.
+horizontal scale compose: each instance receives one `EMB` (single model) or `EMB.MULTI` (mixed) share per request.
 
 ### Commands
 

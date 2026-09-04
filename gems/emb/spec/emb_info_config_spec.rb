@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe Emb do
-  before(:all) { described_class.setup(port: 16_379, batch: false) }
+  before(:all) { described_class.setup(port: 16_379) }
   after(:all) { described_class.reset_registry! }
 
   describe '.stats' do

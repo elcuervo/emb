@@ -376,7 +376,8 @@ just lint            # Linters (golangci-lint + go vet)
 just test            # Run tests
 just bench           # Run Go benchmarks
 just bench-all       # redis-benchmark suite (see BENCHMARK.md)
-just bench-ruby      # End-to-end Ruby client harness against a live server
+just bench-ruby      # End-to-end Ruby client harness (lazy-mode mechanisms) against a live server
+just bench-ruby-multi # Same harness across TWO partitioned emb instances (url-array scenarios)
 just build           # Build the emb binary
 just dev             # Build and run the server
 just download-model  # Download a model from HuggingFace

@@ -10,7 +10,7 @@ module Emb
     end
 
     def [](text, *texts)
-      return Emb.build_batch_loader(@client, @name, texts.empty? ? text : [text, *texts]) if @client.batch?
+      return Emb.build_batch_loader(@client, @name, texts.empty? ? text : [text, *texts]) if @client.lazy?
 
       set = Array(@client.send_command('EMB', @name.to_s, text, *texts))
       result = set.map { |entry| entry.unpack('e*') }
