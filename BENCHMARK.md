@@ -306,51 +306,72 @@ With the LRU cache enabled and repeated texts, cache hits dominate regardless.
 
 ## Client-side (Ruby)
 
-The Ruby benchmarks run the end-to-end harness against a live server via
-`just bench-ruby` (`gems/emb/bench/bench.rb`) and measure request handling from the
-client's perspective: requests/sec, p50/p99, and an overhead ratio
-`(per-embed e2e − warm inference baseline) / baseline`. A stability gate measures
-inference p50/p99 while a synthetic parse-heavy load (many-arg `EMB.MULTI` with unknown
-models) exercises the server's request path, and fails when
-`p99_with_load / p99_idle > 1.5`.
+The Ruby benchmarks run the end-to-end harness against live server(s) via
+`just bench-ruby` (one node) or `just bench-ruby-multi` (two nodes) —
+`gems/emb/bench/bench.rb` — and measure request handling from the client's
+perspective: requests/sec, p50/p99, and an overhead ratio
+`(per-embed e2e − warm inference baseline) / baseline`. One scenario per
+execution mechanism of the gem's `lazy` mode:
 
-### Reference run (6 app CPUs, fixed harness)
+| scenario | client mechanism | wire shape |
+|----------|------------------|------------|
+| `eager` | `lazy: false` (default) | one `EMB` per embed |
+| `multi` | `lazy: :multi` | deferred calls coalesced into one `EMB` (single model) / `EMB.MULTI` (mixed) |
+| `batch` | `lazy: :batch` | deferred calls flushed as **concurrent** chunk shares |
+| `pipelined` | raw RESP pipelining | one packet per burst |
+| `threaded` | `eager` from N threads | N concurrent sessions |
+| `eager-2node` / `batch-2node` | `url` array | round-robin / concurrent fan-out across two instances |
 
-Server: `bench-cpu-partition.yaml` (`GOMAXPROCS=6`), 200 texts × 4 rounds, pool=5,
-run via `just bench-ruby`. Validated 2026-08-31 after a harness fix: baseline /
-eager / threaded previously timed lazy-loader *construction* (the gem ships
-`batch: true`, and `Emb::Proxy#[]` returns a loader that sends nothing until
-materialized) — the three now force `batch: false` and measure real inference.
-Warm inference baseline: **2.838 ms**.
+A stability gate measures inference p50/p99 under synthetic parse-heavy load
+(many-arg `EMB.MULTI` with unknown models) and fails when
+`p99_with_load / p99_idle > 1.5` (storm > 1.75).
 
-| Scenario | Embed | per-embed | req/s | p50    | p99     | overhead |
-|----------|-------|-----------|-------|--------|---------|----------|
-| eager    | 800   | 2.726 ms  | 366.9 | 2.631  | 3.969   | −4.0%    |
-| lazy     | 800   | 2.916 ms  | 342.9 | 2.902  | 3.025   | +2.8%    |
-| pipelined| 800   | 2.257 ms  | 443.1 | 2.277  | 2.286   | −20.5%   |
-| threaded | 800   | 1.270 ms  | 787.4 | 4.559  | 13.834  | −55.3%   |
+### Reference run (6 app CPUs, two nodes, fixed harness)
 
-Round-trip check: eager = 5 `EMB` / 0 `EMB.MULTI`; lazy = 1 `EMB.MULTI` / 0 `EMB` ✓
-(lazy collapses N calls into one round trip; its per-embed p50 ≈ p99 — no tail).
-Pipelining wins latency (p50 2.28 ms, tightest tail); threaded wins aggregate
-throughput (787 req/s over the pool) at the cost of a 13.8 ms p99 tail
-(server-side session thrash).
+Two `bench-cpu-partition.yaml` servers on :16379/:16380 under `just
+bench-ruby-multi` (app partition split 3+3, bench partition 4), 200 texts × 4
+rounds, pool 5. Validated 2026-09-04 post-merge (lazy-execution-modes). Warm
+inference baseline: **1.873 ms**.
 
-**Stability gate:** idle p99 181.5 ms → constant parse load 241.7, **constant ratio
-1.33 PASS** (≤ 1.5); request storm (2 workers × 400 pairs) p99 568.3, **storm ratio
-3.13 FAIL** (≤ 1.75). The storm gate needs a CPU partition to pass: on macOS there is
-no `taskset`, so the load generators and the sampler share all cores and the p99
-inflation is client-side. A server-side probe under the same storm shows inference
-p99 unaffected (3.0 vs 2.5 ms idle) with the server pinned to ~1.5 cores — bounded
-`EMB.MULTI` fan-out and the `max_pairs` cap hold, so the failure is client contention
-on the unpartitioned host, not unbounded server work.
+| Scenario      | Embed | per-embed | req/s | p50    | p99    | overhead |
+|---------------|-------|-----------|-------|--------|--------|----------|
+| eager         | 800   | 1.901 ms  | 526.0 | 1.748  | 3.948  | +1.5%    |
+| multi         | 800   | 0.529 ms  | 1890.5| 0.543  | 0.547  | −71.8%   |
+| batch         | 800   | 0.541 ms  | 1847.8| 0.553  | 0.629  | −71.1%   |
+| pipelined     | 800   | 1.163 ms  | 859.8 | 1.074  | 1.532  | −37.9%   |
+| threaded      | 800   | 1.132 ms  | 883.6 | 3.902  | 13.056 | −39.6%   |
+| eager-2node   | 800   | 2.951 ms  | 338.9 | 1.904  | 8.887  | +57.6%   |
+| batch-2node   | 800   | 0.763 ms  | 1310.3| 0.751  | 0.923  | −59.3%   |
+
+Round-trip checks pass: eager = 5 `EMB`; multi = 1 `EMB` (single-model scope);
+batch = 3 concurrent `EMB` shares (batch_size 2); mixed-model scope = 1
+`EMB.MULTI` ✓.
+
+- **Coalescing wins latency on one node**: `multi`/`batch` run at ~0.53 ms per
+  embed — a packed batch on the server — with p50 ≈ p99 (no tail). `batch`
+  (concurrent shares) is within noise of `multi` (single packed batch) at idle;
+  its win is distributing load under concurrency.
+- **Eager round-robin across two nodes is the wrong tool**: `eager-2node` pays
+  +57.6% — each node gets half the app CPUs (3+3 vs 6) and per-call rotation
+  doubles the chance of landing on the busy one. The url array earns its keep
+  in `batch-2node`: concurrent shares fan out across both nodes (−59.3%
+  overhead, p99 0.92 ms) instead of serializing.
+- **Threaded keeps server-side session thrash**: 883 req/s best aggregate,
+  13 ms p99 (10-session contention), consistent with prior runs.
+
+**Stability gate:** idle p99 43.9 ms → constant parse load 55.2, **constant ratio
+1.26 PASS** (≤ 1.5); request storm (2 workers × 400 pairs) p99 72.3, **storm ratio
+1.65 PASS** (≤ 1.75). Under a partition the storm gate passes; unpartitioned
+macOS runs historically showed client-side contention (see Notes).
 
 ### Evidence-based client decisions
 
-**Out-of-the-box client config:** the `emb` gem ships `batch: true` (lazy batching — every
-embed coalesces into one `EMB.MULTI`, the round-trip win above), `pool: 5`, and the
-pure-Ruby RESP driver. All are globally configurable via `Emb.configure` (`EMB_URL`
-remains the only env var; see the gem README); the results below are the rationale.
+**Out-of-the-box client config:** the `emb` gem ships *eager* execution (`lazy: false` —
+one `EMB` per embed), `pool: 5`, and the pure-Ruby RESP driver. Coalescing
+(`lazy: :multi`) and concurrent fan-out (`lazy: :batch`, optional `url` array for
+multiple instances) are opt-in via `Emb.configure` — see the mechanism table above
+for what each buys (`EMB_URL` remains the only env var; full usage in the gem
+README). The results below are the rationale.
 
 - **Pool default stays 5.** Sweep {1,2,4,8,16}: single-connection regimes move ≤10%
   (eager 104→116 req/s), threaded moves ~25% but keeps poor p99 across all sizes

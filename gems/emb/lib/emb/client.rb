@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'connection_router'
+require 'redis_client'
 
 module Emb
   class Client
@@ -17,8 +18,11 @@ module Emb
       @lazy_mode = lazy.nil? ? cfg.lazy : validate_lazy!(lazy)
       @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
       url = extract_url!(redis_options, cfg)
-      @router = ConnectionRouter.new(pool || cfg.pool, instance_urls(url),
-                                     merged_redis_options(redis_options, cfg, url))
+      # Capture before ConnectionRouter consumes the merged options, so
+      # fail-closed batches can report the retry budget (Emb::ServerError).
+      redis_options = merged_redis_options(redis_options, cfg, url)
+      @reconnect_attempts = redis_options.fetch(:reconnect_attempts, cfg.reconnect_attempts)
+      @router = ConnectionRouter.new(pool || cfg.pool, instance_urls(url), redis_options)
       @registry = {}
     end
 
@@ -26,7 +30,7 @@ module Emb
 
     def pools = @router.pools
 
-    attr_reader :batch_size, :lazy_mode
+    attr_reader :batch_size, :lazy_mode, :reconnect_attempts
 
     def [](name)
       @registry[name] ||= Proxy.new(self, name.to_sym)

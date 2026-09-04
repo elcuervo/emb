@@ -23,6 +23,7 @@ RSpec.describe Emb::Configuration do
       expect(Emb.configuration.read_timeout).to eq(10)
       expect(Emb.configuration.write_timeout).to eq(10)
       expect(Emb.configuration.reconnect_attempts).to eq(0)
+      expect(Emb.configuration.to_h[:reconnect_attempts]).to eq(0)
       expect(Emb.configuration.driver).to be_nil
     end
   end

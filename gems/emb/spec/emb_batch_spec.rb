@@ -22,11 +22,56 @@ class FakeEmbClient
   end
 end
 
-# FailingEmbClient records commands and always raises like a timed-out server.
+# FailingEmbClient simulates redis-client's ensure_connected retry loop: a
+# transient failure (ConnectionError/ProtocolError) re-sends up to
+# `reconnect_attempts` extra times (recording each wire send) before raising.
+# `timeouts: k` fails the first k sends then succeeds; nil (default) always
+# fails. `error:` selects the raised class — only transient errors retry,
+# mirroring redis-client; operation errors surface on the first send.
 class FailingEmbClient < FakeEmbClient
+  attr_accessor :reconnect_attempts, :timeouts
+
+  def initialize(responses = {}, reconnect_attempts: 0, timeouts: nil, error: RedisClient::ReadTimeoutError)
+    super(responses)
+    @reconnect_attempts = reconnect_attempts
+    @timeouts = timeouts
+    @error = error
+  end
+
   def send_command(*args)
-    @commands << args
-    raise RedisClient::ReadTimeoutError, 'simulated timeout'
+    1.upto(total_attempts) do |attempt|
+      @commands << args
+      return @responses.fetch(args) if recovered?(attempt)
+
+      raise @error, 'simulated failure' unless retry?(attempt)
+    end
+  end
+
+  private
+
+  def total_attempts
+    budget = @reconnect_attempts
+    budget = budget.count(&:itself) if budget.is_a?(Array)
+    budget = 0 if budget == false
+    budget + 1
+  end
+
+  def recovered?(attempt)
+    @timeouts && attempt > @timeouts
+  end
+
+  def retry?(attempt)
+    (@error <= RedisClient::ConnectionError || @error <= RedisClient::ProtocolError) && attempt < total_attempts
+  end
+end
+
+# MixedFailureEmbClient models redis-client's mixed-failure sequence: within a
+# single send_command the command times out (would be retried internally) and
+# the re-send comes back as an operation error. Records both wire sends.
+class MixedFailureEmbClient < FakeEmbClient
+  def send_command(*args)
+    2.times { @commands << args }
+    raise RedisClient::CommandError, 'server rejected the re-send'
   end
 end
 
@@ -570,7 +615,9 @@ RSpec.describe Emb do
       a = described_class.build_batch_loader(client, :minilm, 'a')
       b = described_class.build_batch_loader(client, :minilm, 'b')
 
-      expect { a.first }.to raise_error(READ_TIMEOUT, 'simulated timeout')
+      expect { a.first }.to raise_error(Emb::ServerError) do |e|
+        expect(e.cause).to be_a(READ_TIMEOUT)
+      end
 
       # The successful share resolved normally and its command is not re-sent.
       expect(b).to eq([2.0, 2.0])
@@ -706,13 +753,16 @@ RSpec.describe Emb do
     end
   end
 
-  describe 'fail-closed batches (secure-client-batch-defaults)' do
-    it 'surfaces the error once and clears the pending batch' do
+  describe 'fail-closed batches with retries (batch-failure-retries)' do
+    it 'surfaces Emb::ServerError once and clears the pending batch' do
       client = FailingEmbClient.new
       l1 = described_class.build_batch_loader(client, :minilm, 'a')
       described_class.build_batch_loader(client, :minilm, 'b')
 
-      expect { l1.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+      expect { l1.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
+        expect(e.cause).to be_a(RedisClient::ReadTimeoutError)
+      end
       expect(client.commands.length).to eq(1)
       expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
     end
@@ -720,7 +770,7 @@ RSpec.describe Emb do
     it 'resolves failed items to [] afterwards, with no further I/O' do
       client = FailingEmbClient.new
       l1 = described_class.build_batch_loader(client, :minilm, 'a')
-      expect { l1.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+      expect { l1.__send__(:__sync) }.to raise_error(Emb::ServerError)
 
       expect(l1.__send__(:__sync)).to eq([])
       expect(client.commands.length).to eq(1) # no re-send
@@ -729,10 +779,10 @@ RSpec.describe Emb do
     it 'excludes failed items from subsequent batches in the same scope' do
       client = FailingEmbClient.new
       l1 = described_class.build_batch_loader(client, :minilm, 'a')
-      expect { l1.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+      expect { l1.__send__(:__sync) }.to raise_error(Emb::ServerError)
 
       l2 = described_class.build_batch_loader(client, :minilm, 'c')
-      expect { l2.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+      expect { l2.__send__(:__sync) }.to raise_error(Emb::ServerError)
       expect(client.commands.length).to eq(2)
       expect(client.commands.last).to eq(%w[EMB minilm c])
     end
@@ -741,9 +791,123 @@ RSpec.describe Emb do
       client = FailingEmbClient.new
       3.times do |i|
         loader = described_class.build_batch_loader(client, :minilm, "t#{i}")
-        expect { loader.__send__(:__sync) }.to raise_error(RedisClient::ReadTimeoutError)
+        expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError)
         expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
       end
+    end
+
+    it 'recovers within the retry budget and materializes real embeddings' do
+      client = FailingEmbClient.new(
+        { %w[EMB minilm a b] => [FakeEmbClient.vec(1.0), FakeEmbClient.vec(2.0)] },
+        reconnect_attempts: 2, timeouts: 2
+      )
+      l1 = described_class.build_batch_loader(client, :minilm, 'a')
+      l2 = described_class.build_batch_loader(client, :minilm, 'b')
+
+      expect(l1.__send__(:__sync)).to eq([1.0, 1.0])
+      expect(l2.__send__(:__sync)).to eq([2.0, 2.0])
+      expect(client.commands.length).to eq(3) # 2 timeouts + 1 success
+    end
+
+    it 'raises Emb::ServerError with context once the retry budget is exhausted' do
+      client = FailingEmbClient.new(reconnect_attempts: 2)
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(3)
+        expect(e.cause).to be_a(RedisClient::ConnectionError) # exhaustion surfaces the last error
+        expect(e.message).to include('minilm').and include('1 text(s)').and include('3 attempt(s)')
+      end
+      expect(client.commands.length).to eq(3)
+      expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+    end
+
+    it 'retries protocol errors like redis-client does' do
+      client = FailingEmbClient.new(reconnect_attempts: 2, error: RedisClient::ProtocolError)
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(3)
+        expect(e.cause).to be_a(RedisClient::ProtocolError)
+      end
+      expect(client.commands.length).to eq(3)
+    end
+
+    it 'includes every model and the total text count in the message' do
+      client = FailingEmbClient.new
+      l1 = described_class.build_batch_loader(client, :minilm, 'a')
+      described_class.build_batch_loader(client, :bge, %w[b c])
+
+      expect { l1.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.message).to include('minilm, bge').and include('3 text(s)')
+      end
+    end
+
+    it 'reports the real per-client retry budget end to end' do
+      client = Emb::Client.new(port: 1, reconnect_attempts: 2)
+      expect(client.reconnect_attempts).to eq(2)
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(3) # redis-client really re-sent 3 times to the dead port
+        expect(e.cause).to be_a(RedisClient::CannotConnectError)
+      end
+    end
+
+    it 'treats an explicit false retry setting as no retries' do
+      client = FailingEmbClient.new(reconnect_attempts: false)
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
+      end
+      expect(client.commands.length).to eq(1)
+    end
+
+    it 'counts delay-array reconnect_attempts as one attempt per entry' do
+      client = FailingEmbClient.new(reconnect_attempts: [0, 0.5])
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(3) # two delay entries + the first attempt
+      end
+      expect(client.commands.length).to eq(3)
+    end
+
+    it 're-raises non-redis errors unchanged after clearing the pending batch' do
+      client = FakeEmbClient.new
+      def client.send_command(*)
+        raise TypeError, 'unsupported command argument'
+      end
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(TypeError)
+      expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+      expect(client.commands).to be_empty # nothing ever reached the server
+    end
+
+    it 'reports the final error class for mixed timeout-then-operation sequences' do
+      client = MixedFailureEmbClient.new
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      # redis-client 0.30 does not expose an accumulated send count, so the
+      # attempts number follows the final error (nominal, documented).
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
+        expect(e.cause).to be_a(RedisClient::CommandError)
+      end
+      expect(client.commands.length).to eq(2) # timeout send + re-send
+    end
+
+    it 'never retries operation errors even with a retry budget' do
+      client = FailingEmbClient.new(reconnect_attempts: 2, error: RedisClient::CommandError)
+      loader = described_class.build_batch_loader(client, :minilm, 'hello')
+
+      expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
+        expect(e.cause).to be_a(RedisClient::CommandError)
+      end
+      expect(client.commands.length).to eq(1)
     end
   end
 end
