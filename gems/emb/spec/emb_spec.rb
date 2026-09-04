@@ -186,6 +186,7 @@ RSpec.describe Emb do
     it 'exposes the effective reconnect_attempts' do
       expect(described_class.new(port: 16_379, reconnect_attempts: 2).reconnect_attempts).to eq(2)
       expect(described_class.new(port: 16_379).reconnect_attempts).to eq(0) # global default
+      expect(described_class.new(port: 16_379, reconnect_attempts: false).reconnect_attempts).to be(false)
     end
 
     it 'forwards unknown redis-client options without error' do

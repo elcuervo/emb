@@ -30,7 +30,8 @@ module Emb
       # redis-client re-sends transient failures (timeouts, connection errors)
       # up to that many extra times — EMB.MULTI is not idempotent, so each
       # re-send duplicates inference — and the batch still terminates in
-      # Emb::ServerError. Operation errors (server error replies) are never
+      # Emb::ServerError. An Array of per-retry delays is also accepted (one
+      # retry per entry). Operation errors (server error replies) are never
       # retried.
       self.reconnect_attempts = 0
     end

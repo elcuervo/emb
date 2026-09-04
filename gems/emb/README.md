@@ -86,6 +86,9 @@ transient failures (timeouts, connection drops, protocol errors) up to that many
 extra times before the batch fails closed — each re-send re-runs server inference,
 so keep the budget small — but operation errors (unknown model, auth, bad pairs)
 are never retried. Raise the timeouts if you raise `batch_size`.
+`reconnect_attempts` also accepts an Array of per-retry delays (a redis-client
+passthrough); each entry grants one retry and counts toward
+`Emb::ServerError#attempts`.
 
 ### Connection pool
 
@@ -359,7 +362,10 @@ and resolves to `[]` instead. The error's `cause` is the underlying redis error
 (`RedisClient::ReadTimeoutError`, `RedisClient::CommandError`, ...) and its message
 includes the model(s), text count, and attempt count. Transient failures (timeout,
 connection error, protocol error) re-send up to `reconnect_attempts` extra times when that option is set
-above 0 (default 0 = a single attempt); operation errors are never retried. This
+above 0 (default 0 = a single attempt); operation errors are never retried. A non-redis
+error raised by the batch call itself (e.g. a `TypeError` from bad arguments) is a local
+bug, not a server failure: the batch's pending items are still cleared, but the original
+error is re-raised. This
 prevents a slow server from turning one failed batch into endless duplicate work
 (retries re-running the whole batch) or growth of the pending set across retries.
 Pair-level failures the server reports as `null` (MGET semantics) are unaffected.

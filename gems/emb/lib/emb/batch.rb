@@ -16,10 +16,16 @@ module Emb
 
         begin
           results = Array(client.send_command('EMB.MULTI', *pairs))
-        rescue StandardError => e
+        rescue RedisClient::Error => e
           # Fail closed: raise Emb::ServerError (cause = the original error) and
           # drop the batch's pending items. Post-failure resolutions yield [].
           fail_batch!(e, slice: slice, budget: retry_budget(client))
+        rescue StandardError
+          # A non-redis error (e.g. CommandBuilder TypeError from bad arguments)
+          # is a local bug, not a batch failure: still fail closed by dropping
+          # the pending items, but re-raise the original error unchanged.
+          clear_batch_pending!
+          raise
         end
 
         offset = 0
@@ -57,7 +63,10 @@ module Emb
     # Fail-closed tail for a failed batch: clear the pending set, then raise
     # Emb::ServerError carrying the cause and the models/texts/attempts
     # context. Transient errors were already re-sent `budget` extra times by
-    # redis-client; operation errors surface on the first attempt.
+    # redis-client; operation errors surface on the first attempt. `attempts`
+    # reflects the final error's retry class — redis-client 0.30 does not
+    # expose an accumulated send count, so a mixed sequence (timeout retried,
+    # then an operation error) reports the operation error's count.
     def fail_batch!(error, slice:, budget:)
       clear_batch_pending!
       attempts = transient_error?(error) ? budget + 1 : 1
@@ -76,7 +85,7 @@ module Emb
     # truthy slots each grant one retry).
     def retry_budget(client)
       value = client.reconnect_attempts if client.respond_to?(:reconnect_attempts)
-      value ||= Emb.configuration.reconnect_attempts
+      value = Emb.configuration.reconnect_attempts if value.nil?
       return value if value.is_a?(Integer)
 
       value.is_a?(Array) ? value.count(&:itself) : 0
