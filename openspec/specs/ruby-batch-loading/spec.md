@@ -2,139 +2,75 @@
 
 ## Purpose
 
-Specifies lazy client-side batching for the `emb` gem: embedding calls made within the same
-execution scope (thread) coalesce into a single `EMB.MULTI` command using the `batch-loader`
-gem, with a `batch` configuration option that makes the default proxy API lazy.
+Specifies deferred client-side execution for the `emb` gem: under a deferred `lazy` mode (`:multi` or `:batch`), embedding calls made within the same execution scope (thread) coalesce into `EMB` / `EMB.MULTI` commands using the `batch-loader` gem, with the `lazy` mode configuration governing whether the default proxy API defers.
 
 ## Requirements
 
-### Requirement: Emb.batch exposes lazy batched embeddings
-
-The gem SHALL expose a module-level `Emb.batch` and an instance-level `client.batch` that
-return a per-model lazy proxy sharing the syntax of the standard proxy API:
-`Emb.batch[:model]["text"]` returns a lazy embedding that materializes on first use.
-The explicit batch API SHALL be available regardless of the `batch` configuration option.
-The value SHALL match the eager API's shape: a single text yields an Array of Float,
-multiple texts yield an Array of Array of Float.
-
-#### Scenario: Single text is lazy and materializes to a vector
-
-- **WHEN** `loader = Emb.batch[:minilm]["hello world"]` is called
-- **THEN** no command SHALL be sent to the server at call time
-- **AND** `loader.sum` SHALL send `EMB.MULTI minilm "hello world"` to the server
-- **AND** `loader.sum` SHALL return the sum of the embedding for `minilm`/`"hello world"`
-
-#### Scenario: Multi-text matches eager shape
-
-- **WHEN** `vecs = Emb.batch[:minilm]["hello", "world"]` is used
-- **THEN** `vecs` SHALL be an Array of Array of Float
-
-#### Scenario: Instance client batch API
-
-- **WHEN** `client = Emb.new; client.batch[:minilm]["hello"]` is used
-- **THEN** it SHALL send `EMB.MULTI` to the client's configured server
-
 ### Requirement: Per-scope coalescing into EMB.MULTI
 
-All lazy embeddings created in the same execution scope (thread) and batch scope SHALL be
-delivered to the server as `EMB.MULTI` command(s) when the first of them is used,
-coalesced per client into chunks of at most the configured `batch_size` pairs each.
-Embeddings for different models SHALL coalesce into the same command(s), preserving
-per-pair order in the response. Creating loaders SHALL NOT cause I/O; using a value
-triggers the flush. Chunking SHALL be unconditional (not triggered by server errors) so a
-single command never exceeds the server's `max_pairs` cap and stays within typical client
-read timeouts.
+All lazy embeddings created in the same execution scope (thread) and batch scope under a deferred mode (`lazy: :multi` or `lazy: :batch`) SHALL be delivered to the server when the first of them is used, coalesced per client into chunks of at most the configured `batch_size` texts each. A chunk whose items all use one model SHALL be delivered as a single `EMB <model> <text>...` command (the server packs its texts into one inference). A chunk spanning models SHALL be delivered as one `EMB.MULTI <model> <text>...` command, preserving per-pair nil behavior. Creating loaders SHALL NOT cause I/O; using a value triggers the flush. Chunking SHALL be unconditional (not triggered by server errors) so a single command never exceeds the server's `max_texts`/`max_pairs` cap and stays within typical client read timeouts. In `:batch` mode, the chunk shares are the executable units dispatched concurrently (per the `client-multi-instance-distribution` capability).
 
 #### Scenario: Same-model loaders coalesce into one MULTI
 
-- **WHEN** `l1 = Emb.batch[:minilm]["a"]`, `l2 = Emb.batch[:minilm]["b"]`, and `l3 = Emb.batch[:minilm]["c"]` are created in the same scope
-- **AND** `l1.sum` is called
-- **THEN** a single command `EMB.MULTI minilm "a" minilm "b" minilm "c"` SHALL be sent to the server
-- **AND** `l2.sum` and `l3.sum` SHALL return the correct embeddings without additional commands
+- **WHEN** `a = Emb[:minilm]["x"]`, `b = Emb[:minilm]["y"]`, and `c = Emb[:minilm]["z"]` are created in the same scope under `lazy: :multi` and `a` is used
+- **THEN** a single command `EMB minilm "x" "y" "z"` SHALL be sent to the server
+- **AND** `EMB.MULTI` SHALL NOT be used for same-model coalescing
+- **AND** `b` and `c` SHALL return the correct embeddings without additional commands
 
 #### Scenario: Mixed-model loaders coalesce into one MULTI
 
-- **WHEN** `Emb.batch[:minilm]["a"]` and `Emb.batch[:bge]["b"]` are created and used in the same scope
+- **WHEN** `Emb[:minilm]["a"]` and `Emb[:bge]["b"]` are created and used in the same scope under a deferred mode
 - **THEN** a single command `EMB.MULTI minilm "a" bge "b"` SHALL be sent
 - **AND** each value SHALL be the embedding from its own model
 
 #### Scenario: Loaders created after a flush form a new batch
 
-- **WHEN** a batch has already been flushed in the scope
+- **WHEN** a batch has already been flushed in the scope under a deferred mode
 - **AND** a new loader is then created and used
-- **THEN** a new `EMB.MULTI` command SHALL be sent containing only the new loader's pairs
+- **THEN** a new command SHALL be sent containing only the new loader's texts
 
 #### Scenario: Large scope resolves in chunked commands
 
-- **GIVEN** a client configured with `batch_size` 100
-- **WHEN** a scope defers 250 pairs
-- **THEN** the scope resolves via three `EMB.MULTI` commands with 100, 100, and 50 pairs respectively
+- **GIVEN** a client configured with `batch_size: 100` and a deferred mode
+- **WHEN** a scope defers 250 pairs of one model
+- **THEN** the scope resolves via three `EMB` commands with 100, 100, and 50 texts respectively (as shares, possibly executed concurrently in `:batch` mode)
 - **AND** results are returned in the deferral order with single-text values as vectors and multi-text values as collections, exactly as with one command
 
 #### Scenario: Chunked failures keep MGET semantics
 
-- **GIVEN** a client configured with `batch_size` 100
+- **GIVEN** a client configured with `batch_size: 100` and a deferred mode
 - **WHEN** a scope defers pairs including an unknown model, spanning two chunks
-- **THEN** each chunk resolves with per-pair `nil` for failed pairs and the loader returns values in deferral order
+- **THEN** each mixed-model chunk resolves via `EMB.MULTI` with per-pair `nil` for failed pairs and the loader returns values in deferral order
 
 #### Scenario: batch_size is configurable
 
 - **WHEN** `Emb.configure { |c| c.batch_size = 64 }` is set before clients are created
-- **THEN** all clients created afterwards use 64-pair chunks
+- **THEN** all clients created afterwards use 64-text chunks
 - **AND** an explicit per-client `batch_size:` option overrides the global setting
 
 ### Requirement: Cached values within a scope
 
-The gem SHALL cache loaded embeddings within the execution scope (`cache: true`), so using
-the same lazy embedding more than once SHALL NOT trigger additional server commands.
+The gem SHALL cache loaded embeddings within the execution scope under deferred modes, so using the same lazy embedding more than once SHALL NOT trigger additional server commands.
 
 #### Scenario: Repeat use does not re-send
 
-- **WHEN** `loader = Emb.batch[:minilm]["hello"]` is created and `loader.sum` is called twice
-- **THEN** exactly one `EMB.MULTI` command SHALL be sent to the server
+- **WHEN** `loader = Emb[:minilm]["hello"]` is created under a deferred mode and its value is used twice
+- **THEN** the pair SHALL be delivered to the server exactly once
 
 #### Scenario: Identical pairs deduplicate
 
-- **WHEN** `a = Emb.batch[:minilm]["dup"]` and `b = Emb.batch[:minilm]["dup"]` are created and both used in the same scope
-- **THEN** a single `EMB.MULTI` SHALL be sent with one pair for `minilm`/`"dup"`
+- **WHEN** `a = Emb[:minilm]["dup"]` and `b = Emb[:minilm]["dup"]` are created and both used in the same scope
+- **THEN** a single `EMB minilm "dup"` SHALL be sent (single-model scope), carrying one text
 - **AND** `a` and `b` SHALL materialize to the same value
-
-### Requirement: Batch mode configuration
-
-The gem SHALL accept a `batch` option in its client configuration, defaulting to `true`.
-When `true` (the default), the standard proxy API (`Emb[:model]["text"]` / `client[:model]["text"]`)
-SHALL return lazy batched embeddings instead of sending commands immediately.
-When `false`, the standard proxy API SHALL send `EMB` immediately (eager), exactly as
-before batching was introduced.
-
-#### Scenario: Default is lazy
-
-- **WHEN** `client = Emb.new` is created without a `batch` option
-- **THEN** `client[:minilm]["hello"]` SHALL NOT send a command at call time
-- **AND** using the returned value SHALL send `EMB.MULTI` and return an Array of Float
-
-#### Scenario: Batch mode makes the proxy lazy (explicit)
-
-- **WHEN** `client = Emb.new(batch: true)` is created
-- **THEN** `client[:minilm]["hello"]` SHALL NOT send a command at call time
-- **AND** using the returned value SHALL send `EMB.MULTI` and return an Array of Float
-
-#### Scenario: Opt-out restores eager sends
-
-- **WHEN** `client = Emb.new(batch: false)` is created
-- **THEN** `client[:minilm]["hello"]` SHALL send `EMB` immediately and return an Array of Float
 
 ### Requirement: Failure handling follows MGET semantics
 
-A pair whose embedding fails (unknown model or inference error) SHALL materialize as `nil`,
-mirroring `EMB.MULTI`'s per-pair null behavior. Successful pairs in the same batch SHALL
-materialize normally.
+In mixed-model chunks (delivered as `EMB.MULTI`), a pair whose embedding fails (unknown model or inference error) SHALL materialize as `nil`, mirroring `EMB.MULTI`'s per-pair null behavior, and successful pairs in the same chunk SHALL materialize normally. In single-model chunks (delivered as `EMB`), `EMB` has no per-text partial failures: a model-level failure (unknown model, inference error) surfaces as a whole-command error and follows the fail-closed behavior instead; sibling texts of a failing command are not individually salvageable, which is acceptable because they share the failing model.
 
 #### Scenario: Failed pair yields nil, siblings succeed
 
-- **WHEN** `a = Emb.batch[:minilm]["ok"]` and `b = Emb.batch[:ghost]["nope"]` are created in the same scope
+- **WHEN** `a = Emb[:minilm]["ok"]` and `b = Emb[:ghost]["nope"]` are created in the same scope under a deferred mode and used
 - **AND** the server returns a null for the `ghost` pair
-- **AND** `a` and `b` are used
 - **THEN** `a` SHALL be an Array of Float
 - **AND** `b.nil?` SHALL be `true`
 
@@ -145,48 +81,46 @@ materialize normally.
 
 ### Requirement: Request-scoped cache clearing
 
-The gem SHALL provide `Emb::Middleware`, a Rack middleware that clears the per-thread batch
-scope after each request via `BatchLoader::Executor.clear_current`. Clearing SHALL happen
-even when the wrapped application raises, and SHALL NOT leak cached values or pending
-loaders into the next request.
+The gem SHALL provide `Emb::Middleware`, a Rack middleware that clears the per-thread batch scope after each request under deferred modes, via `BatchLoader::Executor.clear_current`. Clearing SHALL happen even when the wrapped application raises, and SHALL NOT leak cached values or pending loaders into the next request. In eager mode (`lazy: false`) no per-thread scope exists and the middleware SHALL be inert (requests behave eagerly, nothing to clear).
 
 #### Scenario: Middleware clears the scope after each request
 
-- **WHEN** `Emb::Middleware` wraps an application in the middleware stack
-- **AND** the first request creates and uses `Emb.batch[:minilm]["hello"]`
-- **AND** the second request creates and uses `Emb.batch[:minilm]["hello"]` again
-- **THEN** a new `EMB.MULTI` command SHALL be sent for the second request
+- **WHEN** `Emb::Middleware` wraps an application under `lazy: :multi`
+- **AND** the first request creates and uses `Emb[:minilm]["hello"]`
+- **AND** the second request creates and uses `Emb[:minilm]["hello"]` again
+- **THEN** a new `EMB` command SHALL be sent for the second request (single-model scope)
 - **AND** the first request's cached value SHALL NOT be reused
 
 #### Scenario: Scope is cleared when the application raises
 
-- **WHEN** the wrapped application raises an exception
+- **WHEN** the wrapped application raises an exception under a deferred mode
 - **THEN** the per-thread batch scope SHALL still be cleared
+
+#### Scenario: Inert under eager mode
+
+- **WHEN** `Emb::Middleware` wraps an application under the default `lazy: false`
+- **THEN** each embed call SHALL send immediately
+- **AND** the middleware SHALL perform no scope manipulation
+
 ### Requirement: Job-scoped cache clearing
 
-The gem SHALL provide `Emb::JobMiddleware`, a background-job middleware that clears
-the per-thread batch scope after each job execution via `BatchLoader::Executor.clear_current`,
-mirroring the guarantee `Emb::Middleware` provides for Rack requests. Clearing SHALL
-happen even when the job raises, and each job SHALL start with a fresh batch scope.
-The middleware SHALL be execution-framework agnostic: it SHALL wrap a job callback
-and yield to the job body, so the same class can be registered in any job processor
-(ActiveJob, Sidekiq, Shoryuken, and adapters built on them such as SolidQueue).
+The gem SHALL provide `Emb::JobMiddleware`, a background-job middleware that clears the per-thread batch scope after each job execution under deferred modes, via `BatchLoader::Executor.clear_current`, mirroring the guarantee `Emb::Middleware` provides for Rack requests. Clearing SHALL happen even when the job raises, and each job SHALL start with a fresh batch scope. The middleware SHALL be execution-framework agnostic: it SHALL wrap a job callback and yield to the job body, so the same class can be registered in any job processor (ActiveJob, Sidekiq, Shoryuken, and adapters built on them such as SolidQueue). In eager mode the middleware SHALL be inert.
 
 #### Scenario: Scope is cleared after each job
 
-- **WHEN** `Emb::JobMiddleware` wraps a job body that creates and uses lazy embeddings
+- **WHEN** `Emb::JobMiddleware` wraps a job body under `lazy: :batch` that creates and uses lazy embeddings
 - **THEN** the batch scope SHALL be empty after the job completes
-- **AND** a second job on the same thread SHALL start with a fresh scope (the same pair re-sends `EMB.MULTI`)
+- **AND** a second job on the same thread SHALL start with a fresh scope (the same pair re-sends its command)
 
 #### Scenario: Scope is cleared when the job raises
 
-- **WHEN** `Emb::JobMiddleware` wraps a job body that raises after creating lazy embeddings
+- **WHEN** `Emb::JobMiddleware` wraps a job body under a deferred mode that raises after creating lazy embeddings
 - **THEN** the per-thread batch scope SHALL still be cleared
 
 #### Scenario: Unused loaders are dropped at job end
 
-- **WHEN** a job creates lazy loaders that are never used
-- **THEN** no `EMB.MULTI` SHALL be sent for them
+- **WHEN** a job under a deferred mode creates lazy loaders that are never used
+- **THEN** no command SHALL be sent for them
 - **AND** they SHALL be dropped when the job ends, not carried into the next job
 
 #### Scenario: Middleware yields to the job body
@@ -195,54 +129,30 @@ and yield to the job body, so the same class can be registered in any job proces
 - **THEN** it SHALL invoke the rest of the middleware chain (yield) and the job body regardless of the number of positional arguments
 - **AND** it SHALL pass through the job body's return value or exception unchanged
 
-### Requirement: Batch failures retry then fail closed
+#### Scenario: Inert under eager mode
 
-When a batch command fails with a transient error (timeout, connection error, protocol error), the gem SHALL re-send the command up to `reconnect_attempts` additional times (the first attempt plus `reconnect_attempts` retries in total) before failing closed. Operation errors — replies the server parsed and rejected (`RedisClient::CommandError`, e.g. unknown model) — SHALL NOT be retried. When a batch fails after all retries (or immediately for an operation error or the default `reconnect_attempts: 0` configuration), the gem SHALL raise `Emb::ServerError` to the code that forced the batch, SHALL remove every deferred item of that batch from the scope's pending set, and SHALL NOT re-send the failed batch on any later resolution attempt. `Emb::ServerError` SHALL carry the underlying redis error as `cause`, plus the model(s), text count, and attempt count. Re-resolving an item from a failed batch SHALL return an empty array (`[]`) and SHALL NOT perform I/O. New batches created in the same scope afterwards SHALL contain only items deferred after the failure.
+- **WHEN** `Emb::JobMiddleware` wraps a job body under the default `lazy: false`
+- **THEN** the middleware SHALL pass through to the job body with no scope manipulation
+
+### Requirement: Batch failures fail closed
+
+When a batch command fails terminally (timeout after send, connection error after retries are exhausted, or protocol error), the gem SHALL surface the error to the code that forced the batch, SHALL remove every deferred item of that failing share from the scope's pending set, SHALL NOT re-send the failed command on any later resolution attempt, and SHALL NOT re-send shares that already succeeded. Re-resolving an item from a failed share SHALL return an empty array (`[]`) and SHALL NOT perform I/O. New batches created in the same scope afterwards SHALL contain only items deferred after the failure.
 
 #### Scenario: Error surfaces once and pending is cleared
 
-- **WHEN** a scope defers 6 items and the `EMB.MULTI` for them fails under the default configuration (`reconnect_attempts: 0`)
-- **THEN** the forced value SHALL raise `Emb::ServerError` after a single attempt
+- **WHEN** a scope under a deferred mode defers 6 items and the command for them fails terminally
+- **THEN** the forced value SHALL raise the original error
 - **AND** the scope's pending set SHALL be empty afterwards
-
-#### Scenario: Transient failure recovers within retries
-
-- **GIVEN** a client configured with `reconnect_attempts: 2`
-- **WHEN** a scope defers 6 items and the first two `EMB.MULTI` sends for them time out
-- **AND** the third send succeeds
-- **THEN** the forced loader SHALL materialize the real embeddings for all 6 items
-- **AND** the server SHALL have received exactly 3 `EMB.MULTI` commands for the batch
-
-#### Scenario: Exhausted retries raise a typed error and clear pending
-
-- **GIVEN** a client configured with `reconnect_attempts: 2`
-- **WHEN** a scope defers 6 items and every `EMB.MULTI` send for them fails transiently
-- **THEN** the forced value SHALL raise `Emb::ServerError`
-- **AND** 3 attempts SHALL have been sent to the server (`reconnect_attempts + 1`)
-- **AND** the scope's pending set SHALL be empty afterwards
-
-#### Scenario: Operation errors are not retried
-
-- **GIVEN** a client configured with `reconnect_attempts: 2`
-- **WHEN** a scope defers items and the server returns an error reply (not a timeout/connection error) on the first send
-- **THEN** the forced value SHALL raise `Emb::ServerError`
-- **AND** exactly one command SHALL have been sent to the server
-
-#### Scenario: ServerError carries failure context
-
-- **WHEN** a batch fails (after exhausting retries, or on the first attempt)
-- **THEN** the raised `Emb::ServerError`'s `cause` SHALL be the underlying redis error
-- **AND** its message SHALL include the model(s), the text count, and the number of attempts
 
 #### Scenario: Retry resolves to [] without I/O
 
-- **WHEN** an item of a failed batch is resolved again after the failure
+- **WHEN** an item of a failed share is resolved again after the failure
 - **THEN** it SHALL return an empty array (`[]`)
 - **AND** no command SHALL be sent to the server
 
 #### Scenario: Subsequent batches exclude failed items
 
-- **WHEN** a batch has failed in a scope and the scope then defers 2 new items which are forced
+- **WHEN** a command has failed terminally in a scope and the scope then defers 2 new items which are forced
 - **THEN** the server SHALL receive a single command containing exactly the 2 new pairs
 - **AND** none of the previously failed items SHALL be re-sent
 
@@ -250,3 +160,54 @@ When a batch command fails with a transient error (timeout, connection error, pr
 
 - **WHEN** several batches fail sequentially in the same scope (with or without retries in between)
 - **THEN** the pending set SHALL NOT grow beyond the items currently deferred in the scope
+
+### Requirement: Lazy mode configuration
+
+The gem SHALL accept a `lazy` mode in its client configuration with exactly three values: `false`, `:multi`, and `:batch`, defaulting to `false`. They are mutually exclusive by construction. With `false` (eager, the default), the standard proxy API (`Emb[:model]["text"]` / `client[:model]["text"]`) SHALL send `EMB` immediately. With `:multi`, proxy embed calls SHALL return lazy batched embeddings that coalesce into one `EMB` command (single-model scope) or one `EMB.MULTI` (mixed-model scope), executed serially. With `:batch`, proxy embed calls SHALL return lazy embeddings whose coalesced chunk shares execute concurrently. Any other value SHALL be rejected at configuration time.
+
+#### Scenario: Default is eager
+
+- **WHEN** `client = Emb.new` is created without a `lazy` option
+- **THEN** `client[:minilm]["hello"]` SHALL send `EMB minilm "hello"` at call time and return an Array of Float
+
+#### Scenario: Multi mode defers and coalesces serially
+
+- **WHEN** `client = Emb.new(lazy: :multi)` is created
+- **THEN** `client[:minilm]["hello"]` SHALL NOT send a command at call time
+- **AND** using the returned value SHALL send `EMB minilm "hello"` and return an Array of Float
+- **AND** chunked commands SHALL be executed one at a time (serial)
+
+#### Scenario: Batch mode defers and executes concurrently
+
+- **WHEN** `client = Emb.new(lazy: :batch)` is created and pool-sized connections are available
+- **THEN** `client[:minilm]["hello"]` SHALL NOT send a command at call time
+- **AND** using the returned value SHALL dispatch chunk shares concurrently and return an Array of Float
+
+#### Scenario: Invalid mode rejected
+
+- **WHEN** `Emb.new(lazy: :eager)` or any value other than `false`/`:multi`/`:batch` is provided
+- **THEN** configuration SHALL raise a clear error
+
+### Requirement: Batch mode parallel execution
+
+In `lazy: :batch` mode, the chunk shares of a resolving scope SHALL be dispatched concurrently rather than one after another, and results SHALL be reassembled in deferral order after all shares complete. Concurrency SHALL hold for a single instance (shares run in parallel over that instance's pool connections) and across instances (shares distribute per the `client-multi-instance-distribution` capability).
+
+#### Scenario: Mixed-latency chunks overlap
+
+- **WHEN** a scope under `lazy: :batch` resolves into a slow chunk and a fast chunk on pool-sized connections
+- **THEN** both chunks SHALL be dispatched before either completion is awaited
+- **AND** the resolving call SHALL complete in approximately the slow chunk's latency, not the sum of both
+- **AND** results SHALL be returned in deferral order
+
+#### Scenario: Single-instance concurrency
+
+- **WHEN** `Emb.setup(url: "redis://localhost:6379", lazy: :batch, pool: 4)` is configured and a scope resolves into multiple chunk shares
+- **THEN** the shares SHALL execute concurrently over the instance's pool connections
+- **AND** all values SHALL materialize correctly in deferral order
+
+#### Scenario: Terminal share failure fails closed
+
+- **WHEN** two shares execute concurrently and one fails terminally after retries
+- **THEN** the force SHALL raise the failing share's error
+- **AND** the successful share's command SHALL NOT be re-sent on any later resolution
+- **AND** the failed share's items SHALL be cleared from the scope's pending set

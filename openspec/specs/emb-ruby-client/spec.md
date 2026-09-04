@@ -53,11 +53,9 @@ connection pool and proxy registry.
 
 ### Requirement: Proxy-based API
 
-The gem SHALL expose a module-level `Emb[name]` syntax that returns a memoized proxy for each model name.
-Instance clients SHALL expose the same `client[name]` syntax.
-The gem SHALL expose `Emb::VERSION` that resolves correctly regardless of install path.
-When the client is configured with `batch: true` (the out-of-the-box default), proxy embed calls SHALL return a lazy batched embedding (per the `ruby-batch-loading` capability) instead of sending a command immediately.
-When the client is configured with `batch: false`, proxy embed calls SHALL immediately send `EMB` to the server and return the embedding.
+The gem SHALL expose a module-level `Emb[name]` syntax that returns a memoized proxy for each model name. Instance clients SHALL expose the same `client[name]` syntax. The gem SHALL expose `Emb::VERSION` that resolves correctly regardless of install path.
+
+Proxy embed-call behavior SHALL be governed by the `lazy` mode (per the `ruby-batch-loading` capability): with the default `lazy: false`, proxy embed calls SHALL immediately send `EMB` to the server and return the embedding; with `lazy: :multi` or `lazy: :batch`, they SHALL return a lazy embedding that materializes on first use. There SHALL be no explicit `Emb.batch` / `client.batch` proxy.
 
 #### Scenario: Version resolves from loaded spec
 
@@ -67,20 +65,17 @@ When the client is configured with `batch: false`, proxy embed calls SHALL immed
 
 #### Scenario: Single embed (module level)
 
-- **WHEN** `Emb[:minilm]["hello world"]` is called with the default `batch: true` configuration
-- **THEN** it SHALL return a lazy batched value (no command sent at call time) whose use
-  returns an Array of Float matching the eager result
+- **WHEN** `Emb[:minilm]["hello world"]` is called with the default `lazy: false` configuration
+- **THEN** it SHALL send `EMB minilm "hello world"` at call time and return an Array of Float
 
 #### Scenario: Single embed (instance)
 
-- **WHEN** `client = Emb.new; client[:minilm]["hello world"]` is called
-- **THEN** it SHALL return an Array of Float when the value is used
-- **AND** it SHALL send `EMB.MULTI` (lazy batch) by default, or `EMB minilm "hello world"`
-  when the client is `batch: false`
+- **WHEN** `client = Emb.new; client[:minilm]["hello world"]` is called with the default `lazy: false` configuration
+- **THEN** it SHALL send `EMB minilm "hello world"` immediately and return an Array of Float
 
 #### Scenario: Multi-text embed
 
-- **WHEN** `Emb[:minilm]["hello", "world"]` is called with `batch: false`
+- **WHEN** `Emb[:minilm]["hello", "world"]` is called with the default `lazy: false` configuration
 - **THEN** it SHALL send `EMB minilm "hello" "world"` to the server
 - **THEN** it SHALL return an Array of Array of Float
 
@@ -91,7 +86,7 @@ When the client is configured with `batch: false`, proxy embed calls SHALL immed
 
 #### Scenario: Single embed in batch mode
 
-- **WHEN** `Emb.setup(batch: true)` has configured the default client
+- **WHEN** `Emb.setup(lazy: :batch)` has configured the default client
 - **AND** `vec = Emb[:minilm]["hello world"]` is called
 - **THEN** no command SHALL be sent to the server at call time
 - **AND** when `vec` is used (e.g. `vec.sum`), it SHALL return an Array of Float
@@ -99,16 +94,16 @@ When the client is configured with `batch: false`, proxy embed calls SHALL immed
 
 #### Scenario: Multi-text embed in batch mode
 
-- **WHEN** `Emb.setup(batch: true)` has configured the default client
+- **WHEN** `Emb.setup(lazy: :batch)` has configured the default client
 - **AND** `vecs = Emb[:minilm]["hello", "world"]` is called
 - **AND** `vecs` is used
 - **THEN** it SHALL return an Array of Array of Float
 
 #### Scenario: Eager path unaffected by explicit batch API
 
-- **WHEN** `Emb.batch[:minilm]["hello"]` is used while the client has `batch: false`
-- **THEN** the explicit batch API SHALL still return a lazy batched embedding
-- **AND** the default proxy path `Emb[:minilm]["hello"]` SHALL remain eager
+- **WHEN** a client has the default `lazy: false` configuration
+- **THEN** the default proxy path `Emb[:minilm]["hello"]` SHALL remain eager
+- **AND** the explicit `Emb.batch` / `client.batch` API SHALL NOT exist (invoking it raises `NoMethodError`), so it SHALL have no effect on the eager path
 
 ### Requirement: Command wrappers
 
@@ -142,7 +137,7 @@ Instance clients SHALL expose the same methods.
 
 ### Requirement: Multi-model batch
 
-The gem SHALL support batch multi-model embedding via a block syntax, on both module level and instance level. The composed `EMB.MULTI` SHALL be split into commands of at most the configured `batch_size` pairs (default 512), preserving result ordering and per-pair nil behavior across chunks.
+The gem SHALL support batch multi-model embedding via a block syntax, on both module level and instance level. The composed `EMB.MULTI` SHALL be split into commands of at most the configured `batch_size` pairs (default 512), preserving result ordering and per-pair nil behavior across chunks. The block syntax SHALL execute eagerly in every `lazy` mode: composing and running a block SHALL send `EMB.MULTI` at block end regardless of the configured mode.
 
 #### Scenario: Multi-embed block (module level)
 
@@ -157,15 +152,23 @@ The gem SHALL support batch multi-model embedding via a block syntax, on both mo
 
 #### Scenario: Oversized block chunks and reassembles
 
-- **WHEN** `client.multi` with `batch_size` 100 collects 250 pairs across models
-- **THEN** it SHALL send three `EMB.MULTI` commands (100, 100, 50 pairs)
-- **AND** the returned array SHALL be in collection order across all chunks, with failed pairs as `nil`
+- **GIVEN** `batch_size: 100`
+- **WHEN** `Emb.multi` composes 250 pairs
+- **THEN** the pairs SHALL be sent as three commands of 100, 100, and 50 pairs
+- **AND** results SHALL be concatenated in composition order
 
 #### Scenario: batch_size applies globally and per client
 
 - **WHEN** `Emb.configure { |c| c.batch_size = 64 }` is set
 - **THEN** default and `Emb.new` clients SHALL use 64-pair chunks
 - **AND** `Emb.new(batch_size: 32)` SHALL override with 32
+
+#### Scenario: Multi stays eager under deferred modes
+
+- **WHEN** a client is configured `lazy: :batch`
+- **AND** `Emb.multi { |m| m[:minilm]["hello"] }` is called
+- **THEN** `EMB.MULTI minilm "hello"` SHALL be sent when the block ends (not deferred)
+- **AND** the return value SHALL be the processed result, not a lazy value
 
 ### Requirement: Connection pooling
 
