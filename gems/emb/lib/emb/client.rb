@@ -8,17 +8,14 @@ module Emb
     include Commands
 
     # Accepts a single redis URL (String) or several (Array of Strings) naming
-    # interchangeable emb instances serving the same model set. Each url gets
-    # its own pool of `pool` connections; commands rotate across instances
-    # first (ConnectionRouter), then across connections within the selected
-    # instance. Pre-send connection failures retry on the next instance; errors
-    # after a command may have been sent are never re-dispatched.
+    # interchangeable emb instances serving the same model set; each url gets
+    # its own pool of `pool` connections (see ConnectionRouter).
     def initialize(pool: nil, lazy: nil, **redis_options)
       cfg = Emb.configuration
       @lazy_mode = lazy.nil? ? cfg.lazy : validate_lazy!(lazy)
       @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
       url = extract_url!(redis_options, cfg)
-      # Capture before ConnectionRouter consumes the merged options, so
+      # Captured before ConnectionRouter consumes the merged options, so
       # fail-closed batches can report the retry budget (Emb::ServerError).
       redis_options = merged_redis_options(redis_options, cfg, url)
       @reconnect_attempts = redis_options.fetch(:reconnect_attempts, cfg.reconnect_attempts)

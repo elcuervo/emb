@@ -5,15 +5,14 @@ require 'redis_client'
 
 module Emb
   # Owns a client's instance fan-out: one RoundRobinPool per configured url,
-  # instance-level round-robin selection on top of each pool's connection
-  # rotation, and the pre-send retry across instances. Commands rotate across
-  # instances first, then across connections within the selected instance.
+  # instance-level round-robin on top of each pool's connection rotation, and
+  # the pre-send retry across instances.
   #
   # Retry is deliberately limited to PRESEND_CONNECTION_ERROR: a connection
   # that was never established means the command was not written, so moving it
-  # to another instance is safe. Errors raised after a command may have been
-  # sent (timeouts, mid-flight connection loss) are never re-dispatched —
-  # retrying them would duplicate inference on the server.
+  # to another instance is safe. Errors after a command may have been sent
+  # (timeouts, mid-flight connection loss) are never re-dispatched — retrying
+  # them would duplicate inference on the server.
   class ConnectionRouter
     # Captured at load so `rescue` keeps working when tests or apps replace the
     # RedisClient constant (stub_const) — a runtime constant lookup in the
