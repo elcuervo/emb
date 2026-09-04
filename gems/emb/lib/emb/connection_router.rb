@@ -58,9 +58,10 @@ module Emb
     end
 
     def perform_command(pool, args)
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC) if Emb.debug?
+      debug = Emb.debug?
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC) if debug
       result = pool.with { |r| r.call(*args) }
-      log_command(args, started) if Emb.debug?
+      log_command(args, started) if debug
       result
     end
 

@@ -76,19 +76,18 @@ coalescing with `lazy: :multi` or concurrent fan-out with `lazy: :batch` — glo
 
 **Why the timeout and reconnect defaults matter:** batched `EMB.MULTI` (up to 512 pairs)
 can take over a second of inference on a shared CPU, and redis-client's silent default is
-1.0s — a slower reply times out and (because `ReadTimeoutError` is a `ConnectionError`)
-redis-client would **re-send the whole command** per `reconnect_attempts`, duplicating
-server inference. The gem therefore defaults to an explicit 10s timeout and
-`reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
+1.0s — a slower reply times out. The gem therefore defaults to an explicit 10s timeout
+and `reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
 `Emb::ServerError` (see [Lazy execution modes](#lazy-execution-modes)). Set
 `Emb.configure { |c| c.reconnect_attempts = 2 }` and redis-client re-sends
-pre-send transient failures (timeouts, connection drops, protocol errors) up to
-that many extra times before the batch fails closed — each re-send re-runs server
-inference, so keep the budget small — but operation errors (unknown model, auth,
-bad pairs) are never retried, and `lazy: :batch` shares additionally retry a
-refused connection on the next configured instance. Raise the timeouts if you
-raise `batch_size`. `reconnect_attempts` also accepts an Array of per-retry
-delays (a redis-client passthrough); each entry grants one retry and counts
+**connection and protocol failures** up to that many extra times before the batch fails
+closed — each re-send re-runs server inference, so keep the budget small. Operation
+errors (unknown model, auth, bad pairs) are never retried, and neither are **read
+timeouts**: redis-client treats `ReadTimeoutError` as terminal, and re-sending a timed-out
+command could duplicate inference the server already did. `lazy: :batch` shares
+additionally retry a refused connection on the next configured instance. Raise the
+timeouts if you raise `batch_size`. `reconnect_attempts` also accepts an Array of
+per-retry delays (a redis-client passthrough); each entry grants one retry and counts
 toward `Emb::ServerError#attempts`.
 
 ### Connection pool

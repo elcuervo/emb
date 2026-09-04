@@ -330,18 +330,20 @@ A stability gate measures inference p50/p99 under synthetic parse-heavy load
 
 Two `bench-cpu-partition.yaml` servers on :16379/:16380 under `just
 bench-ruby-multi` (app partition split 3+3, bench partition 4), 200 texts × 4
-rounds, pool 5. Validated 2026-09-04 post-merge (lazy-execution-modes). Warm
-inference baseline: **1.873 ms**.
+rounds, pool 5. Validated 2026-09-04 post-merge (lazy-execution-modes; eager rows reuse one
+client per round since CodeRabbit review — client construction is excluded from
+timing, which alone moved eager from 526 to 736 req/s). Warm
+inference baseline: **1.857 ms**.
 
 | Scenario      | Embed | per-embed | req/s | p50    | p99    | overhead |
 |---------------|-------|-----------|-------|--------|--------|----------|
-| eager         | 800   | 1.901 ms  | 526.0 | 1.748  | 3.948  | +1.5%    |
-| multi         | 800   | 0.529 ms  | 1890.5| 0.543  | 0.547  | −71.8%   |
-| batch         | 800   | 0.541 ms  | 1847.8| 0.553  | 0.629  | −71.1%   |
-| pipelined     | 800   | 1.163 ms  | 859.8 | 1.074  | 1.532  | −37.9%   |
-| threaded      | 800   | 1.132 ms  | 883.6 | 3.902  | 13.056 | −39.6%   |
-| eager-2node   | 800   | 2.951 ms  | 338.9 | 1.904  | 8.887  | +57.6%   |
-| batch-2node   | 800   | 0.763 ms  | 1310.3| 0.751  | 0.923  | −59.3%   |
+| eager         | 800   | 1.358 ms  | 736.2 | 1.261  | 2.890  | −26.9%   |
+| multi         | 800   | 0.570 ms  | 1753.2| 0.582  | 0.591  | −69.3%   |
+| batch         | 800   | 0.637 ms  | 1571.0| 0.639  | 0.652  | −65.7%   |
+| pipelined     | 800   | 1.295 ms  | 772.5 | 1.324  | 1.365  | −30.3%   |
+| threaded      | 800   | 0.898 ms  | 1113.6| 3.075  | 8.349  | −51.6%   |
+| eager-2node   | 800   | 2.914 ms  | 343.1 | 1.903  | 9.724  | +56.9%   |
+| batch-2node   | 800   | 0.641 ms  | 1561.2| 0.643  | 0.715  | −65.5%   |
 
 Round-trip checks pass: eager = 5 `EMB`; multi = 1 `EMB` (single-model scope);
 batch = 3 concurrent `EMB` shares (batch_size 2); mixed-model scope = 1
@@ -359,9 +361,9 @@ batch = 3 concurrent `EMB` shares (batch_size 2); mixed-model scope = 1
 - **Threaded keeps server-side session thrash**: 883 req/s best aggregate,
   13 ms p99 (10-session contention), consistent with prior runs.
 
-**Stability gate:** idle p99 43.9 ms → constant parse load 55.2, **constant ratio
-1.26 PASS** (≤ 1.5); request storm (2 workers × 400 pairs) p99 72.3, **storm ratio
-1.65 PASS** (≤ 1.75). Under a partition the storm gate passes; unpartitioned
+**Stability gate:** idle p99 50.0 ms → constant parse load 70.5, **constant ratio
+1.41 PASS** (≤ 1.5); request storm (2 workers × 400 pairs) p99 69.7, **storm ratio
+1.40 PASS** (≤ 1.75). Under a partition the storm gate passes; unpartitioned
 macOS runs historically showed client-side contention (see Notes).
 
 ### Evidence-based client decisions

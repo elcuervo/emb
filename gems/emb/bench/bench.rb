@@ -168,8 +168,9 @@ def scenario_eager
 end
 
 def eager_round(round)
+  client = eager_client # one client per round; construction is excluded from timing
   distinct_texts(TEXTS, round).map do |t|
-    timed_call { Emb::Proxy.new(eager_client, MODEL)[t] }
+    timed_call { Emb::Proxy.new(client, MODEL)[t] }
   end
 end
 
@@ -254,8 +255,9 @@ end
 
 def worker(thread)
   Thread.new do
+    client = eager_client # one client per worker thread
     distinct_texts(TEXTS, thread).each do |t|
-      timed_call { Emb::Proxy.new(eager_client, MODEL)[t] }.then { SAMPLE_QUEUE << _1 }
+      timed_call { Emb::Proxy.new(client, MODEL)[t] }.then { SAMPLE_QUEUE << _1 }
     end
   end
 end

@@ -92,13 +92,21 @@ class LatchTracker
   end
 
   def enter
+    # Finite wait: if dispatch stops being concurrent, the first worker times
+    # out and fails the test instead of hanging the suite forever.
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
     @mutex.synchronize do
       @arrived += 1
       @max_overlap = [@max_overlap, @arrived].max
       if @arrived == @n
         @cv.broadcast
       else
-        @cv.wait(@mutex) while @arrived < @n
+        while @arrived < @n
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          raise 'latch timed out: dispatch was not concurrent' if remaining <= 0
+
+          @cv.wait(@mutex, remaining)
+        end
       end
     end
   end
@@ -626,6 +634,47 @@ RSpec.describe Emb do
       expect(client.commands.size).to eq(2)
       expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
     end
+
+    it 're-raises a non-redis error unchanged on the parallel path (parity with serial)' do
+      client = ParallelFakeEmbClient.new
+      def client.send_command(*)
+        raise TypeError, 'unsupported command argument'
+      end
+      client.batch_size = 1
+      l1 = described_class.build_batch_loader(client, :minilm, 'a')
+      described_class.build_batch_loader(client, :minilm, 'b')
+
+      expect { l1.__send__(:__sync) }.to raise_error(TypeError, 'unsupported command argument')
+      expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+    end
+
+    it 'packs chunk shares by text count, not item count' do
+      client = ParallelFakeEmbClient.new(
+        { %w[EMB minilm x y] => [FakeEmbClient.vec(1.0), FakeEmbClient.vec(2.0)],
+          %w[EMB minilm z] => [FakeEmbClient.vec(3.0)] }
+      )
+      client.batch_size = 2
+      loaded = []
+      items = [[client, :minilm, %w[x y]], [client, :minilm, 'z']]
+
+      Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
+
+      expect(client.commands).to eq([%w[EMB minilm x y], %w[EMB minilm z]])
+      expect(loaded.map(&:last)).to eq([[[1.0, 1.0], [2.0, 2.0]], [3.0, 3.0]])
+    end
+
+    it 'fails closed with ServerError when the server reply is shorter than the texts' do
+      short_client = FakeEmbClient.new(
+        %w[EMB minilm a b] => [FakeEmbClient.vec(1.0)] # 2 texts, 1 entry
+      )
+      l1 = described_class.build_batch_loader(short_client, :minilm, 'a')
+      described_class.build_batch_loader(short_client, :minilm, 'b')
+
+      expect { l1.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.cause).to be_a(RedisClient::ProtocolError)
+        expect(e.message).to include('expected 2 reply entries, got 1')
+      end
+    end
   end
 
   describe 'multi-instance pre-send retry (real client)' do
@@ -810,7 +859,7 @@ RSpec.describe Emb do
     end
 
     it 'raises Emb::ServerError with context once the retry budget is exhausted' do
-      client = FailingEmbClient.new(reconnect_attempts: 2)
+      client = FailingEmbClient.new(reconnect_attempts: 2, error: RedisClient::ConnectionError)
       loader = described_class.build_batch_loader(client, :minilm, 'hello')
 
       expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
@@ -865,7 +914,7 @@ RSpec.describe Emb do
     end
 
     it 'counts delay-array reconnect_attempts as one attempt per entry' do
-      client = FailingEmbClient.new(reconnect_attempts: [0, 0.5])
+      client = FailingEmbClient.new(reconnect_attempts: [0, 0.5], error: RedisClient::ConnectionError)
       loader = described_class.build_batch_loader(client, :minilm, 'hello')
 
       expect { loader.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
