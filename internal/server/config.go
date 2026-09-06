@@ -6,8 +6,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tidwall/redcon"
+
+	"github.com/elcuervo/emb/internal/config"
 )
 
 // configParam is one entry in the runtime-config registry. Read-only params
@@ -30,19 +33,38 @@ func (s *Server) configParams() []configParam {
 		},
 		{
 			name: "cache_file",
-			get:  func(s *Server) string { return s.cacheFile },
-			set: func(s *Server, v string) error {
-				s.cacheFile = v
-				return nil
-			},
+			get:  func(s *Server) string { return s.persistenceValue("file") },
+			set:  (*Server).setConfigCacheFile,
+		},
+		{
+			name:     "cache_load",
+			get:      func(s *Server) string { return s.persistenceValue("load") },
+			readOnly: true,
 		},
 		{
 			name: "cache_save",
-			get:  func(s *Server) string { return s.cacheSave },
-			set: func(s *Server, v string) error {
-				s.cacheSave = v
-				return nil
-			},
+			get:  func(s *Server) string { return s.persistenceValue("save") },
+			set:  (*Server).setConfigCacheSave,
+		},
+		{
+			name: "cache_save_on_shutdown",
+			get:  func(s *Server) string { return s.persistenceValue("shutdown") },
+			set:  (*Server).setConfigCacheSaveOnShutdown,
+		},
+		{
+			name:     "cache_restore_limit",
+			get:      func(s *Server) string { return s.persistenceValue("limit") },
+			readOnly: true,
+		},
+		{
+			name:     "cache_restore_reserve",
+			get:      func(s *Server) string { return s.persistenceValue("reserve") },
+			readOnly: true,
+		},
+		{
+			name: "cache_save_rate_limit",
+			get:  func(s *Server) string { return s.persistenceValue("rate") },
+			set:  (*Server).setConfigCacheSaveRate,
 		},
 		{
 			name: "max_texts",
@@ -67,6 +89,107 @@ func (s *Server) configParams() []configParam {
 		{name: "tls_key", get: func(s *Server) string { return s.tlsKey }, readOnly: true},
 		{name: "models", get: (*Server).configModels, readOnly: true},
 	}
+}
+
+func (s *Server) persistenceValue(name string) string {
+	s.persistenceMu.RLock()
+	defer s.persistenceMu.RUnlock()
+	switch name {
+	case "file":
+		return s.cacheFile
+	case "load":
+		return strconv.FormatBool(s.cacheLoad)
+	case "save":
+		return s.cacheSave
+	case "shutdown":
+		return strconv.FormatBool(s.cacheSaveOnShutdown)
+	case "limit":
+		if s.cacheRestoreLimit == "" {
+			return "auto"
+		}
+		return s.cacheRestoreLimit
+	case "reserve":
+		if s.cacheRestoreReserve == "" {
+			return "10%"
+		}
+		return s.cacheRestoreReserve
+	case "rate":
+		if s.cacheSaveRateLimit == "" {
+			return "0"
+		}
+		return s.cacheSaveRateLimit
+	default:
+		return ""
+	}
+}
+
+func (s *Server) reconfigureSnapshotLocked() {
+	interval := time.Duration(0)
+	if s.cacheSave != "" {
+		interval, _ = time.ParseDuration(s.cacheSave)
+	}
+	rate, _ := (config.Config{CacheSaveRateLimit: s.cacheSaveRateLimit}).CacheSaveRateBytes()
+	if s.snapshot == nil && s.cacheFile != "" && s.cache != nil {
+		s.snapshot = newSnapshotCoordinator(s.cache, s.reg, PersistenceConfig{
+			File: s.cacheFile, Load: s.cacheLoad, SaveInterval: interval,
+			SaveOnShutdown: s.cacheSaveOnShutdown, SaveRateBytes: rate,
+			RestoreLimit: s.cacheRestoreLimit, RestoreReserve: s.cacheRestoreReserve,
+			SaveRateRaw: s.cacheSaveRateLimit,
+		})
+	} else if s.snapshot != nil {
+		s.snapshot.Configure(s.cacheFile, interval, s.cacheSaveOnShutdown, rate)
+	}
+}
+
+func (s *Server) setConfigCacheFile(v string) error {
+	s.persistenceMu.Lock()
+	s.cacheFile = v
+	s.reconfigureSnapshotLocked()
+	s.persistenceMu.Unlock()
+	return nil
+}
+
+func (s *Server) setConfigCacheSave(v string) error {
+	var interval time.Duration
+	var err error
+	if v != "" {
+		interval, err = time.ParseDuration(v)
+		if err != nil || interval <= 0 {
+			return fmt.Errorf("cache_save must be a positive duration")
+		}
+	}
+	s.persistenceMu.Lock()
+	if v != "" && s.cacheFile == "" {
+		s.persistenceMu.Unlock()
+		return fmt.Errorf("cache_save requires cache_file")
+	}
+	s.cacheSave = v
+	s.reconfigureSnapshotLocked()
+	s.persistenceMu.Unlock()
+	return nil
+}
+
+func (s *Server) setConfigCacheSaveOnShutdown(v string) error {
+	enabled, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("cache_save_on_shutdown must be true or false")
+	}
+	s.persistenceMu.Lock()
+	s.cacheSaveOnShutdown = enabled
+	s.reconfigureSnapshotLocked()
+	s.persistenceMu.Unlock()
+	return nil
+}
+
+func (s *Server) setConfigCacheSaveRate(v string) error {
+	if _, err := (config.Config{CacheSaveRateLimit: v}).CacheSaveRateBytes(); err != nil {
+		return err
+	}
+	s.persistenceMu.Lock()
+	s.cacheSaveRateLimit = v
+	s.reconfigureSnapshotLocked()
+	s.persistenceMu.Unlock()
+	return nil
 }
 
 // configModels reports the loaded model names (sorted for stable output).

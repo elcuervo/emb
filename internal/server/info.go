@@ -27,16 +27,20 @@ func cacheHitRate(hits, misses int64) string {
 // struct feeds both the sectioned INFO and (via its fields) the existing
 // EMB.STATS array writer, so the two cannot drift.
 type infoSnapshot struct {
-	version  string
-	uptime   int
-	process  int
-	totalReq int64
-	totalTok int64
-	totalErr int64
-	models   int
-	active   int64
-	cache    *CacheStats // nil when the cache is disabled at boot
-	byModel  []modelInfoLine
+	version       string
+	uptime        int
+	process       int
+	totalReq      int64
+	totalTok      int64
+	totalErr      int64
+	models        int
+	active        int64
+	cache         *CacheStats // nil when the cache is disabled at boot
+	snapshot      *SnapshotStatus
+	cacheFile     string
+	cacheSave     string
+	cacheSaveRate string
+	byModel       []modelInfoLine
 	// res holds the live process resource sample (memory/CPU/goroutines).
 	res resourceStats
 	// netIn/netOut are aggregate RESP bytes received/sent since start.
@@ -104,6 +108,15 @@ func (s *Server) infoSnapshot() infoSnapshot {
 		cacheStats = &cs
 		perModel = cs.ByModel
 	}
+	var snapshotStatus *SnapshotStatus
+	s.persistenceMu.RLock()
+	cacheFile, cacheSave, cacheSaveRate := s.cacheFile, s.cacheSave, s.cacheSaveRateLimit
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		status := coordinator.Status()
+		snapshotStatus = &status
+	}
 
 	lines := make([]modelInfoLine, 0, len(names))
 	var totalReq, totalTok int64
@@ -128,19 +141,23 @@ func (s *Server) infoSnapshot() infoSnapshot {
 	}
 
 	return infoSnapshot{
-		version:  s.version,
-		uptime:   int(time.Since(s.started).Seconds()),
-		process:  os.Getpid(),
-		totalReq: totalReq,
-		totalTok: totalTok,
-		totalErr: s.reg.TotalErrors(),
-		models:   len(models),
-		active:   s.activeReqs.Load(),
-		cache:    cacheStats,
-		byModel:  lines,
-		res:      s.resourceStats(),
-		netIn:    s.netIn.Load(),
-		netOut:   s.netOut.Load(),
+		version:       s.version,
+		uptime:        int(time.Since(s.started).Seconds()),
+		process:       os.Getpid(),
+		totalReq:      totalReq,
+		totalTok:      totalTok,
+		totalErr:      s.reg.TotalErrors(),
+		models:        len(models),
+		active:        s.activeReqs.Load(),
+		cache:         cacheStats,
+		snapshot:      snapshotStatus,
+		cacheFile:     cacheFile,
+		cacheSave:     cacheSave,
+		cacheSaveRate: cacheSaveRate,
+		byModel:       lines,
+		res:           s.resourceStats(),
+		netIn:         s.netIn.Load(),
+		netOut:        s.netOut.Load(),
 	}
 }
 
@@ -191,7 +208,39 @@ func buildInfoSections(which []string, snap infoSnapshot) string {
 		fmt.Fprintf(&b, "cache_evictions:%d\r\n", evictions)
 		fmt.Fprintf(&b, "cache_entries:%d\r\n", entries)
 		fmt.Fprintf(&b, "cache_max_bytes:%d\r\n", maxBytes)
-		fmt.Fprintf(&b, "cache_memory_bytes:%d\r\n\r\n", curBytes)
+		fmt.Fprintf(&b, "cache_memory_bytes:%d\r\n", curBytes)
+		flushes, flushedEntries, flushDuration := uint64(0), uint64(0), time.Duration(0)
+		if snap.cache != nil {
+			flushes, flushedEntries, flushDuration = snap.cache.Flushes, snap.cache.FlushedEntries, snap.cache.LastFlushDuration
+		}
+		fmt.Fprintf(&b, "cache_flushes:%d\r\n", flushes)
+		fmt.Fprintf(&b, "cache_flushed_entries:%d\r\n", flushedEntries)
+		fmt.Fprintf(&b, "cache_last_flush_duration_usec:%d\r\n", flushDuration.Microseconds())
+		fmt.Fprintf(&b, "cache_snapshot_file:%s\r\n", snap.cacheFile)
+		fmt.Fprintf(&b, "cache_snapshot_interval:%s\r\n", snap.cacheSave)
+		fmt.Fprintf(&b, "cache_snapshot_rate_limit:%s\r\n", snap.cacheSaveRate)
+		status := SnapshotStatus{}
+		if snap.snapshot != nil {
+			status = *snap.snapshot
+		}
+		fmt.Fprintf(&b, "cache_snapshot_enabled:%t\r\n", status.Enabled)
+		fmt.Fprintf(&b, "cache_snapshot_in_progress:%t\r\n", status.InProgress)
+		fmt.Fprintf(&b, "cache_snapshot_successes:%d\r\n", status.Successes)
+		fmt.Fprintf(&b, "cache_snapshot_failures:%d\r\n", status.Failures)
+		fmt.Fprintf(&b, "cache_snapshot_skipped:%d\r\n", status.Skipped)
+		fmt.Fprintf(&b, "cache_snapshot_last_success_unix:%d\r\n", status.LastSuccessUnix)
+		fmt.Fprintf(&b, "cache_snapshot_last_duration_usec:%d\r\n", status.LastDuration.Microseconds())
+		fmt.Fprintf(&b, "cache_snapshot_last_entries:%d\r\n", status.LastEntries)
+		fmt.Fprintf(&b, "cache_snapshot_last_bytes:%d\r\n", status.LastBytes)
+		fmt.Fprintf(&b, "cache_snapshot_capture_duration_usec:%d\r\n", status.LastCaptureDuration.Microseconds())
+		fmt.Fprintf(&b, "cache_restore_limit_bytes:%d\r\n", status.RestoreLimitBytes)
+		fmt.Fprintf(&b, "cache_restore_rss_bytes:%d\r\n", status.RestoreRSSBytes)
+		fmt.Fprintf(&b, "cache_restore_headroom_bytes:%d\r\n", status.RestoreHeadroomBytes)
+		fmt.Fprintf(&b, "cache_restore_entries:%d\r\n", status.RestoredEntries)
+		fmt.Fprintf(&b, "cache_restore_skipped_unknown:%d\r\n", status.SkippedUnknown)
+		fmt.Fprintf(&b, "cache_restore_skipped_fingerprint:%d\r\n", status.SkippedFingerprint)
+		fmt.Fprintf(&b, "cache_restore_skipped_memory:%d\r\n", status.SkippedMemory)
+		fmt.Fprintf(&b, "cache_restore_error:%s\r\n\r\n", status.RestoreError)
 	}
 	if selected["keyspace"] {
 		b.WriteString("# Keyspace\r\n")

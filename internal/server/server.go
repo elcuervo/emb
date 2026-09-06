@@ -47,8 +47,16 @@ type Server struct {
 	cacheConfig string
 	// cacheFile/cacheSave are runtime-editable snapshot parameters (consumed by
 	// the cache-snapshot save loop; stored here even before that change lands).
-	cacheFile string
-	cacheSave string
+	cacheFile           string
+	cacheSave           string
+	cacheLoad           bool
+	cacheSaveOnShutdown bool
+	cacheRestoreLimit   string
+	cacheRestoreReserve string
+	cacheSaveRateLimit  string
+	persistenceMu       sync.RWMutex
+	persistenceCfg      *PersistenceConfig
+	snapshot            *snapshotCoordinator
 	// version is the injected build version ("dev" when unset), reported by INFO.
 	version string
 	state   atomic.Int64
@@ -124,6 +132,21 @@ func WithMaxPairs(n int) Option {
 	return func(s *Server) { s.maxPairs = n }
 }
 
+func WithPersistence(cfg PersistenceConfig) Option {
+	return func(s *Server) {
+		s.persistenceCfg = &cfg
+		s.cacheFile = cfg.File
+		s.cacheLoad = cfg.Load
+		s.cacheSaveOnShutdown = cfg.SaveOnShutdown
+		s.cacheRestoreLimit = cfg.RestoreLimit
+		s.cacheRestoreReserve = cfg.RestoreReserve
+		s.cacheSaveRateLimit = cfg.SaveRateRaw
+		if cfg.SaveInterval > 0 {
+			s.cacheSave = cfg.SaveInterval.String()
+		}
+	}
+}
+
 func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config, opts ...Option) *Server {
 	cacheBytes, err := parseCacheConfig(cacheConfig)
 	if err != nil {
@@ -135,21 +158,29 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	s := &Server{
-		reg:         reg,
-		started:     time.Now(),
-		addr:        addr,
-		tlsConfig:   tlsConfig,
-		cache:       c,
-		cacheConfig: cacheConfig,
-		version:     "dev",
-		idleTimeout: config.DefaultIdleTimeout,
-		maxTexts:    4096,
-		maxPairs:    4096,
+		reg:                 reg,
+		started:             time.Now(),
+		addr:                addr,
+		tlsConfig:           tlsConfig,
+		cache:               c,
+		cacheConfig:         cacheConfig,
+		cacheLoad:           true,
+		cacheSaveOnShutdown: true,
+		version:             "dev",
+		idleTimeout:         config.DefaultIdleTimeout,
+		maxTexts:            4096,
+		maxPairs:            4096,
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	s.password.Store(password)
+	if s.persistenceCfg != nil && s.persistenceCfg.File != "" && s.cache != nil {
+		s.snapshot = newSnapshotCoordinator(s.cache, s.reg, *s.persistenceCfg)
+		if s.persistenceCfg.Load {
+			s.restoreSnapshot(*s.persistenceCfg)
+		}
+	}
 
 	mux := redcon.NewServeMux()
 	mux.HandleFunc("ping", s.handlePING)
@@ -163,6 +194,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.ready", s.handleREADY)
 	mux.HandleFunc("info", s.handleInfo)
 	mux.HandleFunc("config", s.handleConfig)
+	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
+	mux.HandleFunc("emb.save", s.handleSAVE)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
 		// Account the received command: cmd.Raw is the full RESP bytes including
@@ -258,11 +291,53 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		log.Printf("shutdown timeout after %v", ctx.Err())
 	}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		coordinator.Shutdown(ctx)
+	}
 
 	return s.srv.Close()
 }
 
+func (s *Server) restoreSnapshot(cfg PersistenceConfig) {
+	cacheBytes := s.cache.Stats().MaxBytes
+	limit, rss, headroom, err := effectiveRestoreLimit(cacheBytes, cfg.RestoreLimit, cfg.RestoreReserve)
+	status := SnapshotStatus{Enabled: true, RestoreLimitBytes: limit, RestoreRSSBytes: rss, RestoreHeadroomBytes: headroom}
+	if err == nil && limit > 0 {
+		var models map[string]registry.ModelFingerprint
+		models, err = s.reg.Fingerprints()
+		if err == nil {
+			var restored snapshotRestoreResult
+			restored, err = readSnapshot(cfg.File, limit, models)
+			if err == nil && restored.Found {
+				s.cache.replaceStorageFrom(restored.Cache)
+				s.snapshot.lastGen.Store(s.cache.Stats().Generation)
+				s.snapshot.savedOnce.Store(true)
+				status.RestoredEntries = restored.Restored
+				status.SkippedUnknown = restored.SkippedUnknown
+				status.SkippedFingerprint = restored.SkippedFingerprint
+				status.SkippedMemory = restored.SkippedMemory
+			}
+		}
+	}
+	if err != nil {
+		status.RestoreError = err.Error()
+		log.Printf("cache snapshot restore skipped: %v", err)
+	}
+	s.snapshot.statusMu.Lock()
+	s.snapshot.status = status
+	s.snapshot.statusMu.Unlock()
+}
+
 func (s *Server) Close() error {
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		coordinator.Close()
+	}
 	return s.srv.Close()
 }
 
@@ -335,6 +410,46 @@ func (s *Server) handleAUTH(conn redcon.Conn, cmd redcon.Command) {
 
 func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("PONG")
+}
+
+func (s *Server) handleCACHEFLUSH(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) > 2 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.CACHE.FLUSH' command")
+		return
+	}
+	if s.cache == nil {
+		conn.WriteInt(0)
+		return
+	}
+	if len(cmd.Args) == 1 {
+		conn.WriteInt(s.cache.Flush())
+		return
+	}
+	model := string(cmd.Args[1])
+	if !s.reg.HasModel(model) {
+		conn.WriteError(fmt.Sprintf("ERR model '%s' not found", model))
+		return
+	}
+	conn.WriteInt(s.cache.FlushModel(model))
+}
+
+func (s *Server) handleSAVE(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) != 1 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.SAVE' command")
+		return
+	}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator == nil {
+		conn.WriteError("ERR cache persistence is disabled (cache_file is empty)")
+		return
+	}
+	if err := coordinator.Save(context.Background()); err != nil {
+		conn.WriteError("ERR " + err.Error())
+		return
+	}
+	conn.WriteString("OK")
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
@@ -576,14 +691,22 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	totalCacheHits := int64(0)
 	totalCacheMisses := int64(0)
 	totalCacheEvictions := int64(0)
+	cacheStats := CacheStats{}
 	if s.cache != nil {
-		cs := s.cache.Stats()
-		totalCacheHits = cs.Hits
-		totalCacheMisses = cs.Misses
-		totalCacheEvictions = cs.Evictions
+		cacheStats = s.cache.Stats()
+		totalCacheHits = cacheStats.Hits
+		totalCacheMisses = cacheStats.Misses
+		totalCacheEvictions = cacheStats.Evictions
+	}
+	snapshotStatus := SnapshotStatus{}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		snapshotStatus = coordinator.Status()
 	}
 
-	conn.WriteArray(40)
+	conn.WriteArray(82)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -627,6 +750,55 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(totalCacheMisses))
 	conn.WriteBulkString("cache_evictions")
 	conn.WriteInt(int(totalCacheEvictions))
+	conn.WriteBulkString("cache_flushes")
+	conn.WriteInt(int(cacheStats.Flushes))
+	conn.WriteBulkString("cache_flushed_entries")
+	conn.WriteInt(int(cacheStats.FlushedEntries))
+	conn.WriteBulkString("cache_last_flush_duration_usec")
+	conn.WriteInt(int(cacheStats.LastFlushDuration.Microseconds()))
+	conn.WriteBulkString("cache_snapshot_enabled")
+	conn.WriteInt(boolInt(snapshotStatus.Enabled))
+	conn.WriteBulkString("cache_snapshot_in_progress")
+	conn.WriteInt(boolInt(snapshotStatus.InProgress))
+	conn.WriteBulkString("cache_snapshot_successes")
+	conn.WriteInt(int(snapshotStatus.Successes))
+	conn.WriteBulkString("cache_snapshot_failures")
+	conn.WriteInt(int(snapshotStatus.Failures))
+	conn.WriteBulkString("cache_snapshot_skipped")
+	conn.WriteInt(int(snapshotStatus.Skipped))
+	conn.WriteBulkString("cache_snapshot_last_success_unix")
+	conn.WriteInt(int(snapshotStatus.LastSuccessUnix))
+	conn.WriteBulkString("cache_snapshot_last_duration_ms")
+	conn.WriteInt(int(snapshotStatus.LastDuration.Milliseconds()))
+	conn.WriteBulkString("cache_snapshot_last_entries")
+	conn.WriteInt(int(snapshotStatus.LastEntries))
+	conn.WriteBulkString("cache_snapshot_last_bytes")
+	conn.WriteInt(int(snapshotStatus.LastBytes))
+	conn.WriteBulkString("cache_snapshot_capture_duration_usec")
+	conn.WriteInt(int(snapshotStatus.LastCaptureDuration.Microseconds()))
+	conn.WriteBulkString("cache_restore_limit_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreLimitBytes))
+	conn.WriteBulkString("cache_restore_rss_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreRSSBytes))
+	conn.WriteBulkString("cache_restore_headroom_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreHeadroomBytes))
+	conn.WriteBulkString("cache_restore_entries")
+	conn.WriteInt(int(snapshotStatus.RestoredEntries))
+	conn.WriteBulkString("cache_restore_skipped_unknown")
+	conn.WriteInt(int(snapshotStatus.SkippedUnknown))
+	conn.WriteBulkString("cache_restore_skipped_fingerprint")
+	conn.WriteInt(int(snapshotStatus.SkippedFingerprint))
+	conn.WriteBulkString("cache_restore_skipped_memory")
+	conn.WriteInt(int(snapshotStatus.SkippedMemory))
+	conn.WriteBulkString("cache_restore_error")
+	conn.WriteBulkString(snapshotStatus.RestoreError)
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
@@ -746,6 +918,8 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.STATS - Show server statistics (requests, connections, mem/cpu, goroutines)",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.HELP - Show this help message",
+		"EMB.CACHE.FLUSH [model] - Invalidate all cached embeddings or one model",
+		"EMB.SAVE - Asynchronously save the embedding cache snapshot",
 		"INFO [section ...] - Redis-style server info (version, stats, memory, cpu, cache hit ratios)",
 		"CONFIG GET [pattern] - List runtime configuration parameters",
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",

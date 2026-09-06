@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -476,6 +477,43 @@ func TestServerConfigSetCacheDisabledAtBoot(t *testing.T) {
 	addr := serveTest(t) // no cache at boot
 	if got := errorOf(t, redisCmd(t, addr, "CONFIG", "SET", "cache", "1MB")); got == "" {
 		t.Fatal("expected error enabling a disabled-at-boot cache")
+	}
+}
+
+func TestServerConfigPersistenceLiveControls(t *testing.T) {
+	addr, srv := serveTestWithCacheOptions(t, "100MB")
+	file := filepath.Join(t.TempDir(), "cache.embcache")
+	for _, setting := range [][2]string{
+		{"cache_file", file},
+		{"cache_save", "1h"},
+		{"cache_save_on_shutdown", "false"},
+		{"cache_save_rate_limit", "25MB/s"},
+	} {
+		if tok := redisCmd(t, addr, "CONFIG", "SET", setting[0], setting[1]); tok.kind != "status" || tok.val != "OK" {
+			t.Fatalf("CONFIG SET %s = %#v", setting[0], tok)
+		}
+	}
+	if srv.snapshot == nil || !srv.snapshot.Status().Enabled {
+		t.Fatal("live cache_file did not enable persistence")
+	}
+	params := map[string]string{}
+	elems := arrayOf(t, redisCmd(t, addr, "CONFIG", "GET", "cache*"))
+	for i := 0; i+1 < len(elems); i += 2 {
+		params[bulkOf(t, elems[i])] = bulkOf(t, elems[i+1])
+	}
+	if params["cache_file"] != file || params["cache_save"] != "1h" || params["cache_save_rate_limit"] != "25MB/s" {
+		t.Fatalf("CONFIG GET persistence = %#v", params)
+	}
+	for _, key := range []string{"cache_load", "cache_restore_limit", "cache_restore_reserve"} {
+		if got := errorOf(t, redisCmd(t, addr, "CONFIG", "SET", key, "false")); !strings.Contains(got, "read-only") {
+			t.Fatalf("CONFIG SET %s error = %q", key, got)
+		}
+	}
+	if tok := redisCmd(t, addr, "CONFIG", "SET", "cache_file", ""); tok.kind != "status" {
+		t.Fatalf("disabling persistence = %#v", tok)
+	}
+	if srv.snapshot.Status().Enabled {
+		t.Fatal("empty cache_file did not disable persistence")
 	}
 }
 

@@ -368,3 +368,54 @@ func TestParseFlagsRequestSizeCapsNegative(t *testing.T) {
 		t.Fatalf("expected non-negative error for -max-pairs -5, got %v", err)
 	}
 }
+
+func TestPersistenceConfigDefaultsAndValidation(t *testing.T) {
+	defaults := Config{}
+	if !defaults.CacheLoadEnabled() || !defaults.CacheShutdownSaveEnabled() {
+		t.Fatal("cache load and shutdown save must default to enabled")
+	}
+
+	valid := Config{
+		Cache: "auto", CacheFile: "/tmp/cache.embcache", CacheSave: "5m",
+		CacheRestoreLimit: "50%", CacheRestoreReserve: "1GB", CacheSaveRateLimit: "100MB/s",
+	}
+	if err := valid.validatePersistence(); err != nil {
+		t.Fatalf("valid persistence config rejected: %v", err)
+	}
+	if rate, err := valid.CacheSaveRateBytes(); err != nil || rate != 100_000_000 {
+		t.Fatalf("rate = %d, %v", rate, err)
+	}
+
+	tests := []Config{
+		{CacheFile: "/tmp/cache"},
+		{Cache: "1GB", CacheSave: "5m"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheSave: "0"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreLimit: "101%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreReserve: "0%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheSaveRateLimit: "fast"},
+	}
+	for i, cfg := range tests {
+		if err := cfg.validatePersistence(); err == nil {
+			t.Errorf("invalid persistence config %d was accepted: %#v", i, cfg)
+		}
+	}
+}
+
+func TestParseFlagsPersistence(t *testing.T) {
+	fc, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-cache", "512MB", "-cache-file", "/tmp/cache.embcache",
+		"-cache-load", "false", "-cache-save", "30s",
+		"-cache-save-on-shutdown", "false", "-cache-restore-limit", "256MB",
+		"-cache-restore-reserve", "20%", "-cache-save-rate-limit", "10MB/s",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.CacheFile != "/tmp/cache.embcache" || fc.CacheLoadEnabled() || fc.CacheShutdownSaveEnabled() {
+		t.Fatalf("persistence flags not retained: %#v", fc.Config)
+	}
+	if fc.CacheSave != "30s" || fc.CacheRestoreLimit != "256MB" || fc.CacheRestoreReserve != "20%" {
+		t.Fatalf("persistence controls not retained: %#v", fc.Config)
+	}
+}

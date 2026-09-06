@@ -1,9 +1,5 @@
-# server-lifecycle Specification
+## MODIFIED Requirements
 
-## Purpose
-Specifies server lifecycle: graceful shutdown on SIGINT/SIGTERM, a shutdown timeout that lets in-flight requests drain, and errors for requests arriving during shutdown.
-
-## Requirements
 ### Requirement: Graceful shutdown on SIGINT and SIGTERM
 
 The server SHALL gracefully shut down when it receives either SIGINT or SIGTERM. It SHALL stop accepting new work, drain in-flight inference, perform a bounded final cache snapshot when configured and dirty, close connections, and release ONNX Runtime resources in that order.
@@ -40,6 +36,8 @@ The server SHALL NOT wait indefinitely for in-flight requests or cache snapshot 
 - **THEN** the server SHALL close remaining connections and resources after the timeout
 - **AND** the last previously completed atomic snapshot SHALL remain usable
 
+## ADDED Requirements
+
 ### Requirement: Startup restore precedes readiness
 When persistence is configured and `cache_load=true`, host-memory-bounded streaming snapshot parsing and staging SHALL occur before the server reports ready. When loading is disabled, or snapshot data is missing or recoverably invalid, the server SHALL proceed with an empty or safely partial cache rather than fail startup.
 
@@ -52,13 +50,3 @@ When persistence is configured and `cache_load=true`, host-memory-bounded stream
 - **WHEN** the snapshot is larger than the effective cache/restore/headroom limit
 - **THEN** readiness SHALL wait only for bounded streaming validation and permitted admission
 - **AND** admitted entries SHALL not exceed the sampled safe memory ceiling
-
-### Requirement: Clients receive error during shutdown
-
-The server SHALL reject new requests during shutdown with a clear error message.
-
-#### Scenario: New request during shutdown
-
-- **WHEN** the server is shutting down
-- **AND** a client sends a new EMB command
-- **THEN** the server SHALL respond with a RESP error "ERR server shutting down"
