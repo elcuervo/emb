@@ -125,6 +125,14 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
 
+# Download the GLiNER2 scripted-model testbed (cuerbot/gliner2-multi-v1 int8)
+# Used by the gated script-eval/GLiNER tests; ~380MB.
+download-gliner-model:
+    @mkdir -p ./models/gliner2
+    @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/model_int8.onnx" -o ./models/gliner2/model_int8.onnx && echo "✓ model_int8.onnx"
+    @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/tokenizer.json" -o ./models/gliner2/tokenizer.json && echo "✓ tokenizer.json"
+    @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/config.json" -o ./models/gliner2/config.json && echo "✓ config.json"
+
 # Run redis-benchmark with a single-threaded server
 # Uses 1 client, 1 pipeline, 500 requests (~2s at 280 req/s)
 # Requires: redis-benchmark, downloaded model at ./models/minilm

@@ -32,6 +32,20 @@ type ModelEntry struct {
 	cfg     config.ModelConfig
 	loaded  atomic.Bool
 	loadErr error
+
+	// scripted resources (task: scripted-model path): a generic named-tensor
+	// session plus the word-aligned tokenizer, created lazily on first script
+	// evaluation, separate from the embedding pool.
+	scriptOnce   sync.Once
+	scriptRes    *ScriptResources
+	scriptResErr error
+}
+
+// ScriptResources bundles what a scripted evaluation needs for a model: a
+// named-tensor session and the pretokenized-encoding tokenizer.
+type ScriptResources struct {
+	Session   onnx.NamedSession
+	Tokenizer tokenizer.PretokenizedTokenizer
 }
 
 type Registry struct {
@@ -198,6 +212,73 @@ func (e *ModelEntry) ensurePool() error {
 	}
 	log.Printf("  %s: %d workers ready (detected dim=%d%s)", e.Name, workers, cfg.Dim, batchInfo)
 	return nil
+}
+
+// ScriptResources lazily opens the generic named-tensor session and the
+// word-aligned tokenizer a scripted evaluation needs, mirroring the pool's
+// session options (weights bytes, graph inputs/outputs, thread counts). The
+// embedding pool is intentionally not required: script models may not be
+// embeddable at all (e.g. GLiNER's logits graph).
+func (e *ModelEntry) ScriptResources() (*ScriptResources, error) {
+	e.scriptOnce.Do(func() {
+		e.scriptRes, e.scriptResErr = e.openScriptResources()
+	})
+	return e.scriptRes, e.scriptResErr
+}
+
+func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
+	cfg := e.cfg
+
+	tok, err := tokenizer.NewTokenizer(cfg.Tokenizer, cfg.PadOutput)
+	if err != nil {
+		return nil, fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
+	}
+	pT, ok := any(tok).(tokenizer.PretokenizedTokenizer)
+	if !ok {
+		_ = tok.Close()
+		return nil, fmt.Errorf("tokenizer for %q does not support word-level encoding", e.Name)
+	}
+
+	inputNames, err := onnx.GetInputNames(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("reading input names for %q: %w", e.Name, err)
+	}
+	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("reading output info for %q: %w", e.Name, err)
+	}
+	outputNames := make([]string, 0, len(outInfo))
+	for n := range outInfo {
+		outputNames = append(outputNames, n)
+	}
+	sort.Strings(outputNames)
+
+	modelData, err := os.ReadFile(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("reading model file for %q: %w", e.Name, err)
+	}
+
+	intraThreads := cfg.IntraOpThreads
+	if intraThreads <= 0 {
+		intraThreads = defaultIntraOpThreads()
+	}
+	execMode := onnx.ExecModeSequential
+	if cfg.ExecutionMode == "parallel" {
+		execMode = onnx.ExecModeParallel
+	}
+
+	sess, err := onnx.NewNamedRuntimeSessionFromBytes(
+		modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
+	)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("creating scripted session for %q: %w", e.Name, err)
+	}
+
+	return &ScriptResources{Session: sess, Tokenizer: pT}, nil
 }
 
 func downloadModel(cfg *config.ModelConfig, name string) error {
@@ -415,6 +496,19 @@ func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
 	return entry, nil
 }
 
+// Resolve returns a model entry without requiring the embedding pool. Script
+// evaluation uses it so non-embeddable models (e.g. GLiNER logits graphs) can
+// be addressed by name.
+func (r *Registry) Resolve(name string) (*ModelEntry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.models[name]
+	if !ok {
+		return nil, fmt.Errorf("model '%s' not found", name)
+	}
+	return entry, nil
+}
+
 func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -465,6 +559,9 @@ func (r *Registry) Close() error {
 	for _, entry := range r.models {
 		if entry.Pool != nil {
 			_ = entry.Pool.Close()
+		}
+		if entry.scriptRes != nil && entry.scriptRes.Session != nil {
+			_ = entry.scriptRes.Session.Close()
 		}
 	}
 	clear(r.models)

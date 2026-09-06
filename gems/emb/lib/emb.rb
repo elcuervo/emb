@@ -43,6 +43,9 @@ module Emb
     def ready       = default_client.ready
     def ready?      = default_client.ready?
     def multi(&)    = default_client.multi(&)
+    def eval(model, script, texts, args = []) = default_client.eval(model, script, texts, args)
+    def evalsha(model, sha, texts, args = []) = default_client.evalsha(model, sha, texts, args)
+    def script = default_client.script
     def reset_registry! = default_client.reset_registry!
     def debug? = @debug
     def send_command(*) = default_client.send_command(*)

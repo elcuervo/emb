@@ -1709,6 +1709,14 @@ func respValueLen(s []byte) (int, bool) {
 					return 0, false
 				}
 				p += j + 2
+			case '*':
+				// Nested array (e.g. hash replies whose values are arrays):
+				// parse recursively from the element start.
+				elem, ok := respValueLen(s[p:])
+				if !ok {
+					return 0, false
+				}
+				p += elem
 			default:
 				return 0, false
 			}

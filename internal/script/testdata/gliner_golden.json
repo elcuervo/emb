@@ -1,0 +1,67 @@
+[
+  {
+    "text": "Apple CEO Tim Cook announced iPhone 15.",
+    "labels": [
+      "PERSON",
+      "ORG",
+      "PRODUCT"
+    ],
+    "entities": {
+      "ORG": [
+        "Apple"
+      ],
+      "PERSON": [
+        "Tim Cook"
+      ],
+      "PRODUCT": [
+        "iPhone 15"
+      ]
+    }
+  },
+  {
+    "text": "Stripe hired Mary in Dublin.",
+    "labels": [
+      "PERSON",
+      "ORG"
+    ],
+    "entities": {
+      "ORG": [
+        "Dublin",
+        "Stripe"
+      ],
+      "PERSON": [
+        "Mary"
+      ]
+    }
+  },
+  {
+    "text": "Google launched the Pixel 9 in Mountain View.",
+    "labels": [
+      "PRODUCT",
+      "LOCATION"
+    ],
+    "entities": {
+      "LOCATION": [
+        "Mountain View"
+      ],
+      "PRODUCT": [
+        "Pixel 9"
+      ]
+    }
+  },
+  {
+    "text": "Elon founded SpaceX in Hawthorne.",
+    "labels": [
+      "FEATURE",
+      "CURRENCY"
+    ],
+    "entities": {
+      "CURRENCY": [
+        "Hawthorne"
+      ],
+      "FEATURE": [
+        "SpaceX"
+      ]
+    }
+  }
+]
