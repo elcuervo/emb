@@ -267,7 +267,7 @@ func TestHelpDocumentsScriptFamily(t *testing.T) {
 	resp := doCmd(t, c, "EMB.HELP")
 	for _, want := range []string{
 		"EMB.EVAL", "EMB.EVSHA", "EMB.SCRIPT LOAD", "EMB.SCRIPT EXISTS",
-		"EMB.SCRIPT FLUSH", "field/value pairs",
+		"EMB.SCRIPT FLUSH", "field/value pairs", "emb.math",
 	} {
 		if !strings.Contains(resp, want) {
 			t.Fatalf("EMB.HELP missing %q", want)

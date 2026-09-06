@@ -1,11 +1,13 @@
 package script
 
 import (
+	"strings"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
 // fakeSession is a scripted-model session that doubles input_ids values.
@@ -163,6 +165,78 @@ return #out.words .. "|" .. out.words[2] .. "|" .. out.starts[3]`
 	// 4|,|8
 	if v.String() != "4|,|8" {
 		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+// offsetTokenizerHosts binds the real minilm tokenizer's plain/pair encode so
+// scripts can slice surface text via byte offsets.
+func offsetTokenizerHosts(t *testing.T) Hosts {
+	t.Helper()
+	rt, err := tokenizer.NewTokenizer("../../models/minilm/tokenizer.json", false)
+	if err != nil {
+		t.Skipf("test tokenizer not present: %v (run: just download-model)", err)
+	}
+	t.Cleanup(func() { _ = rt.Close() })
+	return Hosts{EncodePlain: rt.EncodeOffsets, EncodePair: rt.EncodePairOffsets}
+}
+
+func TestHostEncodeOffsets(t *testing.T) {
+	hosts := offsetTokenizerHosts(t)
+	src := `
+local enc = emb.tokenize.encode("hello world", 512)
+return #enc.ids .. "|" .. enc.mask[2] .. "|" .. enc.offsets[3][1] .. "|" .. enc.offsets[3][2]`
+	v, err := EvalWithHosts(src, nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// [CLS] hello world [SEP]: 4 ids, mask all ones, world at [6,11).
+	if v.String() != "4|1|6|11" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+func TestHostEncodeSlicesText(t *testing.T) {
+	hosts := offsetTokenizerHosts(t)
+	src := `
+local text = "the quick brown fox"
+local enc = emb.tokenize.encode(text, 512)
+local parts = {}
+for _, off in ipairs(enc.offsets) do
+  local s, e = off[1], off[2]
+  if e > 0 then parts[#parts + 1] = string.sub(text, s + 1, e) end  -- 0-based byte span -> 1-based sub
+end
+return table.concat(parts, " ")`
+	v, err := EvalWithHosts(src, nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "the quick brown fox" {
+		t.Fatalf("offsets do not reconstruct text: %q", v.String())
+	}
+}
+
+func TestHostEncodePair(t *testing.T) {
+	hosts := offsetTokenizerHosts(t)
+	src := `
+local enc = emb.tokenize.encode_pair("who founded Apple", "Apple was founded in 1976.", 512)
+local second = "Apple was founded in 1976."
+local tok = {}
+for i = enc.sep + 1, #enc.ids do
+  local off = enc.offsets[i]
+  if off[2] > 0 then tok[#tok + 1] = string.sub(second, off[1] + 1, off[2]) end
+end
+return enc.sep .. "|" .. table.concat(tok, " ")`
+	v, err := EvalWithHosts(src, nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// sep = len(encode(first)) (5: CLS who founded Apple SEP); second-part
+	// tokens (after the inter-part SEP) reconstruct the context.
+	if !strings.HasPrefix(v.String(), "5|") {
+		t.Fatalf("unexpected sep: %q", v.String())
+	}
+	if v.String() != "5|Apple was founded in 1976 ." && v.String() != "5|Apple was founded in 1976." {
+		t.Fatalf("second-part reconstruction wrong: %q", v.String())
 	}
 }
 

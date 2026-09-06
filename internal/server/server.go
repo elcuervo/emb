@@ -772,6 +772,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
+		"Script blocks: emb.run(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax} json",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

@@ -27,7 +27,7 @@ Goal: mount such models and run them via Redis-style scripts — `EMB.EVAL`/`EMB
 
 Redis ships Lua 5.1; gopher-lua implements 5.1 semantics in pure Go and gives us per-state isolation. **A new Lua state per evaluation** (not a shared interpreter like Redis's) means a runaway script fails only its own request — no global blocking, no `SCRIPT KILL` needed. Alternatives: starlark (hermetic by design, but not Redis-compatible reply semantics), goja (JS; heavier, sandboxing is manual), builtin Go adapters only (not what the user asked — no request-time scripts). Interpreter init cost is small; pool later only if profiling demands it.
 
-Sandbox surface (per spec): open only a curated stdlib subset (`string`, `table`, `math` minus `random`); register host functions `emb.run`, `emb.tokenize.pretokenized`, `emb.tokenize.words`, `json`; omit `io`/`os`/`debug`/`package`. Budgets: wall-clock deadline via gopher-lua context support, recursive-depth bound via VM call-stack limits, and a script-size cap; exceeding any replies with an error for that request only. Scripts are pure compute → replies deterministic → cacheable (this is the safety contract that makes content-addressed caching correct — see D4).
+Sandbox surface (per spec): open only a curated stdlib subset (`string`, `table`, `math` minus `random`); register host functions `emb.run`, `emb.tokenize.*` (`words`, `pretokenized`, `encode`, `encode_pair`), `emb.math` (`sigmoid`, `softmax`, `argmax`), `json`; omit `io`/`os`/`debug`/`package`. Budgets: wall-clock deadline via gopher-lua context support, recursive-depth bound via VM call-stack limits, and a script-size cap; exceeding any replies with an error for that request only. Scripts are pure compute → replies deterministic → cacheable (this is the safety contract that makes content-addressed caching correct — see D4).
 
 ### D2: Command shape — model-first, numtexts disambiguator
 
@@ -64,7 +64,29 @@ New handlers (`handleEMBEVAL`, `handleEVSHA`, `handleSCRIPT`) join the existing 
 
 ## Migration Plan
 
-Pure additive — no existing command, config key, or reply shape changes. Deploy order: (1) `internal/onnx` `RunNamed` + `internal/tokenizer` `EncodePretokenized`/`SplitWords` (all additive, unit-tested); (2) `internal/script` engine/sandbox/conversion + host blocks + cache keys; (3) server command family + gating; (4) example `gliner2.lua` + golden/wire fixture tests; (5) `gems/emb` client methods. Rollback: revert commits; existing deployments unaffected since no behavior changes unless the new commands are used.
+Pure additive — no existing command, config key, or reply shape changes. Deploy order: (1) `internal/onnx` `RunNamed` + `internal/tokenizer` `EncodePretokenized`/`SplitWords` (all additive, unit-tested); (2) `internal/script` engine/sandbox/conversion + host blocks (`emb.tokenize.*`, `emb.math`, `emb.run`) + cache keys; (3) server command family + gating; (4) example scripts (`gliner2.lua`, then classification/QA/reranker) + golden/wire fixture tests; (5) `gems/emb` client methods. Rollback: revert commits; existing deployments unaffected since no behavior changes unless the new commands are used.
+
+## Baseline block set (D7)
+
+Extension decision — the host surface is the shared baseline for writing scripts across model families; nothing model-specific is maintained. Verified against real exports: distilbert sst-2 (`input_ids, attention_mask → logits [-1,2]`), distilbert squad (`→ start_logits, end_logits`), bge-reranker-base (`→ logits [-1,1]`), gliner2 (7 int64 inputs, `logits [1,seq,w,n]`).
+
+| Host block | Used by | Rationale |
+|---|---|---|
+| `emb.run(inputs) → outputs` | all | named tensors in/out; returns every graph output (QA needs both start+end logits) |
+| `emb.tokenize.words(text)` | span models (GLiNER) | BertPreTokenizer-equivalent split, byte offsets |
+| `emb.tokenize.pretokenized(words, n)` | span models | word-aligned encode with word_ids (is_split_into_words semantics) |
+| `emb.tokenize.encode(text, n)` | classification, QA, token-NER, rerankers | the model's OWN pretokenizer — correctness-critical: byte-level-BPE tokenizers (XLM-R family) split differently than BertPreTokenizer, so `words`-based input silently degrades them |
+| `emb.tokenize.encode_pair(a, b, n)` | cross-encoders, QA | BERT-family `[CLS] a [SEP] b [SEP]` template; returns `sep` position + per-part offsets so QA spans slice the original context without a decode block |
+| `emb.math.sigmoid` | rerankers, span scoring | vectorized (array in → array out) so hot per-candidate loops cross the Go/Lua boundary once per label batch, not per candidate; scalar accepted for convenience |
+| `emb.math.softmax` / `argmax` | classification, token-NER | stable softmax (subtract max) and first-maximum argmax — deterministic, O(n) per request |
+| `json` | structured glue | (existing) |
+
+Design notes:
+- **Sigmoid in the math lib (user decision)**: even though the naive form is one Lua line, a shared `emb.math` gives every script the same primitives with defined semantics; the vectorized form sidesteps the per-element boundary cost that argued for leaving it user-space.
+- **encode_pair template assumption**: the pair template is BERT-family ([CLS]/[SEP] composition). Models with other pair formats stay expressible via `encode` + explicit separator ids (the script composes the template itself).
+- **Offsets are byte-based** (matching the tokenizers binding, verified by the multi-byte `EncodePretokenized` tests); scripts slice original strings with `string.sub(text, s, e-1)`.
+- **Seq2seq (T5/BART)**: expressible via repeated `emb.run` within one evaluation (the session persists across host calls) but without KV-cache access it recomputes the encoder per step — OK for short outputs, not a supported fast path. Documented, not blocked.
+- **Multi-text batching** inside scripts (stacks of same-schema inputs) remains user-space padding in v1.
 
 ## Open Questions
 

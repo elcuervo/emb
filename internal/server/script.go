@@ -11,6 +11,7 @@ import (
 
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/script"
+	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
 // scriptCache stores script source by model and SHA1. Scripts are cached per
@@ -306,7 +307,13 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
 			return res.Session.RunNamed(inputs)
 		},
-		EncodePretokenized: res.Tokenizer.EncodePretokenized,
+	}
+	if pT, ok := res.Tokenizer.(tokenizer.PretokenizedTokenizer); ok {
+		hosts.EncodePretokenized = pT.EncodePretokenized
+	}
+	if oT, ok := res.Tokenizer.(tokenizer.OffsetTokenizer); ok {
+		hosts.EncodePlain = oT.EncodeOffsets
+		hosts.EncodePair = oT.EncodePairOffsets
 	}
 
 	replies := make([][]byte, len(texts))

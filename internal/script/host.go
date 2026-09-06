@@ -13,16 +13,21 @@ import (
 )
 
 // Hosts binds a script evaluation to the resources it may touch: the model's
-// named-tensor session and its word-aligned tokenizer. Both are optional; a
+// named-tensor session and its tokenizer capabilities. All are optional; a
 // binding with only Run lets scripts do arbitrary graph IO without
 // tokenization, and vice versa. The zero value disables all host functions.
 type Hosts struct {
 	// Run executes one inference over named tensors and returns the graph's
 	// named outputs. Nil makes emb.run unavailable.
 	Run func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error)
-	// EncodePretokenized word-encodes an already-split word list. Nil makes
-	// emb.tokenize.pretokenized unavailable.
+	// EncodePretokenized word-encodes an already-split word list (emb.tokenize.pretokenized).
 	EncodePretokenized func(words []string, maxLen int) (ids, wordIDs []int64, err error)
+	// EncodePlain encodes a single text through the model tokenizer's own
+	// pipeline with per-token byte offsets (emb.tokenize.encode).
+	EncodePlain func(text string, maxLen int) (ids, mask []int64, offsets [][2]int, err error)
+	// EncodePair composes the BERT-family pair template with per-part offsets
+	// (emb.tokenize.encode_pair).
+	EncodePair func(first, second string, maxLen int) (ids, mask []int64, offsets [][2]int, sep int, err error)
 }
 
 // registerHosts installs the whitelisted emb.* and json host functions into
@@ -38,7 +43,14 @@ func registerHosts(ls *lua.LState, h Hosts) {
 		return tokenizeHost(ls, h)
 	}))
 	tok.RawSetString("words", ls.NewFunction(tokenizeWordsHost))
+	tok.RawSetString("encode", ls.NewFunction(func(ls *lua.LState) int {
+		return encodeHost(ls, h)
+	}))
+	tok.RawSetString("encode_pair", ls.NewFunction(func(ls *lua.LState) int {
+		return encodePairHost(ls, h)
+	}))
 	emb.RawSetString("tokenize", tok)
+	registerMath(emb, ls)
 	ls.SetGlobal("emb", emb)
 
 	j := ls.NewTable()
@@ -130,6 +142,66 @@ func tokenizeWordsHost(ls *lua.LState) int {
 	result.RawSetString("ends", endsT)
 	ls.Push(result)
 	return 1
+}
+
+// encodeHost implements emb.tokenize.encode(text, max_len) → {ids, mask,
+// offsets}: the model tokenizer's own pipeline (special tokens included),
+// with per-token byte offsets so scripts slice surface text directly.
+func encodeHost(ls *lua.LState, h Hosts) int {
+	if h.EncodePlain == nil {
+		ls.RaiseError("emb.tokenize.encode is unavailable for this model")
+		return 0
+	}
+	text := ls.CheckString(1)
+	maxLen := ls.OptInt(2, 0)
+	ids, mask, offsets, err := h.EncodePlain(text, maxLen)
+	if err != nil {
+		ls.RaiseError("emb.tokenize.encode: %v", err)
+		return 0
+	}
+	result := ls.NewTable()
+	result.RawSetString("ids", int64ArrayToLua(ls, ids))
+	result.RawSetString("mask", int64ArrayToLua(ls, mask))
+	result.RawSetString("offsets", offsetsToLua(ls, offsets))
+	ls.Push(result)
+	return 1
+}
+
+// encodePairHost implements emb.tokenize.encode_pair(first, second, max_len)
+// → {ids, mask, offsets, sep}: the BERT-family pair template [CLS] a [SEP] b
+// [SEP], with per-part byte offsets and the 1-based sep position.
+func encodePairHost(ls *lua.LState, h Hosts) int {
+	if h.EncodePair == nil {
+		ls.RaiseError("emb.tokenize.encode_pair is unavailable for this model")
+		return 0
+	}
+	first := ls.CheckString(1)
+	second := ls.CheckString(2)
+	maxLen := ls.OptInt(3, 0)
+	ids, mask, offsets, sep, err := h.EncodePair(first, second, maxLen)
+	if err != nil {
+		ls.RaiseError("emb.tokenize.encode_pair: %v", err)
+		return 0
+	}
+	result := ls.NewTable()
+	result.RawSetString("ids", int64ArrayToLua(ls, ids))
+	result.RawSetString("mask", int64ArrayToLua(ls, mask))
+	result.RawSetString("offsets", offsetsToLua(ls, offsets))
+	result.RawSetString("sep", lua.LNumber(sep))
+	ls.Push(result)
+	return 1
+}
+
+// offsetsToLua renders [][2]int spans as an array of {start, end} pairs.
+func offsetsToLua(ls *lua.LState, offsets [][2]int) *lua.LTable {
+	out := ls.NewTable()
+	for i, off := range offsets {
+		pair := ls.NewTable()
+		pair.RawSetInt(1, lua.LNumber(off[0]))
+		pair.RawSetInt(2, lua.LNumber(off[1]))
+		out.RawSetInt(i+1, pair)
+	}
+	return out
 }
 
 // tokenizeHost implements emb.tokenize.pretokenized(words, maxLen) →

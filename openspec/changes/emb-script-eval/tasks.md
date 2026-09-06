@@ -38,3 +38,12 @@
 
 - [x] 7.1 `just test` (server + gems), `just lint`, `just build` all green. Verify: full CI-equivalent suite passes
 - [x] 7.2 Spec walkthrough: end-to-end test covering load→evalsha, unknown sha, per-model exists, distinct label sets as distinct cache entries, and budget errors replying per-request. Verify: integration test (or recorded transcript) matches every scenario in specs/script-eval
+
+## 8. Baseline blocks for more model families
+
+- [x] 8.1 `emb.math` host functions: `sigmoid` (number or array in/array out, vectorized), `softmax` (stable: subtract max), `argmax` (1-based index + value of first maximum). Verify: unit tests — vector sigmoid values, stable softmax on large inputs (no overflow), argmax tie-break to first, empty/non-numeric arrays error
+- [x] 8.2 `emb.tokenize.encode(text, maxLen)` host block → `{ids, mask, offsets}` using the model tokenizer's own pipeline. Verify: unit test — ids/mask equal the embedding path's `Encode` values for the same text (minilm fixture), offsets slice the original text (multibyte case), truncation applied
+- [x] 8.3 `emb.tokenize.encode_pair(a, b, maxLen)` host block → composes `[CLS] a [SEP] b [SEP]`, returns `{ids, mask, offsets, sep}` with per-part offsets (tokens of `b` slice `b` directly). Verify: unit test — ids equal CLS+encode(a)+SEP+encode(b)+SEP, `sep` points at the inter-part separator, offsets slice each part (incl. multibyte)
+- [x] 8.4 Refactor `examples/scripts/gliner2.lua` decode to the baseline: score every candidate with a single vectorized `emb.math.sigmoid` call per label instead of the inline per-element form. Verify: GLiNER golden test still passes unchanged (`go test ./internal/script/ -run GLiNER`)
+- [x] 8.5 Example scripts for the new families using the baseline: `sst2.lua` (classification), `qa.lua` (extractive QA with offset slicing), `rerank.lua` (cross-encoder with sigmoid). Verify: each loads in the engine and, with a fake session returning canned logits, produces the expected hash replies (evaluate-with-fake test)
+- [x] 8.6 Docs parity: `EMB.HELP` mentions the math + tokenization blocks; design/spec reflect the baseline. Verify: help output contains `emb.math`; `openspec validate` passes, full suite green (`just test`, gem rspec, rubocop, golangci-lint)

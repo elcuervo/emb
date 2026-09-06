@@ -34,8 +34,6 @@ local function normalize(text)
   return s .. "."
 end
 
-local function sigmoid(x) return 1 / (1 + math.exp(-x)) end
-
 local text = KEYS[1]
 local labels = {}
 for i = 1, #ARGV do labels[i] = ARGV[i] end
@@ -120,24 +118,32 @@ local function at(data, shape, ...)
   return data[offset + 1]
 end
 
--- Span scan (model-specific decode): word-start positions x width, sigmoid
--- vs THRESHOLD, overlap suppression.
+-- Span scan (model-specific decode): word-start positions x width, scored
+-- with ONE vectorized emb.math.sigmoid call per label (baseline), then
+-- thresholded with overlap suppression.
 local function find_spans(li)
-  local spans = {}
+  local raw, cand = {}, {}
   for pos = 1, seq do
     local sw = pos2word[pos]
     if sw then
       for w = 0, max_width - 1 do
         local end_word = sw - 1 + w
         if end_word >= text_len then break end
-        local score = sigmoid(at(logits, log_shape, 1, pos, w + 1, li))
-        if score >= THRESHOLD then
-          local cs, ce = starts[sw], ends[sw + w]
-          local span_text = string.sub(norm, cs, ce - 1):gsub("^%s+", ""):gsub("%s+$", "")
-          if span_text ~= "" then
-            spans[#spans + 1] = { text = span_text, score = score, s = cs, e = ce }
-          end
-        end
+        raw[#raw + 1] = at(logits, log_shape, 1, pos, w + 1, li)
+        cand[#cand + 1] = { sw = sw, w = w }
+      end
+    end
+  end
+  if #raw == 0 then return {} end
+  local scores = emb.math.sigmoid(raw)
+  local spans = {}
+  for i = 1, #scores do
+    if scores[i] >= THRESHOLD then
+      local sw, w = cand[i].sw, cand[i].w
+      local cs, ce = starts[sw], ends[sw + w]
+      local span_text = string.sub(norm, cs, ce - 1):gsub("^%s+", ""):gsub("%s+$", "")
+      if span_text ~= "" then
+        spans[#spans + 1] = { text = span_text, score = scores[i], s = cs, e = ce }
       end
     end
   end

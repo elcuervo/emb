@@ -73,7 +73,7 @@ The server SHALL convert each script's return value to RESP2 using a Redis-faith
 
 ### Requirement: Sandboxed execution with budgets
 
-Script execution SHALL be sandboxed and isolated: each evaluation runs in a fresh interpreter with only whitelisted host functions (`emb.run`, `emb.tokenize.pretokenized`, `emb.tokenize.words`, `json`) and a curated standard-library subset; `io`, `os`, file/network access, FFI, `math.random`, and all time functions SHALL be unavailable. Each evaluation SHALL be bounded by a wall-clock deadline, an execution-step budget, and a script-size cap; exceeding any bound replies with an error for that request only and never affects other in-flight requests. Scripted evaluation commands SHALL count toward the server's `max_concurrent_requests` gate.
+Script execution SHALL be sandboxed and isolated: each evaluation runs in a fresh interpreter with only whitelisted host functions (`emb.run`, `emb.tokenize.pretokenized`, `emb.tokenize.words`, `emb.tokenize.encode`, `emb.tokenize.encode_pair`, `emb.math`, `json`) and a curated standard-library subset; `io`, `os`, file/network access, FFI, `math.random`, and all time functions SHALL be unavailable. Each evaluation SHALL be bounded by a wall-clock deadline, an execution-step budget, and a script-size cap; exceeding any bound replies with an error for that request only and never affects other in-flight requests. Scripted evaluation commands SHALL count toward the server's `max_concurrent_requests` gate.
 
 #### Scenario: Infinite loop in one request
 
@@ -103,6 +103,44 @@ When the server cache is enabled, scripted replies SHALL be cached under a conte
 
 - **WHEN** the same script and text are sent with different label args
 - **THEN** each distinct arg set is executed and cached separately
+
+### Requirement: Math helper functions
+
+The server SHALL provide an `emb.math` module with `sigmoid`, `softmax`, and `argmax`, accepting either a single number or an array of numbers. `sigmoid(x)` SHALL compute 1/(1+exp(−x)) element-wise for arrays (vectorized, returning an array). `softmax` SHALL be numerically stable (subtract the max before exponentiating) and return probabilities summing to 1. `argmax` SHALL return the index (1-based) and value of the first maximum element. Empty arrays SHALL error; non-numeric elements SHALL error.
+
+#### Scenario: Vectorized sigmoid over a score array
+
+- **WHEN** a script calls `emb.math.sigmoid({0.5, 1, -1})`
+- **THEN** the result is an array of the three sigmoid values
+
+#### Scenario: Stable softmax and argmax
+
+- **WHEN** a script calls `emb.math.softmax({1000, 1001, 999})` and `emb.math.argmax({3, 7, 1})`
+- **THEN** softmax returns finite probabilities (no overflow) and argmax returns index 2 with value 7
+
+#### Scenario: Empty input errors
+
+- **WHEN** a script passes an empty array to `emb.math.argmax` or `emb.math.softmax`
+- **THEN** the evaluation fails with an error reply
+
+### Requirement: Plain and pair tokenization
+
+The server SHALL provide `emb.tokenize.encode(text, maxLength)` and `emb.tokenize.encode_pair(first, second, maxLength)` using the model tokenizer's own pretokenization pipeline (not the word-splitting block). `encode` SHALL return `{ids, mask, offsets}` where offsets are per-token byte ranges into `text`; `encode_pair` SHALL compose the BERT-family pair template `[CLS] first [SEP] second [SEP]` and additionally return the `sep` token position (the separator between the two parts) and per-part offsets (tokens of `first` map into `first`, tokens of `second` map into `second`). Models with non-BERT pair templates SHALL remain script-composable via `encode` plus explicit separator token ids.
+
+#### Scenario: Plain encode matches the embedding path
+
+- **WHEN** a script encodes a text with `emb.tokenize.encode`
+- **THEN** the ids and mask equal the values the embedding pipeline's tokenizer produces for the same text
+
+#### Scenario: Pair encode composes the pair template
+
+- **WHEN** a script calls `emb.tokenize.encode_pair("who founded Apple", "Apple was founded in 1976.", 512)`
+- **THEN** ids equal `[CLS]` + encode(first) + `[SEP]` + encode(second) + `[SEP]`, `sep` points at the separator token, and offsets of `second`-owned tokens slice the `second` string directly
+
+#### Scenario: QA answer slicing via offsets
+
+- **WHEN** a script selects start/end logits positions and slices `second` at the corresponding offsets
+- **THEN** the sliced text is the answer surface string (no token-decode block required)
 
 ### Requirement: Structured extraction reference behavior
 

@@ -133,6 +133,11 @@ download-gliner-model:
     @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/tokenizer.json" -o ./models/gliner2/tokenizer.json && echo "✓ tokenizer.json"
     @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/config.json" -o ./models/gliner2/config.json && echo "✓ config.json"
 
+# GLiNER extraction benchmarks against the real int8 model (Apple sentence
+# material; requires: just download-gliner-model)
+bench-gliner intra="4":
+    @EMB_BENCH_INTRA={{intra}} go test ./internal/script/ -bench=BenchmarkGLiNERExtract -benchtime=5x -run=^$
+
 # Run redis-benchmark with a single-threaded server
 # Uses 1 client, 1 pipeline, 500 requests (~2s at 280 req/s)
 # Requires: redis-benchmark, downloaded model at ./models/minilm

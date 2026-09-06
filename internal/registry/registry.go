@@ -42,10 +42,11 @@ type ModelEntry struct {
 }
 
 // ScriptResources bundles what a scripted evaluation needs for a model: a
-// named-tensor session and the pretokenized-encoding tokenizer.
+// named-tensor session and the tokenizer (its plain/offsets/word-level
+// capabilities are type-asserted when building the host binding).
 type ScriptResources struct {
 	Session   onnx.NamedSession
-	Tokenizer tokenizer.PretokenizedTokenizer
+	Tokenizer tokenizer.Tokenizer
 }
 
 type Registry struct {
@@ -233,11 +234,6 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
 	}
-	pT, ok := any(tok).(tokenizer.PretokenizedTokenizer)
-	if !ok {
-		_ = tok.Close()
-		return nil, fmt.Errorf("tokenizer for %q does not support word-level encoding", e.Name)
-	}
 
 	inputNames, err := onnx.GetInputNames(cfg.ONNX)
 	if err != nil {
@@ -278,7 +274,7 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		return nil, fmt.Errorf("creating scripted session for %q: %w", e.Name, err)
 	}
 
-	return &ScriptResources{Session: sess, Tokenizer: pT}, nil
+	return &ScriptResources{Session: sess, Tokenizer: tok}, nil
 }
 
 func downloadModel(cfg *config.ModelConfig, name string) error {
