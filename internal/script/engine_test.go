@@ -64,6 +64,8 @@ func TestSandboxNoOsIo(t *testing.T) {
 		"return os.execute('ls')",
 		"return io.open('/etc/passwd')",
 		"return require('io')",
+		"return module('os')",
+		"return module('io')",
 		"return coroutine.running()",
 	} {
 		if _, err := Eval(src, nil, nil, EvalOptions{}); err == nil {

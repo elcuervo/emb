@@ -79,6 +79,21 @@ func TestSplitWordsCJKPunctuation(t *testing.T) {
 	}
 }
 
+func TestSplitWordsFullwidthNotPunct(t *testing.T) {
+	// Fullwidth letters (U+FF21–U+FF3A) and digits (U+FF10–U+FF19) fall
+	// inside the U+FF01–U+FF3F range the Rust crate used to treat as
+	// punctuation; they must stay part of one word.
+	words, _, _ := SplitWords("ＡＢＣ１２")
+	if !reflect.DeepEqual(words, []string{"ＡＢＣ１２"}) {
+		t.Fatalf("fullwidth letters/digits must form one word: %v", words)
+	}
+	// Fullwidth punctuation still splits.
+	words, _, _ = SplitWords("Ａ！Ｂ")
+	if !reflect.DeepEqual(words, []string{"Ａ", "！", "Ｂ"}) {
+		t.Fatalf("fullwidth punctuation must split: %v", words)
+	}
+}
+
 func TestSplitWordsNoLowercase(t *testing.T) {
 	// The block stays raw: models decide their own casing rules.
 	words, _, _ := SplitWords("Tim Cook")

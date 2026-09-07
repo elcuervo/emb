@@ -188,8 +188,14 @@ func TestGLiNERGolden(t *testing.T) {
 			t.Fatalf("case %d text mismatch", i)
 		}
 		got := fresh[i].Golden
+		if len(got) != len(g.Golden) {
+			t.Fatalf("case %q: got labels %v want %v", g.Text, got, g.Golden)
+		}
 		for label, want := range g.Golden {
-			gotList := got[label]
+			gotList, ok := got[label]
+			if !ok {
+				t.Fatalf("case %q: missing label %s", g.Text, label)
+			}
 			if len(gotList) != len(want) {
 				t.Fatalf("case %q label %s: got %v want %v", g.Text, label, gotList, want)
 			}

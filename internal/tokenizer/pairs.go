@@ -24,8 +24,14 @@ func (t *RefTokenizer) EncodePairOffsets(first, second string, maxLength int) ([
 	encA := t.tk.EncodeWithOptions(first, true, tokenizers.WithReturnOffsets(), tokenizers.WithReturnAttentionMask())
 	encB := t.tk.EncodeWithOptions(second, false, tokenizers.WithReturnOffsets(), tokenizers.WithReturnAttentionMask())
 
-	idsA, offA := trimByMask(&encA)
-	idsB, offB := trimByMask(&encB)
+	idsA, offA, err := trimByMask(&encA)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	idsB, offB, err := trimByMask(&encB)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
 
 	if maxLength <= 0 {
 		maxLength = DefaultMaxLength
@@ -34,6 +40,9 @@ func (t *RefTokenizer) EncodePairOffsets(first, second string, maxLength int) ([
 	// The template is [CLS] A [SEP] B [SEP]. A's encode already ends with the
 	// inter-part [SEP]; keep that structure when A is truncated (prefix +
 	// separator), so the separator position stays exact.
+	if len(idsA) == 0 {
+		return nil, nil, nil, 0, fmt.Errorf("pair encode: first part produced no tokens")
+	}
 	sepID := idsA[len(idsA)-1]
 	prefixA := idsA[:len(idsA)-1]
 	offPrefixA := offA[:len(offA)-1]
@@ -85,7 +94,10 @@ func (t *RefTokenizer) EncodePairOffsets(first, second string, maxLength int) ([
 const DefaultMaxLength = 512
 
 func slicesFromEncoding(enc *tokenizers.Encoding, maxLength int) ([]int64, []int64, [][2]int, error) {
-	ids, off := trimByMask(enc)
+	ids, off, err := trimByMask(enc)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if len(ids) == 0 {
 		return nil, nil, nil, fmt.Errorf("encode produced no tokens")
 	}
@@ -100,13 +112,18 @@ func slicesFromEncoding(enc *tokenizers.Encoding, maxLength int) ([]int64, []int
 }
 
 // trimByMask drops built-in padding (tokenizer.json may pad to a fixed
-// length) using the attention mask, returning parallel ids and offsets.
-func trimByMask(enc *tokenizers.Encoding) ([]int64, [][2]int) {
+// length) using the attention mask, returning parallel ids and offsets. It
+// errors if the tokenizer reported fewer ids/offsets than the mask selects,
+// so callers never index past the returned arrays.
+func trimByMask(enc *tokenizers.Encoding) ([]int64, [][2]int, error) {
 	n := 0
 	for _, m := range enc.AttentionMask {
 		if m == 1 {
 			n++
 		}
+	}
+	if len(enc.IDs) < n || len(enc.Offsets) < n {
+		return nil, nil, fmt.Errorf("tokenizer returned %d ids and %d offsets for %d non-pad tokens", len(enc.IDs), len(enc.Offsets), n)
 	}
 	ids := make([]int64, n)
 	off := make([][2]int, n)
@@ -114,7 +131,7 @@ func trimByMask(enc *tokenizers.Encoding) ([]int64, [][2]int) {
 		ids[i] = int64(enc.IDs[i])
 		off[i] = [2]int{int(enc.Offsets[i][0]), int(enc.Offsets[i][1])}
 	}
-	return ids, off
+	return ids, off, nil
 }
 
 func truncatePairPart(ids []int64, off [][2]int, n int) ([]int64, [][2]int) {

@@ -85,7 +85,7 @@ module Emb
     #   nil                        → no decoding, parsing exactly as before
     #   :f32                       → each value position is unpack('e*')'d when
     #                                it is a packed float bulk; numeric arrays
-    #                                pass through as floats
+    #                                pass through unchanged (element types kept)
     #   {field => :f32, ...}       → after hash parsing, the named field(s) of
     #                                each hash reply decode as :f32 (fields
     #                                absent from a reply are left untouched)

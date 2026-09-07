@@ -51,7 +51,7 @@ Scripts SHALL be cached per model keyed by SHA1 of the script source. `EMB.SCRIP
 
 ### Requirement: Lua-to-RESP reply conversion
 
-The server SHALL convert each script's return value to RESP2 using a Redis-faithful grammar: Lua string → bulk (byte-safe; UTF-8/JSON/binary all valid), Lua number → integer reply, list-form table (sequential integer keys from 1) → array reply, string-keyed table → hash reply as flat field/value pairs (HGETALL shape), `nil`/`false` → null, and a table with an `err` string field → error reply. Values SHALL nest recursively (a hash value may be an array, hash, bulk, integer, or null).
+The server SHALL convert each script's return value to RESP2 using a Redis-faithful grammar: Lua string → bulk (byte-safe; UTF-8/JSON/binary all valid), integral Lua number → integer reply, non-integral Lua number → bulk string (RESP2 has no double, so the decimal is not truncated), list-form table (sequential integer keys from 1) → array reply, string-keyed table → hash reply as flat field/value pairs (HGETALL shape), `nil`/`false` → null, and a table with an `err` string field → error reply (an `err` value containing CR or LF SHALL be rejected so the error cannot splice extra RESP frames). Values SHALL nest recursively (a hash value may be an array, hash, bulk, integer, or null).
 
 #### Scenario: Hash reply from an entities table
 
@@ -75,11 +75,11 @@ The server SHALL convert each script's return value to RESP2 using a Redis-faith
 
 ### Requirement: Sandboxed execution with budgets
 
-Script execution SHALL be sandboxed and isolated: each evaluation runs in a fresh interpreter with only whitelisted host functions (`emb.run`, `emb.tokenize.pretokenized`, `emb.tokenize.words`, `emb.tokenize.encode`, `emb.tokenize.encode_pair`, `emb.math`, `json`) and a curated standard-library subset; `io`, `os`, file/network access, FFI, `math.random`, and all time functions SHALL be unavailable. Each evaluation SHALL be bounded by a wall-clock deadline, an execution-step budget, and a script-size cap; exceeding any bound replies with an error for that request only and never affects other in-flight requests. Scripted evaluation commands SHALL count toward the server's `max_concurrent_requests` gate.
+Script execution SHALL be sandboxed and isolated: each evaluation runs in a fresh interpreter with only whitelisted host functions (`emb.run`, `emb.tokenize.pretokenized`, `emb.tokenize.words`, `emb.tokenize.encode`, `emb.tokenize.encode_pair`, `emb.math`, `json`) and a curated standard-library subset; `io`, `os`, `module`, file/network access, FFI, `math.random`, and all time functions SHALL be unavailable. Each evaluation SHALL be bounded by a wall-clock deadline (enforced at VM instruction granularity), a call-stack depth limit, and a script-size cap; exceeding any bound replies with an error for that request only and never affects other in-flight requests. Scripted evaluation commands SHALL count toward the server's `max_concurrent_requests` gate.
 
 #### Scenario: Infinite loop in one request
 
-- **WHEN** a script runs past its execution budget
+- **WHEN** a script runs past its wall-clock deadline
 - **THEN** that request replies with an execution-time error while concurrent requests continue normally
 
 #### Scenario: Oversized script
@@ -94,7 +94,7 @@ Script execution SHALL be sandboxed and isolated: each evaluation runs in a fres
 
 ### Requirement: Content-addressed reply caching
 
-When the server cache is enabled, scripted replies SHALL be cached under a content-addressed key derived from model name, script SHA1, the args, and the text — distinct args (e.g. different label sets) SHALL be distinct cache entries. A cache hit SHALL reply without re-running the script or model inference.
+When the server cache is enabled, scripted replies SHALL be cached under a content-addressed key derived from model name, script SHA1, the args, and the text — distinct args (e.g. different label sets) SHALL be distinct cache entries, and the arg hash SHALL keep argument boundaries unambiguous (nil, empty, and NUL-containing arguments are distinct keys). A cache hit (every text of a request) SHALL reply without re-running the script or model inference. When any text of a request misses, the server SHALL evaluate the script once with ALL the request texts as KEYS and merge the per-text results by their original indexes, so cache state never changes the inputs or the reply shape a script produces. Per-text caching assumes a script's reply for a text depends only on (model, script SHA1, args, text) — a script whose per-text output reads sibling texts in KEYS is outside the cache contract.
 
 #### Scenario: Same script and labels hit the cache
 

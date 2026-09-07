@@ -237,7 +237,8 @@ unchanged. The following decode modes SHALL be supported:
 - `decode: :f32` — the top-level reply for a single text, or each element of a
   multi-text reply, is treated as a vector: a string bulk SHALL be decoded via
   little-endian float32 `unpack('e*')` into an array of floats; a numeric array
-  SHALL pass through as floats.
+  SHALL pass through unchanged (its elements keep their numeric types), and
+  any other value is a contract mismatch that raises.
 - `decode: {field => :f32}` — after hash parsing, the named field SHALL be
   decoded as `:f32`; applies recursively for multi-text replies (arrays of
   hashes). Fields absent from a reply SHALL be left untouched.

@@ -90,14 +90,23 @@ func benchTexts(words int) string {
 	return strings.Join(parts, " ")
 }
 
-// noDecodeSource cuts the span-scan decode from the example script so the
-// delta between full and build-only isolates decode cost.
-func noDecodeSource(full string) string {
-	idx := strings.Index(full, "-- Span scan")
+// decodeMarker anchors the cut in examples/scripts/gliner2.lua: everything
+// before it is input construction + the single emb.run_batch inference call;
+// the span-scan decode comes after. It must keep matching the example script.
+const decodeMarker = "-- Flat row-major access helper"
+
+// noDecodeSource cuts the decode stage from the example script so the delta
+// between full and build-only isolates decode cost. It fails loudly when the
+// marker is missing instead of silently returning the unchanged script (which
+// would make build-only measure the full path). The injected return uses only
+// values in scope at the cut point.
+func noDecodeSource(tb testing.TB, full string) string {
+	tb.Helper()
+	idx := strings.Index(full, decodeMarker)
 	if idx < 0 {
-		return full
+		tb.Fatalf("decode marker %q not found in gliner script", decodeMarker)
 	}
-	return full[:idx] + "return { seq = seq, nlab = nlab, nlogits = #out.logits.data }\n"
+	return full[:idx] + "return { texts = #texts, nlab = nlab, nlogits = #outs[1].logits.data }\n"
 }
 
 func BenchmarkGLiNERExtract(b *testing.B) {
@@ -144,7 +153,7 @@ func BenchmarkGLiNERExtract(b *testing.B) {
 			}
 		})
 		b.Run("build-only", func(b *testing.B) {
-			trimmed := noDecodeSource(src)
+			trimmed := noDecodeSource(b, src)
 			for i := 0; i < b.N; i++ {
 				if _, err := EvalWithHosts(trimmed, []string{midText}, midLabels, hosts, EvalOptions{}); err != nil {
 					b.Fatal(err)

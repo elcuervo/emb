@@ -7,8 +7,10 @@ import (
 )
 
 // bertPunct reports whether r is punctuation under the BertPreTokenizer
-// rules (ASCII punctuation plus the CJK/fullwidth ranges the Rust tokenizers
-// crate recognizes). Whitespace is handled separately.
+// rules: ASCII punctuation plus Unicode punctuation categories. The tokenizers
+// crate's range tables overlap fullwidth letters/digits (U+FF01–U+FF3F); using
+// unicode.IsPunct keeps those inside words while still splitting fullwidth
+// and CJK punctuation. Whitespace is handled separately.
 func bertPunct(r rune) bool {
 	if 33 <= r && r <= 47 {
 		return true
@@ -22,17 +24,7 @@ func bertPunct(r rune) bool {
 	if 123 <= r && r <= 126 {
 		return true
 	}
-	switch {
-	case 0x3000 <= r && r <= 0x303F: // CJK symbols & punctuation (incl. U+3000)
-	case 0x2018 <= r && r <= 0x201F: // quotes / dashes
-	case 0x3014 <= r && r <= 0x301F: // CJK brackets
-	case 0xFE30 <= r && r <= 0xFE4F: // CJK compatibility forms
-	case 0xFF01 <= r && r <= 0xFF3F: // fullwidth forms (!..? and letters)
-	case 0xFF5B <= r && r <= 0xFF65: // fullwidth brackets and halfwidth punct
-	default:
-		return false
-	}
-	return true
+	return unicode.IsPunct(r)
 }
 
 // SplitWords splits text into words with byte offsets, following the

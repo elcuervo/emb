@@ -300,6 +300,47 @@ func TestEvalConcurrentGate(t *testing.T) {
 	c2.Close()
 }
 
+// TestEvalPartialCacheMultiTextFullKeys verifies that a multi-text request
+// with some texts cached still evaluates the script ONCE with ALL the request
+// texts as KEYS (Redis semantics): scripts never see a reduced KEYS list, so
+// per-text reply shapes stay identical to a cold run and cached entries from
+// single-text requests cannot be mixed into multi-text arrays at the wrong
+// shape.
+func TestEvalPartialCacheMultiTextFullKeys(t *testing.T) {
+	addr, srv := serveScriptTest(t, "8mb")
+	c := dial(t, addr)
+
+	// Each per-text element reports how many KEYS the evaluation saw.
+	reportKeys := `local out = {} for i = 1, #KEYS do out[i] = "#" .. #KEYS end return out`
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", reportKeys)
+	shaVal := sha[5 : len(sha)-2]
+
+	// Prime the cache with a 3-text request (KEYS = a b c).
+	first := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "c")
+	want := "*3\r\n$2\r\n#3\r\n$2\r\n#3\r\n$2\r\n#3\r\n"
+	if first != want {
+		t.Fatalf("unexpected cold multi-text reply %q", first)
+	}
+
+	// Partial hit (a, b cached): the script must still see ALL three request
+	// texts as KEYS, so every element reports #3 (the old miss-only path
+	// would see KEYS=[d] and emit a #1 element with mismatched shapes).
+	partial := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "d")
+	if partial != want {
+		t.Fatalf("partial-cache reply must equal a full-KEYS cold run, got %q", partial)
+	}
+	if stats := srv.cache.Stats(); stats.Hits < 2 {
+		t.Fatalf("expected >=2 cache hits for the partial request, got %d", stats.Hits)
+	}
+
+	// A fully cached request replays every element without re-running.
+	repeat := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "c")
+	if repeat != first {
+		t.Fatalf("full-hit reply changed: %q vs %q", repeat, first)
+	}
+	c.Close()
+}
+
 func TestHelpDocumentsScriptFamily(t *testing.T) {
 	addr, _ := serveScriptTest(t, "")
 	c := dial(t, addr)

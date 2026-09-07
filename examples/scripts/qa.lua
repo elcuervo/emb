@@ -16,10 +16,12 @@ local out = emb.run({
 -- Both outputs come back from the single run.
 local s, e = out.start_logits.data, out.end_logits.data
 
--- Model logic: the answer lives in the second part, so the span crosses the
--- inter-part [SEP] and stays within the sequence (max span width 30).
-local bs, be, best = enc.sep, enc.sep, -1e9
-for i = enc.sep, #s do
+-- Model logic: the answer lives in the second part, so the span starts just
+-- past the inter-part [SEP] and stays within the sequence (max width 30). The
+-- [SEP] itself is a zero-width special token (offset [0,0]) and can never be
+-- the answer, so selection starts at sep + 1.
+local bs, be, best = enc.sep + 1, enc.sep + 1, -1e9
+for i = enc.sep + 1, #s do
   local stop_i = math.min(#s, i + 30)
   for j = i, stop_i do
     local sc = s[i] + e[j]

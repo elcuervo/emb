@@ -1,10 +1,9 @@
 package script
 
 import (
+	"fmt"
 	"strings"
 	"testing"
-
-	lua "github.com/yuin/gopher-lua"
 
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
@@ -24,6 +23,11 @@ func (f *fakeSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.Named
 			ids = in.Int64
 			shape = in.Shape
 		}
+	}
+	// A relaxed validation reaching Run with an unexpected input (missing
+	// input_ids or a rank-1 shape) must return an error, not panic.
+	if len(shape) < 2 || ids == nil {
+		return nil, fmt.Errorf("fakeSession: expected 2-D input_ids, got shape %v", shape)
 	}
 	// outputs: int64 tensor (word marker) and float32 tensor (logits)
 	n := int(shape[0] * shape[1])
@@ -280,8 +284,6 @@ return json.encode({PERSON = {"Tim Cook"}, score = 0.9823})`
 	}
 }
 
-var _ = lua.LNil
-
 func TestHostRunExplicitDtype(t *testing.T) {
 	// All-integral data with an explicit f32 dtype must produce a float32
 	// tensor (zero-filled inputs like fused-CLIP pixel_values).
@@ -308,6 +310,31 @@ return out.x.data[1]`
 	}
 }
 
+func TestHostRunFillWithinLimit(t *testing.T) {
+	// A legitimately large constant tensor (the fused-CLIP pixel_values
+	// shape) still fits under maxFillElements.
+	var got onnx.NamedTensor
+	src := `
+local out = emb.run({ p = {shape = {1, 3, 224, 224}, fill = 0, dtype = "f32"} })
+return out.p.shape[4]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			got = inputs[0]
+			return map[string]onnx.NamedTensor{
+				"p": {Name: "p", Shape: got.Shape, DType: got.DType, Float: []float32{0}},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Float) != 1*3*224*224 {
+		t.Fatalf("expected %d float elements, got %d", 1*3*224*224, len(got.Float))
+	}
+	if v.String() != "224" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
 func TestHostRunFillZeroFloat(t *testing.T) {
 	// {shape, fill, dtype} builds the tensor host-side without a Lua data
 	// table: the session receives a float32 tensor with the exact element
@@ -423,6 +450,9 @@ func TestHostRunFillErrors(t *testing.T) {
 		`return emb.run({ x = {shape = {2}, fill = 1, data = {1, 1}} })`, // fill+data conflict
 		`return emb.run({ x = {shape = {2}, fill = "1"} })`,              // fill must be a number
 		`return emb.run({ x = {shape = {2}} })`,                          // neither data nor fill
+		`return emb.run({ x = {shape = {-1, 2}, fill = 0} })`,            // negative dimension
+		`return emb.run({ x = {shape = {1, 100000000}, fill = 0} })`,     // exceeds maxFillElements
+		`return emb.run({ x = {shape = {}, data = {}} })`,                // empty shape
 	} {
 		if _, err := EvalWithHosts(src, nil, nil, hostFixture(), EvalOptions{}); err == nil {
 			t.Fatalf("script %q should fail emb.run validation", src)

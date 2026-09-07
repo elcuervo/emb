@@ -89,7 +89,7 @@ sha = sig_client.script.load(:siglip2, script)
 # 768 floats (dim must match the graph); the raw String would need unpack('e*').
 sig_vec = sig_client.evalsha(:siglip2, sha, [LINE], ['normalize'], decode: :f32)
 abort "siglip2: expected 768 dims, got #{sig_vec.size}" unless sig_vec.size == 768
-sig_base = median_of([5].map do |_i|
+sig_base = median_of(5.times.map do |_i|
   t0 = ms
   sig_client.evalsha(:siglip2, sha, [LINE], ['normalize'], decode: :f32)
   ms - t0
@@ -100,7 +100,7 @@ end
 report('siglip2 (script)', samples, total, ops, sig_base)
 
 # --- e5: standard embed path ---
-e5_base = median_of([5].map do |_i|
+e5_base = median_of(5.times.map do |_i|
   t0 = ms
   Emb::Proxy.new(eager_client(port), :e5)[LINE]
   ms - t0
@@ -113,7 +113,7 @@ report('e5 (embed)', samples, total, ops, e5_base)
 # --- gliner2: scripted NER extraction (EVSHA, dynamic labels) ---
 glin = eager_client(port)
 glin_sha = glin.script.load(:gliner2, File.read(File.expand_path('../../../examples/scripts/gliner2.lua', __dir__)))
-glin_base = median_of([5].map do |_i|
+glin_base = median_of(5.times.map do |_i|
   t0 = ms
   glin.evalsha(:gliner2, glin_sha, [LINE], %w[PERSON ORG PRODUCT])
   ms - t0

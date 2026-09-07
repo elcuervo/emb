@@ -57,7 +57,7 @@ func TestExampleSST2(t *testing.T) {
 	}
 	reply := evalExample(t, "sst2.lua", []string{"this film is great"}, []string{"NEGATIVE", "POSITIVE"}, run)
 	// sst2 returns {label, confidence, scores}: label must be POSITIVE.
-	if !containsReply(reply, "\"POSITIVE\"") && !containsReply(reply, "POSITIVE") {
+	if !containsReply(reply, "POSITIVE") {
 		t.Fatalf("expected POSITIVE label in %q", reply)
 	}
 	if containsReply(reply, "NEGATIVE") {
@@ -188,15 +188,6 @@ func TestExampleRerank(t *testing.T) {
 	}
 }
 
-func containsReply(reply, needle string) bool {
-	return indexOf(reply, needle) >= 0
-}
+func containsReply(reply, needle string) bool { return strings.Contains(reply, needle) }
 
-func indexOf(reply, needle string) int {
-	for i := 0; i+len(needle) <= len(reply); i++ {
-		if reply[i:i+len(needle)] == needle {
-			return i
-		}
-	}
-	return -1
-}
+func indexOf(reply, needle string) int { return strings.Index(reply, needle) }

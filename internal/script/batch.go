@@ -145,6 +145,10 @@ func namedInputsFromTable(ls *lua.LState, arg *lua.LTable) ([]onnx.NamedTensor, 
 // mergeBatch merges per-item named tensor sets into one padded set along the
 // batch axis: each named tensor keeps its input order, shapes become
 // [N] + max-per-dim, data zero-filled with each item's data placed in row.
+// Each item tensor must be a single batch row (Shape[0] == 1); when an item's
+// inner dimensions differ from the padded maximums, its data is scattered per
+// row so padding lands in the correct cells (a naive contiguous copy would
+// misplace it or overwrite the next item's row).
 func mergeBatch(items [][]onnx.NamedTensor, names []string) ([]onnx.NamedTensor, error) {
 	n := len(items)
 	merged := make([]onnx.NamedTensor, 0, len(names))
@@ -161,6 +165,9 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string) ([]onnx.NamedTensor,
 		// The merged tensor replaces the items' batch dim (0) with N and pads
 		// the remaining dims (1..rank-1) to the per-dimension maximum.
 		rank := rankOf(base.Shape)
+		if rank == 0 {
+			return nil, fmt.Errorf("input %q has an empty shape", name)
+		}
 		maxShape := make([]int64, rank)
 		maxShape[0] = int64(n)
 		for d := 1; d < rank; d++ {
@@ -193,11 +200,19 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string) ([]onnx.NamedTensor,
 					in = cand
 				}
 			}
+			if in.Shape[0] != 1 {
+				return nil, fmt.Errorf("input %q item %d: batch dimension must be 1, got %d", name, i+1, in.Shape[0])
+			}
 			row := i * inner
-			if in.DType == onnx.TensorInt64 {
-				copy(out.Int64[row:], in.Int64)
+			if slices.Equal(in.Shape[1:], maxShape[1:]) {
+				// Exact inner layout: a single contiguous copy fills the row.
+				if in.DType == onnx.TensorInt64 {
+					copy(out.Int64[row:], in.Int64)
+				} else {
+					copy(out.Float[row:], in.Float)
+				}
 			} else {
-				copy(out.Float[row:], in.Float)
+				scatterRow(out, row, in, maxShape[1:])
 			}
 		}
 		merged = append(merged, out)
@@ -205,13 +220,80 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string) ([]onnx.NamedTensor,
 	return merged, nil
 }
 
+// scatterRow copies in's inner row-major data into dst's padded row layout
+// (maxInner is the per-dimension maximum). in's inner dims are <= maxInner; a
+// cell at item-index (i1, i2, …) maps to merged offset (i1*maxStride1 + …).
+func scatterRow(out onnx.NamedTensor, dstStart int, in onnx.NamedTensor, maxInner []int64) {
+	n := len(in.Shape) - 1 // inner dims
+	if n == 0 {
+		if in.DType == onnx.TensorInt64 {
+			out.Int64[dstStart] = in.Int64[0]
+		} else {
+			out.Float[dstStart] = in.Float[0]
+		}
+		return
+	}
+	maxStrides := make([]int, n)
+	srcStrides := make([]int, n)
+	stride := 1
+	for k := n - 1; k >= 0; k-- {
+		maxStrides[k] = stride
+		stride *= int(maxInner[k])
+	}
+	stride = 1
+	for k := n - 1; k >= 0; k-- {
+		srcStrides[k] = stride
+		stride *= int(in.Shape[k+1])
+	}
+	cur := make([]int, n)
+	for {
+		src, dst := 0, 0
+		for k := range cur {
+			src += cur[k] * srcStrides[k]
+			dst += cur[k] * maxStrides[k]
+		}
+		if in.DType == onnx.TensorInt64 {
+			out.Int64[dstStart+dst] = in.Int64[src]
+		} else {
+			out.Float[dstStart+dst] = in.Float[src]
+		}
+		k := n - 1
+		for k >= 0 {
+			cur[k]++
+			if cur[k] < int(in.Shape[k+1]) {
+				break
+			}
+			cur[k] = 0
+			k--
+		}
+		if k < 0 {
+			break
+		}
+	}
+}
+
 // sliceBatchOutput extracts item i's data (0-based) from a batched output.
+// It validates that the output carries the expected batch dimension and data
+// length before slicing, so a graph output without a leading dim of size n
+// (e.g. a pooled or scalar result) raises a Lua error instead of panicking.
 func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int) *lua.LTable {
 	out := ls.NewTable()
 	shape := t.Shape
+	if len(shape) == 0 {
+		ls.RaiseError("emb.run_batch: output has an empty shape (no batch dimension)")
+		return out
+	}
+	if shape[0] != int64(n) {
+		ls.RaiseError("emb.run_batch: output shape %v has batch dimension %d, want %d", shape, shape[0], n)
+		return out
+	}
 	inner := 1
 	for _, d := range shape[1:] {
 		inner *= int(d)
+	}
+	if (t.DType == onnx.TensorInt64 && len(t.Int64) < n*inner) || (t.DType != onnx.TensorInt64 && len(t.Float) < n*inner) {
+		ls.RaiseError("emb.run_batch: output %q data has %d elements, want at least %d", t.Name, len(t.Int64)+len(t.Float), n*inner)
+		return out
 	}
 	batchShape := append([]int64{1}, shape[1:]...)
 	shapeTab := ls.NewTable()

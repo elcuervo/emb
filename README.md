@@ -138,14 +138,14 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 
 Think of the plain embed command as a fixed pipeline:
 
-```
+```text
 model(input) -> output          # EMB <model> <text>
 ```
 
 tokenize → infer → pool → normalize → reply. **Scripts** replace the outer
 edges of that pipeline with your own code around the same model call:
 
-```
+```text
 model(fn(input)) -> output      # EMB.EVAL / EMB.EVSHA
 ```
 
@@ -164,7 +164,7 @@ value per text. The whitelisted host blocks:
 
 | Block | Purpose |
 |-------|---------|
-| `emb.run({name = {shape, data|fill, dtype?}, ...})` | Named-tensor inference → `{name = {shape, data}}` per output |
+| `emb.run({name = {shape, data\|fill, dtype?}, ...})` | Named-tensor inference → `{name = {shape, data}}` per output |
 | `emb.run_batch({item, ...})` | One model call for N items (padded into a single session run) |
 | `emb.tokenize.encode(text, max_len)` | The model tokenizer's own pipeline → `{ids, mask, offsets}` |
 | `emb.tokenize.encode_pair(a, b, max_len)` | BERT-family pair framing → `{ids, mask, offsets, sep}` |

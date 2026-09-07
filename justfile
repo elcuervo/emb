@@ -126,12 +126,17 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
 
 # Download the GLiNER2 scripted-model testbed (cuerbot/gliner2-multi-v1 int8)
-# Used by the gated script-eval/GLiNER tests; ~380MB.
+# Used by the gated script-eval/GLiNER tests; ~380MB. Skips files that are
+# already present and fails on HTTP errors (curl -f), mirroring download-model.
 download-gliner-model:
     @mkdir -p ./models/gliner2
-    @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/model_int8.onnx" -o ./models/gliner2/model_int8.onnx && echo "✓ model_int8.onnx"
-    @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/tokenizer.json" -o ./models/gliner2/tokenizer.json && echo "✓ tokenizer.json"
-    @curl -sL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/config.json" -o ./models/gliner2/config.json && echo "✓ config.json"
+    @for f in model_int8.onnx tokenizer.json config.json; do \
+        if [ -f "./models/gliner2/$$f" ] && [ "$$(wc -c < "./models/gliner2/$$f")" -gt 100 ]; then \
+            echo "✓ $$f (exists)"; \
+        else \
+            curl -fsSL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/$$f" -o "./models/gliner2/$$f" && echo "✓ $$f" || { rm -f "./models/gliner2/$$f"; echo "failed to download $$f" >&2; exit 1; }; \
+        fi; \
+    done
 
 # GLiNER extraction benchmarks against the real int8 model (Apple sentence
 # material; requires: just download-gliner-model)

@@ -496,10 +496,11 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 		}
 	}
 	if cfg.ScriptPreload {
-		log.Printf("  preloading scripted session for %q (workers=%d)...", name, cfg.ScriptWorkers)
-		if _, err := entry.ScriptResources(); err != nil {
+		res, err := entry.ScriptResources()
+		if err != nil {
 			return nil, err
 		}
+		log.Printf("  preloaded scripted sessions for %q (workers=%d)", name, len(res.Sessions()))
 	}
 
 	return entry, nil
@@ -591,6 +592,11 @@ func (r *Registry) Close() error {
 		if entry.scriptRes != nil {
 			for _, sess := range entry.scriptRes.Sessions() {
 				_ = sess.Close()
+			}
+			// The scripted tokenizer is a separate RefTokenizer from the embed
+			// pool's; release its native resources explicitly.
+			if entry.scriptRes.Tokenizer != nil {
+				_ = entry.scriptRes.Tokenizer.Close()
 			}
 		}
 	}

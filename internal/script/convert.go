@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -89,6 +90,12 @@ func convertTable(w ReplyWriter, t *lua.LTable) error {
 	if hasErr && len(keys) == 1 {
 		msg := t.RawGetString("err")
 		if s, ok := msg.(lua.LString); ok {
+			// A CR/LF inside the message would splice a second RESP frame onto
+			// the wire (and, when cached, be replayed verbatim via WriteRaw),
+			// breaking command/response alignment. Reject instead of writing.
+			if strings.ContainsAny(string(s), "\r\n") {
+				return fmt.Errorf("error reply contains CR or LF")
+			}
 			w.WriteError(string(s))
 			return nil
 		}

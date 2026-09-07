@@ -1,6 +1,7 @@
 package script
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/elcuervo/emb/internal/onnx"
@@ -80,6 +81,65 @@ return single.logits.data[1] .. "|" .. outs[1].logits.data[1] .. "|" .. outs[1].
 	}
 	if cc.calls != 2 {
 		t.Fatalf("expected single + batch = 2 calls, got %d", cc.calls)
+	}
+}
+
+func TestRunBatchRejectsBatchDimGT1(t *testing.T) {
+	// An item declaring a batch dim greater than 1 would have its data
+	// mis-segmented by the merge (rows advance by the inner size only), so it
+	// is rejected outright.
+	src := `return emb.run_batch({ { x = {shape = {2, 2}, data = {1, 2, 3, 4}} } })`
+	if _, err := EvalWithHosts(src, nil, nil, batchHosts(&countingSession{}), EvalOptions{}); err == nil {
+		t.Fatal("expected batch-dim>1 item to be rejected")
+	}
+}
+
+func TestRunBatchRank3Scatter(t *testing.T) {
+	// Items with different inner extents are scattered into the padded merged
+	// row layout: dims (1,2,3) and (1,3,2) merge into (2,3,3), and each
+	// item's cells must land at their row-major offsets within [3,3].
+	var merged onnx.NamedTensor
+	run := func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+		for _, in := range inputs {
+			if in.Name == "x" {
+				merged = in
+			}
+		}
+		f := make([]float32, len(merged.Int64))
+		for i, v := range merged.Int64 {
+			f[i] = float32(v)
+		}
+		return map[string]onnx.NamedTensor{
+			"logits": {Name: "logits", Shape: merged.Shape, DType: onnx.TensorFloat32, Float: f},
+		}, nil
+	}
+	src := `return #emb.run_batch({ { x = {shape = {1, 2, 3}, data = {1,2,3,4,5,6}} }, { x = {shape = {1, 3, 2}, data = {7,8,9,10,11,12}} } })`
+	if _, err := EvalWithHosts(src, nil, nil, Hosts{Run: run}, EvalOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(merged.Shape, []int64{2, 3, 3}) {
+		t.Fatalf("merged shape = %v, want [2 3 3]", merged.Shape)
+	}
+	// item 0 occupies merged indices {0..2, 3..5} (prefix of its 3x3 row),
+	// item 1 (3x2) scatters to {0,1}, {3,4}, {6,7} of its row; the remaining
+	// cells stay zero.
+	want := []int64{1, 2, 3, 4, 5, 6, 0, 0, 0, 7, 8, 0, 9, 10, 0, 11, 12, 0}
+	if !reflect.DeepEqual(merged.Int64, want) {
+		t.Fatalf("merged data = %v, want %v", merged.Int64, want)
+	}
+}
+
+func TestRunBatchOutputShapeMismatch(t *testing.T) {
+	// A graph output that does not carry a leading batch dim of size n must
+	// produce a Lua error, not a panic (start+j would read past the data).
+	run := func(_ []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+		return map[string]onnx.NamedTensor{
+			"logits": {Name: "logits", Shape: []int64{1, 3}, DType: onnx.TensorFloat32, Float: []float32{1, 2, 3}},
+		}, nil
+	}
+	src := `return emb.run_batch({ { x = {shape = {1, 3}, data = {1, 2, 3}} }, { x = {shape = {1, 3}, data = {4, 5, 6}} } })`
+	if _, err := EvalWithHosts(src, nil, nil, Hosts{Run: run}, EvalOptions{}); err == nil {
+		t.Fatal("expected output batch-dim mismatch to error")
 	}
 }
 

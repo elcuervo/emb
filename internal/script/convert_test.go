@@ -119,6 +119,19 @@ func TestConvertErrTable(t *testing.T) {
 	}
 }
 
+func TestConvertErrTableRejectsCRLF(t *testing.T) {
+	// A CR/LF inside the error message would splice a second RESP frame onto
+	// the wire (and, once cached, be replayed verbatim), so it is rejected.
+	v, err := Eval(`return {err = "bad\r\n:1"}`, nil, nil, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := &respBuffer{}
+	if err := Convert(buf, v); err == nil {
+		t.Fatal("expected CR/LF error reply to be rejected")
+	}
+}
+
 func TestConvertEmptyTable(t *testing.T) {
 	buf := convertStr(t, `return {}`)
 	if want := "*0\r\n"; buf.b.String() != want {

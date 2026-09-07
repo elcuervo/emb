@@ -1,6 +1,10 @@
 package script
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+	"time"
+)
 
 func TestCompilerReusesProto(t *testing.T) {
 	c := NewCompiler()
@@ -88,14 +92,31 @@ func TestCompilerCompileErrorNotCached(t *testing.T) {
 	}
 }
 
+func TestCompilerProtoCacheBounded(t *testing.T) {
+	// EMB.EVAL feeds unique inline scripts per request; the prototype cache
+	// must stay bounded instead of growing without limit.
+	c := NewCompiler()
+	c.max = 8
+	for i := 0; i < 100; i++ {
+		if _, err := c.Eval("m", "return '"+string(rune('a'+i%26))+"' .. "+strconv.Itoa(i), nil, nil, Hosts{}, EvalOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.mu.Lock()
+	n := len(c.protos["m"])
+	c.mu.Unlock()
+	if n != c.max {
+		t.Fatalf("expected proto cache capped at %d, got %d", c.max, n)
+	}
+}
+
 func TestCompilerBudgetAndSandbox(t *testing.T) {
 	c := NewCompiler()
-	// Size cap still applies.
 	if _, err := c.Eval("m", "return 1", nil, nil, Hosts{}, EvalOptions{MaxScriptBytes: 3}); err != ErrScriptTooLarge {
 		t.Fatalf("expected ErrScriptTooLarge, got %v", err)
 	}
 	// Deadlines still apply to cached protos.
-	if _, err := c.Eval("m", "local x = 0 while true do x = x + 1 end", nil, nil, Hosts{}, EvalOptions{Deadline: 50}); err != ErrDeadlineExceeded {
+	if _, err := c.Eval("m", "local x = 0 while true do x = x + 1 end", nil, nil, Hosts{}, EvalOptions{Deadline: 50 * time.Millisecond}); err != ErrDeadlineExceeded {
 		t.Fatalf("expected ErrDeadlineExceeded, got %v", err)
 	}
 	// Sandbox still strips os/io on cached protos.

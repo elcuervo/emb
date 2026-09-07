@@ -34,6 +34,21 @@ func TestCacheKeyDeterministic(t *testing.T) {
 	}
 }
 
+func TestCacheKeyArgBoundaries(t *testing.T) {
+	// nil vs [""] must differ (a NUL join would flatten both to the same string).
+	if CacheKey("m", "s", nil, "t") == CacheKey("m", "s", []string{""}, "t") {
+		t.Fatal("nil and [\"\"] args must not collide")
+	}
+	// ["a","b"] vs ["a\x00b"] must differ (NUL is a valid ARGV byte).
+	if CacheKey("m", "s", []string{"a", "b"}, "t") == CacheKey("m", "s", []string{"a\x00b"}, "t") {
+		t.Fatal("args with embedded NUL must not collide")
+	}
+	// ["a","b"] vs ["ab"] must differ (count boundaries matter).
+	if CacheKey("m", "s", []string{"a", "b"}, "t") == CacheKey("m", "s", []string{"ab"}, "t") {
+		t.Fatal("different arg splits must not collide")
+	}
+}
+
 func TestEncodeReplyMatchesConvert(t *testing.T) {
 	v, err := Eval(`return {PERSON = {"Tim Cook"}, ORG = {"Apple"}}`, nil, nil, EvalOptions{})
 	if err != nil {

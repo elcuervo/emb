@@ -27,11 +27,14 @@ const DefaultDeadline = 30 * time.Second
 var ErrScriptTooLarge = errors.New("script exceeds size limit")
 
 // Compile validates that `source` parses as a Lua chunk without executing it.
-// EMB.SCRIPT LOAD uses it to reject invalid scripts before caching.
+// EMB.SCRIPT LOAD uses it to reject invalid scripts before caching. It wraps
+// the source exactly like the evaluators (wrapSource), so LOAD accepts exactly
+// what EVAL/EVSHA will run (a raw chunk permits top-level `return`, which the
+// function wrapper does not).
 func Compile(source string) error {
 	ls := lua.NewState(lua.Options{SkipOpenLibs: true})
 	defer ls.Close()
-	if _, err := ls.LoadString(source); err != nil {
+	if _, err := ls.LoadString(wrapSource(source)); err != nil {
 		return fmt.Errorf("compiling script: %w", err)
 	}
 	return nil
@@ -126,7 +129,7 @@ func openSandboxLibs(ls *lua.LState) {
 	ls.OpenLibs()
 	for _, name := range []string{
 		lua.OsLibName, lua.IoLibName, lua.DebugLibName, lua.LoadLibName,
-		"channel", "coroutine", "require", "dofile", "loadfile",
+		"channel", "coroutine", "require", "dofile", "loadfile", "module",
 	} {
 		ls.SetGlobal(name, lua.LNil)
 	}

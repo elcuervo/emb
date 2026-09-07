@@ -75,13 +75,12 @@ func TestEncodeOffsetsMultibyte(t *testing.T) {
 	joined := ""
 	for _, off := range offsets {
 		if off[0] == 0 && off[1] == 0 {
-			joined += " "
-			continue
+			continue // special tokens carry no span
 		}
 		joined += "café"[off[0]:off[1]]
 	}
-	if len(joined) == 0 {
-		t.Fatal("no real-token spans")
+	if joined != "café" {
+		t.Fatalf("byte offsets do not reconstruct the source: %q", joined)
 	}
 }
 
@@ -128,12 +127,9 @@ func TestEncodePairOffsets(t *testing.T) {
 	}
 	// "1976" appears in the joined second-part surface.
 	found := false
-	for i, off := range secondToks {
+	for _, off := range secondToks {
 		if second[off[0]:off[1]] == "1976" {
 			found = true
-			break
-		}
-		if i > len(secondToks) {
 			break
 		}
 	}

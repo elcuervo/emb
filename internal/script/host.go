@@ -12,6 +12,12 @@ import (
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
+// maxFillElements bounds the number of elements a single fill tensor may
+// allocate (16M ≈ 64MB at 4 bytes/element). Fill shapes are script-controlled
+// and multiplied host-side, so this keeps an unbounded allocation from a
+// pathological spec from exhausting server memory.
+const maxFillElements = 16 * 1024 * 1024
+
 // Hosts binds a script evaluation to the resources it may touch: the model's
 // named-tensor session and its tokenizer capabilities. All are optional; a
 // binding with only Run lets scripts do arbitrary graph IO without
@@ -251,6 +257,9 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 		if err != nil {
 			return t, fmt.Errorf("shape: %w", err)
 		}
+		if len(shape) == 0 {
+			return t, fmt.Errorf("shape must have at least one dimension")
+		}
 		t.Shape = shape
 	} else {
 		return t, fmt.Errorf("missing shape")
@@ -273,6 +282,9 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 	}
 	if hasFill && hasData {
 		return t, fmt.Errorf("fill and data are mutually exclusive")
+	}
+	if !hasFill && !hasData {
+		return t, fmt.Errorf("spec must provide exactly one of data or fill")
 	}
 
 	// Data form: read the element array and infer int64/float32; the session
@@ -300,19 +312,34 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 
 	// Fill form: construct the constant tensor directly from the shape (the
 	// count is exact by construction, so no Lua data table is ever built).
-	count := 1
+	// The shape is script-controlled, so validate every dimension and bound
+	// the element count with checked multiplication before allocating.
+	count := int64(1)
 	for _, d := range t.Shape {
-		count *= int(d)
+		if d < 0 {
+			return t, fmt.Errorf("negative shape dimension %d", d)
+		}
+		if d == 0 {
+			count = 0
+			break
+		}
+		if count > math.MaxInt64/d {
+			return t, fmt.Errorf("shape element count overflows")
+		}
+		count *= d
+		if count > maxFillElements {
+			return t, fmt.Errorf("shape exceeds max fill elements (%d)", maxFillElements)
+		}
 	}
 	t.DType = dtypeFor(explicitDType, []float64{float64(fillVal)})
 	switch t.DType {
 	case onnx.TensorFloat32:
-		t.Float = make([]float32, count)
+		t.Float = make([]float32, int(count))
 		for i := range t.Float {
 			t.Float[i] = float32(fillVal)
 		}
 	default:
-		t.Int64 = make([]int64, count)
+		t.Int64 = make([]int64, int(count))
 		for i := range t.Int64 {
 			t.Int64[i] = int64(fillVal)
 		}

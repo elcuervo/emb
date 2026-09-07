@@ -74,7 +74,7 @@ func TestScriptSessionRoundRobin(t *testing.T) {
 
 func TestScriptPreloadWarmsAtLoad(t *testing.T) {
 	entry := scriptFixture(t, 1, true)
-	if !entry.loaded.Load() && entry.scriptRes == nil {
+	if entry.scriptRes == nil {
 		t.Fatal("expected script resources warmed by preload")
 	}
 	res, err := entry.ScriptResources()

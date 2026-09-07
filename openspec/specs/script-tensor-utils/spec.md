@@ -8,7 +8,7 @@ Gives scripts constant-filled tensor construction without Lua table round-trips 
 
 ### Requirement: Constant-filled tensor specs (`fill`)
 
-The server SHALL accept a `fill` field on `emb.run` and `emb.run_batch` input specs as an alternative to `data`: `{shape = {...}, fill = n, dtype = "i64"|"f32"}` SHALL construct a tensor of the given shape with every element equal to `n`, allocated host-side without a Lua data table. `fill` and `data` SHALL be mutually exclusive (an error when both are present); `dtype` behavior matches the existing spec rules (explicit or inferred — a non-integer `fill` infers float32).
+The server SHALL accept a `fill` field on `emb.run` and `emb.run_batch` input specs as an alternative to `data`: `{shape = {...}, fill = n, dtype = "i64"|"f32"}` SHALL construct a tensor of the given shape with every element equal to `n`, allocated host-side without a Lua data table. Every spec SHALL provide exactly one of `data` or `fill` (an error when both are present, and an error when neither is present — no implicit zero-filled fallback). `dtype` behavior matches the existing spec rules (explicit or inferred — a non-integer `fill` infers float32). Shape dimensions SHALL be non-negative and the element count SHALL be computed with checked multiplication and bounded by a documented maximum allocation (`maxFillElements`, 16M elements ≈ 64MB at 4 bytes/element), so a pathological shape cannot exhaust server memory.
 
 #### Scenario: Zero-filled float tensor for a fused model's auxiliary input
 

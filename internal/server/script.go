@@ -283,11 +283,13 @@ func parseInt(s string) (int, error) {
 
 // runScripted executes a script over one or more texts and writes the reply:
 // a single converted value for one text, an array of converted values for
-// several. The script runs ONCE with all (uncached) texts as KEYS, so the
-// script can batch its inference (emb.run_batch); for multi-text calls the
-// script must return an array whose elements correspond 1:1 to the texts.
-// Cache hits (when the server cache is enabled) skip the evaluation; each
-// text's converted element is cached under its content-addressed key.
+// several. The script runs ONCE with all request texts as KEYS, so the script
+// can batch its inference (emb.run_batch); for multi-text calls the script
+// must return an array whose elements correspond 1:1 to the texts. When the
+// server cache is enabled, a request whose texts are ALL cache hits replies
+// without re-running the script; any miss triggers one evaluation over the
+// full KEYS list, and each text's converted element is cached under its
+// content-addressed key.
 func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, args []string) {
 	s.active.Add(1)
 	defer s.active.Done()
@@ -321,63 +323,73 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		hosts.EncodePair = oT.EncodePairOffsets
 	}
 
-	// Per-text cache lookup first; only the misses reach the script.
+	// Cache lookup: serve entirely from cache when every text is a hit; any
+	// miss (or no cache) falls through to ONE evaluation with ALL the request
+	// texts as KEYS (Redis semantics), so the script always sees the true
+	// request context and returns the same shape as a cold run. Per-text
+	// replies are cached under their content-addressed keys.
 	replies := make([][]byte, len(texts))
-	missIdx := []int{}
-	for i, text := range texts {
-		if s.cache != nil {
-			key := script.CacheKey(model, sha, args, text)
-			if hit, ok := s.cache.Get(key); ok {
+	if s.cache != nil {
+		allHit := true
+		for i, text := range texts {
+			if hit, ok := s.cache.Get(script.CacheKey(model, sha, args, text)); ok {
 				replies[i] = hit
-				continue
+			} else {
+				allHit = false
 			}
 		}
-		missIdx = append(missIdx, i)
+		if allHit {
+			s.writeScriptReply(conn, replies)
+			return
+		}
 	}
 
-	if len(missIdx) > 0 {
-		missTexts := make([]string, len(missIdx))
-		for j, idx := range missIdx {
-			missTexts[j] = texts[idx]
-		}
+	// Evaluate the script once with all texts as KEYS. For a multi-text
+	// request the script must return one value per text (in order); a single
+	// text returns the value itself.
+	v, err := s.compiler.Eval(model, src, texts, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
+	if err != nil {
+		conn.WriteError(fmt.Sprintf("ERR %v", err))
+		return
+	}
 
-		v, err := s.compiler.Eval(model, src, missTexts, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
+	var values []lua.LValue
+	if len(texts) == 1 {
+		values = []lua.LValue{v}
+	} else {
+		tbl, ok := v.(*lua.LTable)
+		if !ok || tbl.Len() != len(texts) {
+			conn.WriteError(fmt.Sprintf("ERR script must return one value per text (%d texts)", len(texts)))
+			return
+		}
+		values = make([]lua.LValue, len(texts))
+		for j := 0; j < len(texts); j++ {
+			values[j] = tbl.RawGetInt(j + 1)
+		}
+	}
+
+	for i := range values {
+		encoded, err := script.EncodeReply(values[i])
 		if err != nil {
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
 			return
 		}
-
-		values := []lua.LValue{v}
-		if len(missTexts) > 1 {
-			tbl, ok := v.(*lua.LTable)
-			if !ok || tbl.Len() != len(missTexts) {
-				conn.WriteError(fmt.Sprintf("ERR script must return one value per text (%d texts)", len(missTexts)))
-				return
-			}
-			values = make([]lua.LValue, len(missTexts))
-			for j := 0; j < len(missTexts); j++ {
-				values[j] = tbl.RawGetInt(j + 1)
-			}
-		}
-
-		for j, idx := range missIdx {
-			encoded, err := script.EncodeReply(values[j])
-			if err != nil {
-				conn.WriteError(fmt.Sprintf("ERR %v", err))
-				return
-			}
-			replies[idx] = encoded
-			if s.cache != nil {
-				s.cache.Set(script.CacheKey(model, sha, args, texts[idx]), encoded)
-			}
+		replies[i] = encoded
+		if s.cache != nil {
+			s.cache.Set(script.CacheKey(model, sha, args, texts[i]), encoded)
 		}
 	}
+	s.writeScriptReply(conn, replies)
+}
 
-	if len(texts) == 1 {
+// writeScriptReply emits a single converted reply for a one-text request or an
+// array of per-text replies for a multi-text request.
+func (s *Server) writeScriptReply(conn redcon.Conn, replies [][]byte) {
+	if len(replies) == 1 {
 		conn.WriteRaw(replies[0])
 		return
 	}
-	conn.WriteArray(len(texts))
+	conn.WriteArray(len(replies))
 	for _, r := range replies {
 		conn.WriteRaw(r)
 	}

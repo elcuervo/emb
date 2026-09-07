@@ -10,7 +10,8 @@
 -- KEYS[1] = text; ARGV[1] optional "normalize" to L2-normalize the vector.
 
 local enc = emb.tokenize.encode(KEYS[1], 256)
-local normalize = ARGV[1] == "normalize"
+-- The docs/example use NORMALIZE; accept any case so both spellings work.
+local normalize = string.lower(ARGV[1] or "") == "normalize"
 
 -- Feed the image branch a constant zeroed 1x3x224x224 tensor (not used for
 -- text). fill builds it host-side from the shape alone: no 150k-element Lua
