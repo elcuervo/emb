@@ -169,6 +169,42 @@ func TestSnapshotRestoreHonorsMemoryCeiling(t *testing.T) {
 	}
 }
 
+func TestSnapshotRestoreSharesBudgetAcrossLoadedAndQuarantined(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cache.embcache")
+	// Construct the snapshot with the lazy entry first so it is quarantined
+	// before the loaded entry is considered.
+	snap := CacheSnapshot{Entries: []CacheSnapshotEntry{
+		{Key: "lazy:l", Value: make([]byte, 8)},    // dim 2 -> 8-byte value
+		{Key: "loaded:ld", Value: make([]byte, 4)}, // dim 1 -> 4-byte value
+	}}
+
+	models := map[string]registry.ModelFingerprint{
+		"lazy":   {Fingerprint: "lazy-fp", Dim: 2, Loaded: false},
+		"loaded": {Fingerprint: "loaded-fp", Dim: 1, Loaded: true},
+	}
+	if _, err := writeSnapshot(context.Background(), path, snap, models, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Entry cost is 48 bytes plus key and value bytes:
+	//   lazy:l    = 6+8+48  = 62
+	//   loaded:ld = 9+4+48  = 61
+	// A shared budget of 100 admits the lazy entry into quarantine (62) and
+	// must then reject the loaded entry (61 > 100-62), even though the loaded
+	// entry alone would fit the cache-local ceiling.
+	const maxBytes = 100
+	result, err := readSnapshot(path, maxBytes, models)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.QuarantinedCount != 1 || result.QuarantineBytes != 62 {
+		t.Fatalf("quarantine counts = %#v (want 1 entry / 62 bytes)", result)
+	}
+	if result.Restored != 0 || result.SkippedMemory != 1 {
+		t.Fatalf("loaded admission counts = %#v (want restored 0 / skipped-memory 1)", result)
+	}
+}
+
 func TestSnapshotMaximumLegalKeyLength(t *testing.T) {
 	key := "beta:" + strings.Repeat("x", maxSnapshotString-len("beta:"))
 	cache := NewCache(20 << 20)

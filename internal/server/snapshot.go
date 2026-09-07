@@ -442,6 +442,14 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		seenBytes += int64(len(key))
 		seen[key] = struct{}{}
 
+		// Apply the shared restore budget (cache-admitted plus quarantined
+		// bytes) before either admission branch so a lazy entry restored
+		// ahead of a loaded entry cannot let the combined cache and quarantine
+		// exceed the effective restore limit.
+		if entryBytes > maxBytes-admittedBytes-quarantinedBytes {
+			result.SkippedMemory++
+			continue
+		}
 		if cur.Loaded {
 			if result.Cache.restoreAppendMRU(key, value) {
 				result.Restored++
@@ -455,10 +463,6 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		// and its fingerprint is verified. Quarantined records count fully
 		// against the same restore budget so they cannot form an unaccounted
 		// second cache.
-		if entryBytes > maxBytes-admittedBytes-quarantinedBytes {
-			result.SkippedMemory++
-			continue
-		}
 		q := quarantine[model]
 		q.fingerprint = headerFP[model].Fingerprint
 		q.dim = headerFP[model].Dim

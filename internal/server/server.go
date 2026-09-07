@@ -759,6 +759,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	snapshotStatus := SnapshotStatus{}
 	s.persistenceMu.RLock()
 	coordinator := s.snapshot
+	saveOnShutdown := s.cacheSaveOnShutdown
 	s.persistenceMu.RUnlock()
 	if coordinator != nil {
 		snapshotStatus = coordinator.Status()
@@ -819,7 +820,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteBulkString("cache_load")
 	conn.WriteInt(boolInt(s.cacheLoad))
 	conn.WriteBulkString("cache_save_on_shutdown")
-	conn.WriteInt(boolInt(s.cacheSaveOnShutdown))
+	conn.WriteInt(boolInt(saveOnShutdown))
 	conn.WriteBulkString("cache_snapshot_in_progress")
 	conn.WriteInt(boolInt(snapshotStatus.InProgress))
 	conn.WriteBulkString("cache_snapshot_successes")
