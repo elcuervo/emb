@@ -182,14 +182,16 @@ func TestSnapshotCoordinatorLiveTimerAndRateReplacement(t *testing.T) {
 }
 
 func TestEffectiveRestoreLimitUsesSmallestCeiling(t *testing.T) {
-	limit, _, headroom, err := effectiveRestoreLimit(1<<30, "64MB", "1MB")
+	// Explicit host metrics keep this ceiling test deterministic: 8GB total,
+	// 1GB RSS, and a 1MB reserve leave large headroom for the 64MB ceiling.
+	limit, _, headroom, err := effectiveRestoreLimitForMetrics(1<<30, "64MB", "1MB", 8<<30, 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if limit <= 0 || limit > 64_000_000 {
-		t.Fatalf("effective limit = %d", limit)
+	if limit != 64_000_000 {
+		t.Fatalf("effective limit = %d, want 64_000_000", limit)
 	}
-	if headroom >= 0 && limit > headroom {
+	if headroom < 0 || limit > headroom {
 		t.Fatalf("effective limit %d exceeds host headroom %d", limit, headroom)
 	}
 }

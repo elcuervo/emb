@@ -382,16 +382,23 @@ func TestPersistenceConfigDefaultsAndValidation(t *testing.T) {
 	if err := valid.validatePersistence(); err != nil {
 		t.Fatalf("valid persistence config rejected: %v", err)
 	}
+	// A file-only config is valid but dormant until a cache is also enabled;
+	// this mirrors the runtime CONFIG SET cache_file path.
+	fileOnly := Config{CacheFile: "/tmp/cache.embcache"}
+	if err := fileOnly.validatePersistence(); err != nil {
+		t.Fatalf("dormant file-only config rejected: %v", err)
+	}
 	if rate, err := valid.CacheSaveRateBytes(); err != nil || rate != 100_000_000 {
 		t.Fatalf("rate = %d, %v", rate, err)
 	}
 
 	tests := []Config{
-		{CacheFile: "/tmp/cache"},
 		{Cache: "1GB", CacheSave: "5m"},
 		{Cache: "1GB", CacheFile: "/tmp/cache", CacheSave: "0"},
 		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreLimit: "101%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreLimit: "NaN%"},
 		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreReserve: "0%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreReserve: "NaN%"},
 		{Cache: "1GB", CacheFile: "/tmp/cache", CacheSaveRateLimit: "fast"},
 	}
 	for i, cfg := range tests {

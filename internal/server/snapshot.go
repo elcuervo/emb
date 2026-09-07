@@ -67,6 +67,26 @@ type snapshotRestoreResult struct {
 	SkippedUnknown     int64
 	SkippedFingerprint int64
 	SkippedMemory      int64
+	// Quarantine holds entries for configured models that have not loaded yet
+	// (lazy models). They are bounded by the same restore budget and admitted
+	// only after the model loads and its fingerprint matches.
+	Quarantine       map[string]restoreQuarantine
+	QuarantinedCount int64
+	QuarantineBytes  int64
+}
+
+// restoreQuarantine is one lazy model's restored records plus the fingerprint
+// stored in the snapshot, which is verified when the model first loads.
+type restoreQuarantine struct {
+	fingerprint string
+	dim         int
+	bytes       int64
+	entries     []pendingRestoreEntry
+}
+
+type pendingRestoreEntry struct {
+	Key   string
+	Value []byte
 }
 
 type rateWriter struct {
@@ -350,6 +370,7 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		return result, errors.New("invalid snapshot model count")
 	}
 	compatible := make(map[string]registry.ModelFingerprint)
+	headerFP := make(map[string]registry.ModelFingerprint)
 	for range modelCount {
 		name, err := readSized(stream, maxSnapshotString)
 		if err != nil {
@@ -363,8 +384,10 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		if err != nil {
 			return result, err
 		}
+		stored := registry.ModelFingerprint{Fingerprint: string(fingerprint), Dim: int(dim)}
+		headerFP[string(name)] = stored
 		cur, ok := current[string(name)]
-		if ok && cur.Fingerprint == string(fingerprint) && cur.Dim == int(dim) {
+		if ok && cur.Loaded && cur.Fingerprint == stored.Fingerprint && cur.Dim == int(dim) {
 			compatible[string(name)] = cur
 		}
 	}
@@ -373,6 +396,8 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		return result, errors.New("invalid snapshot entry count")
 	}
 	seen := make(map[string]struct{})
+	var seenBytes, admittedBytes, quarantinedBytes int64
+	quarantine := make(map[string]restoreQuarantine)
 	for range entryCount {
 		keyBytes, err := readSized(stream, maxSnapshotString)
 		if err != nil {
@@ -383,26 +408,68 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 			return result, err
 		}
 		key := string(keyBytes)
+		entryBytes := int64(len(key) + len(value) + 48)
 		model := modelOf(key)
 		cur, known := current[model]
 		if !known {
 			result.SkippedUnknown++
 			continue
 		}
-		if _, ok := compatible[model]; !ok || len(value) != cur.Dim*4 {
-			result.SkippedFingerprint++
-			continue
+		// A configured lazy model is quarantined; a loaded model must match the
+		// snapshot's stored fingerprint exactly. Both still require the value
+		// to fit the model dimension.
+		if cur.Loaded {
+			if _, ok := compatible[model]; !ok || len(value) != cur.Dim*4 {
+				result.SkippedFingerprint++
+				continue
+			}
+		} else {
+			hfp, ok := headerFP[model]
+			if !ok || hfp.Dim != cur.Dim || len(value) != cur.Dim*4 {
+				result.SkippedFingerprint++
+				continue
+			}
 		}
+		// Retain the key for duplicate detection, bounded by the same restore
+		// budget: a snapshot written with a large cache restored under a
+		// smaller effective limit must not hold every key in memory.
 		if _, exists := seen[key]; exists {
 			return result, errors.New("duplicate snapshot key")
 		}
-		seen[key] = struct{}{}
-		if result.Cache.restoreAppendMRU(key, value) {
-			result.Restored++
-		} else {
-			result.SkippedMemory++
+		if maxBytes < 0 || seenBytes > maxBytes-int64(len(key)) {
+			return result, errors.New("snapshot key data exceeds restore limit")
 		}
+		seenBytes += int64(len(key))
+		seen[key] = struct{}{}
+
+		if cur.Loaded {
+			if result.Cache.restoreAppendMRU(key, value) {
+				result.Restored++
+				admittedBytes += entryBytes
+			} else {
+				result.SkippedMemory++
+			}
+			continue
+		}
+		// Lazy model: hold the record until the first request loads the model
+		// and its fingerprint is verified. Quarantined records count fully
+		// against the same restore budget so they cannot form an unaccounted
+		// second cache.
+		if entryBytes > maxBytes-admittedBytes-quarantinedBytes {
+			result.SkippedMemory++
+			continue
+		}
+		q := quarantine[model]
+		q.fingerprint = headerFP[model].Fingerprint
+		q.dim = headerFP[model].Dim
+		q.bytes += entryBytes
+		q.entries = append(q.entries, pendingRestoreEntry{Key: key, Value: value})
+		quarantine[model] = q
+		quarantinedBytes += entryBytes
+		result.QuarantinedCount++
 	}
+	result.Quarantine = quarantine
+	result.QuarantineBytes = quarantinedBytes
 	var extra [1]byte
 	if n, err := stream.Read(extra[:]); n != 0 || err != io.EOF {
 		return result, errors.New("snapshot contains trailing payload data")

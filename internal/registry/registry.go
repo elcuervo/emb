@@ -514,9 +514,38 @@ func (r *Registry) Fingerprints() (map[string]ModelFingerprint, error) {
 	return result, nil
 }
 
+// FingerprintState reports every configured model: a verified fingerprint for
+// loaded models and an unloaded placeholder for lazy (never-loaded) ones.
+// Restore uses it to decide which snapshot entries can be admitted now and
+// which must be quarantined until their model's first load, without reading
+// every large ONNX file at startup for the sake of the cache.
+func (r *Registry) FingerprintState() map[string]ModelFingerprint {
+	models := r.List()
+	result := make(map[string]ModelFingerprint, len(models))
+	for _, entry := range models {
+		st := ModelFingerprint{Dim: entry.Dim}
+		if entry.loaded.Load() {
+			fp, err := entry.Fingerprint()
+			if err != nil {
+				log.Printf("snapshot: skipping loaded model %q fingerprint: %v", entry.Name, err)
+				result[entry.Name] = st
+				continue
+			}
+			st.Fingerprint = fp
+			st.Loaded = true
+		}
+		result[entry.Name] = st
+	}
+	return result
+}
+
 type ModelFingerprint struct {
 	Fingerprint string
 	Dim         int
+	// Loaded reports whether the fingerprint was verified from the model this
+	// run. Lazy (never-loaded) models have an empty fingerprint until their
+	// first load; restore quarantines their entries until then.
+	Loaded bool
 }
 
 func (r *Registry) TotalErrors() int64 {

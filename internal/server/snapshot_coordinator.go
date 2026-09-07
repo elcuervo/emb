@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,6 +46,7 @@ type SnapshotStatus struct {
 	SkippedUnknown       int64
 	SkippedFingerprint   int64
 	SkippedMemory        int64
+	QuarantinedEntries   int64
 	RestoreError         string
 }
 
@@ -283,7 +285,7 @@ func resolveSnapshotMemory(value string, total uint64, def int64, allowAuto bool
 	}
 	if strings.HasSuffix(v, "%") {
 		pct, err := strconv.ParseFloat(strings.TrimSuffix(v, "%"), 64)
-		if err != nil || pct <= 0 || pct > 100 {
+		if err != nil || math.IsNaN(pct) || pct <= 0 || pct > 100 {
 			return 0, fmt.Errorf("invalid memory percentage %q", value)
 		}
 		if total == 0 {

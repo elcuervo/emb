@@ -1376,11 +1376,11 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 82 {
-				t.Fatalf("expected 82 declared elements, got %d: %q", declared, resp)
+			if declared != 88 {
+				t.Fatalf("expected 88 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 82 {
-				t.Fatalf("expected 82 actual elements, got %d: %q", actual, resp)
+			if actual != 88 {
+				t.Fatalf("expected 88 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{

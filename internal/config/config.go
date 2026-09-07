@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -175,7 +176,7 @@ func validateMemorySetting(name, value string, allowAuto bool) error {
 	}
 	if strings.HasSuffix(value, "%") {
 		pct, err := strconv.ParseFloat(strings.TrimSuffix(value, "%"), 64)
-		if err != nil || pct <= 0 || pct > 100 {
+		if err != nil || math.IsNaN(pct) || pct <= 0 || pct > 100 {
 			return fmt.Errorf("%s must be a percentage greater than 0 and at most 100", name)
 		}
 		return nil
@@ -206,9 +207,9 @@ func parseRate(value string) (int64, error) {
 func (c Config) CacheSaveRateBytes() (int64, error) { return parseRate(c.CacheSaveRateLimit) }
 
 func (c Config) validatePersistence() error {
-	if c.CacheFile != "" && strings.TrimSpace(c.Cache) == "" {
-		return fmt.Errorf("cache_file requires cache to be enabled")
-	}
+	// A cache_file without a cache is valid but dormant: Server.New keeps it
+	// stored until a cache is also active, matching the runtime CONFIG SET
+	// path. cache_save still requires a destination file.
 	if c.CacheSave != "" {
 		if c.CacheFile == "" {
 			return fmt.Errorf("cache_save requires cache_file")

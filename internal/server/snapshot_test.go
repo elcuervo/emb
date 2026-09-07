@@ -16,9 +16,11 @@ import (
 )
 
 func testFingerprints() map[string]registry.ModelFingerprint {
+	// Loaded: true so unit tests exercise the admit-now path (a real server
+	// would quarantine entries for unloaded lazy models instead).
 	return map[string]registry.ModelFingerprint{
-		"alpha": {Fingerprint: "alpha-fingerprint", Dim: 2},
-		"beta":  {Fingerprint: "beta-fingerprint", Dim: 1},
+		"alpha": {Fingerprint: "alpha-fingerprint", Dim: 2, Loaded: true},
+		"beta":  {Fingerprint: "beta-fingerprint", Dim: 1, Loaded: true},
 	}
 }
 
@@ -98,7 +100,9 @@ func TestSnapshotEmptyAndCompatibilityFiltering(t *testing.T) {
 		t.Fatal(err)
 	}
 	current := testFingerprints()
-	current["beta"] = registry.ModelFingerprint{Fingerprint: "new", Dim: 1}
+	// A fingerprint mismatch on a loaded model is skipped, not quarantined:
+	// quarantine applies only to models that have not loaded yet.
+	current["beta"] = registry.ModelFingerprint{Fingerprint: "new", Dim: 1, Loaded: true}
 	result, err := readSnapshot(path, 1<<20, current)
 	if err != nil {
 		t.Fatal(err)

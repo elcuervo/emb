@@ -523,6 +523,35 @@ func TestServerConfigPersistenceLiveControls(t *testing.T) {
 	}
 }
 
+func TestPersistenceControlGate(t *testing.T) {
+	gate := func(addr, password string) bool {
+		s := &Server{addr: addr}
+		s.password.Store(password)
+		return s.persistenceControlAllowed()
+	}
+	// Loopback addresses permit live persistence control without a password.
+	for _, addr := range []string{"127.0.0.1:6379", "localhost:6379", "[::1]:6379"} {
+		if !gate(addr, "") {
+			t.Errorf("loopback address %q was gated without a password", addr)
+		}
+	}
+	// Exposed listeners require a configured password for cache_file/EMB.SAVE.
+	for _, addr := range []string{":6379", "0.0.0.0:6379", "10.1.2.3:6379", "not-an-address"} {
+		if gate(addr, "") {
+			t.Errorf("exposed address %q allowed persistence control without a password", addr)
+		}
+		if !gate(addr, "hunter2") {
+			t.Errorf("exposed address %q with a password was gated", addr)
+		}
+	}
+	// The live setter itself rejects the default exposed/no-password case.
+	exposed := &Server{addr: ":6379"}
+	exposed.password.Store("")
+	if err := exposed.setConfigCacheFile("/tmp/attacker.embcache"); err == nil {
+		t.Error("CONFIG SET cache_file accepted on exposed listener without a password")
+	}
+}
+
 func TestServerConfigSetPassword(t *testing.T) {
 	addr := serveTest(t) // no password at boot
 	if tok := redisCmd(t, addr, "CONFIG", "SET", "password", "hunter2"); tok.kind != "status" || tok.val != "OK" {

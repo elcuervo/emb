@@ -24,7 +24,8 @@ The server SHALL write a RESP array count that exactly matches the number of ele
 #### Scenario: Idle persistence status
 - **GIVEN** persistence is configured and no save has run
 - **WHEN** `EMB.STATS` and `INFO cache` are called
-- **THEN** enabled SHALL be true, in-progress SHALL be false, and all lifecycle counters SHALL be zero
+- **THEN** enabled SHALL be true, in-progress SHALL be false, and all save-related counters SHALL be zero
+- **AND** restore counters (restored, skipped-by-reason, quarantined, effective limit, sampled RSS/headroom) SHALL reflect startup restoration when one ran, and SHALL be zero when no restore ran
 
 #### Scenario: Failure and success counters
 - **WHEN** one injected save fails and a later save succeeds

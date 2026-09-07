@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"path"
 	"sort"
 	"strconv"
@@ -80,6 +81,9 @@ func (s *Server) configParams() []configParam {
 			name: "password",
 			get:  func(s *Server) string { return s.password.Load().(string) },
 			set: func(s *Server, v string) error {
+				if s.password.Load().(string) == "" && !s.loopbackListener() {
+					return fmt.Errorf("setting a password requires a loopback-only listener when no password is configured")
+				}
 				s.password.Store(v)
 				return nil
 			},
@@ -123,6 +127,29 @@ func (s *Server) persistenceValue(name string) string {
 	}
 }
 
+// loopbackListener reports whether the server binds a loopback address only.
+// An empty host (":6379") binds every interface, so it is not loopback;
+// explicit "localhost" resolves to loopback and is treated as safe.
+func (s *Server) loopbackListener() bool {
+	host, _, err := net.SplitHostPort(s.addr)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// persistenceControlAllowed gates live snapshot-destination and save commands
+// on an operator-configured password or a loopback-only listener. An exposed,
+// unauthenticated listener must not be able to point cache_file at arbitrary
+// writable paths: EMB.SAVE would then clobber that path with snapshot data.
+func (s *Server) persistenceControlAllowed() bool {
+	return s.password.Load().(string) != "" || s.loopbackListener()
+}
+
 func (s *Server) reconfigureSnapshotLocked() {
 	interval := time.Duration(0)
 	if s.cacheSave != "" {
@@ -142,6 +169,9 @@ func (s *Server) reconfigureSnapshotLocked() {
 }
 
 func (s *Server) setConfigCacheFile(v string) error {
+	if !s.persistenceControlAllowed() {
+		return fmt.Errorf("cache_file can only be changed with a configured password or a loopback-only listener")
+	}
 	s.persistenceMu.Lock()
 	s.cacheFile = v
 	s.reconfigureSnapshotLocked()

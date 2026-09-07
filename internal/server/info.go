@@ -27,20 +27,22 @@ func cacheHitRate(hits, misses int64) string {
 // struct feeds both the sectioned INFO and (via its fields) the existing
 // EMB.STATS array writer, so the two cannot drift.
 type infoSnapshot struct {
-	version       string
-	uptime        int
-	process       int
-	totalReq      int64
-	totalTok      int64
-	totalErr      int64
-	models        int
-	active        int64
-	cache         *CacheStats // nil when the cache is disabled at boot
-	snapshot      *SnapshotStatus
-	cacheFile     string
-	cacheSave     string
-	cacheSaveRate string
-	byModel       []modelInfoLine
+	version             string
+	uptime              int
+	process             int
+	totalReq            int64
+	totalTok            int64
+	totalErr            int64
+	models              int
+	active              int64
+	cache               *CacheStats // nil when the cache is disabled at boot
+	snapshot            *SnapshotStatus
+	cacheFile           string
+	cacheSave           string
+	cacheSaveRate       string
+	cacheLoad           bool
+	cacheSaveOnShutdown bool
+	byModel             []modelInfoLine
 	// res holds the live process resource sample (memory/CPU/goroutines).
 	res resourceStats
 	// netIn/netOut are aggregate RESP bytes received/sent since start.
@@ -111,6 +113,8 @@ func (s *Server) infoSnapshot() infoSnapshot {
 	var snapshotStatus *SnapshotStatus
 	s.persistenceMu.RLock()
 	cacheFile, cacheSave, cacheSaveRate := s.cacheFile, s.cacheSave, s.cacheSaveRateLimit
+	cacheLoad := s.cacheLoad
+	cacheSaveOnShutdown := s.cacheSaveOnShutdown
 	coordinator := s.snapshot
 	s.persistenceMu.RUnlock()
 	if coordinator != nil {
@@ -141,23 +145,25 @@ func (s *Server) infoSnapshot() infoSnapshot {
 	}
 
 	return infoSnapshot{
-		version:       s.version,
-		uptime:        int(time.Since(s.started).Seconds()),
-		process:       os.Getpid(),
-		totalReq:      totalReq,
-		totalTok:      totalTok,
-		totalErr:      s.reg.TotalErrors(),
-		models:        len(models),
-		active:        s.activeReqs.Load(),
-		cache:         cacheStats,
-		snapshot:      snapshotStatus,
-		cacheFile:     cacheFile,
-		cacheSave:     cacheSave,
-		cacheSaveRate: cacheSaveRate,
-		byModel:       lines,
-		res:           s.resourceStats(),
-		netIn:         s.netIn.Load(),
-		netOut:        s.netOut.Load(),
+		version:             s.version,
+		uptime:              int(time.Since(s.started).Seconds()),
+		process:             os.Getpid(),
+		totalReq:            totalReq,
+		totalTok:            totalTok,
+		totalErr:            s.reg.TotalErrors(),
+		models:              len(models),
+		active:              s.activeReqs.Load(),
+		cache:               cacheStats,
+		snapshot:            snapshotStatus,
+		cacheFile:           cacheFile,
+		cacheSave:           cacheSave,
+		cacheSaveRate:       cacheSaveRate,
+		cacheLoad:           cacheLoad,
+		cacheSaveOnShutdown: cacheSaveOnShutdown,
+		byModel:             lines,
+		res:                 s.resourceStats(),
+		netIn:               s.netIn.Load(),
+		netOut:              s.netOut.Load(),
 	}
 }
 
@@ -223,6 +229,8 @@ func buildInfoSections(which []string, snap infoSnapshot) string {
 		if snap.snapshot != nil {
 			status = *snap.snapshot
 		}
+		fmt.Fprintf(&b, "cache_load:%t\r\n", snap.cacheLoad)
+		fmt.Fprintf(&b, "cache_save_on_shutdown:%t\r\n", snap.cacheSaveOnShutdown)
 		fmt.Fprintf(&b, "cache_snapshot_enabled:%t\r\n", status.Enabled)
 		fmt.Fprintf(&b, "cache_snapshot_in_progress:%t\r\n", status.InProgress)
 		fmt.Fprintf(&b, "cache_snapshot_successes:%d\r\n", status.Successes)
@@ -240,6 +248,7 @@ func buildInfoSections(which []string, snap infoSnapshot) string {
 		fmt.Fprintf(&b, "cache_restore_skipped_unknown:%d\r\n", status.SkippedUnknown)
 		fmt.Fprintf(&b, "cache_restore_skipped_fingerprint:%d\r\n", status.SkippedFingerprint)
 		fmt.Fprintf(&b, "cache_restore_skipped_memory:%d\r\n", status.SkippedMemory)
+		fmt.Fprintf(&b, "cache_restore_quarantined:%d\r\n", status.QuarantinedEntries)
 		fmt.Fprintf(&b, "cache_restore_error:%s\r\n\r\n", status.RestoreError)
 	}
 	if selected["keyspace"] {

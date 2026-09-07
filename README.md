@@ -272,6 +272,14 @@ encrypt their storage as the source data requires. They are a disposable
 warm-start optimization, not a durable database or backup; deleting a bad or
 incompatible file is always safe.
 
+Live changes to `cache_file` and the `EMB.SAVE` command require either a
+configured `password` or a loopback-only `listen` address. The default
+listener (`:6379`) binds every interface, so with no `password` set the server
+rejects those commands with an explicit error rather than letting an
+unauthenticated client point snapshot writes at an arbitrary path. Bind
+`localhost` for a password-free deployment, or set `password` (and `AUTH`)
+when serving non-loopback clients.
+
 ## Embeddings & vector indexes (OpenSearch)
 
 `emb` always emits **fp32 little-endian float vectors** (`dim * 4` bytes per
