@@ -115,6 +115,14 @@ type ModelConfig struct {
 	// right choice for mostly-serial encoder graphs) or "parallel". Empty
 	// resolves to sequential.
 	ExecutionMode string `yaml:"execution_mode"`
+	// ScriptWorkers bounds parallel scripted-model sessions. 0/absent
+	// auto-tunes from RAM and model size (min 1), mirroring Workers for the
+	// embedding pool; scripted evaluations distribute round-robin across the
+	// sessions.
+	ScriptWorkers int `yaml:"script_workers"`
+	// ScriptPreload warms the scripted session + tokenizer at load time
+	// instead of on the first script evaluation.
+	ScriptPreload bool `yaml:"script_preload"`
 }
 
 func Load(path string) (*Config, error) {

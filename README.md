@@ -24,6 +24,7 @@ redis-cli EMB minilm "hello world"
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [Custom scripts](#custom-scripts)
 - [Configuration](#configuration)
 - [Operations](#operations)
 - [Clients](#clients)
@@ -108,9 +109,14 @@ redis-cli EMB minilm "hello world"
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, live cache stats |
 | `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown, **mem (RSS MB), cpu user/sys usec, goroutines** |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
+| `EMB.EVAL <model> <script> <numtexts> <text...> <arg...>` | Evaluate a Lua script once against a model (KEYS=texts, ARGV=args) |
+| `EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>` | Evaluate a cached script by SHA (see `EMB.SCRIPT LOAD`) |
+| `EMB.SCRIPT LOAD <model> <script>` | Compile, cache, and return the script's SHA1 |
+| `EMB.SCRIPT EXISTS <model> <sha...>` | Which scripts are cached (1/0 per SHA) |
+| `EMB.SCRIPT FLUSH [<model>]` | Clear cached scripts (all models when omitted) |
 | `EMB.CACHE.FLUSH [model]` | Remove all cached embeddings, or only entries for one configured model; returns the removed count |
 | `EMB.SAVE` | Accept an asynchronous cache snapshot; poll `EMB.STATS` or `INFO cache` for completion/failure |
-| `EMB.HELP` | Command reference |
+| `EMB.HELP` | Command reference (includes the full script surface) |
 | `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `memory`, `cpu`, `clients` |
 | `CONFIG GET [glob]` / `CONFIG SET` | Read or live-tune runtime settings (see [Operations](#operations)) |
 | `AUTH <password>` | Authenticate the connection (required if `password` is set) |
@@ -127,6 +133,160 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 1) \x7c\x8e\x80\xbd...   (minilm, 384 floats)
 2) \x4a\x9f\x31\xc2...   (siglip2, 768 floats)
 ```
+
+## Custom scripts
+
+### The model, as a function
+
+Think of the plain embed command as a fixed pipeline:
+
+```text
+model(input) -> output          # EMB <model> <text>
+```
+
+tokenize → infer → pool → normalize → reply. **Scripts** replace the outer
+edges of that pipeline with your own code around the same model call:
+
+```text
+model(fn(input)) -> output      # EMB.EVAL / EMB.EVSHA
+```
+
+`fn` is a sandboxed Lua function on the server that does your preprocessing
+(custom tokenization, constant inputs, prompt framing) and postprocessing
+(argmax, softmax, byte packing) — then replies through the exact same RESP
+grammar as the embed path. Scripts are cached by SHA1 per model, so hot
+requests are one `EMB.EVSHA` round trip with no server-side re-compile.
+
+### The script surface
+
+Scripts read texts from `KEYS` and arguments from `ARGV`
+(`EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>`). A multi-text call
+runs **one** evaluation with `KEYS` = all texts and requires one returned
+value per text. The whitelisted host blocks:
+
+| Block | Purpose |
+|-------|---------|
+| `emb.run({name = {shape, data\|fill, dtype?}, ...})` | Named-tensor inference → `{name = {shape, data}}` per output |
+| `emb.run_batch({item, ...})` | One model call for N items (padded into a single session run) |
+| `emb.tokenize.encode(text, max_len)` | The model tokenizer's own pipeline → `{ids, mask, offsets}` |
+| `emb.tokenize.encode_pair(a, b, max_len)` | BERT-family pair framing → `{ids, mask, offsets, sep}` |
+| `emb.tokenize.words(text)` | Generic word split (BertPreTokenizer rules, byte offsets) |
+| `emb.tokenize.pretokenized(words, max_len)` | Encode an already-split word list → `{ids, word_ids}` |
+| `emb.math.{sigmoid, softmax, argmax}` | Post-processing primitives (vectorized per array) |
+| `emb.math.float32_bytes(vals)` | Pack numbers into ONE little-endian float32 bulk (`unpack('e*')`) |
+| `json.{encode, decode}` | Structured replies / parsing |
+
+Input specs are `{shape = {...}, data = {...}, dtype?}` — or
+`{shape = {...}, fill = n, dtype?}` to build a **constant tensor host-side**:
+every element equals `n`, allocated by the server with no Lua data table
+round-trip. `fill` and `data` are mutually exclusive; an explicit `dtype`
+(`"f32"`/`"i64"`) wins, and a fractional `fill` infers `f32`:
+
+```lua
+-- fused-CLIP text branch: a zeroed 1×3×224×224 pixel_values built by the
+-- host — a Lua zeros table here would be 150,528 elements per request.
+emb.run({
+  input_ids    = { shape = {1, #enc.ids}, data = enc.ids },
+  pixel_values = { shape = {1, 3, 224, 224}, fill = 0, dtype = "f32" },
+})
+```
+
+Replies convert through the standard grammar: Lua string → bulk, list → array,
+string-keyed table → hash (flat field/value pairs), `{err = "..."}` → error
+reply. `EMB.HELP` lists the full surface.
+
+### Example 1 — vector embeddings (`model(input) → output`)
+
+[`examples/scripts/siglip2.lua`](examples/scripts/siglip2.lua) re-implements
+the embed path on a fused CLIP export: the image branch is fed a constant zero
+tensor (`fill`), the text embedding is L2-normalized, and the reply is **one
+3 KB bulk** byte-identical to a direct embed (768 float32s, `unpack('e*')`)
+instead of 768 separate RESP bulks:
+
+```lua
+local enc = emb.tokenize.encode(KEYS[1], 256)
+local out = emb.run({
+  input_ids    = { shape = {1, #enc.ids}, data = enc.ids },
+  pixel_values = { shape = {1, 3, 224, 224}, fill = 0, dtype = "f32" },
+})
+local vec = out.text_embeds.data
+if ARGV[1] == "normalize" then
+  local norm = 0
+  for i = 1, #vec do norm = norm + vec[i] * vec[i] end
+  norm = math.sqrt(norm)
+  if norm > 0 then
+    for i = 1, #vec do vec[i] = vec[i] / norm end
+  end
+end
+return emb.math.float32_bytes(vec)
+```
+
+```bash
+SHA=$(redis-cli EMB.SCRIPT LOAD siglip2 "$(cat examples/scripts/siglip2.lua)")
+redis-cli EMB.EVSHA siglip2 "$SHA" 1 "a photo of a cat" normalize
+# -> one 3072-byte bulk string (768 little-endian float32s)
+```
+
+### Example 2 — custom classification (`model(fn(input)) → output`)
+
+[`examples/scripts/sst2.lua`](examples/scripts/sst2.lua) turns a raw-logits
+text model into a labeled classifier with the building blocks: encode with the
+model's own tokenizer, run once, softmax–argmax against labels passed as
+`ARGV`:
+
+```lua
+local labels = {}
+for i = 1, #ARGV do labels[i] = ARGV[i] end
+
+local enc = emb.tokenize.encode(KEYS[1], 512)
+local out = emb.run({
+  input_ids      = { shape = {1, #enc.ids}, data = enc.ids },
+  attention_mask = { shape = {1, #enc.ids}, data = enc.mask },
+})
+local probs = emb.math.softmax(out.logits.data)
+local idx, score = emb.math.argmax(probs)
+return { label = labels[idx], confidence = score, scores = probs }
+```
+
+```bash
+redis-cli EMB.EVSHA sst2 "$SHA" 1 "this film is great" NEGATIVE POSITIVE
+# -> hash: {label = "POSITIVE", confidence = 0.99, scores = [...]}
+```
+
+More patterns live in [`examples/scripts/`](examples/scripts/): extractive QA
+(`qa.lua` — pair encode + constrained span search over offsets), reranking
+(`rerank.lua` — per-document batched sigmoid scores), and span extraction
+(`gliner2.lua` — `emb.tokenize.words` schemas + `emb.run_batch`).
+
+### Writing your own script
+
+1. **Know your graph.** Input tensor names/ranks/dtypes and the output tensor
+   come from your ONNX export; the server logs the output name it
+   auto-detects at model load.
+2. **Preprocess** with the `emb.tokenize.*` blocks, then build each input as
+   `{shape, data}` (element-wise) or `{shape, fill}` (constant, host-side).
+3. **Run the model once** with `emb.run` (or `emb.run_batch` for N items in
+   one session call) and **postprocess** with `emb.math.*` until the reply
+   matches the grammar you want your clients to consume.
+4. **Load and call** — the SHA1 is per model, so re-loading after an edit is
+   a new SHA:
+
+```bash
+SHA=$(redis-cli EMB.SCRIPT LOAD minilm "$(cat my_script.lua)")
+redis-cli EMB.EVSHA minilm "$SHA" 1 "hello world" normalized
+```
+
+or straight from Ruby:
+
+```ruby
+sha = client.script.load(:minilm, source)
+embedding = client.evalsha(:minilm, sha, ["hello world"], ["normalized"], decode: :f32)
+# -> [0.0123, -0.0456, ...]   decode: :f32 unpacks float32_bytes replies
+```
+
+Sandbox notes: scripts are **pure compute** — `os`, `io`, `require`/loaders,
+coroutines, and `math.random*` are stripped, so identical inputs always
+produce identical replies (which is what makes reply caching sound).
 
 ## Configuration
 

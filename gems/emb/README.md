@@ -78,7 +78,7 @@ coalescing with `lazy: :multi` or concurrent fan-out with `lazy: :batch` — glo
 can take over a second of inference on a shared CPU, and redis-client's silent default is
 1.0s — a slower reply times out. The gem therefore defaults to an explicit 10s timeout
 and `reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
-`Emb::ServerError` (see [Lazy execution modes](#lazy-execution-modes)). Set
+`Emb::ServerError` (see [Lazy batching](#lazy-batching)). Set
 `Emb.configure { |c| c.reconnect_attempts = 2 }` and redis-client re-sends
 **connection and protocol failures** up to that many extra times before the batch fails
 closed — each re-send re-runs server inference, so keep the budget small. Operation
@@ -358,17 +358,37 @@ client.multi do |m|
 end
 ```
 
-### Lazy execution modes
+### Script replies
 
-Embed-call behavior is governed by a single `lazy` mode — `false` (default, eager),
-`:multi` (defer and coalesce into one `EMB` for a single model / one `EMB.MULTI` for mixed scopes, serial), or `:batch` (defer and execute
-the coalesced chunk shares **concurrently**). The three are mutually exclusive.
+`Emb.eval` / `Emb.evalsha` run a Lua script against a model (KEYS = texts,
+ARGV = args) and parse replies through the RESP grammar — hashes, arrays,
+strings, errors. Unlike the embed path, a scripted reply has no fixed shape,
+so packed vectors are **not** auto-decoded: a `float32_bytes` reply comes back
+as the raw bulk String. Decode it per call with the `decode:` keyword:
 
-| mode | `Emb[:model][text]` | execution |
-|---|---|---|
-| `false` (default) | immediate `EMB` round trip | serial, per call |
-| `:multi` | deferred → coalesces into one `EMB` (single model) or `EMB.MULTI` (mixed) | serial, one command at a time |
-| `:batch` | deferred → coalesces into `EMB`/`EMB.MULTI` chunks | **concurrent** — chunk shares run in parallel |
+```ruby
+sha = client.script.load(:siglip2, siglip_source)
+
+# decode: :f32 — the reply is a packed float32 vector (or a numeric array)
+vec = client.evalsha(:siglip2, sha, ["a photo of a cat"], ["normalize"], decode: :f32)
+# => [0.0123, -0.0456, ...]  768 floats
+
+# multi-text replies decode each element
+vecs = client.evalsha(:siglip2, sha, ["a", "b"], ["normalize"], decode: :f32)
+# => [[0.0123, ...], [-0.0456, ...]]
+
+# decode: {field => :f32} — structured replies decode a named field
+out = client.evalsha(:siglip2, sha, ["a"], ["normalize"], decode: { embedding: :f32 })
+# => {"dim" => 768, "embedding" => [0.0123, ...]}
+```
+
+`decode:` defaults to `nil` (no decoding, exactly today's behavior). Supported
+modes are `:f32` and `{field => :f32}`; anything else, or a reply that is not
+actually a float vector / hash at the decodable position, raises
+`ArgumentError`. A raw bulk can always be decoded by hand with
+`reply.unpack("e*")`.
+
+### Lazy batching
 
 In `:batch` mode the shares fan out across the configured instances (one share per
 instance when the share count allows) or across the instance's pool connections when a

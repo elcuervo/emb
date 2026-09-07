@@ -35,12 +35,40 @@ type ModelEntry struct {
 	cfg     config.ModelConfig
 	loaded  atomic.Bool
 	loadErr error
+
+	// scripted resources (task: scripted-model path): a generic named-tensor
+	// session plus the word-aligned tokenizer, created lazily on first script
+	// evaluation, separate from the embedding pool.
+	scriptOnce   sync.Once
+	scriptRes    *ScriptResources
+	scriptResErr error
+
 	// Fingerprints are expensive for large ONNX files. Persistence computes one
 	// lazily per model and all periodic/manual saves reuse it.
 	fingerprintOnce sync.Once
 	fingerprint     string
 	fingerprintErr  error
 }
+
+// ScriptResources bundles what a scripted evaluation needs for a model: a
+// pool of named-tensor sessions (parallel scripted executions, round-robin)
+// and the tokenizer (its plain/offsets/word-level capabilities are
+// type-asserted when building the host binding).
+type ScriptResources struct {
+	sessions  []onnx.NamedSession
+	next      atomic.Uint64
+	Tokenizer tokenizer.Tokenizer
+}
+
+// Session returns the next named-tensor session for a scripted run,
+// round-robin across the pool (each session serializes its own runs).
+func (r *ScriptResources) Session() onnx.NamedSession {
+	i := r.next.Add(1) - 1
+	return r.sessions[i%uint64(len(r.sessions))]
+}
+
+// Sessions exposes the pool for Close and tests.
+func (r *ScriptResources) Sessions() []onnx.NamedSession { return r.sessions }
 
 func hashFile(h io.Writer, path string) error {
 	f, err := os.Open(path)
@@ -246,6 +274,82 @@ func (e *ModelEntry) ensurePool() error {
 	return nil
 }
 
+// ScriptResources lazily opens the generic named-tensor session and the
+// word-aligned tokenizer a scripted evaluation needs, mirroring the pool's
+// session options (weights bytes, graph inputs/outputs, thread counts). The
+// embedding pool is intentionally not required: script models may not be
+// embeddable at all (e.g. GLiNER's logits graph).
+func (e *ModelEntry) ScriptResources() (*ScriptResources, error) {
+	e.scriptOnce.Do(func() {
+		e.scriptRes, e.scriptResErr = e.openScriptResources()
+	})
+	return e.scriptRes, e.scriptResErr
+}
+
+func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
+	cfg := e.cfg
+
+	tok, err := tokenizer.NewTokenizer(cfg.Tokenizer, cfg.PadOutput)
+	if err != nil {
+		return nil, fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
+	}
+
+	inputNames, err := onnx.GetInputNames(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("reading input names for %q: %w", e.Name, err)
+	}
+	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("reading output info for %q: %w", e.Name, err)
+	}
+	outputNames := make([]string, 0, len(outInfo))
+	for n := range outInfo {
+		outputNames = append(outputNames, n)
+	}
+	sort.Strings(outputNames)
+
+	modelData, err := os.ReadFile(cfg.ONNX)
+	if err != nil {
+		_ = tok.Close()
+		return nil, fmt.Errorf("reading model file for %q: %w", e.Name, err)
+	}
+
+	intraThreads := cfg.IntraOpThreads
+	if intraThreads <= 0 {
+		intraThreads = defaultIntraOpThreads()
+	}
+	execMode := onnx.ExecModeSequential
+	if cfg.ExecutionMode == "parallel" {
+		execMode = onnx.ExecModeParallel
+	}
+
+	numSessions := cfg.ScriptWorkers
+	if numSessions <= 0 {
+		numSessions = autoTuneWorkers(cfg.ONNX, 0)
+	}
+	if numSessions < 1 {
+		numSessions = 1
+	}
+	sessions := make([]onnx.NamedSession, 0, numSessions)
+	for i := 0; i < numSessions; i++ {
+		sess, err := onnx.NewNamedRuntimeSessionFromBytes(
+			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
+		)
+		if err != nil {
+			_ = tok.Close()
+			for _, opened := range sessions {
+				_ = opened.Close()
+			}
+			return nil, fmt.Errorf("creating scripted session %d for %q: %w", i, e.Name, err)
+		}
+		sessions = append(sessions, sess)
+	}
+
+	return &ScriptResources{sessions: sessions, Tokenizer: tok}, nil
+}
+
 func downloadModel(cfg *config.ModelConfig, name string) error {
 	dir := filepath.Dir(cfg.ONNX)
 	if cfg.ONNX == "" {
@@ -438,6 +542,13 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 			return nil, err
 		}
 	}
+	if cfg.ScriptPreload {
+		res, err := entry.ScriptResources()
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("  preloaded scripted sessions for %q (workers=%d)", name, len(res.Sessions()))
+	}
 
 	return entry, nil
 }
@@ -457,6 +568,19 @@ func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
 		if entry.loadErr != nil {
 			return nil, entry.loadErr
 		}
+	}
+	return entry, nil
+}
+
+// Resolve returns a model entry without requiring the embedding pool. Script
+// evaluation uses it so non-embeddable models (e.g. GLiNER logits graphs) can
+// be addressed by name.
+func (r *Registry) Resolve(name string) (*ModelEntry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.models[name]
+	if !ok {
+		return nil, fmt.Errorf("model '%s' not found", name)
 	}
 	return entry, nil
 }
@@ -514,11 +638,6 @@ func (r *Registry) Fingerprints() (map[string]ModelFingerprint, error) {
 	return result, nil
 }
 
-// FingerprintState reports every configured model: a verified fingerprint for
-// loaded models and an unloaded placeholder for lazy (never-loaded) ones.
-// Restore uses it to decide which snapshot entries can be admitted now and
-// which must be quarantined until their model's first load, without reading
-// every large ONNX file at startup for the sake of the cache.
 func (r *Registry) FingerprintState() map[string]ModelFingerprint {
 	models := r.List()
 	result := make(map[string]ModelFingerprint, len(models))
@@ -566,6 +685,16 @@ func (r *Registry) Close() error {
 	for _, entry := range r.models {
 		if entry.Pool != nil {
 			_ = entry.Pool.Close()
+		}
+		if entry.scriptRes != nil {
+			for _, sess := range entry.scriptRes.Sessions() {
+				_ = sess.Close()
+			}
+			// The scripted tokenizer is a separate RefTokenizer from the embed
+			// pool's; release its native resources explicitly.
+			if entry.scriptRes.Tokenizer != nil {
+				_ = entry.scriptRes.Tokenizer.Close()
+			}
 		}
 	}
 	clear(r.models)

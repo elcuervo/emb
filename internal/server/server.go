@@ -16,6 +16,7 @@ import (
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/registry"
+	"github.com/elcuervo/emb/internal/script"
 )
 
 type serverState int64
@@ -45,6 +46,11 @@ type Server struct {
 	cache        *Cache
 	// cacheConfig retains the raw boot cache string so CONFIG GET echoes it.
 	cacheConfig string
+	// scripts is the per-model script cache for EMB.SCRIPT/EMB.EVAL/EMB.EVSHA.
+	scripts *scriptCache
+	// compiler caches compiled script prototypes per (model, sha) so repeat
+	// EVSHA executions skip Lua parsing/compiling; FLUSH invalidates it.
+	compiler *script.Compiler
 	// cacheFile/cacheSave are runtime-editable snapshot parameters (consumed by
 	// the cache-snapshot save loop; stored here even before that change lands).
 	cacheFile           string
@@ -92,6 +98,9 @@ type Server struct {
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
 	fanOut int
+	// scriptDeadline bounds each EMB.EVAL/EMB.EVSHA evaluation's wall-clock
+	// execution; 0 resolves to script.DefaultDeadline.
+	scriptDeadline time.Duration
 	// netIn/netOut are aggregate RESP bytes received from and sent to all
 	// connections since process start, exposed as INFO's
 	// total_net_input_bytes/total_net_output_bytes. RX is counted from the raw
@@ -129,6 +138,12 @@ func WithMaxConcurrentRequests(n int) Option {
 // unset is 4096.
 func WithMaxTexts(n int) Option {
 	return func(s *Server) { s.maxTexts = n }
+}
+
+// WithScriptDeadline bounds each EMB.EVAL/EMB.EVSHA script evaluation's
+// wall-clock execution. Zero (the default) uses script.DefaultDeadline.
+func WithScriptDeadline(d time.Duration) Option {
+	return func(s *Server) { s.scriptDeadline = d }
 }
 
 // WithMaxPairs bounds the pairs processed per EMB.MULTI command; commands beyond
@@ -171,6 +186,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		tlsConfig:           tlsConfig,
 		cache:               c,
 		cacheConfig:         cacheConfig,
+		scripts:             newScriptCache(0),
+		compiler:            script.NewCompiler(),
 		cacheLoad:           true,
 		cacheSaveOnShutdown: true,
 		version:             "dev",
@@ -199,6 +216,9 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
 	mux.HandleFunc("emb.ready", s.handleREADY)
+	mux.HandleFunc("emb.eval", s.handleEVAL)
+	mux.HandleFunc("emb.evsha", s.handleEVSHA)
+	mux.HandleFunc("emb.script", s.handleSCRIPT)
 	mux.HandleFunc("info", s.handleInfo)
 	mux.HandleFunc("config", s.handleConfig)
 	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
@@ -224,7 +244,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		// EMB.STATS/INFO report live in-flight counts even when the cap is 0.
 		if len(cmd.Args) > 0 {
 			name := strings.ToLower(string(cmd.Args[0]))
-			if name == "emb" || name == "emb.multi" {
+			if name == "emb" || name == "emb.multi" || name == "emb.eval" || name == "emb.evsha" {
 				if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
 					conn.WriteError(fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs))
 					return
@@ -983,6 +1003,11 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics (requests, connections, mem/cpu, goroutines)",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
+		"EMB.EVAL <model> <script> <numtexts> <text...> <arg...> - Evaluate a Lua script against a model (KEYS=texts, ARGV=args)",
+		"EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...> - Evaluate a cached script by SHA (see EMB.SCRIPT LOAD)",
+		"EMB.SCRIPT LOAD <model> <script> - Compile, cache and return the script SHA1",
+		"EMB.SCRIPT EXISTS <model> <sha...> - Check which scripts are cached (1/0 per sha)",
+		"EMB.SCRIPT FLUSH [<model>] - Clear cached scripts (all models when omitted)",
 		"EMB.HELP - Show this help message",
 		"EMB.CACHE.FLUSH [model] - Invalidate all cached embeddings or one model",
 		"EMB.SAVE - Asynchronously save the embedding cache snapshot",
@@ -991,6 +1016,9 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
+		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
+		"Script input specs: {shape, data|fill, dtype} - fill builds a constant tensor host-side (no Lua data table); fill+data error",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

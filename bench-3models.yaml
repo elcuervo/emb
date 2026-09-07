@@ -1,0 +1,26 @@
+# Three-model measurement config: siglip2 (scripted text embeddings on the
+# fused CLIP export), e5 (standard embed path), gliner2 (scripted NER).
+# Scripted models preload their sessions and run 4 parallel workers.
+# Run via:  ./bin/emb -config bench-3models.yaml -listen :16379
+#           ruby gems/emb/bench/bench_models.rb
+listen: ":16379"
+
+models:
+  siglip2:
+    onnx: ./models/siglip2/text_model_int8.onnx
+    tokenizer: ./models/siglip2/tokenizer.json
+    script_preload: true
+    script_workers: 4
+
+  e5:
+    onnx: ./models/e5/model_int8.onnx
+    tokenizer: ./models/e5/tokenizer.json
+    max_length: 512
+    pooling: mean
+    normalize: true
+
+  gliner2:
+    onnx: ./models/gliner2/model_int8.onnx
+    tokenizer: ./models/gliner2/tokenizer.json
+    script_preload: true
+    script_workers: 4

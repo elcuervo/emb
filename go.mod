@@ -9,6 +9,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/tidwall/redcon v1.6.2
 	github.com/yalue/onnxruntime_go v1.31.0
+	github.com/yuin/gopher-lua v1.1.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
