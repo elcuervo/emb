@@ -440,32 +440,6 @@ unauthenticated client point snapshot writes at an arbitrary path. Bind
 `localhost` for a password-free deployment, or set `password` (and `AUTH`)
 when serving non-loopback clients.
 
-## Embeddings & vector indexes (OpenSearch)
-
-`emb` always emits **fp32 little-endian float vectors** (`dim * 4` bytes per
-text), so vectors can be stored directly in an OpenSearch `knn_vector` field
-with `data_type: float` (or any float-vector index). This holds **even when the
-backbone runs int8** (e.g. `siglip2`/`text_model_int8.onnx`): quantization
-applies to the model's compute; pooling/normalization and the wire format stay
-fp32. There is no `byte`-vector mode and no on-wire precision loss.
-
-Retrieval-correctness notes:
-
-- **Near-identical is the contract, not byte-identity.** SIMD pooling,
-  pooling-in-graph, and int8 backbones shift vectors within ~0.99 cosine of the
-  fp32 reference while preserving top-k retrieval ranking (validated by
-  `cmd/emb-verify-performance`; siglip2 int8 measures 0.9992 mean cosine vs its
-  fp32 export with identical top-10 ranking). If you require exact byte equality
-  with a previous deployment, reindex with the same configuration instead.
-- **Changing precision requires a one-time reindex.** fp32→int8 (or any
-  pooling/normalize change) alters vector values. **Version your embedding
-  function** (model id + precision + normalizer) into the index metadata and
-  rebuild the index in the new precision; never mix vectors of different
-  precisions in one `knn_vector` field.
-- **Int8 artifact discovery is deliberately unchanged** (`quantize: auto` still
-  picks `model_quantized.onnx`/`onnx/quantized/*` by name); quantized-model
-  autodiscovery is out of scope for this change.
-
 ## Operations
 
 ### Health checks
