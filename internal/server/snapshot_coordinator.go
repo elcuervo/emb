@@ -68,7 +68,7 @@ type snapshotCoordinator struct {
 
 	wake        chan struct{}
 	stop        chan struct{}
-	stopOnce   sync.Once
+	stopOnce    sync.Once
 	done        chan struct{}
 	ready       chan struct{}
 	ctx         context.Context
