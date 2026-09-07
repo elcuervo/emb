@@ -307,3 +307,125 @@ return out.x.data[1]`
 		t.Fatalf("unexpected result %q", v.String())
 	}
 }
+
+func TestHostRunFillZeroFloat(t *testing.T) {
+	// {shape, fill, dtype} builds the tensor host-side without a Lua data
+	// table: the session receives a float32 tensor with the exact element
+	// count implied by the shape, all zero.
+	var got onnx.NamedTensor
+	src := `
+local out = emb.run({ pixel_values = {shape = {1, 3, 224, 224}, fill = 0, dtype = "f32"} })
+return out.pixel_values.shape[4]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			got = inputs[0]
+			return map[string]onnx.NamedTensor{
+				"pixel_values": {Name: "pixel_values", Shape: got.Shape, DType: got.DType, Float: []float32{0}},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DType != onnx.TensorFloat32 {
+		t.Fatalf("expected float32 fill tensor, got %v", got.DType)
+	}
+	if len(got.Int64) != 0 {
+		t.Fatal("fill tensor must not populate the int64 slice (no Lua data table)")
+	}
+	if len(got.Float) != 1*3*224*224 {
+		t.Fatalf("expected %d float elements, got %d", 1*3*224*224, len(got.Float))
+	}
+	for i, x := range got.Float {
+		if x != 0 {
+			t.Fatalf("element %d = %v, want 0", i, x)
+		}
+	}
+	if v.String() != "224" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+func TestHostRunFillOnesMask(t *testing.T) {
+	// Integer fill with an explicit i64 dtype produces an int64 mask tensor.
+	var got onnx.NamedTensor
+	src := `
+local out = emb.run({ mask = {shape = {1, 8}, fill = 1, dtype = "i64"} })
+return out.mask.shape[2]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			got = inputs[0]
+			return map[string]onnx.NamedTensor{
+				"mask": {Name: "mask", Shape: got.Shape, DType: got.DType, Int64: []int64{1}},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DType != onnx.TensorInt64 {
+		t.Fatalf("expected int64 fill tensor, got %v", got.DType)
+	}
+	if len(got.Float) != 0 {
+		t.Fatal("fill tensor must not populate the float slice (no Lua data table)")
+	}
+	if len(got.Int64) != 8 {
+		t.Fatalf("expected 8 int64 elements, got %d", len(got.Int64))
+	}
+	for i, x := range got.Int64 {
+		if x != 1 {
+			t.Fatalf("element %d = %d, want 1", i, x)
+		}
+	}
+	if v.String() != "8" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+func TestHostRunFillDTypeInference(t *testing.T) {
+	// Integer fill infers int64; fractional fill infers float32; an explicit
+	// dtype always wins.
+	got := map[string]onnx.TensorType{}
+	gotInt := map[string][]int64{}
+	gotFloat := map[string][]float32{}
+	src := `
+emb.run({
+  a = {shape = {2}, fill = 7},
+  b = {shape = {2}, fill = 0.5},
+  c = {shape = {2}, fill = 1, dtype = "f32"},
+})
+return "ok"`
+	if _, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			for _, in := range inputs {
+				got[in.Name] = in.DType
+				gotInt[in.Name] = in.Int64
+				gotFloat[in.Name] = in.Float
+			}
+			return map[string]onnx.NamedTensor{}, nil
+		},
+	}, EvalOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got["a"] != onnx.TensorInt64 || len(gotInt["a"]) != 2 || gotInt["a"][1] != 7 {
+		t.Fatalf("integer fill should infer int64: dtype=%v data=%v", got["a"], gotInt["a"])
+	}
+	if got["b"] != onnx.TensorFloat32 || len(gotFloat["b"]) != 2 || gotFloat["b"][0] != 0.5 {
+		t.Fatalf("fractional fill should infer float32: dtype=%v data=%v", got["b"], gotFloat["b"])
+	}
+	if got["c"] != onnx.TensorFloat32 || len(gotFloat["c"]) != 2 || gotFloat["c"][0] != 1 {
+		t.Fatalf("explicit dtype should win over fill inference: dtype=%v data=%v", got["c"], gotFloat["c"])
+	}
+}
+
+func TestHostRunFillErrors(t *testing.T) {
+	for _, src := range []string{
+		`return emb.run({ x = {shape = {2}, fill = 1, data = {1, 1}} })`, // fill+data conflict
+		`return emb.run({ x = {shape = {2}, fill = "1"} })`,              // fill must be a number
+		`return emb.run({ x = {shape = {2}} })`,                          // neither data nor fill
+	} {
+		if _, err := EvalWithHosts(src, nil, nil, hostFixture(), EvalOptions{}); err == nil {
+			t.Fatalf("script %q should fail emb.run validation", src)
+		}
+	}
+}

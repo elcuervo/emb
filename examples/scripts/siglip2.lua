@@ -5,20 +5,19 @@
 -- depends only on the text tokens.
 --
 --   EMB.EVSHA siglip2 <sha> 1 "a photo of a cat" NORMALIZE
---   -> hash {dim = 768, embedding = {...}}
+--   -> a single 3072-byte bulk (768 little-endian float32; unpack('e*'))
 --
 -- KEYS[1] = text; ARGV[1] optional "normalize" to L2-normalize the vector.
 
 local enc = emb.tokenize.encode(KEYS[1], 256)
 local normalize = ARGV[1] == "normalize"
 
--- Feed the image branch a zeroed 1x3x224x224 tensor (not used for text).
-local zeros = {}
-for i = 1, 3 * 224 * 224 do zeros[i] = 0 end
-
+-- Feed the image branch a constant zeroed 1x3x224x224 tensor (not used for
+-- text). fill builds it host-side from the shape alone: no 150k-element Lua
+-- data table round-trip per request.
 local out = emb.run({
   input_ids    = { shape = {1, #enc.ids}, data = enc.ids },
-  pixel_values = { shape = {1, 3, 224, 224}, data = zeros, dtype = "f32" },
+  pixel_values = { shape = {1, 3, 224, 224}, fill = 0, dtype = "f32" },
 })
 local vec = out.text_embeds.data -- 768 floats
 
@@ -31,4 +30,5 @@ if normalize then
   end
 end
 
-return { dim = #vec, embedding = vec }
+-- One bulk reply, byte-identical to the embed path's float32 layout.
+return emb.math.float32_bytes(vec)

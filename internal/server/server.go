@@ -777,7 +777,8 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
-		"Script blocks: emb.run / emb.run_batch(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax} json",
+		"Script input specs: {shape, data|fill, dtype} - fill builds a constant tensor host-side (no Lua data table); fill+data error",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

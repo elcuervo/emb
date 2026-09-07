@@ -38,6 +38,10 @@ A `{shape, fill, dtype}` input spec lets `namedTensorFromLua` allocate the flat 
 - **Byte replies lose in-band structure**: a packed embedding is opaque; clients must know the dim. Mitigation: it's opt-in per script, and the embed path already works this way (dim from EMB.MODELS or script contract).
 - **Big-endian hosts**: little-endian is the RESP tradition here (gem `unpack('e*')`); documented, not configurable.
 
+## Measured result
+
+Recorded in the change's benchmark task (M4, GOMAXPROCS=6, quiet ~2 load, 4 threads × 50 texts): after **138.3 ms p50 / 24.2 req/s** vs the 181.9 ms p50 / 20.6 req/s baseline (~24% p50 reduction). Interleaved NEW-vs-OLD A/Bs on this machine were load-sensitive (a concurrent worktree agent spiked load to 6–19 during the session): 168 vs 169 ms p50 in the quiet window (within noise), 396 vs 430 ms mid-load. The wins are real but dominated by machine-state variance on this testbed; the single-bulk reply and host-side fill remove the server-side per-request costs as designed.
+
 ## Migration Plan
 
 Additive host blocks; nothing existing changes. Order: (1) `fill` support + tests (run + run_batch); (2) `emb.math.float32_bytes` + round-trip tests; (3) siglip2.lua rewrite; (4) bench harness decode + before/after measurement; (5) sweep/docs. Rollback: revert; scripts keep working with `data`-style tables unchanged.

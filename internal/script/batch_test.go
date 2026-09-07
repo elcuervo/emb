@@ -109,3 +109,52 @@ func TestRunBatchValidationErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestRunBatchFillItems(t *testing.T) {
+	// Batch items may declare constant (fill) inputs; the merged tensor is the
+	// per-dimension max shape with the constant in every row.
+	var gotLabels onnx.NamedTensor
+	src := `
+local outs = emb.run_batch({
+  { labels = {shape = {1, 2}, fill = 1, dtype = "i64"} },
+  { labels = {shape = {1, 4}, fill = 1, dtype = "i64"} }
+})
+return outs[1].labels.shape[2] .. "|" .. outs[2].labels.shape[2]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			for _, in := range inputs {
+				if in.Name == "labels" {
+					gotLabels = in
+				}
+			}
+			out := make([]int64, len(gotLabels.Int64))
+			copy(out, gotLabels.Int64)
+			return map[string]onnx.NamedTensor{
+				"labels": {Name: "labels", Shape: gotLabels.Shape, DType: onnx.TensorInt64, Int64: out},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// merged shape [2, 4]: batch axis 2, sequence padded to 4. Item 0's two
+	// ones occupy the head of row 0 (rest zero-padded); item 1 fills row 1.
+	if gotLabels.DType != onnx.TensorInt64 {
+		t.Fatalf("expected int64 fill tensor, got %v", gotLabels.DType)
+	}
+	if len(gotLabels.Int64) != 8 {
+		t.Fatalf("expected 8 merged elements, got %d", len(gotLabels.Int64))
+	}
+	for i, x := range gotLabels.Int64 {
+		want := int64(1)
+		if i >= 2 && i < 4 { // item 0's padded tail
+			want = 0
+		}
+		if x != want {
+			t.Fatalf("merged element %d = %d, want %d", i, x, want)
+		}
+	}
+	if v.String() != "4|4" {
+		t.Fatalf("unexpected batch result %q", v.String())
+	}
+}

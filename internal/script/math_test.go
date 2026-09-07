@@ -1,6 +1,7 @@
 package script
 
 import (
+	"encoding/binary"
 	"math"
 	"testing"
 
@@ -79,6 +80,7 @@ func TestMathEmptyErrors(t *testing.T) {
 		"return emb.math.sigmoid({})",
 		"return emb.math.softmax({})",
 		"return emb.math.argmax({})",
+		"return emb.math.float32_bytes({})",
 	} {
 		if _, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{}); err == nil {
 			t.Fatalf("script %q should error on empty input", src)
@@ -86,6 +88,56 @@ func TestMathEmptyErrors(t *testing.T) {
 	}
 	if _, err := EvalWithHosts(`return emb.math.softmax({"a"})`, nil, nil, Hosts{}, EvalOptions{}); err == nil {
 		t.Fatal("expected non-numeric error")
+	}
+}
+
+func TestMathFloat32BytesRoundTrip(t *testing.T) {
+	// 768 floats pack to a 3072-byte string that decodes back to the exact
+	// float32 values (little-endian IEEE 754, the embed path's layout).
+	src := `
+local t = {}
+for i = 1, 768 do t[i] = i * 0.5 end
+return emb.math.float32_bytes(t)`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ok := v.(lua.LString)
+	if !ok {
+		t.Fatalf("expected LString, got %T", v)
+	}
+	if len(s) != 4*768 {
+		t.Fatalf("expected %d bytes, got %d", 4*768, len(s))
+	}
+	enc := []byte(s)
+	for i := 0; i < 768; i++ {
+		bits := binary.LittleEndian.Uint32(enc[i*4 : i*4+4])
+		got := math.Float32frombits(bits)
+		if want := float32(float64(i+1) * 0.5); got != want {
+			t.Fatalf("element %d = %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestMathFloat32BytesTwoElements(t *testing.T) {
+	// A 2-element pack is exactly 8 bytes with known bit patterns.
+	v, err := EvalWithHosts(`return emb.math.float32_bytes({1.5, -2.25})`, nil, nil, Hosts{}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ok := v.(lua.LString)
+	if !ok {
+		t.Fatalf("expected LString, got %T", v)
+	}
+	if len(s) != 8 {
+		t.Fatalf("expected 8 bytes, got %d", len(s))
+	}
+	enc := []byte(s)
+	if got := binary.LittleEndian.Uint32(enc[0:4]); got != 0x3FC00000 { // 1.5
+		t.Fatalf("first element bits = %08x, want 3fc00000", got)
+	}
+	if got := binary.LittleEndian.Uint32(enc[4:8]); got != 0xC0100000 { // -2.25
+		t.Fatalf("second element bits = %08x, want c0100000", got)
 	}
 }
 

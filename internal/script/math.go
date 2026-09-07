@@ -1,21 +1,24 @@
 package script
 
 import (
+	"encoding/binary"
 	"math"
 
 	lua "github.com/yuin/gopher-lua"
 )
 
 // registerMath installs the emb.math baseline: the common post-processing
-// primitives for classification / QA / reranker / span models, so scripts
-// share one implementation instead of redefining five functions each.
-// sigmoid is vectorized (array in → array out) so hot per-candidate loops
-// cross the Go/Lua boundary once per array, not per element.
+// primitives for classification / QA / reranker / span models, plus the raw
+// float32 packer for byte-compatible embedding replies, so scripts share one
+// implementation instead of redefining five functions each. sigmoid is
+// vectorized (array in → array out) so hot per-candidate loops cross the
+// Go/Lua boundary once per array, not per element.
 func registerMath(emb *lua.LTable, ls *lua.LState) {
 	m := ls.NewTable()
 	m.RawSetString("sigmoid", ls.NewFunction(mathSigmoid))
 	m.RawSetString("softmax", ls.NewFunction(mathSoftmax))
 	m.RawSetString("argmax", ls.NewFunction(mathArgmax))
+	m.RawSetString("float32_bytes", ls.NewFunction(mathFloat32Bytes))
 	emb.RawSetString("math", m)
 }
 
@@ -106,4 +109,27 @@ func mathArgmax(ls *lua.LState) int {
 
 func sigmoid(x float64) float64 {
 	return 1 / (1 + math.Exp(-x))
+}
+
+// mathFloat32Bytes implements emb.math.float32_bytes(vals): packs an array of
+// Lua numbers into a Lua string of 4 little-endian IEEE 754 float32 bytes per
+// element (the byte layout the embed path replies with, so clients decode via
+// unpack('e*')). Returning the string yields a single bulk reply instead of
+// one bulk per element. Empty arrays error.
+func mathFloat32Bytes(ls *lua.LState) int {
+	vals, err := numberArrayFromLua(ls.CheckTable(1))
+	if err != nil {
+		ls.RaiseError("emb.math.float32_bytes: %v", err)
+		return 0
+	}
+	if len(vals) == 0 {
+		ls.RaiseError("emb.math.float32_bytes: empty array")
+		return 0
+	}
+	buf := make([]byte, 0, 4*len(vals))
+	for _, x := range vals {
+		buf = binary.LittleEndian.AppendUint32(buf, math.Float32bits(float32(x)))
+	}
+	ls.Push(lua.LString(buf))
+	return 1
 }

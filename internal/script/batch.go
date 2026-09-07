@@ -130,7 +130,7 @@ func namedInputsFromTable(ls *lua.LState, arg *lua.LTable) ([]onnx.NamedTensor, 
 	for _, name := range names {
 		spec, ok := arg.RawGetString(name).(*lua.LTable)
 		if !ok {
-			return nil, fmt.Errorf("input %q must be a table {shape=..., data=...}", name)
+			return nil, fmt.Errorf("input %q must be a table {shape=..., data=...|fill=...}", name)
 		}
 		t, err := namedTensorFromLua(spec)
 		if err != nil {

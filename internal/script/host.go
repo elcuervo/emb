@@ -72,8 +72,9 @@ func registerHosts(ls *lua.LState, h Hosts) {
 //
 // → a table of named outputs {name = {shape = {...}, data = {...}}}. Integral
 // data encodes as int64; a single fraction in a tensor's data promotes it to
-// float32. Field names are processed in sorted order so identical tables map
-// to identical tensor orders.
+// float32. Input specs also accept fill for constant tensors (see
+// namedTensorFromLua). Field names are processed in sorted order so identical
+// tables map to identical tensor orders.
 func runHost(ls *lua.LState, h Hosts) int {
 	if h.Run == nil {
 		ls.RaiseError("emb.run is unavailable for this model")
@@ -92,7 +93,7 @@ func runHost(ls *lua.LState, h Hosts) int {
 	for _, name := range names {
 		spec, ok := arg.RawGetString(name).(*lua.LTable)
 		if !ok {
-			ls.RaiseError("emb.run: input %q must be a table {shape=..., data=...}", name)
+			ls.RaiseError("emb.run: input %q must be a table {shape=..., data=...|fill=...}", name)
 			return 0
 		}
 		t, err := namedTensorFromLua(spec)
@@ -232,8 +233,17 @@ func tokenizeHost(ls *lua.LState, h Hosts) int {
 	return 1
 }
 
-// namedTensorFromLua reads {shape = {n...}, data = {...}}; data with any
-// fractional element becomes a float32 tensor, otherwise int64.
+// namedTensorFromLua reads an input spec in one of two forms:
+//
+//	{shape = {n...}, data = {...}, dtype?} — element-wise values
+//	{shape = {n...}, fill = n, dtype?} — every element equal to n
+//
+// data with any fractional element becomes a float32 tensor, otherwise int64.
+// fill constructs the constant tensor host-side from the shape alone (no Lua
+// data table round-trip); a fractional fill infers float32. An explicit dtype
+// overrides both inference rules (zero-filled float tensors like fused-CLIP
+// pixel_values are all-integral and would misinfer as int64). fill and data
+// are mutually exclusive.
 func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 	var t onnx.NamedTensor
 	if shapeTab, ok := spec.RawGetString("shape").(*lua.LTable); ok {
@@ -245,47 +255,93 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 	} else {
 		return t, fmt.Errorf("missing shape")
 	}
-	dataTab, ok := spec.RawGetString("data").(*lua.LTable)
-	if !ok {
-		return t, fmt.Errorf("missing data")
-	}
-	data, err := numberArrayFromLua(dataTab)
-	if err != nil {
-		return t, fmt.Errorf("data: %w", err)
-	}
-	// An explicit dtype overrides inference (zero-filled float tensors like
-	// fused-CLIP pixel_values are all-integral and would misinfer as int64).
+
+	var explicitDType string
 	if dtype, ok := spec.RawGetString("dtype").(lua.LString); ok {
-		switch string(dtype) {
-		case "f32":
-			t.DType = onnx.TensorFloat32
-		case "i64":
-			t.DType = onnx.TensorInt64
-		default:
-			return t, fmt.Errorf("dtype must be i64 or f32, got %q", string(dtype))
+		explicitDType = string(dtype)
+		if explicitDType != "f32" && explicitDType != "i64" {
+			return t, fmt.Errorf("dtype must be i64 or f32, got %q", explicitDType)
 		}
-	} else {
-		t.DType = onnx.TensorInt64
-		for _, n := range data {
-			if math.Trunc(n) != n {
-				t.DType = onnx.TensorFloat32
-				break
+	}
+
+	dataTab, hasData := spec.RawGetString("data").(*lua.LTable)
+	fillField := spec.RawGetString("fill")
+	hasFill := fillField != lua.LNil
+	fillVal, fillIsNumber := fillField.(lua.LNumber)
+	if hasFill && !fillIsNumber {
+		return t, fmt.Errorf("fill must be a number")
+	}
+	if hasFill && hasData {
+		return t, fmt.Errorf("fill and data are mutually exclusive")
+	}
+
+	// Data form: read the element array and infer int64/float32; the session
+	// layer checks the count against the shape at run time.
+	if hasData {
+		data, err := numberArrayFromLua(dataTab)
+		if err != nil {
+			return t, fmt.Errorf("data: %w", err)
+		}
+		t.DType = dtypeFor(explicitDType, data)
+		switch t.DType {
+		case onnx.TensorFloat32:
+			t.Float = make([]float32, len(data))
+			for i, n := range data {
+				t.Float[i] = float32(n)
+			}
+		default:
+			t.Int64 = make([]int64, len(data))
+			for i, n := range data {
+				t.Int64[i] = int64(n)
 			}
 		}
+		return t, nil
 	}
+
+	// Fill form: construct the constant tensor directly from the shape (the
+	// count is exact by construction, so no Lua data table is ever built).
+	count := 1
+	for _, d := range t.Shape {
+		count *= int(d)
+	}
+	t.DType = dtypeFor(explicitDType, []float64{float64(fillVal)})
 	switch t.DType {
 	case onnx.TensorFloat32:
-		t.Float = make([]float32, len(data))
-		for i, n := range data {
-			t.Float[i] = float32(n)
+		t.Float = make([]float32, count)
+		for i := range t.Float {
+			t.Float[i] = float32(fillVal)
 		}
 	default:
-		t.Int64 = make([]int64, len(data))
-		for i, n := range data {
-			t.Int64[i] = int64(n)
+		t.Int64 = make([]int64, count)
+		for i := range t.Int64 {
+			t.Int64[i] = int64(fillVal)
 		}
 	}
 	return t, nil
+}
+
+// dtypeFor resolves a tensor's dtype: an explicit dtype wins; otherwise data
+// infers int64, promoting to float32 on any fractional element, and a fill
+// value infers float32 when it is fractional.
+func dtypeFor(explicit string, data []float64) onnx.TensorType {
+	if explicit != "" {
+		return dtypeFromString(explicit)
+	}
+	dt := onnx.TensorInt64
+	for _, n := range data {
+		if math.Trunc(n) != n {
+			dt = onnx.TensorFloat32
+			break
+		}
+	}
+	return dt
+}
+
+func dtypeFromString(s string) onnx.TensorType {
+	if s == "f32" {
+		return onnx.TensorFloat32
+	}
+	return onnx.TensorInt64
 }
 
 func namedTensorToLua(ls *lua.LState, t onnx.NamedTensor) *lua.LTable {

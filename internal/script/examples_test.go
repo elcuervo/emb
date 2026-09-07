@@ -1,7 +1,10 @@
 package script
 
 import (
+	"encoding/binary"
+	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/elcuervo/emb/internal/onnx"
@@ -115,6 +118,52 @@ func TestExampleQA(t *testing.T) {
 	// The answer surfaced from the context via offsets must include 1976.
 	if !containsReply(reply, "1976") {
 		t.Fatalf("expected answer 1976 in %q", reply)
+	}
+}
+
+func TestExampleSiglip2(t *testing.T) {
+	// The fused-CLIP text branch: pixel_values arrives as a host-built zero
+	// fill (no Lua data table) and the reply is ONE raw float32 bulk, L2-
+	// normalized when ARGV[1] == "normalize".
+	embeddings := make([]float32, 768)
+	for i := range embeddings {
+		embeddings[i] = float32(i+1) / 100
+	}
+	var gotPixel onnx.NamedTensor
+	run := func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+		for _, in := range inputs {
+			if in.Name == "pixel_values" {
+				gotPixel = in
+			}
+		}
+		return map[string]onnx.NamedTensor{
+			"text_embeds": {Name: "text_embeds", Shape: []int64{1, 768}, DType: onnx.TensorFloat32, Float: embeddings},
+		}, nil
+	}
+	reply := evalExample(t, "siglip2.lua", []string{"a photo of a cat"}, []string{"normalize"}, run)
+
+	if gotPixel.DType != onnx.TensorFloat32 || len(gotPixel.Float) != 1*3*224*224 {
+		t.Fatalf("pixel_values must be a host-built float32 fill, got dtype=%v n=%d", gotPixel.DType, len(gotPixel.Float))
+	}
+	for i, x := range gotPixel.Float {
+		if x != 0 {
+			t.Fatalf("pixel_values[%d] = %v, want 0", i, x)
+		}
+	}
+	// Reply shape: a single $3072\r\n bulk (not an array of 768 floats).
+	head := "$3072\r\n"
+	if !strings.HasPrefix(reply, head) || len(reply) != len(head)+3072+2 {
+		t.Fatalf("expected one 3072-byte bulk, got %d bytes: %.40q", len(reply), reply)
+	}
+	// The bulk decodes back to 768 float32s with unit L2 norm (normalize).
+	raw := []byte(reply)
+	sum := 0.0
+	for i := 0; i < 768; i++ {
+		bits := binary.LittleEndian.Uint32(raw[len(head)+i*4 : len(head)+i*4+4])
+		sum += float64(math.Float32frombits(bits)) * float64(math.Float32frombits(bits))
+	}
+	if math.Abs(sum-1) > 1e-6 {
+		t.Fatalf("expected unit L2 norm after normalize, got %v", sum)
 	}
 }
 
