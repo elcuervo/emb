@@ -16,6 +16,7 @@ import (
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/registry"
+	"github.com/elcuervo/emb/internal/script"
 )
 
 type serverState int64
@@ -47,6 +48,9 @@ type Server struct {
 	cacheConfig string
 	// scripts is the per-model script cache for EMB.SCRIPT/EMB.EVAL/EMB.EVSHA.
 	scripts *scriptCache
+	// compiler caches compiled script prototypes per (model, sha) so repeat
+	// EVSHA executions skip Lua parsing/compiling; FLUSH invalidates it.
+	compiler *script.Compiler
 	// cacheFile/cacheSave are runtime-editable snapshot parameters (consumed by
 	// the cache-snapshot save loop; stored here even before that change lands).
 	cacheFile string
@@ -153,6 +157,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		cache:       c,
 		cacheConfig: cacheConfig,
 		scripts:     newScriptCache(0),
+		compiler:    script.NewCompiler(),
 		version:     "dev",
 		idleTimeout: config.DefaultIdleTimeout,
 		maxTexts:    4096,
@@ -772,7 +777,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
-		"Script blocks: emb.run(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax} json",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax} json",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

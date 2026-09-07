@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/tidwall/redcon"
+	lua "github.com/yuin/gopher-lua"
 
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/script"
@@ -174,6 +175,7 @@ func (s *Server) handleScriptFlush(conn redcon.Conn, args []string) {
 		model = args[0]
 	}
 	s.scripts.Flush(model)
+	s.compiler.Flush(model)
 	conn.WriteString("OK")
 }
 
@@ -280,9 +282,12 @@ func parseInt(s string) (int, error) {
 }
 
 // runScripted executes a script over one or more texts and writes the reply:
-// a single converted value for one text, an array of converted values
-// otherwise. Cache hits (when the server cache is enabled) reply from the
-// content-addressed key without running script or model.
+// a single converted value for one text, an array of converted values for
+// several. The script runs ONCE with all (uncached) texts as KEYS, so the
+// script can batch its inference (emb.run_batch); for multi-text calls the
+// script must return an array whose elements correspond 1:1 to the texts.
+// Cache hits (when the server cache is enabled) skip the evaluation; each
+// text's converted element is cached under its content-addressed key.
 func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, args []string) {
 	s.active.Add(1)
 	defer s.active.Done()
@@ -305,7 +310,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 
 	hosts := script.Hosts{
 		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
-			return res.Session.RunNamed(inputs)
+			return res.Session().RunNamed(inputs)
 		},
 	}
 	if pT, ok := res.Tokenizer.(tokenizer.PretokenizedTokenizer); ok {
@@ -316,32 +321,55 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		hosts.EncodePair = oT.EncodePairOffsets
 	}
 
+	// Per-text cache lookup first; only the misses reach the script.
 	replies := make([][]byte, len(texts))
-	cached := make([]bool, len(texts))
+	missIdx := []int{}
 	for i, text := range texts {
 		if s.cache != nil {
 			key := script.CacheKey(model, sha, args, text)
 			if hit, ok := s.cache.Get(key); ok {
 				replies[i] = hit
-				cached[i] = true
+				continue
 			}
 		}
-		if cached[i] {
-			continue
+		missIdx = append(missIdx, i)
+	}
+
+	if len(missIdx) > 0 {
+		missTexts := make([]string, len(missIdx))
+		for j, idx := range missIdx {
+			missTexts[j] = texts[idx]
 		}
-		v, err := script.EvalWithHosts(src, []string{text}, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
+
+		v, err := s.compiler.Eval(model, src, missTexts, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
 		if err != nil {
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
 			return
 		}
-		encoded, err := script.EncodeReply(v)
-		if err != nil {
-			conn.WriteError(fmt.Sprintf("ERR %v", err))
-			return
+
+		values := []lua.LValue{v}
+		if len(missTexts) > 1 {
+			tbl, ok := v.(*lua.LTable)
+			if !ok || tbl.Len() != len(missTexts) {
+				conn.WriteError(fmt.Sprintf("ERR script must return one value per text (%d texts)", len(missTexts)))
+				return
+			}
+			values = make([]lua.LValue, len(missTexts))
+			for j := 0; j < len(missTexts); j++ {
+				values[j] = tbl.RawGetInt(j + 1)
+			}
 		}
-		replies[i] = encoded
-		if s.cache != nil {
-			s.cache.Set(script.CacheKey(model, sha, args, text), encoded)
+
+		for j, idx := range missIdx {
+			encoded, err := script.EncodeReply(values[j])
+			if err != nil {
+				conn.WriteError(fmt.Sprintf("ERR %v", err))
+				return
+			}
+			replies[idx] = encoded
+			if s.cache != nil {
+				s.cache.Set(script.CacheKey(model, sha, args, texts[idx]), encoded)
+			}
 		}
 	}
 

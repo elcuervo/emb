@@ -38,6 +38,9 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	emb.RawSetString("run", ls.NewFunction(func(ls *lua.LState) int {
 		return runHost(ls, h)
 	}))
+	emb.RawSetString("run_batch", ls.NewFunction(func(ls *lua.LState) int {
+		return runBatchHost(ls, h)
+	}))
 	tok := ls.NewTable()
 	tok.RawSetString("pretokenized", ls.NewFunction(func(ls *lua.LState) int {
 		return tokenizeHost(ls, h)

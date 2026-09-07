@@ -11,4 +11,5 @@ models:
   gliner2:
     onnx: ./models/gliner2/model_int8.onnx
     tokenizer: ./models/gliner2/tokenizer.json
-    preload: false
+    script_preload: true
+    script_workers: 4

@@ -20,12 +20,19 @@ The server SHALL support multiple named-tensor sessions per model (`script_worke
 
 ### Requirement: Batched scripted inference (`emb.run_batch`)
 
-The server SHALL provide an `emb.run_batch(inputsArray)` host block: an array of input-spec tables (each `{name = {shape, data}}`) SHALL be merged into one padded inference run and returned as an array of per-item named-output maps, one per input. The host SHALL validate that all items declare the same tensor names and dtypes; padding SHALL extend each named tensor to the maximum dimensions across the batch (zero-filled), and the script remains responsible for any masking semantics.
+The server SHALL provide an `emb.run_batch(inputsArray)` host block: an array of input-spec tables (each `{name = {shape, data}}`) SHALL be merged into one padded inference run and returned as an array of per-item named-output maps, one per input. The host SHALL validate that all items declare the same tensor names, ranks, and dtypes; padding SHALL extend each named tensor to the maximum dimensions across the batch (zero-filled), and the script remains responsible for any masking semantics.
+
+When a scripted evaluation is requested with multiple texts, the server SHALL evaluate the script ONCE with all texts in KEYS (Redis semantics), and the script SHALL return one value per text: the value itself for a single text, or an array whose elements correspond 1:1 to the texts in order. A multi-text result that is not such an array SHALL be an error reply.
 
 #### Scenario: Multi-text request runs one inference call
 
 - **WHEN** a script passes two input specs to `emb.run_batch`
 - **THEN** the underlying session is invoked once for both items, and the result contains one output map per input
+
+#### Scenario: Multi-text evaluation passes all texts as KEYS
+
+- **WHEN** `EMB.EVSHA` is sent with two texts and a script that returns an array of per-text hash values
+- **THEN** the script executes once with `KEYS = {text1, text2}` and the reply is an array of the two hashes
 
 #### Scenario: Deterministic batch results
 

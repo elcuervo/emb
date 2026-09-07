@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
+	"github.com/yuin/gopher-lua/parse"
 )
 
 // DefaultMaxScriptBytes bounds a script's source size. Mirrors the spirit of
@@ -56,7 +58,8 @@ func Eval(source string, keys, argv []string, opts EvalOptions) (lua.LValue, err
 }
 
 // EvalWithHosts is Eval with the whitelisted emb.* / json host functions
-// bound from `hosts` (see Hosts).
+// bound from `hosts` (see Hosts). Each invocation compiles the source fresh;
+// hot paths should use Compiler.Eval to reuse the compiled prototype.
 func EvalWithHosts(source string, keys, argv []string, hosts Hosts, opts EvalOptions) (lua.LValue, error) {
 	if opts.MaxScriptBytes <= 0 {
 		opts.MaxScriptBytes = DefaultMaxScriptBytes
@@ -64,6 +67,25 @@ func EvalWithHosts(source string, keys, argv []string, hosts Hosts, opts EvalOpt
 	if len(source) > opts.MaxScriptBytes {
 		return lua.LNil, ErrScriptTooLarge
 	}
+	if opts.Deadline <= 0 {
+		opts.Deadline = DefaultDeadline
+	}
+
+	chunk, err := parse.Parse(strings.NewReader(wrapSource(source)), "<string>")
+	if err != nil {
+		return lua.LNil, fmt.Errorf("compiling script: %w", err)
+	}
+	proto, err := lua.Compile(chunk, "<string>")
+	if err != nil {
+		return lua.LNil, fmt.Errorf("compiling script: %w", err)
+	}
+	return runProto(proto, keys, argv, hosts, opts)
+}
+
+// runProto runs a compiled (wrapped) script in a fresh sandboxed state with
+// KEYS/ARGV globals and the given deadline; identical semantics to
+// EvalWithHosts, minus the parse+compile step.
+func runProto(proto *lua.FunctionProto, keys, argv []string, hosts Hosts, opts EvalOptions) (lua.LValue, error) {
 	if opts.Deadline <= 0 {
 		opts.Deadline = DefaultDeadline
 	}
@@ -82,13 +104,7 @@ func EvalWithHosts(source string, keys, argv []string, hosts Hosts, opts EvalOpt
 	defer cancel()
 	ls.SetContext(ctx)
 
-	// Redis wraps scripts in a function over (KEYS, ARGV); do the same so the
-	// script body's `return` yields the evaluation result.
-	wrapped := "return (function(KEYS, ARGV)\n" + source + "\nend)(KEYS, ARGV)"
-	fn, err := ls.LoadString(wrapped)
-	if err != nil {
-		return lua.LNil, fmt.Errorf("compiling script: %w", err)
-	}
+	fn := ls.NewFunctionFromProto(proto)
 	ls.Push(fn)
 	if err := ls.PCall(0, lua.MultRet, nil); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

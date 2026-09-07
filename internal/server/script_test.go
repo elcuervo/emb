@@ -147,6 +147,43 @@ func TestEvalUnknownModel(t *testing.T) {
 	c.Close()
 }
 
+func TestScriptFlushInvalidatesCompiledProtos(t *testing.T) {
+	addr, srv := serveScriptTest(t, "")
+	c := dial(t, addr)
+
+	// First LOAD+EVSHA compiles the script prototype.
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", helloScript)
+	shaVal := sha[5 : len(sha)-2]
+	first := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "1", "hello", "PERSON")
+	compiles := srv.compiler.Compiles.Load()
+	if compiles != 1 {
+		t.Fatalf("expected 1 compile after first EVSHA, got %d", compiles)
+	}
+
+	// FLUSH drops the source cache AND the compiled proto; a re-LOAD follows
+	// by a fresh EVSHA recompiles and replies identically.
+	if got := doCmd(t, c, "EMB.SCRIPT", "FLUSH", "test"); got != "+OK\r\n" {
+		t.Fatalf("flush failed: %q", got)
+	}
+	if got := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "1", "hello", "PERSON"); !strings.HasPrefix(got, "-ERR no such script") {
+		t.Fatalf("expected no-such-script after flush, got %q", got)
+	}
+
+	sha2 := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", helloScript)
+	if sha2 != sha {
+		t.Fatalf("same source must keep its SHA after flush: %q vs %q", sha2, sha)
+	}
+	shaVal2 := sha2[5 : len(sha2)-2]
+	second := doCmd(t, c, "EMB.EVSHA", "test", shaVal2, "1", "hello", "PERSON")
+	if second != first {
+		t.Fatalf("reply changed after recompile: %q vs %q", second, first)
+	}
+	if got := srv.compiler.Compiles.Load(); got != 2 {
+		t.Fatalf("expected recompile after flush (2), got %d", got)
+	}
+	c.Close()
+}
+
 func TestEvalInlineAndEvshaRoundTrip(t *testing.T) {
 	addr, _ := serveScriptTest(t, "")
 	c := dial(t, addr)
@@ -157,8 +194,10 @@ func TestEvalInlineAndEvshaRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected inline eval reply %q", resp)
 	}
 
-	// LOAD then EVSHA with two texts → array of bulks.
-	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", helloScript)
+	// LOAD then EVSHA with two texts → the script runs ONCE (KEYS = both
+	// texts) and must return one value per text; the reply is an array.
+	perText := `local out = {} for i = 1, #KEYS do out[i] = KEYS[i] .. "|" .. ARGV[1] end return out`
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", perText)
 	shaVal := sha[5 : len(sha)-2]
 	resp = doCmd(t, c, "EMB.EVSHA", "test", shaVal, "2", "a", "b", "ORG")
 	if resp != "*2\r\n$5\r\na|ORG\r\n$5\r\nb|ORG\r\n" {
@@ -272,6 +311,36 @@ func TestHelpDocumentsScriptFamily(t *testing.T) {
 		if !strings.Contains(resp, want) {
 			t.Fatalf("EMB.HELP missing %q", want)
 		}
+	}
+	c.Close()
+}
+
+// TestEvalMultiTextSingleEval verifies the batched contract: one evaluation
+// per multi-text request (KEYS = all texts), one value per text required.
+func TestEvalMultiTextSingleEval(t *testing.T) {
+	addr, srv := serveScriptTest(t, "")
+	c := dial(t, addr)
+
+	perText := `local out = {} for i = 1, #KEYS do out[i] = KEYS[i] end return out`
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", perText)
+	shaVal := sha[5 : len(sha)-2]
+	before := srv.compiler.Compiles.Load()
+
+	resp := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "c")
+	if resp != "*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n" {
+		t.Fatalf("unexpected multi-text reply %q", resp)
+	}
+	// Exactly one compile happened for the whole 3-text request.
+	if got := srv.compiler.Compiles.Load(); got != before+1 {
+		t.Fatalf("expected 1 compile for 3 texts, got %d (before %d)", got, before)
+	}
+
+	// A single-value script under multi-text must error, not silently drop texts.
+	sha2 := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", `return "only one"`)
+	shaVal2 := sha2[5 : len(sha2)-2]
+	resp = doCmd(t, c, "EMB.EVSHA", "test", shaVal2, "2", "x", "y")
+	if !strings.Contains(resp, "one value per text") {
+		t.Fatalf("expected per-text-array error, got %q", resp)
 	}
 	c.Close()
 }

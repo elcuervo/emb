@@ -34,17 +34,15 @@ local function normalize(text)
   return s .. "."
 end
 
-local text = KEYS[1]
+local texts = KEYS
 local labels = {}
 for i = 1, #ARGV do labels[i] = ARGV[i] end
 local nlab = #labels
 if nlab == 0 then return {} end
 
-local norm = normalize(text)
-local words, starts, ends = split_words(norm)
-
 -- Schema (model-specific): 4 header words, [E] + label per label, closing
--- parens, then [SEP_TEXT] and the text words.
+-- parens, then [SEP_TEXT] and the text words. Shared by every text (labels
+-- are per-request), so each text builds its input tensors against it.
 local schema = { "(", "[P]", PROMPT, "(" }
 for i = 1, nlab do
   schema[#schema + 1] = PREFIX
@@ -53,63 +51,66 @@ end
 schema[#schema + 1] = ")"
 schema[#schema + 1] = ")"
 
-local combined = {}
-for i = 1, #schema do combined[#combined + 1] = schema[i] end
-combined[#combined + 1] = SEP_TEXT
-for i = 1, #words do combined[#combined + 1] = words[i] end
-
--- Building block 2: word-aligned encoding with per-subword word indices.
-local enc = emb.tokenize.pretokenized(combined, MAX_LEN)
-local ids, wids = enc.ids, enc.word_ids
-local seq = #ids
-
--- pos2word: first subword of each text word -> local 1-based word index.
--- text_start = 0-based combined index of the first text word.
+-- Per-text state: normalization, word offsets, alignment bookkeeping, and
+-- the named input tensors, collected into one batch (single inference run).
+local meta = {}
+local inputs = {}
 local text_start = #schema + 1
-local pos2word, seen, text_len = {}, {}, 0
-for idx = 1, seq do
-  local wid = wids[idx]
-  if wid >= text_start and not seen[wid] then
-    seen[wid] = true
-    local w = wid - text_start + 1
-    pos2word[idx] = w
-    if w > text_len then text_len = w end
-  end
-end
+for ti = 1, #texts do
+  local norm = normalize(texts[ti])
+  local words, starts, ends = split_words(norm)
+  local combined = {}
+  for i = 1, #schema do combined[#combined + 1] = schema[i] end
+  combined[#combined + 1] = SEP_TEXT
+  for i = 1, #words do combined[#combined + 1] = words[i] end
 
--- label_positions: token position of each [E] marker (combined idx 4+2(i-1)).
-local label_positions = {}
-for i = 1, nlab do
-  local combined_idx = 4 + (i - 1) * 2
-  local found = nil
+  local enc = emb.tokenize.pretokenized(combined, MAX_LEN)
+  local ids, wids = enc.ids, enc.word_ids
+  local seq = #ids
+
+  local pos2word, seen, text_len = {}, {}, 0
   for idx = 1, seq do
-    if wids[idx] == combined_idx then found = idx break end
+    local wid = wids[idx]
+    if wid >= text_start and not seen[wid] then
+      seen[wid] = true
+      local w = wid - text_start + 1
+      pos2word[idx] = w
+      if w > text_len then text_len = w end
+    end
   end
-  if found == nil then error("could not locate label marker for " .. labels[i]) end
-  label_positions[i] = found
+
+  local label_positions = {}
+  for i = 1, nlab do
+    local combined_idx = 4 + (i - 1) * 2
+    local found = nil
+    for idx = 1, seq do
+      if wids[idx] == combined_idx then found = idx break end
+    end
+    if found == nil then error("could not locate label marker for " .. labels[i]) end
+    label_positions[i] = found
+  end
+
+  local words_mask, attn, label_mask = {}, {}, {}
+  for idx = 1, seq do
+    words_mask[idx] = pos2word[idx] and 1 or 0
+    attn[idx] = 1
+  end
+  for i = 1, nlab do label_mask[i] = 1 end
+
+  meta[ti] = { norm = norm, starts = starts, ends = ends, text_len = text_len, seq = seq, pos2word = pos2word }
+  inputs[ti] = {
+    input_ids       = { shape = {1, seq}, data = ids },
+    attention_mask  = { shape = {1, seq}, data = attn },
+    words_mask      = { shape = {1, seq}, data = words_mask },
+    text_lengths    = { shape = {1},     data = {text_len} },
+    task_type       = { shape = {1},     data = {0} },
+    label_positions = { shape = {1, nlab}, data = label_positions },
+    label_mask      = { shape = {1, nlab}, data = label_mask },
+  }
 end
 
-local words_mask, attn, label_mask = {}, {}, {}
-for idx = 1, seq do
-  words_mask[idx] = pos2word[idx] and 1 or 0
-  attn[idx] = 1
-end
-for i = 1, nlab do label_mask[i] = 1 end
-
--- Building block 3: named-tensor inference over the 7 GLiNER inputs.
-local out = emb.run({
-  input_ids       = { shape = {1, seq}, data = ids },
-  attention_mask  = { shape = {1, seq}, data = attn },
-  words_mask      = { shape = {1, seq}, data = words_mask },
-  text_lengths    = { shape = {1},     data = {text_len} },
-  task_type       = { shape = {1},     data = {0} },
-  label_positions = { shape = {1, nlab}, data = label_positions },
-  label_mask      = { shape = {1, nlab}, data = label_mask },
-})
-
-local logits = out.logits.data
-local log_shape = out.logits.shape -- {1, seq, max_width, num_labels}
-local max_width, num_labels = log_shape[3], log_shape[4]
+-- Baseline block: one padded inference run for the whole batch.
+local outs = emb.run_batch(inputs)
 
 -- Flat row-major access helper for decoded tensors (kept user-space: trivial).
 local function at(data, shape, ...)
@@ -118,56 +119,69 @@ local function at(data, shape, ...)
   return data[offset + 1]
 end
 
--- Span scan (model-specific decode): word-start positions x width, scored
--- with ONE vectorized emb.math.sigmoid call per label (baseline), then
--- thresholded with overlap suppression.
-local function find_spans(li)
-  local raw, cand = {}, {}
-  for pos = 1, seq do
-    local sw = pos2word[pos]
-    if sw then
-      for w = 0, max_width - 1 do
-        local end_word = sw - 1 + w
-        if end_word >= text_len then break end
-        raw[#raw + 1] = at(logits, log_shape, 1, pos, w + 1, li)
-        cand[#cand + 1] = { sw = sw, w = w }
+
+local function decode_text(ti)
+  local o = outs[ti]
+  local logits, log_shape = o.logits.data, o.logits.shape
+  local max_width, num_labels = log_shape[3], log_shape[4]
+  -- find_spans / format_spans close over the per-text state via setglobals;
+  -- re-implemented below as a closure over meta[ti] for clarity.
+  local m = meta[ti]
+  local norm, starts, ends = m.norm, m.starts, m.ends
+  local text_len, seq, pos2word = m.text_len, m.seq, m.pos2word
+  local function find_spans_li(li)
+    local raw, cand = {}, {}
+    for pos = 1, seq do
+      local sw = pos2word[pos]
+      if sw then
+        for w = 0, max_width - 1 do
+          local end_word = sw - 1 + w
+          if end_word >= text_len then break end
+          raw[#raw + 1] = at(logits, log_shape, 1, pos, w + 1, li)
+          cand[#cand + 1] = { sw = sw, w = w }
+        end
       end
     end
-  end
-  if #raw == 0 then return {} end
-  local scores = emb.math.sigmoid(raw)
-  local spans = {}
-  for i = 1, #scores do
-    if scores[i] >= THRESHOLD then
-      local sw, w = cand[i].sw, cand[i].w
-      local cs, ce = starts[sw], ends[sw + w]
-      local span_text = string.sub(norm, cs, ce - 1):gsub("^%s+", ""):gsub("%s+$", "")
-      if span_text ~= "" then
-        spans[#spans + 1] = { text = span_text, score = scores[i], s = cs, e = ce }
+    if #raw == 0 then return {} end
+    local scores = emb.math.sigmoid(raw)
+    local spans = {}
+    for i = 1, #scores do
+      if scores[i] >= THRESHOLD then
+        local sw, w = cand[i].sw, cand[i].w
+        local cs, ce = starts[sw], ends[sw + w]
+        local span_text = string.sub(norm, cs, ce - 1):gsub("^%s+", ""):gsub("%s+$", "")
+        if span_text ~= "" then
+          spans[#spans + 1] = { text = span_text, score = scores[i], s = cs, e = ce }
+        end
       end
     end
+    return spans
   end
-  return spans
-end
-
-local function format_spans(spans)
-  if #spans == 0 then return {} end
-  table.sort(spans, function(a, b) return a.score > b.score end)
-  local selected = {}
-  for _, sp in ipairs(spans) do
-    local overlaps = false
-    for _, sel in ipairs(selected) do
-      if not (sp.e <= sel.s or sp.s >= sel.e) then overlaps = true break end
+  local function format_spans_li(spans)
+    if #spans == 0 then return {} end
+    table.sort(spans, function(a, b) return a.score > b.score end)
+    local selected = {}
+    for _, sp in ipairs(spans) do
+      local overlaps = false
+      for _, sel in ipairs(selected) do
+        if not (sp.e <= sel.s or sp.s >= sel.e) then overlaps = true break end
+      end
+      if not overlaps then selected[#selected + 1] = sp end
     end
-    if not overlaps then selected[#selected + 1] = sp end
+    local out_list = {}
+    for i, sp in ipairs(selected) do out_list[i] = sp.text end
+    return out_list
   end
-  local out = {}
-  for i, sp in ipairs(selected) do out[i] = sp.text end
-  return out
+  local entities = {}
+  for li = 1, num_labels do
+    entities[labels[li]] = format_spans_li(find_spans_li(li))
+  end
+  return entities
 end
 
-local entities = {}
-for li = 1, num_labels do
-  entities[labels[li]] = format_spans(find_spans(li))
+local entities_per_text = {}
+for ti = 1, #texts do
+  entities_per_text[ti] = decode_text(ti)
 end
-return entities
+if #texts == 1 then return entities_per_text[1] end
+return entities_per_text

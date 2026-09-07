@@ -27,7 +27,7 @@ RSpec.describe Emb do
       end
 
       it 'returns an array of hashes for multiple texts' do
-        script = 'return {PERSON = {KEYS[1]}}'
+        script = 'local out = {} for i = 1, #KEYS do out[i] = {PERSON = {KEYS[i]}} end return out'
         result = described_class.eval(:minilm, script, %w[a b])
         expect(result).to eq([{ 'PERSON' => ['a'] }, { 'PERSON' => ['b'] }])
       end

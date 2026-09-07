@@ -30,7 +30,7 @@ Constraint: the script surface stays the same shape (blocks, not adapters), repl
 
 `emb.run_batch(items)` validates equal tensor names/dtypes across items, pads each named tensor to the per-dimension max (zero-fill), concatenates along the batch axis, and issues ONE `RunNamed` against a pooled session. Outputs split back along the batch dim into per-item maps (slice [i*n, (i+1)*n) per element). This reuses `RunNamed` unchanged — the merge/split lives in the Lua-facing host. GLiNER fits immediately: `label_positions`/`label_mask` are identical across items, `text_lengths` varies per item (concat on dim 0), `input_ids`/`attention_mask`/`words_mask` pad along seq. The example `gliner2.lua` collects all KEYS texts, builds one batch, decodes each item — same replies, verified by the unchanged golden test (single text = batch of one).
 
-Caveat: padding to the longest seq in a batch means a mixed-length batch costs ~max length, not sum — the intended trade (measured in the benchmark's multi-text cell).
+Caveat: padding to the longest seq in a batch means a mixed-length batch costs ~max length, not sum — the intended trade. Measured on the int8 testbed (M4, intra=4, ~20-word texts, labels 3): batch-8 is neutral vs serial (268ms vs 279ms per 8 texts) because equal-length padding cancels the savings; batch-16 is 2.3x faster (331ms vs 777ms) once ORT's intra-op parallelism amortizes batch processing. So run_batch pays off at meaningful batch sizes and is architecture-enabling (one session call, per-text caching) even when neutral.
 
 ### D3: Compiled-script cache — proto per (model, SHA), fresh state stays
 

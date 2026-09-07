@@ -368,3 +368,42 @@ func TestParseFlagsRequestSizeCapsNegative(t *testing.T) {
 		t.Fatalf("expected non-negative error for -max-pairs -5, got %v", err)
 	}
 }
+
+func TestLoadScriptedInferenceConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  gliner:
+    onnx: ./model.onnx
+    tokenizer: ./tokenizer.json
+    script_workers: 2
+    script_preload: true
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Models["gliner"]
+	if m.ScriptWorkers != 2 {
+		t.Fatalf("script_workers = %d, want 2", m.ScriptWorkers)
+	}
+	if !m.ScriptPreload {
+		t.Fatal("script_preload not parsed")
+	}
+
+	// A model without the keys keeps zero defaults (auto-tune, no preload).
+	os.WriteFile(cfgPath, []byte(`
+models:
+  plain:
+    onnx: ./model.onnx
+`), 0644)
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Models["plain"].ScriptWorkers != 0 || cfg.Models["plain"].ScriptPreload {
+		t.Fatal("defaults must be 0/false")
+	}
+}

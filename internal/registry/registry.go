@@ -42,12 +42,24 @@ type ModelEntry struct {
 }
 
 // ScriptResources bundles what a scripted evaluation needs for a model: a
-// named-tensor session and the tokenizer (its plain/offsets/word-level
-// capabilities are type-asserted when building the host binding).
+// pool of named-tensor sessions (parallel scripted executions, round-robin)
+// and the tokenizer (its plain/offsets/word-level capabilities are
+// type-asserted when building the host binding).
 type ScriptResources struct {
-	Session   onnx.NamedSession
+	sessions  []onnx.NamedSession
+	next      atomic.Uint64
 	Tokenizer tokenizer.Tokenizer
 }
+
+// Session returns the next named-tensor session for a scripted run,
+// round-robin across the pool (each session serializes its own runs).
+func (r *ScriptResources) Session() onnx.NamedSession {
+	i := r.next.Add(1) - 1
+	return r.sessions[i%uint64(len(r.sessions))]
+}
+
+// Sessions exposes the pool for Close and tests.
+func (r *ScriptResources) Sessions() []onnx.NamedSession { return r.sessions }
 
 type Registry struct {
 	mu          sync.RWMutex
@@ -266,15 +278,29 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		execMode = onnx.ExecModeParallel
 	}
 
-	sess, err := onnx.NewNamedRuntimeSessionFromBytes(
-		modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
-	)
-	if err != nil {
-		_ = tok.Close()
-		return nil, fmt.Errorf("creating scripted session for %q: %w", e.Name, err)
+	numSessions := cfg.ScriptWorkers
+	if numSessions <= 0 {
+		numSessions = autoTuneWorkers(cfg.ONNX, 0)
+	}
+	if numSessions < 1 {
+		numSessions = 1
+	}
+	sessions := make([]onnx.NamedSession, 0, numSessions)
+	for i := 0; i < numSessions; i++ {
+		sess, err := onnx.NewNamedRuntimeSessionFromBytes(
+			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
+		)
+		if err != nil {
+			_ = tok.Close()
+			for _, opened := range sessions {
+				_ = opened.Close()
+			}
+			return nil, fmt.Errorf("creating scripted session %d for %q: %w", i, e.Name, err)
+		}
+		sessions = append(sessions, sess)
 	}
 
-	return &ScriptResources{Session: sess, Tokenizer: tok}, nil
+	return &ScriptResources{sessions: sessions, Tokenizer: tok}, nil
 }
 
 func downloadModel(cfg *config.ModelConfig, name string) error {
@@ -469,6 +495,12 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 			return nil, err
 		}
 	}
+	if cfg.ScriptPreload {
+		log.Printf("  preloading scripted session for %q (workers=%d)...", name, cfg.ScriptWorkers)
+		if _, err := entry.ScriptResources(); err != nil {
+			return nil, err
+		}
+	}
 
 	return entry, nil
 }
@@ -556,8 +588,10 @@ func (r *Registry) Close() error {
 		if entry.Pool != nil {
 			_ = entry.Pool.Close()
 		}
-		if entry.scriptRes != nil && entry.scriptRes.Session != nil {
-			_ = entry.scriptRes.Session.Close()
+		if entry.scriptRes != nil {
+			for _, sess := range entry.scriptRes.Sessions() {
+				_ = sess.Close()
+			}
 		}
 	}
 	clear(r.models)

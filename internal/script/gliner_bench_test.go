@@ -152,4 +152,51 @@ func BenchmarkGLiNERExtract(b *testing.B) {
 			}
 		})
 	})
+
+	// Multi-text cell: 8 texts of ~20 words each, serial (8 single-text evals)
+	// vs batched (ONE eval with KEYS = all 8, one emb.run_batch call).
+	texts8 := make([]string, 8)
+	for i := range texts8 {
+		texts8[i] = benchTexts(20)
+	}
+	texts16 := append(append([]string{}, texts8...), texts8...)
+	b.Run("multi-text-labels3", func(b *testing.B) {
+		b.Run("serial8", func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, txt := range texts8 {
+					if _, err := EvalWithHosts(src, []string{txt}, midLabels, hosts, EvalOptions{}); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+		})
+		b.Run("batched8", func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := EvalWithHosts(src, texts8, midLabels, hosts, EvalOptions{}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+		b.Run("serial16", func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, txt := range texts16 {
+					if _, err := EvalWithHosts(src, []string{txt}, midLabels, hosts, EvalOptions{}); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+		})
+		b.Run("batched16", func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := EvalWithHosts(src, texts16, midLabels, hosts, EvalOptions{}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	})
+
 }
