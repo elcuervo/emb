@@ -194,6 +194,7 @@ func (c *Cache) Stats() CacheStats {
 	c.mu.Lock()
 	entries := c.ll.Len()
 	curBytes := c.curBytes
+	maxBytes := c.maxBytes
 	generation := c.generation
 	flushes := c.flushes
 	flushedEntries := c.flushedEntries
@@ -208,7 +209,7 @@ func (c *Cache) Stats() CacheStats {
 		Misses:            c.misses.Load(),
 		Evictions:         c.evictions.Load(),
 		Entries:           entries,
-		MaxBytes:          c.maxBytes,
+		MaxBytes:          maxBytes,
 		CurBytes:          curBytes,
 		ByModel:           byModel,
 		Generation:        generation,

@@ -383,10 +383,6 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 			return result, err
 		}
 		key := string(keyBytes)
-		if _, exists := seen[key]; exists {
-			return result, errors.New("duplicate snapshot key")
-		}
-		seen[key] = struct{}{}
 		model := modelOf(key)
 		cur, known := current[model]
 		if !known {
@@ -397,6 +393,10 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 			result.SkippedFingerprint++
 			continue
 		}
+		if _, exists := seen[key]; exists {
+			return result, errors.New("duplicate snapshot key")
+		}
+		seen[key] = struct{}{}
 		if result.Cache.restoreAppendMRU(key, value) {
 			result.Restored++
 		} else {

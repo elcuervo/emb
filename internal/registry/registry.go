@@ -506,7 +506,8 @@ func (r *Registry) Fingerprints() (map[string]ModelFingerprint, error) {
 	for _, entry := range models {
 		fingerprint, err := entry.Fingerprint()
 		if err != nil {
-			return nil, fmt.Errorf("fingerprinting model %q: %w", entry.Name, err)
+			log.Printf("snapshot: skipping model %q fingerprint: %v", entry.Name, err)
+			continue
 		}
 		result[entry.Name] = ModelFingerprint{Fingerprint: fingerprint, Dim: entry.Dim}
 	}

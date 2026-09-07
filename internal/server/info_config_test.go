@@ -493,7 +493,10 @@ func TestServerConfigPersistenceLiveControls(t *testing.T) {
 			t.Fatalf("CONFIG SET %s = %#v", setting[0], tok)
 		}
 	}
-	if srv.snapshot == nil || !srv.snapshot.Status().Enabled {
+	srv.persistenceMu.RLock()
+	snap := srv.snapshot
+	srv.persistenceMu.RUnlock()
+	if snap == nil || !snap.Status().Enabled {
 		t.Fatal("live cache_file did not enable persistence")
 	}
 	params := map[string]string{}
@@ -512,7 +515,10 @@ func TestServerConfigPersistenceLiveControls(t *testing.T) {
 	if tok := redisCmd(t, addr, "CONFIG", "SET", "cache_file", ""); tok.kind != "status" {
 		t.Fatalf("disabling persistence = %#v", tok)
 	}
-	if srv.snapshot.Status().Enabled {
+	srv.persistenceMu.RLock()
+	snap = srv.snapshot
+	srv.persistenceMu.RUnlock()
+	if snap.Status().Enabled {
 		t.Fatal("empty cache_file did not disable persistence")
 	}
 }

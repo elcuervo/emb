@@ -68,6 +68,7 @@ type snapshotCoordinator struct {
 
 	wake        chan struct{}
 	stop        chan struct{}
+	stopOnce   sync.Once
 	done        chan struct{}
 	ready       chan struct{}
 	ctx         context.Context
@@ -256,11 +257,7 @@ func (c *snapshotCoordinator) Shutdown(ctx context.Context) {
 		}
 	}
 	c.stopContext()
-	select {
-	case <-c.stop:
-	default:
-		close(c.stop)
-	}
+	c.stopOnce.Do(func() { close(c.stop) })
 	select {
 	case <-c.done:
 	case <-ctx.Done():
@@ -269,11 +266,7 @@ func (c *snapshotCoordinator) Shutdown(ctx context.Context) {
 
 func (c *snapshotCoordinator) Close() {
 	c.stopContext()
-	select {
-	case <-c.stop:
-	default:
-		close(c.stop)
-	}
+	c.stopOnce.Do(func() { close(c.stop) })
 	<-c.done
 	c.currentMu.Lock()
 	done := c.currentDone
@@ -290,8 +283,11 @@ func resolveSnapshotMemory(value string, total uint64, def int64, allowAuto bool
 	}
 	if strings.HasSuffix(v, "%") {
 		pct, err := strconv.ParseFloat(strings.TrimSuffix(v, "%"), 64)
-		if err != nil || pct <= 0 || pct > 100 || total == 0 {
+		if err != nil || pct <= 0 || pct > 100 {
 			return 0, fmt.Errorf("invalid memory percentage %q", value)
+		}
+		if total == 0 {
+			return def, nil
 		}
 		return int64(float64(total) * pct / 100), nil
 	}
