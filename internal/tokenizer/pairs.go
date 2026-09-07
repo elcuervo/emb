@@ -36,6 +36,12 @@ func (t *RefTokenizer) EncodePairOffsets(first, second string, maxLength int) ([
 	if maxLength <= 0 {
 		maxLength = DefaultMaxLength
 	}
+	if maxLength < 3 {
+		// The template needs at least prefix + inter-part [SEP] + trailing
+		// [SEP]; below that the pair cannot be represented, and no budget
+		// arithmetic could keep the result within maxLength.
+		return nil, nil, nil, 0, fmt.Errorf("pair encode: maxLength must be at least 3, got %d", maxLength)
+	}
 
 	// The template is [CLS] A [SEP] B [SEP]. A's encode already ends with the
 	// inter-part [SEP]; keep that structure when A is truncated (prefix +
@@ -48,7 +54,8 @@ func (t *RefTokenizer) EncodePairOffsets(first, second string, maxLength int) ([
 	offPrefixA := offA[:len(offA)-1]
 
 	// Budget the whole sequence including the trailing [SEP]: truncate B
-	// (usually the long context) first, then A's prefix.
+	// (usually the long context) first, then A's prefix. A zero budget drops
+	// B entirely (the result stays prefix + two separators).
 	budgetB := maxLength - len(idsA) - 1
 	if budgetB < 0 {
 		budgetB = 0
@@ -57,7 +64,9 @@ func (t *RefTokenizer) EncodePairOffsets(first, second string, maxLength int) ([
 		idsB, offB = truncatePairPart(idsB, offB, budgetB)
 	}
 
-	budgetPrefix := maxLength - len(idsB) - 2 // prefix + A's sep + trailing sep
+	// prefix + A's sep + trailing sep; with maxLength >= 3 this is >= 1 once
+	// B fits its budget, so a clamped prefix keeps the total <= maxLength.
+	budgetPrefix := maxLength - len(idsB) - 2
 	if budgetPrefix < 1 {
 		budgetPrefix = 1
 	}
@@ -135,9 +144,8 @@ func trimByMask(enc *tokenizers.Encoding) ([]int64, [][2]int, error) {
 }
 
 func truncatePairPart(ids []int64, off [][2]int, n int) ([]int64, [][2]int) {
-	if n <= 0 {
-		n = 1
-	}
+	// n may be zero (drop the part entirely); callers guarantee n >= 0 and
+	// never request more than len(ids).
 	if n > len(ids) {
 		n = len(ids)
 	}

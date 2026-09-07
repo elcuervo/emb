@@ -137,6 +137,13 @@ func (s *Server) handleScriptLoad(conn redcon.Conn, args []string) {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
+	// Reject oversized sources before they enter the source cache: EVAL/EVSHA
+	// enforce the same cap at evaluation time, so LOAD must not accept what a
+	// later EVSHA cannot run.
+	if len(src) > script.DefaultMaxScriptBytes {
+		conn.WriteError(fmt.Sprintf("ERR %v", script.ErrScriptTooLarge))
+		return
+	}
 	if err := script.Compile(src); err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return

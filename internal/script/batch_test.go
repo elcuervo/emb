@@ -170,6 +170,27 @@ func TestRunBatchValidationErrors(t *testing.T) {
 	}
 }
 
+func TestRunBatchMergedBudget(t *testing.T) {
+	// Individually valid fills whose PADDED merge exceeds the request budget
+	// must be rejected: 2 x 3M + 1 elements fit an 8M budget, but the merged
+	// tensor (3 items x 3M) does not.
+	src := `
+local items = {
+  { x = {shape = {1, 3000000}, fill = 0, dtype = "f32"} },
+  { x = {shape = {1, 3000000}, fill = 0, dtype = "f32"} },
+  { x = {shape = {1, 1},       fill = 1, dtype = "f32"} },
+}
+emb.run_batch(items)
+return "ok"`
+	if _, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func([]onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			return map[string]onnx.NamedTensor{}, nil
+		},
+	}, EvalOptions{MaxTensorElements: 8_000_000}); err == nil {
+		t.Fatal("expected the merged batch tensor to exceed the request budget")
+	}
+}
+
 func TestRunBatchFillItems(t *testing.T) {
 	// Batch items may declare constant (fill) inputs; the merged tensor is the
 	// per-dimension max shape with the constant in every row.

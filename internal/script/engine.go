@@ -49,6 +49,10 @@ type EvalOptions struct {
 	Deadline time.Duration
 	// MaxScriptBytes bounds source size; zero uses DefaultMaxScriptBytes.
 	MaxScriptBytes int
+	// MaxTensorElements bounds the total tensor elements the evaluation may
+	// allocate across emb.run / emb.run_batch (data, fill, and padded batch
+	// merges); zero uses DefaultMaxRequestElements.
+	MaxTensorElements int64
 }
 
 // Eval compiles and runs `source` in a fresh sandboxed Lua state with KEYS and
@@ -103,7 +107,16 @@ func runProto(proto *lua.FunctionProto, keys, argv []string, hosts Hosts, opts E
 	ls.SetGlobal("KEYS", stringTable(ls, keys))
 	ls.SetGlobal("ARGV", stringTable(ls, argv))
 
-	ctx, cancel := context.WithTimeout(context.Background(), opts.Deadline)
+	// The context carries the evaluation's tensor budget (shared by every host
+	// call in this run) alongside the deadline.
+	maxTensors := opts.MaxTensorElements
+	if maxTensors <= 0 {
+		maxTensors = DefaultMaxRequestElements
+	}
+	ctx, cancel := context.WithTimeout(
+		context.WithValue(context.Background(), tensorBudgetCtxKey{}, newTensorBudget(maxTensors)),
+		opts.Deadline,
+	)
 	defer cancel()
 	ls.SetContext(ctx)
 

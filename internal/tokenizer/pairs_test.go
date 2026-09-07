@@ -154,3 +154,28 @@ func TestEncodePairOffsetsTruncation(t *testing.T) {
 		t.Fatalf("sep %d out of range for %d ids", sep, len(ids))
 	}
 }
+
+func TestEncodePairOffsetsBudgetBoundaries(t *testing.T) {
+	tok := refTokenizer(t)
+	defer tok.Close()
+
+	// Below the three-token template minimum the pair is rejected outright.
+	for _, n := range []int{1, 2} {
+		if _, _, _, _, err := tok.EncodePairOffsets("a", "b", n); err == nil {
+			t.Fatalf("maxLength=%d should be rejected (template needs 3 tokens)", n)
+		}
+	}
+
+	// At the minimum the pair is exactly prefix + inter-sep + trailing sep;
+	// the second part is dropped entirely rather than over-filling the budget.
+	ids, _, _, sep, err := tok.EncodePairOffsets("a", "b", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) > 3 {
+		t.Fatalf("maxLength=3 returned %d ids, want <= 3", len(ids))
+	}
+	if sep < 2 || sep > len(ids) {
+		t.Fatalf("sep %d out of range for %d ids", sep, len(ids))
+	}
+}

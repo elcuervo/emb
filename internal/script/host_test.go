@@ -310,6 +310,62 @@ return out.x.data[1]`
 	}
 }
 
+func TestTensorBudgetCharge(t *testing.T) {
+	b := &tensorBudget{remaining: 100}
+	if err := b.charge(40); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.charge(60); err != nil {
+		t.Fatal("an exact fit must be allowed")
+	}
+	if err := b.charge(1); err == nil {
+		t.Fatal("over-budget charge must error")
+	}
+	if err := (&tensorBudget{remaining: DefaultMaxRequestElements}).charge(maxFillElements + 1); err == nil {
+		t.Fatal("the per-tensor cap must apply")
+	}
+}
+
+func TestHostRequestWideTensorBudget(t *testing.T) {
+	// Individually valid fills must still respect the request-wide element
+	// budget across host calls in ONE evaluation (a loop of emb.run calls).
+	// 2 x 3M fit an 8M budget; the third call must be rejected.
+	src := `
+for i = 1, 3 do
+  emb.run({ x = {shape = {1, 3000000}, fill = 0, dtype = "f32"} })
+end
+return "ok"`
+	if _, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func([]onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			return map[string]onnx.NamedTensor{}, nil
+		},
+	}, EvalOptions{MaxTensorElements: 8_000_000}); err == nil {
+		t.Fatal("expected the request-wide tensor budget to be exhausted")
+	}
+}
+
+func TestHostDataTensorPerTensorCap(t *testing.T) {
+	// A data tensor larger than the per-tensor cap is rejected before the Go
+	// slice is allocated.
+	var got onnx.NamedTensor
+	src := `
+local x = {}
+for i = 1, 20000000 do x[i] = 1 end
+emb.run({ x = {shape = {1, 20000000}, data = x} })
+return "ok"`
+	if _, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			got = inputs[0]
+			return map[string]onnx.NamedTensor{}, nil
+		},
+	}, EvalOptions{MaxTensorElements: 8_000_000}); err == nil {
+		t.Fatal("expected the oversized data tensor to be rejected")
+	}
+	if got.Int64 != nil && got.Float != nil {
+		t.Fatal("data tensor must not be allocated past the cap")
+	}
+}
+
 func TestHostRunFillWithinLimit(t *testing.T) {
 	// A legitimately large constant tensor (the fused-CLIP pixel_values
 	// shape) still fits under maxFillElements.

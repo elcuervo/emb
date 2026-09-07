@@ -31,15 +31,17 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 
-	// Parse each item into a named-tensor set (same production rules as emb.run).
+	// Parse each item into a named-tensor set (same production rules as emb.run),
+	// charging one request-wide tensor budget across all items and the merge.
 	items := make([][]onnx.NamedTensor, 0, itemsTab.Len())
+	budget := requestBudget(ls)
 	for i := 1; i <= itemsTab.Len(); i++ {
 		spec, ok := itemsTab.RawGetInt(i).(*lua.LTable)
 		if !ok {
 			ls.RaiseError("emb.run_batch: item %d must be a table of named inputs", i)
 			return 0
 		}
-		inputs, err := namedInputsFromTable(ls, spec)
+		inputs, err := namedInputsFromTable(ls, spec, budget)
 		if err != nil {
 			ls.RaiseError("emb.run_batch: item %d: %v", i, err)
 			return 0
@@ -85,7 +87,7 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 		}
 	}
 
-	merged, err := mergeBatch(items, names)
+	merged, err := mergeBatch(items, names, budget)
 	if err != nil {
 		ls.RaiseError("emb.run_batch: %v", err)
 		return 0
@@ -117,8 +119,9 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 }
 
 // namedInputsFromTable parses one emb.run-style input table into ordered
-// named tensors (the same rules as runHost's argument parsing).
-func namedInputsFromTable(ls *lua.LState, arg *lua.LTable) ([]onnx.NamedTensor, error) {
+// named tensors (the same rules as runHost's argument parsing), charging the
+// evaluation's tensor budget for every allocation.
+func namedInputsFromTable(ls *lua.LState, arg *lua.LTable, budget *tensorBudget) ([]onnx.NamedTensor, error) {
 	var names []string
 	arg.ForEach(func(k, _ lua.LValue) {
 		if s, ok := k.(lua.LString); ok {
@@ -132,7 +135,7 @@ func namedInputsFromTable(ls *lua.LState, arg *lua.LTable) ([]onnx.NamedTensor, 
 		if !ok {
 			return nil, fmt.Errorf("input %q must be a table {shape=..., data=...|fill=...}", name)
 		}
-		t, err := namedTensorFromLua(spec)
+		t, err := namedTensorFromLua(spec, budget)
 		if err != nil {
 			return nil, fmt.Errorf("input %q: %w", name, err)
 		}
@@ -149,7 +152,7 @@ func namedInputsFromTable(ls *lua.LState, arg *lua.LTable) ([]onnx.NamedTensor, 
 // inner dimensions differ from the padded maximums, its data is scattered per
 // row so padding lands in the correct cells (a naive contiguous copy would
 // misplace it or overwrite the next item's row).
-func mergeBatch(items [][]onnx.NamedTensor, names []string) ([]onnx.NamedTensor, error) {
+func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget) ([]onnx.NamedTensor, error) {
 	n := len(items)
 	merged := make([]onnx.NamedTensor, 0, len(names))
 	for _, name := range names {
@@ -184,6 +187,11 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string) ([]onnx.NamedTensor,
 		}
 
 		inner := innerInt(maxShape[1:])
+		// Charge the padded merged allocation against the request budget too:
+		// n*inner can exceed the sum of the items' tensor sizes (padding).
+		if err := budget.charge(int64(n) * int64(inner)); err != nil {
+			return nil, fmt.Errorf("merged input %q: %w", name, err)
+		}
 		var out onnx.NamedTensor
 		out.Name = name
 		out.Shape = maxShape

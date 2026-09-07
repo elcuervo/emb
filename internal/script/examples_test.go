@@ -121,6 +121,64 @@ func TestExampleQA(t *testing.T) {
 	}
 }
 
+func TestExampleQARegressionTrailingSep(t *testing.T) {
+	// If the trailing [SEP] token (zero-offset) were a span candidate, a peak
+	// there would win the search and yield an empty answer. Excluding it must
+	// surface the real answer from the context.
+	rt, err := tokenizer.NewTokenizer("../../models/minilm/tokenizer.json", false)
+	if err != nil {
+		t.Skip(err)
+	}
+	defer rt.Close()
+	ids, _, _, err := rt.EncodeOffsets("1976", 512)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var targetID int64
+	for _, id := range ids {
+		if id > 0 && id != 101 && id != 102 { // skip [CLS]/[SEP]
+			targetID = id
+			break
+		}
+	}
+	if targetID == 0 {
+		t.Fatal("no target token found")
+	}
+
+	question := "when was the Mac launched"
+	context := "Apple launched the Mac in 1976."
+	run := func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+		var pair []int64
+		for _, in := range inputs {
+			if in.Name == "input_ids" {
+				pair = in.Int64
+			}
+		}
+		n := len(pair)
+		start := make([]float32, n)
+		end := make([]float32, n)
+		for i := range start {
+			start[i], end[i] = -1, -1
+		}
+		// The 1976 token peaks at 2+2; the trailing [SEP] (index n-1, spans
+		// nothing) peaks at 5+5, so it would win unless excluded.
+		for i, id := range pair {
+			if id == targetID {
+				start[i], end[i] = 2, 2
+			}
+		}
+		start[n-1], end[n-1] = 5, 5
+		return map[string]onnx.NamedTensor{
+			"start_logits": {Name: "start_logits", Shape: []int64{1, int64(n)}, DType: onnx.TensorFloat32, Float: start},
+			"end_logits":   {Name: "end_logits", Shape: []int64{1, int64(n)}, DType: onnx.TensorFloat32, Float: end},
+		}, nil
+	}
+	reply := evalExample(t, "qa.lua", []string{question, context}, nil, run)
+	if !containsReply(reply, "1976") {
+		t.Fatalf("trailing [SEP] must not win the span search: %q", reply)
+	}
+}
+
 func TestExampleSiglip2(t *testing.T) {
 	// The fused-CLIP text branch: pixel_values arrives as a host-built zero
 	// fill (no Lua data table) and the reply is ONE raw float32 bulk, L2-

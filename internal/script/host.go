@@ -18,6 +18,52 @@ import (
 // pathological spec from exhausting server memory.
 const maxFillElements = 16 * 1024 * 1024
 
+// maxRequestElements bounds the total tensor elements a single evaluation may
+// allocate across all emb.run / emb.run_batch host calls (64M ≈ 256MB at 4
+// bytes/element). Data tensors, fill tensors, and merged batch tensors all
+// charge this budget, so a script cannot sidestep the per-tensor cap by
+// issuing many specs (e.g. a large emb.run_batch of individually valid fills)
+// or many emb.run calls in a loop.
+const maxRequestElements = 64 * 1024 * 1024
+
+// DefaultMaxRequestElements is the default per-evaluation tensor element
+// budget (EvalOptions.MaxTensorElements when unset).
+const DefaultMaxRequestElements = int64(maxRequestElements)
+
+// tensorBudget tracks an evaluation's remaining tensor element allowance. It
+// hangs off the evaluation context so every host call within one evaluation
+// shares a single budget.
+type tensorBudget struct{ remaining int64 }
+
+type tensorBudgetCtxKey struct{}
+
+func newTensorBudget(remaining int64) *tensorBudget { return &tensorBudget{remaining: remaining} }
+
+// requestBudget returns the evaluation's budget from the Lua context, or a
+// fresh one when the evaluation bypasses runProto (defensive; all server and
+// unit paths go through runProto).
+func requestBudget(ls *lua.LState) *tensorBudget {
+	if ctx := ls.Context(); ctx != nil {
+		if b, ok := ctx.Value(tensorBudgetCtxKey{}).(*tensorBudget); ok {
+			return b
+		}
+	}
+	return newTensorBudget(DefaultMaxRequestElements)
+}
+
+// charge consumes count elements, enforcing the per-tensor cap and the
+// request-wide allowance before the caller allocates.
+func (b *tensorBudget) charge(count int64) error {
+	if count > maxFillElements {
+		return fmt.Errorf("tensor exceeds max elements (%d)", maxFillElements)
+	}
+	if count > b.remaining {
+		return fmt.Errorf("request exceeds total tensor element limit (%d)", maxRequestElements)
+	}
+	b.remaining -= count
+	return nil
+}
+
 // Hosts binds a script evaluation to the resources it may touch: the model's
 // named-tensor session and its tokenizer capabilities. All are optional; a
 // binding with only Run lets scripts do arbitrary graph IO without
@@ -96,13 +142,14 @@ func runHost(ls *lua.LState, h Hosts) int {
 	sort.Strings(names)
 
 	inputs := make([]onnx.NamedTensor, 0, len(names))
+	budget := requestBudget(ls)
 	for _, name := range names {
 		spec, ok := arg.RawGetString(name).(*lua.LTable)
 		if !ok {
 			ls.RaiseError("emb.run: input %q must be a table {shape=..., data=...|fill=...}", name)
 			return 0
 		}
-		t, err := namedTensorFromLua(spec)
+		t, err := namedTensorFromLua(spec, budget)
 		if err != nil {
 			ls.RaiseError("emb.run: input %q: %v", name, err)
 			return 0
@@ -250,7 +297,7 @@ func tokenizeHost(ls *lua.LState, h Hosts) int {
 // overrides both inference rules (zero-filled float tensors like fused-CLIP
 // pixel_values are all-integral and would misinfer as int64). fill and data
 // are mutually exclusive.
-func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
+func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTensor, error) {
 	var t onnx.NamedTensor
 	if shapeTab, ok := spec.RawGetString("shape").(*lua.LTable); ok {
 		shape, err := int64ArrayFromLua(shapeTab)
@@ -294,6 +341,9 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 		if err != nil {
 			return t, fmt.Errorf("data: %w", err)
 		}
+		if err := budget.charge(int64(len(data))); err != nil {
+			return t, fmt.Errorf("data: %w", err)
+		}
 		t.DType = dtypeFor(explicitDType, data)
 		switch t.DType {
 		case onnx.TensorFloat32:
@@ -327,9 +377,9 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 			return t, fmt.Errorf("shape element count overflows")
 		}
 		count *= d
-		if count > maxFillElements {
-			return t, fmt.Errorf("shape exceeds max fill elements (%d)", maxFillElements)
-		}
+	}
+	if err := budget.charge(count); err != nil {
+		return t, fmt.Errorf("fill: %w", err)
 	}
 	t.DType = dtypeFor(explicitDType, []float64{float64(fillVal)})
 	switch t.DType {

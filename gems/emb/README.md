@@ -78,7 +78,7 @@ coalescing with `lazy: :multi` or concurrent fan-out with `lazy: :batch` — glo
 can take over a second of inference on a shared CPU, and redis-client's silent default is
 1.0s — a slower reply times out. The gem therefore defaults to an explicit 10s timeout
 and `reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
-`Emb::ServerError` (see [Lazy execution modes](#lazy-execution-modes)). Set
+`Emb::ServerError` (see [Lazy batching](#lazy-batching)). Set
 `Emb.configure { |c| c.reconnect_attempts = 2 }` and redis-client re-sends
 **connection and protocol failures** up to that many extra times before the batch fails
 closed — each re-send re-runs server inference, so keep the budget small. Operation
@@ -366,7 +366,7 @@ actually a float vector / hash at the decodable position, raises
 `ArgumentError`. A raw bulk can always be decoded by hand with
 `reply.unpack("e*")`.
 
-### Lazy batching (`Emb.batch`)
+### Lazy batching
 
 In `:batch` mode the shares fan out across the configured instances (one share per
 instance when the share count allows) or across the instance's pool connections when a

@@ -236,7 +236,12 @@ bench-ruby-multi config="bench-cpu-partition.yaml":
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=$half $(aff0) ./bin/emb -config {{config}} & echo $! > "$tmp/pid0"; \
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=$half $(aff1) ./bin/emb -config "$tmp/node2.yaml" & echo $! > "$tmp/pid1"; \
     sleep 2; \
-    until redis-cli -p 16379 ping >/dev/null 2>&1 && redis-cli -p 16380 ping >/dev/null 2>&1; do sleep 1; done; \
+    deadline=$(( $(date +%s) + 60 )); \
+    until redis-cli -p 16379 ping >/dev/null 2>&1 && redis-cli -p 16380 ping >/dev/null 2>&1; do \
+        kill -0 "$(cat "$tmp/pid0")" 2>/dev/null && kill -0 "$(cat "$tmp/pid1")" 2>/dev/null || { echo "ERROR: an EMB node exited during startup"; exit 1; }; \
+        [ "$(date +%s)" -lt "$deadline" ] || { echo "ERROR: EMB nodes did not become ready within 60 seconds"; exit 1; }; \
+        sleep 1; \
+    done; \
     bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(expr {{app_cpus}} + {{bench_cpus}} - 1)"; }; \
     echo "Both nodes ready — running client harness (benchmark partition: $(bench), EMB_BENCH_PORT2=16380)"; \
     (cd gems/emb && EMB_BENCH_PORT2=16380 EMB_BENCH_APP_CPUS={{app_cpus}} EMB_BENCH_BENCH_CPUS={{bench_cpus}} $(bench) bundle exec ruby bench/bench.rb); \

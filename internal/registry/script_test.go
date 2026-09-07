@@ -29,6 +29,20 @@ func scriptFixture(t *testing.T, workers int, preload bool) *ModelEntry {
 	if err != nil {
 		t.Skipf("test model not present: %v (run: just download-model)", err)
 	}
+	// Close any scripted sessions/tokenizer the test opens before the ONNX
+	// environment is destroyed (cleanups run LIFO: registering this after
+	// DestroyEnvironment means it runs first).
+	t.Cleanup(func() {
+		if entry.scriptRes == nil {
+			return
+		}
+		for _, sess := range entry.scriptRes.Sessions() {
+			_ = sess.Close()
+		}
+		if entry.scriptRes.Tokenizer != nil {
+			_ = entry.scriptRes.Tokenizer.Close()
+		}
+	})
 	return entry
 }
 
