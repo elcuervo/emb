@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
+require_relative 'script_reply_decode'
+
 module Emb
   # Server-status and runtime-config command wrappers. They only depend on
   # #send_command, so they live in this module (included into Emb::Client)
   # rather than growing the client class.
   module Commands
+    include ScriptReplyDecode
+
     # EMB.STATS as a Symbol-keyed Hash. No client-side type layer: values are
     # exactly what the RESP decoder returned (Integer where the server sends
     # RESP integers, String otherwise).
@@ -22,18 +26,21 @@ module Emb
     # Evaluate a script against a model (EMB.EVAL). texts become the script's
     # KEYS, args its ARGV. Replies are typed per the reply grammar: hash
     # replies (flat field/value pair arrays under RESP2) become Ruby Hashes,
-    # nested values recurse.
-    def eval(model, script, texts, args = [])
+    # nested values recurse. decode: opt-in float decoding — see
+    # parse_script_reply (decode: :f32 or decode: {field => :f32}).
+    def eval(model, script, texts, args = [], decode: nil)
       texts = Array(texts)
+      schema = normalize_decode(decode)
       reply = send_command('EMB.EVAL', model.to_s, script, texts.size, *texts.map(&:to_s), *args.map(&:to_s))
-      parse_script_reply(reply, multi: texts.size > 1)
+      parse_script_reply(reply, multi: texts.size > 1, decode: schema)
     end
 
     # Evaluate a previously loaded script by SHA1 (EMB.EVSHA). See #eval.
-    def evalsha(model, sha, texts, args = [])
+    def evalsha(model, sha, texts, args = [], decode: nil)
       texts = Array(texts)
+      schema = normalize_decode(decode)
       reply = send_command('EMB.EVSHA', model.to_s, sha, texts.size, *texts.map(&:to_s), *args.map(&:to_s))
-      parse_script_reply(reply, multi: texts.size > 1)
+      parse_script_reply(reply, multi: texts.size > 1, decode: schema)
     end
 
     # EMB.SCRIPT subcommands: a small command object so the surface reads
@@ -73,9 +80,19 @@ module Emb
     # array becomes a Hash, recursively. Pure even-length string lists are
     # indistinguishable from two-field hashes on the RESP2 wire, so scripts
     # that must return them should nest them (wrap the list in a table).
-    def parse_script_reply(reply, multi:)
+    #
+    # decode is the normalized (see normalize_decode) opt-in float decoding:
+    #   nil                        → no decoding, parsing exactly as before
+    #   :f32                       → each value position is unpack('e*')'d when
+    #                                it is a packed float bulk; numeric arrays
+    #                                pass through as floats
+    #   {field => :f32, ...}       → after hash parsing, the named field(s) of
+    #                                each hash reply decode as :f32 (fields
+    #                                absent from a reply are left untouched)
+    def parse_script_reply(reply, multi:, decode: nil)
       parsed = (multi ? reply : [reply]).map { |v| script_hash(v) }
-      multi ? parsed : parsed.first
+      decoded = apply_decode(parsed, decode)
+      multi ? decoded : decoded.first
     end
 
     def script_hash(value)

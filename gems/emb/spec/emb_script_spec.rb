@@ -72,5 +72,90 @@ RSpec.describe Emb do
           .to raise_error(RedisClient::CommandError, /compiling/)
       end
     end
+
+    describe 'script reply decoding' do
+      # emb.math.float32_bytes is a host block available to every script, so
+      # these exercise the decode layer without any model inference.
+      let(:pack4) { 'return emb.math.float32_bytes({1, 2, 3, 4})' }
+      let(:multi_pack) do
+        <<~LUA
+          local out = {}
+          for i = 1, #KEYS do
+            local v = {}
+            for j = 1, 4 do v[j] = i + j end
+            out[i] = emb.math.float32_bytes(v)
+          end
+          return out
+        LUA
+      end
+
+      it 'decodes a packed vector reply to floats, byte-identical to manual unpack' do
+        decoded = described_class.eval(:minilm, pack4, ['x'], [], decode: :f32)
+        expect(decoded).to eq([1.0, 2.0, 3.0, 4.0])
+
+        raw = described_class.eval(:minilm, pack4, ['x']) # no decode -> opaque bulk
+        expect(raw.unpack('e*')).to eq(decoded)
+      end
+
+      it 'decodes each element of a multi-text reply' do
+        decoded = described_class.eval(:minilm, multi_pack, %w[a b], [], decode: :f32)
+        expect(decoded).to eq([[2.0, 3.0, 4.0, 5.0], [3.0, 4.0, 5.0, 6.0]])
+      end
+
+      it 'decodes a named hash field' do
+        script = 'return {dim = 4, embedding = emb.math.float32_bytes({1, 2, 3, 4})}'
+        decoded = described_class.eval(:minilm, script, ['x'], [], decode: { embedding: :f32 })
+        expect(decoded).to eq('dim' => 4, 'embedding' => [1.0, 2.0, 3.0, 4.0])
+      end
+
+      it 'decodes the named field of each per-text hash' do
+        script = <<~LUA
+          local out = {}
+          for i = 1, #KEYS do
+            out[i] = { dim = 4, embedding = emb.math.float32_bytes({i, i + 1, i + 2, i + 3}) }
+          end
+          return out
+        LUA
+        decoded = described_class.eval(:minilm, script, %w[a b], [], decode: { embedding: :f32 })
+        expect(decoded).to eq([
+                                { 'dim' => 4, 'embedding' => [1.0, 2.0, 3.0, 4.0] },
+                                { 'dim' => 4, 'embedding' => [2.0, 3.0, 4.0, 5.0] }
+                              ])
+      end
+
+      it 'passes numeric-array replies through as floats' do
+        expect(described_class.eval(:minilm, 'return {1, 2, 3, 4}', ['x'], [], decode: :f32)).to eq([1, 2, 3, 4])
+      end
+
+      it 'leaves hash fields absent from a reply untouched' do
+        expect(described_class.eval(:minilm, 'return {dim = 4}', ['x'], [], decode: { embedding: :f32 }))
+          .to eq('dim' => 4)
+      end
+
+      it 'keeps existing parsing when decode is omitted' do
+        expect(described_class.eval(:minilm, 'return {PERSON = {KEYS[1]}, score = 98}', ['Tim Cook']))
+          .to eq('PERSON' => ['Tim Cook'], 'score' => 98)
+      end
+
+      it 'raises for an unknown decode mode before any command is sent' do
+        expect { described_class.eval(:minilm, 'return 1', ['x'], [], decode: :bidirectional) }
+          .to raise_error(ArgumentError, /unsupported decode mode :bidirectional/)
+      end
+
+      it 'raises for :f32 on a hash reply' do
+        expect { described_class.eval(:minilm, 'return {label = "x"}', ['x'], [], decode: :f32) }
+          .to raise_error(ArgumentError, /expected a float32-packed bulk or a numeric array/)
+      end
+
+      it 'raises for a bulk that is not a multiple of 4 bytes' do
+        expect { described_class.eval(:minilm, 'return "abc"', ['x'], [], decode: :f32) }
+          .to raise_error(ArgumentError, /not a multiple of 4/)
+      end
+
+      it 'raises for {field => :f32} on a non-hash reply' do
+        expect { described_class.eval(:minilm, pack4, ['x'], [], decode: { embedding: :f32 }) }
+          .to raise_error(ArgumentError, /expected a hash reply/)
+      end
+    end
   end
 end

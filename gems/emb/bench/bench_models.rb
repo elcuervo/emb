@@ -85,13 +85,13 @@ puts 'scenario              ops  total(ms) per-op(ms)      req/s      p50      p
 sig_client = eager_client(port)
 script = File.read(File.expand_path('../../../examples/scripts/siglip2.lua', __dir__))
 sha = sig_client.script.load(:siglip2, script)
-# One warm call: parse_script_reply passes the single bulk string through, and
-# unpack('e*') turns it back into 768 float32s (dim must match the graph).
-sig_vec = sig_client.evalsha(:siglip2, sha, [LINE], ['normalize']).unpack('e*')
+# One warm call: decode: :f32 turns the single packed float32 bulk back into
+# 768 floats (dim must match the graph); the raw String would need unpack('e*').
+sig_vec = sig_client.evalsha(:siglip2, sha, [LINE], ['normalize'], decode: :f32)
 abort "siglip2: expected 768 dims, got #{sig_vec.size}" unless sig_vec.size == 768
 sig_base = median_of([5].map do |_i|
   t0 = ms
-  sig_client.evalsha(:siglip2, sha, [LINE], ['normalize'])
+  sig_client.evalsha(:siglip2, sha, [LINE], ['normalize'], decode: :f32)
   ms - t0
 end)
 samples, total, ops = run_threads(threads, texts, -> { eager_client(port) }) do |cli, t, _worker|

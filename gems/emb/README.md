@@ -322,6 +322,36 @@ client.multi do |m|
 end
 ```
 
+### Script replies
+
+`Emb.eval` / `Emb.evalsha` run a Lua script against a model (KEYS = texts,
+ARGV = args) and parse replies through the RESP grammar — hashes, arrays,
+strings, errors. Unlike the embed path, a scripted reply has no fixed shape,
+so packed vectors are **not** auto-decoded: a `float32_bytes` reply comes back
+as the raw bulk String. Decode it per call with the `decode:` keyword:
+
+```ruby
+sha = client.script.load(:siglip2, siglip_source)
+
+# decode: :f32 — the reply is a packed float32 vector (or a numeric array)
+vec = client.evalsha(:siglip2, sha, ["a photo of a cat"], ["normalize"], decode: :f32)
+# => [0.0123, -0.0456, ...]  768 floats
+
+# multi-text replies decode each element
+vecs = client.evalsha(:siglip2, sha, ["a", "b"], ["normalize"], decode: :f32)
+# => [[0.0123, ...], [-0.0456, ...]]
+
+# decode: {field => :f32} — structured replies decode a named field
+out = client.evalsha(:siglip2, sha, ["a"], ["normalize"], decode: { embedding: :f32 })
+# => {"dim" => 768, "embedding" => [0.0123, ...]}
+```
+
+`decode:` defaults to `nil` (no decoding, exactly today's behavior). Supported
+modes are `:f32` and `{field => :f32}`; anything else, or a reply that is not
+actually a float vector / hash at the decodable position, raises
+`ArgumentError`. A raw bulk can always be decoded by hand with
+`reply.unpack("e*")`.
+
 ### Lazy batching (`Emb.batch`)
 
 Instead of collecting pairs by hand, `Emb.batch` returns lazy embeddings that all
