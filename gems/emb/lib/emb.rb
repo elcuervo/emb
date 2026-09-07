@@ -36,6 +36,8 @@ module Emb
     def info(name)  = default_client.info(name)
     def stats       = default_client.stats
     def server_info(*sections)  = default_client.server_info(*sections)
+    def cache_flush(model = nil) = default_client.cache_flush(model)
+    def save_cache               = default_client.save_cache
     def config                  = default_client.config
     def help        = default_client.help
     def ping        = default_client.ping

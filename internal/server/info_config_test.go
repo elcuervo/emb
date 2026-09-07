@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -476,6 +477,78 @@ func TestServerConfigSetCacheDisabledAtBoot(t *testing.T) {
 	addr := serveTest(t) // no cache at boot
 	if got := errorOf(t, redisCmd(t, addr, "CONFIG", "SET", "cache", "1MB")); got == "" {
 		t.Fatal("expected error enabling a disabled-at-boot cache")
+	}
+}
+
+func TestServerConfigPersistenceLiveControls(t *testing.T) {
+	addr, srv := serveTestWithCacheOptions(t, "100MB")
+	file := filepath.Join(t.TempDir(), "cache.embcache")
+	for _, setting := range [][2]string{
+		{"cache_file", file},
+		{"cache_save", "1h"},
+		{"cache_save_on_shutdown", "false"},
+		{"cache_save_rate_limit", "25MB/s"},
+	} {
+		if tok := redisCmd(t, addr, "CONFIG", "SET", setting[0], setting[1]); tok.kind != "status" || tok.val != "OK" {
+			t.Fatalf("CONFIG SET %s = %#v", setting[0], tok)
+		}
+	}
+	srv.persistenceMu.RLock()
+	snap := srv.snapshot
+	srv.persistenceMu.RUnlock()
+	if snap == nil || !snap.Status().Enabled {
+		t.Fatal("live cache_file did not enable persistence")
+	}
+	params := map[string]string{}
+	elems := arrayOf(t, redisCmd(t, addr, "CONFIG", "GET", "cache*"))
+	for i := 0; i+1 < len(elems); i += 2 {
+		params[bulkOf(t, elems[i])] = bulkOf(t, elems[i+1])
+	}
+	if params["cache_file"] != file || params["cache_save"] != "1h" || params["cache_save_rate_limit"] != "25MB/s" {
+		t.Fatalf("CONFIG GET persistence = %#v", params)
+	}
+	for _, key := range []string{"cache_load", "cache_restore_limit", "cache_restore_reserve"} {
+		if got := errorOf(t, redisCmd(t, addr, "CONFIG", "SET", key, "false")); !strings.Contains(got, "read-only") {
+			t.Fatalf("CONFIG SET %s error = %q", key, got)
+		}
+	}
+	if tok := redisCmd(t, addr, "CONFIG", "SET", "cache_file", ""); tok.kind != "status" {
+		t.Fatalf("disabling persistence = %#v", tok)
+	}
+	srv.persistenceMu.RLock()
+	snap = srv.snapshot
+	srv.persistenceMu.RUnlock()
+	if snap.Status().Enabled {
+		t.Fatal("empty cache_file did not disable persistence")
+	}
+}
+
+func TestPersistenceControlGate(t *testing.T) {
+	gate := func(addr, password string) bool {
+		s := &Server{addr: addr}
+		s.password.Store(password)
+		return s.persistenceControlAllowed()
+	}
+	// Loopback addresses permit live persistence control without a password.
+	for _, addr := range []string{"127.0.0.1:6379", "localhost:6379", "[::1]:6379"} {
+		if !gate(addr, "") {
+			t.Errorf("loopback address %q was gated without a password", addr)
+		}
+	}
+	// Exposed listeners require a configured password for cache_file/EMB.SAVE.
+	for _, addr := range []string{":6379", "0.0.0.0:6379", "10.1.2.3:6379", "not-an-address"} {
+		if gate(addr, "") {
+			t.Errorf("exposed address %q allowed persistence control without a password", addr)
+		}
+		if !gate(addr, "hunter2") {
+			t.Errorf("exposed address %q with a password was gated", addr)
+		}
+	}
+	// The live setter itself rejects the default exposed/no-password case.
+	exposed := &Server{addr: ":6379"}
+	exposed.password.Store("")
+	if err := exposed.setConfigCacheFile("/tmp/attacker.embcache"); err == nil {
+		t.Error("CONFIG SET cache_file accepted on exposed listener without a password")
 	}
 }
 

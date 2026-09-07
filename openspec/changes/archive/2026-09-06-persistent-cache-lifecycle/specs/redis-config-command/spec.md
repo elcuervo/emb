@@ -1,27 +1,4 @@
-## Purpose
-
-Redis-style `CONFIG GET` / `CONFIG SET` over RESP2 so operators can inspect and change the server's runtime-settable parameters without touching the YAML config or restarting.
-
-## Requirements
-
-### Requirement: CONFIG GET
-
-The server SHALL respond to `CONFIG GET` (no pattern) or `CONFIG GET <glob>` with a RESP2 flat array of `parameter value` bulk-string pairs for parameters whose name matches the glob (`*` matches all; glob syntax = `*` and `?`, like Redis). The response SHALL include both runtime-editable and read-only parameters. Unmatched globs SHALL return an empty array (not an error).
-
-#### Scenario: No pattern returns all parameters
-
-- **WHEN** a client sends `CONFIG GET`
-- **THEN** the reply SHALL be an array containing at least the parameters `cache`, `password`, `listen`, `tls_cert`, `tls_key`, `models`, `cache_file`, and `cache_save`, each followed by its current value
-
-#### Scenario: Glob filters parameters
-
-- **WHEN** a client sends `CONFIG GET cache*`
-- **THEN** the reply SHALL contain only parameters starting with `cache` (e.g., `cache`, `cache_file`, `cache_save`)
-
-#### Scenario: Unmatched glob
-
-- **WHEN** a client sends `CONFIG GET nonexistent*`
-- **THEN** the reply SHALL be an empty array
+## MODIFIED Requirements
 
 ### Requirement: CONFIG SET for editable parameters
 
@@ -78,23 +55,7 @@ The server SHALL accept `CONFIG SET <param> <value>` and apply the change immedi
 - **THEN** the server SHALL reply with an error
 - **AND** the relevant cache budget, persistence setting, and scheduler SHALL remain unchanged
 
-### Requirement: CONFIG SET rejects read-only parameters
-
-The server SHALL reply with an error for `CONFIG SET` on read-only/restart-only parameters: `listen`, `tls_cert`, `tls_key`, and `models`.
-
-#### Scenario: Read-only parameter refused
-
-- **WHEN** `CONFIG SET listen :9999` is issued
-- **THEN** the server SHALL reply with an error naming the parameter as read-only (no listener change occurs)
-
-### Requirement: Config commands require authentication
-
-When a password is configured, `CONFIG GET` and `CONFIG SET` SHALL require prior `AUTH` (unlike `INFO`, which is probe-exempt).
-
-#### Scenario: Pre-auth CONFIG is refused
-
-- **WHEN** a password is configured and a client sends `CONFIG GET` without authenticating
-- **THEN** the server SHALL reply with `NOAUTH Authentication required.`
+## ADDED Requirements
 
 ### Requirement: Snapshot configuration is available at startup
 The YAML configuration and CLI SHALL accept `cache_file`, `cache_load`, `cache_save`, `cache_save_on_shutdown`, `cache_restore_limit`, `cache_restore_reserve`, and `cache_save_rate_limit`. Defaults SHALL be empty file, load enabled, empty periodic interval, shutdown save enabled when a file exists, automatic restore limit, 10-percent host reserve, and unlimited save rate. Sizes and rates SHALL accept documented human-readable values; restore limit additionally accepts `auto` or total-RAM percentages and reserve accepts bytes or total-RAM percentages. A non-empty `cache_save` interval without a non-empty `cache_file` SHALL be rejected because it cannot produce a snapshot; the other dormant defaults SHALL remain valid when persistence is disabled.
@@ -108,12 +69,3 @@ The YAML configuration and CLI SHALL accept `cache_file`, `cache_load`, `cache_s
 #### Scenario: Invalid startup combination
 - **WHEN** `cache_save` is non-empty with an empty `cache_file`, a duration is zero/negative/unparsable, a boolean is invalid, a size/rate is negative/unparsable, a percentage exceeds 100, or the reserve cannot leave any legal memory
 - **THEN** configuration parsing SHALL fail with a clear error before the server listens
-
-### Requirement: CONFIG documented in EMB.HELP
-
-`EMB.HELP` SHALL document `CONFIG GET` and `CONFIG SET` with their parameter usage.
-
-#### Scenario: Help lists the commands
-
-- **WHEN** a client sends `EMB.HELP`
-- **THEN** the response SHALL include lines for `CONFIG GET` and `CONFIG SET` describing the syntax

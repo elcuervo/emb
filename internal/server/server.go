@@ -53,8 +53,23 @@ type Server struct {
 	compiler *script.Compiler
 	// cacheFile/cacheSave are runtime-editable snapshot parameters (consumed by
 	// the cache-snapshot save loop; stored here even before that change lands).
-	cacheFile string
-	cacheSave string
+	cacheFile           string
+	cacheSave           string
+	cacheLoad           bool
+	cacheSaveOnShutdown bool
+	cacheRestoreLimit   string
+	cacheRestoreReserve string
+	cacheSaveRateLimit  string
+	persistenceMu       sync.RWMutex
+	persistenceCfg      *PersistenceConfig
+	snapshot            *snapshotCoordinator
+
+	// quarantine holds restored snapshot entries for configured-but-unloaded
+	// (lazy) models until their first request loads and validates them. It is
+	// bounded by the same restore budget and is never served directly.
+	quarantineMu    sync.Mutex
+	quarantine      map[string]restoreQuarantine
+	quarantineBytes int64
 	// version is the injected build version ("dev" when unset), reported by INFO.
 	version string
 	state   atomic.Int64
@@ -139,6 +154,21 @@ func WithMaxPairs(n int) Option {
 	return func(s *Server) { s.maxPairs = n }
 }
 
+func WithPersistence(cfg PersistenceConfig) Option {
+	return func(s *Server) {
+		s.persistenceCfg = &cfg
+		s.cacheFile = cfg.File
+		s.cacheLoad = cfg.Load
+		s.cacheSaveOnShutdown = cfg.SaveOnShutdown
+		s.cacheRestoreLimit = cfg.RestoreLimit
+		s.cacheRestoreReserve = cfg.RestoreReserve
+		s.cacheSaveRateLimit = cfg.SaveRateRaw
+		if cfg.SaveInterval > 0 {
+			s.cacheSave = cfg.SaveInterval.String()
+		}
+	}
+}
+
 func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config, opts ...Option) *Server {
 	cacheBytes, err := parseCacheConfig(cacheConfig)
 	if err != nil {
@@ -150,23 +180,31 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	s := &Server{
-		reg:         reg,
-		started:     time.Now(),
-		addr:        addr,
-		tlsConfig:   tlsConfig,
-		cache:       c,
-		cacheConfig: cacheConfig,
-		scripts:     newScriptCache(0),
-		compiler:    script.NewCompiler(),
-		version:     "dev",
-		idleTimeout: config.DefaultIdleTimeout,
-		maxTexts:    4096,
-		maxPairs:    4096,
+		reg:                 reg,
+		started:             time.Now(),
+		addr:                addr,
+		tlsConfig:           tlsConfig,
+		cache:               c,
+		cacheConfig:         cacheConfig,
+		scripts:             newScriptCache(0),
+		compiler:            script.NewCompiler(),
+		cacheLoad:           true,
+		cacheSaveOnShutdown: true,
+		version:             "dev",
+		idleTimeout:         config.DefaultIdleTimeout,
+		maxTexts:            4096,
+		maxPairs:            4096,
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	s.password.Store(password)
+	if s.persistenceCfg != nil && s.persistenceCfg.File != "" && s.cache != nil {
+		s.snapshot = newSnapshotCoordinator(s.cache, s.reg, *s.persistenceCfg)
+		if s.persistenceCfg.Load {
+			s.restoreSnapshot(*s.persistenceCfg)
+		}
+	}
 
 	mux := redcon.NewServeMux()
 	mux.HandleFunc("ping", s.handlePING)
@@ -183,6 +221,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.script", s.handleSCRIPT)
 	mux.HandleFunc("info", s.handleInfo)
 	mux.HandleFunc("config", s.handleConfig)
+	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
+	mux.HandleFunc("emb.save", s.handleSAVE)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
 		// Account the received command: cmd.Raw is the full RESP bytes including
@@ -278,11 +318,87 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		log.Printf("shutdown timeout after %v", ctx.Err())
 	}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		coordinator.Shutdown(ctx)
+	}
 
 	return s.srv.Close()
 }
 
+func (s *Server) restoreSnapshot(cfg PersistenceConfig) {
+	cacheBytes := s.cache.Stats().MaxBytes
+	limit, rss, headroom, err := effectiveRestoreLimit(cacheBytes, cfg.RestoreLimit, cfg.RestoreReserve)
+	status := SnapshotStatus{Enabled: true, RestoreLimitBytes: limit, RestoreRSSBytes: rss, RestoreHeadroomBytes: headroom}
+	if err == nil && limit <= 0 {
+		status.RestoreError = fmt.Sprintf("effective restore limit is zero (host headroom exhausted with cache_restore_reserve %q); snapshot not restored", cfg.RestoreReserve)
+		log.Printf("cache snapshot restore skipped: %s", status.RestoreError)
+	}
+	if err == nil && limit > 0 {
+		models := s.reg.FingerprintState()
+		var restored snapshotRestoreResult
+		restored, err = readSnapshot(cfg.File, limit, models)
+		if err == nil && restored.Found {
+			s.cache.replaceStorageFrom(restored.Cache)
+			s.snapshot.lastGen.Store(s.cache.Stats().Generation)
+			s.snapshot.savedOnce.Store(true)
+			status.RestoredEntries = restored.Restored
+			status.SkippedUnknown = restored.SkippedUnknown
+			status.SkippedFingerprint = restored.SkippedFingerprint
+			status.SkippedMemory = restored.SkippedMemory
+			status.QuarantinedEntries = restored.QuarantinedCount
+			s.quarantineMu.Lock()
+			s.quarantine = restored.Quarantine
+			s.quarantineBytes = restored.QuarantineBytes
+			s.quarantineMu.Unlock()
+		}
+	}
+	if err != nil {
+		status.RestoreError = err.Error()
+		log.Printf("cache snapshot restore skipped: %v", err)
+	}
+	s.snapshot.statusMu.Lock()
+	s.snapshot.status = status
+	s.snapshot.statusMu.Unlock()
+}
+
+// admitQuarantine publishes a lazy model's restored snapshot entries once the
+// model has loaded and its fingerprint matches the snapshot's stored
+// fingerprint. Incompatible or over-budget records are discarded; the
+// quarantine bucket is removed either way so admission runs at most once per
+// model per process.
+func (s *Server) admitQuarantine(model string, entry *registry.ModelEntry) {
+	s.quarantineMu.Lock()
+	q, ok := s.quarantine[model]
+	if !ok {
+		s.quarantineMu.Unlock()
+		return
+	}
+	delete(s.quarantine, model)
+	s.quarantineBytes -= q.bytes
+	s.quarantineMu.Unlock()
+
+	fp, err := entry.Fingerprint()
+	if err != nil || fp != q.fingerprint {
+		// Model files changed since the snapshot was written (or became
+		// unreadable): the restored embeddings no longer match and are unsafe
+		// to serve, so they are discarded.
+		return
+	}
+	for _, e := range q.entries {
+		s.cache.Set(e.Key, e.Value)
+	}
+}
+
 func (s *Server) Close() error {
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		coordinator.Close()
+	}
 	return s.srv.Close()
 }
 
@@ -357,6 +473,62 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("PONG")
 }
 
+func (s *Server) handleCACHEFLUSH(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) > 2 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.CACHE.FLUSH' command")
+		return
+	}
+	s.quarantineMu.Lock()
+	if len(cmd.Args) == 1 {
+		s.quarantine = nil
+		s.quarantineBytes = 0
+	} else {
+		model := string(cmd.Args[1])
+		if q, ok := s.quarantine[model]; ok {
+			s.quarantineBytes -= q.bytes
+			delete(s.quarantine, model)
+		}
+	}
+	s.quarantineMu.Unlock()
+	if s.cache == nil {
+		conn.WriteInt(0)
+		return
+	}
+	if len(cmd.Args) == 1 {
+		conn.WriteInt(s.cache.Flush())
+		return
+	}
+	model := string(cmd.Args[1])
+	if !s.reg.HasModel(model) {
+		conn.WriteError(fmt.Sprintf("ERR model '%s' not found", model))
+		return
+	}
+	conn.WriteInt(s.cache.FlushModel(model))
+}
+
+func (s *Server) handleSAVE(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) != 1 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.SAVE' command")
+		return
+	}
+	if !s.persistenceControlAllowed() {
+		conn.WriteError("ERR EMB.SAVE requires a configured password or a loopback-only listener")
+		return
+	}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator == nil {
+		conn.WriteError("ERR cache persistence is disabled (cache_file is empty)")
+		return
+	}
+	if err := coordinator.Save(context.Background()); err != nil {
+		conn.WriteError("ERR " + err.Error())
+		return
+	}
+	conn.WriteString("OK")
+}
+
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
@@ -407,6 +579,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
 			return
 		}
+		s.admitQuarantine(modelName, entry)
 
 		missTexts := make([]string, len(missIdxs))
 		for j, idx := range missIdxs {
@@ -596,14 +769,23 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	totalCacheHits := int64(0)
 	totalCacheMisses := int64(0)
 	totalCacheEvictions := int64(0)
+	cacheStats := CacheStats{}
 	if s.cache != nil {
-		cs := s.cache.Stats()
-		totalCacheHits = cs.Hits
-		totalCacheMisses = cs.Misses
-		totalCacheEvictions = cs.Evictions
+		cacheStats = s.cache.Stats()
+		totalCacheHits = cacheStats.Hits
+		totalCacheMisses = cacheStats.Misses
+		totalCacheEvictions = cacheStats.Evictions
+	}
+	snapshotStatus := SnapshotStatus{}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	saveOnShutdown := s.cacheSaveOnShutdown
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		snapshotStatus = coordinator.Status()
 	}
 
-	conn.WriteArray(40)
+	conn.WriteArray(88)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -647,6 +829,61 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(totalCacheMisses))
 	conn.WriteBulkString("cache_evictions")
 	conn.WriteInt(int(totalCacheEvictions))
+	conn.WriteBulkString("cache_flushes")
+	conn.WriteInt(int(cacheStats.Flushes))
+	conn.WriteBulkString("cache_flushed_entries")
+	conn.WriteInt(int(cacheStats.FlushedEntries))
+	conn.WriteBulkString("cache_last_flush_duration_usec")
+	conn.WriteInt(int(cacheStats.LastFlushDuration.Microseconds()))
+	conn.WriteBulkString("cache_snapshot_enabled")
+	conn.WriteInt(boolInt(snapshotStatus.Enabled))
+	conn.WriteBulkString("cache_load")
+	conn.WriteInt(boolInt(s.cacheLoad))
+	conn.WriteBulkString("cache_save_on_shutdown")
+	conn.WriteInt(boolInt(saveOnShutdown))
+	conn.WriteBulkString("cache_snapshot_in_progress")
+	conn.WriteInt(boolInt(snapshotStatus.InProgress))
+	conn.WriteBulkString("cache_snapshot_successes")
+	conn.WriteInt(int(snapshotStatus.Successes))
+	conn.WriteBulkString("cache_snapshot_failures")
+	conn.WriteInt(int(snapshotStatus.Failures))
+	conn.WriteBulkString("cache_snapshot_skipped")
+	conn.WriteInt(int(snapshotStatus.Skipped))
+	conn.WriteBulkString("cache_snapshot_last_success_unix")
+	conn.WriteInt(int(snapshotStatus.LastSuccessUnix))
+	conn.WriteBulkString("cache_snapshot_last_duration_usec")
+	conn.WriteInt(int(snapshotStatus.LastDuration.Microseconds()))
+	conn.WriteBulkString("cache_snapshot_last_entries")
+	conn.WriteInt(int(snapshotStatus.LastEntries))
+	conn.WriteBulkString("cache_snapshot_last_bytes")
+	conn.WriteInt(int(snapshotStatus.LastBytes))
+	conn.WriteBulkString("cache_snapshot_capture_duration_usec")
+	conn.WriteInt(int(snapshotStatus.LastCaptureDuration.Microseconds()))
+	conn.WriteBulkString("cache_restore_limit_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreLimitBytes))
+	conn.WriteBulkString("cache_restore_rss_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreRSSBytes))
+	conn.WriteBulkString("cache_restore_headroom_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreHeadroomBytes))
+	conn.WriteBulkString("cache_restore_entries")
+	conn.WriteInt(int(snapshotStatus.RestoredEntries))
+	conn.WriteBulkString("cache_restore_skipped_unknown")
+	conn.WriteInt(int(snapshotStatus.SkippedUnknown))
+	conn.WriteBulkString("cache_restore_skipped_fingerprint")
+	conn.WriteInt(int(snapshotStatus.SkippedFingerprint))
+	conn.WriteBulkString("cache_restore_skipped_memory")
+	conn.WriteInt(int(snapshotStatus.SkippedMemory))
+	conn.WriteBulkString("cache_restore_quarantined")
+	conn.WriteInt(int(snapshotStatus.QuarantinedEntries))
+	conn.WriteBulkString("cache_restore_error")
+	conn.WriteBulkString(snapshotStatus.RestoreError)
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
@@ -744,6 +981,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	if err != nil {
 		return
 	}
+	s.admitQuarantine(model, entry)
 
 	resp, err := entry.Pool.Embed([]string{text})
 	if err != nil || resp.Err != nil {
@@ -771,6 +1009,8 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.SCRIPT EXISTS <model> <sha...> - Check which scripts are cached (1/0 per sha)",
 		"EMB.SCRIPT FLUSH [<model>] - Clear cached scripts (all models when omitted)",
 		"EMB.HELP - Show this help message",
+		"EMB.CACHE.FLUSH [model] - Invalidate all cached embeddings or one model",
+		"EMB.SAVE - Asynchronously save the embedding cache snapshot",
 		"INFO [section ...] - Redis-style server info (version, stats, memory, cpu, cache hit ratios)",
 		"CONFIG GET [pattern] - List runtime configuration parameters",
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",

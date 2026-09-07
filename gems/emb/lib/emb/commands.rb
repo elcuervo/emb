@@ -73,6 +73,20 @@ module Emb
       end
     end
 
+    # Remove all cached embeddings, or only entries belonging to +model+.
+    # Returns the server's integer removed-entry count.
+    def cache_flush(model = nil)
+      args = ['EMB.CACHE.FLUSH']
+      args << model.to_s unless model.nil?
+      send_command(*args)
+    end
+
+    # Ask the server to start an asynchronous cache snapshot. Completion and
+    # failures are observable through #stats or #server_info(:cache).
+    def save_cache
+      send_command('EMB.SAVE')
+    end
+
     private
 
     # Converts a scripted reply (single value, or an array of per-text values

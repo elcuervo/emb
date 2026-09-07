@@ -2,20 +2,29 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/docker/go-units"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Listen   string `yaml:"listen"`
-	Password string `yaml:"password"`
-	TLSCert  string `yaml:"tls_cert"`
-	TLSKey   string `yaml:"tls_key"`
-	Cache    string `yaml:"cache"`
+	Listen              string `yaml:"listen"`
+	Password            string `yaml:"password"`
+	TLSCert             string `yaml:"tls_cert"`
+	TLSKey              string `yaml:"tls_key"`
+	Cache               string `yaml:"cache"`
+	CacheFile           string `yaml:"cache_file"`
+	CacheLoad           *bool  `yaml:"cache_load"`
+	CacheSave           string `yaml:"cache_save"`
+	CacheSaveOnShutdown *bool  `yaml:"cache_save_on_shutdown"`
+	CacheRestoreLimit   string `yaml:"cache_restore_limit"`
+	CacheRestoreReserve string `yaml:"cache_restore_reserve"`
+	CacheSaveRateLimit  string `yaml:"cache_save_rate_limit"`
 	// IdleTimeout closes connections that have not sent a command for the
 	// duration. nil (default) applies DefaultIdleTimeout; an explicit 0
 	// disables reaping entirely (strict Redis semantics).
@@ -145,6 +154,9 @@ func Load(path string) (*Config, error) {
 		cfg.Models[name] = m
 	}
 
+	if err := cfg.validatePersistence(); err != nil {
+		return nil, err
+	}
 	if cfg.MaxTexts != nil && *cfg.MaxTexts < 0 {
 		return nil, fmt.Errorf("max_texts must be non-negative")
 	}
@@ -153,6 +165,76 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func boolValue(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
+}
+
+func (c Config) CacheLoadEnabled() bool         { return boolValue(c.CacheLoad, true) }
+func (c Config) CacheShutdownSaveEnabled() bool { return boolValue(c.CacheSaveOnShutdown, true) }
+
+func validateMemorySetting(name, value string, allowAuto bool) error {
+	value = strings.TrimSpace(value)
+	if value == "" || (allowAuto && strings.EqualFold(value, "auto")) {
+		return nil
+	}
+	if strings.HasSuffix(value, "%") {
+		pct, err := strconv.ParseFloat(strings.TrimSuffix(value, "%"), 64)
+		if err != nil || math.IsNaN(pct) || pct <= 0 || pct > 100 {
+			return fmt.Errorf("%s must be a percentage greater than 0 and at most 100", name)
+		}
+		return nil
+	}
+	n, err := units.FromHumanSize(value)
+	if err != nil || n <= 0 {
+		if allowAuto {
+			return fmt.Errorf("%s must be auto, a positive size, or percentage", name)
+		}
+		return fmt.Errorf("%s must be a positive size or percentage", name)
+	}
+	return nil
+}
+
+func parseRate(value string) (int64, error) {
+	v := strings.TrimSpace(value)
+	if v == "" || v == "0" {
+		return 0, nil
+	}
+	v = strings.TrimSuffix(strings.TrimSuffix(v, "/s"), "ps")
+	n, err := units.FromHumanSize(v)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("cache_save_rate_limit must be 0 or a positive byte rate such as 100MB/s")
+	}
+	return n, nil
+}
+
+func (c Config) CacheSaveRateBytes() (int64, error) { return parseRate(c.CacheSaveRateLimit) }
+
+func (c Config) validatePersistence() error {
+	// A cache_file without a cache is valid but dormant: Server.New keeps it
+	// stored until a cache is also active, matching the runtime CONFIG SET
+	// path. cache_save still requires a destination file.
+	if c.CacheSave != "" {
+		if c.CacheFile == "" {
+			return fmt.Errorf("cache_save requires cache_file")
+		}
+		d, err := time.ParseDuration(c.CacheSave)
+		if err != nil || d <= 0 {
+			return fmt.Errorf("cache_save must be a positive duration")
+		}
+	}
+	if err := validateMemorySetting("cache_restore_limit", c.CacheRestoreLimit, true); err != nil {
+		return err
+	}
+	if err := validateMemorySetting("cache_restore_reserve", c.CacheRestoreReserve, false); err != nil {
+		return err
+	}
+	_, err := c.CacheSaveRateBytes()
+	return err
 }
 
 type FlagConfig struct {
@@ -197,6 +279,42 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		case arg == "-cache" && i+1 < len(args):
 			i++
 			fc.Cache = args[i]
+
+		case arg == "-cache-file" && i+1 < len(args):
+			i++
+			fc.CacheFile = args[i]
+
+		case arg == "-cache-load" && i+1 < len(args):
+			i++
+			v, err := strconv.ParseBool(args[i])
+			if err != nil {
+				return nil, fmt.Errorf("parsing -cache-load: %w", err)
+			}
+			fc.CacheLoad = &v
+
+		case arg == "-cache-save" && i+1 < len(args):
+			i++
+			fc.CacheSave = args[i]
+
+		case arg == "-cache-save-on-shutdown" && i+1 < len(args):
+			i++
+			v, err := strconv.ParseBool(args[i])
+			if err != nil {
+				return nil, fmt.Errorf("parsing -cache-save-on-shutdown: %w", err)
+			}
+			fc.CacheSaveOnShutdown = &v
+
+		case arg == "-cache-restore-limit" && i+1 < len(args):
+			i++
+			fc.CacheRestoreLimit = args[i]
+
+		case arg == "-cache-restore-reserve" && i+1 < len(args):
+			i++
+			fc.CacheRestoreReserve = args[i]
+
+		case arg == "-cache-save-rate-limit" && i+1 < len(args):
+			i++
+			fc.CacheSaveRateLimit = args[i]
 
 		case arg == "-idle-timeout" && i+1 < len(args):
 			i++
@@ -312,6 +430,9 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		}
 	}
 
+	if err := fc.validatePersistence(); err != nil {
+		return nil, err
+	}
 	if fc.MaxTexts != nil && *fc.MaxTexts < 0 {
 		return nil, fmt.Errorf("max_texts must be non-negative")
 	}

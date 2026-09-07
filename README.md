@@ -114,6 +114,8 @@ redis-cli EMB minilm "hello world"
 | `EMB.SCRIPT LOAD <model> <script>` | Compile, cache, and return the script's SHA1 |
 | `EMB.SCRIPT EXISTS <model> <sha...>` | Which scripts are cached (1/0 per SHA) |
 | `EMB.SCRIPT FLUSH [<model>]` | Clear cached scripts (all models when omitted) |
+| `EMB.CACHE.FLUSH [model]` | Remove all cached embeddings, or only entries for one configured model; returns the removed count |
+| `EMB.SAVE` | Accept an asynchronous cache snapshot; poll `EMB.STATS` or `INFO cache` for completion/failure |
 | `EMB.HELP` | Command reference (includes the full script surface) |
 | `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `memory`, `cpu`, `clients` |
 | `CONFIG GET [glob]` / `CONFIG SET` | Read or live-tune runtime settings (see [Operations](#operations)) |
@@ -297,6 +299,13 @@ listen: ":6379"
 # tls_cert: /etc/emb/cert.pem
 # tls_key:  /etc/emb/key.pem
 # cache: "auto"   # or "1GB", "256MB", "25%". Empty = disabled
+# cache_file: /var/lib/emb/cache.embcache
+# cache_load: true
+# cache_save: 5m
+# cache_save_on_shutdown: true
+# cache_restore_limit: auto
+# cache_restore_reserve: 10%
+# cache_save_rate_limit: 100MB/s
 # idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32
 
 models:
@@ -384,6 +393,52 @@ error. Live cache stats — hits, misses, hit rate, evictions, entries, and byte
 usage — are visible per model via `EMB.INFO <model>` and globally via
 [`INFO`](#operations) and `EMB.STATS`. See `BENCHMARK.md` → *Cache* for
 hit-rate measurements.
+
+### Persistent cache snapshots
+
+Snapshots optionally preserve the in-process LRU across restarts. They are
+inspired by Redis RDB operationally, but are a small emb-specific streaming
+format and are **not RDB-compatible**. Persistence is completely dormant when
+`cache_file` is empty: no coordinator, timer, fingerprinting, serialization,
+filesystem work, or cache hot-path checks are created.
+
+| Setting / CLI flag | Default | Live update | Meaning |
+|---|---:|---:|---|
+| `cache_file` / `-cache-file` | empty | yes | Snapshot path; empty disables persistence |
+| `cache_load` / `-cache-load` | `true` | restart | Restore at startup when the file exists |
+| `cache_save` / `-cache-save` | empty | yes | Positive automatic-save interval; empty disables periodic saves |
+| `cache_save_on_shutdown` / `-cache-save-on-shutdown` | `true` | yes | Save a dirty cache after inference drains and before model close |
+| `cache_restore_limit` / `-cache-restore-limit` | `auto` | restart | Maximum restore memory as `auto`, bytes, or percentage of host RAM |
+| `cache_restore_reserve` / `-cache-restore-reserve` | `10%` | restart | Host memory kept free during restore |
+| `cache_save_rate_limit` / `-cache-save-rate-limit` | `0` | yes | Output rate such as `100MB/s`; `0` is unlimited |
+
+Startup restore streams into an unpublished staging cache. Its effective
+ceiling is the smallest of the configured cache budget, `cache_restore_limit`,
+and sampled host headroom (`total RAM - current RSS - reserve`). Compatible
+entries are admitted MRU-first; checksum failure leaves the live cache empty.
+Model/tokenizer fingerprints are streamed once and cached, so periodic saves
+do not repeatedly read model artifacts.
+
+Automatic and manual saves briefly capture immutable entry descriptors under
+the cache mutex, then encode, checksum, throttle, sync, and rename in a
+background goroutine. Inference and all database commands continue during
+that work. Only one save runs at a time; clean timer ticks are coalesced and
+`EMB.SAVE` reports an overlap error. Files are written through an owner-only
+`0600` temporary file and atomically renamed, preserving the prior snapshot
+until the replacement is complete.
+
+Snapshot files contain original input text and embedding bytes. Protect or
+encrypt their storage as the source data requires. They are a disposable
+warm-start optimization, not a durable database or backup; deleting a bad or
+incompatible file is always safe.
+
+Live changes to `cache_file` and the `EMB.SAVE` command require either a
+configured `password` or a loopback-only `listen` address. The default
+listener (`:6379`) binds every interface, so with no `password` set the server
+rejects those commands with an explicit error rather than letting an
+unauthenticated client point snapshot writes at an arbitrary path. Bind
+`localhost` for a password-free deployment, or set `password` (and `AUTH`)
+when serving non-loopback clients.
 
 ## Embeddings & vector indexes (OpenSearch)
 

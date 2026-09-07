@@ -1,7 +1,10 @@
 package registry
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -39,6 +42,12 @@ type ModelEntry struct {
 	scriptOnce   sync.Once
 	scriptRes    *ScriptResources
 	scriptResErr error
+
+	// Fingerprints are expensive for large ONNX files. Persistence computes one
+	// lazily per model and all periodic/manual saves reuse it.
+	fingerprintOnce sync.Once
+	fingerprint     string
+	fingerprintErr  error
 }
 
 // ScriptResources bundles what a scripted evaluation needs for a model: a
@@ -60,6 +69,44 @@ func (r *ScriptResources) Session() onnx.NamedSession {
 
 // Sessions exposes the pool for Close and tests.
 func (r *ScriptResources) Sessions() []onnx.NamedSession { return r.sessions }
+
+func hashFile(h io.Writer, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(h, f)
+	closeErr := f.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+// Fingerprint identifies every model input that intentionally affects emitted
+// embedding bytes. It is computed only when cache persistence asks for it.
+func (e *ModelEntry) Fingerprint() (string, error) {
+	e.fingerprintOnce.Do(func() {
+		h := sha256.New()
+		for _, path := range []string{e.cfg.ONNX, e.cfg.Tokenizer} {
+			if path == "" {
+				continue
+			}
+			if err := hashFile(h, path); err != nil {
+				e.fingerprintErr = fmt.Errorf("hashing %q: %w", path, err)
+				return
+			}
+		}
+		// Scheduling and capacity settings are deliberately absent: workers,
+		// batching, tokenizer workers, ORT threads, and execution mode do not
+		// alter the intended embedding output.
+		_, _ = fmt.Fprintf(h, "\x00output=%s\x00dim=%d\x00max_length=%d\x00pooling=%s\x00normalize=%t\x00pad_output=%t\x00quantization=%s",
+			e.cfg.OutputTensor, e.Dim, e.cfg.MaxLength, e.cfg.Pooling,
+			e.cfg.Normalize, e.cfg.PadOutput, e.Quantization)
+		e.fingerprint = hex.EncodeToString(h.Sum(nil))
+	})
+	return e.fingerprint, e.fingerprintErr
+}
 
 type Registry struct {
 	mu          sync.RWMutex
@@ -568,6 +615,56 @@ func (r *Registry) List() []*ModelEntry {
 		list = append(list, entry)
 	}
 	return list
+}
+
+func (r *Registry) HasModel(name string) bool {
+	r.mu.RLock()
+	_, ok := r.models[name]
+	r.mu.RUnlock()
+	return ok
+}
+
+func (r *Registry) Fingerprints() (map[string]ModelFingerprint, error) {
+	models := r.List()
+	result := make(map[string]ModelFingerprint, len(models))
+	for _, entry := range models {
+		fingerprint, err := entry.Fingerprint()
+		if err != nil {
+			log.Printf("snapshot: skipping model %q fingerprint: %v", entry.Name, err)
+			continue
+		}
+		result[entry.Name] = ModelFingerprint{Fingerprint: fingerprint, Dim: entry.Dim}
+	}
+	return result, nil
+}
+
+func (r *Registry) FingerprintState() map[string]ModelFingerprint {
+	models := r.List()
+	result := make(map[string]ModelFingerprint, len(models))
+	for _, entry := range models {
+		st := ModelFingerprint{Dim: entry.Dim}
+		if entry.loaded.Load() {
+			fp, err := entry.Fingerprint()
+			if err != nil {
+				log.Printf("snapshot: skipping loaded model %q fingerprint: %v", entry.Name, err)
+				result[entry.Name] = st
+				continue
+			}
+			st.Fingerprint = fp
+			st.Loaded = true
+		}
+		result[entry.Name] = st
+	}
+	return result
+}
+
+type ModelFingerprint struct {
+	Fingerprint string
+	Dim         int
+	// Loaded reports whether the fingerprint was verified from the model this
+	// run. Lazy (never-loaded) models have an empty fingerprint until their
+	// first load; restore quarantines their entries until then.
+	Loaded bool
 }
 
 func (r *Registry) TotalErrors() int64 {
