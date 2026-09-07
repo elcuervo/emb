@@ -1,12 +1,4 @@
-# ruby-client-round-robin
-
-## Purpose
-
-Defines how the emb Ruby client distributes commands across its pool of connections so
-that traffic fans out to all emb instances behind connection-level load balancers (such
-as AWS Service Connect), instead of pinning to a single connection.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Round-robin connection distribution
 
@@ -40,33 +32,3 @@ The `pool` option SHALL control the number of Redis connections the client maint
 
 - **WHEN** a client with `pool: 2` and three urls issues commands
 - **THEN** each of the three per-instance pools SHALL have 2 connections
-
-### Requirement: Concurrent use is thread-safe
-
-Commands issued concurrently from multiple threads SHALL never be sent over the same
-connection at the same time, and SHALL each return the reply for their own command.
-
-#### Scenario: Interleaved concurrent commands return correct replies
-
-- **WHEN** multiple threads concurrently send commands with distinct payloads through a
-  client with `pool: 4`
-- **THEN** every thread SHALL receive the reply corresponding to its own command, with
-  no cross-talk or corruption
-
-### Requirement: Failure and reconnect behavior is unchanged
-
-Connection failure and reconnect behavior SHALL behave as before this change:
-redis-client reconnect attempts SHALL still apply, and error replies from the server
-SHALL be raised as `RedisClient::CommandError` exactly as today.
-
-#### Scenario: Server restart recovers
-
-- **WHEN** the server drops the connection while a client with `reconnect_attempts: 3`
-  is idle, then comes back
-- **THEN** the next command SHALL reconnect and succeed
-
-#### Scenario: Server error replies still raise
-
-- **WHEN** the server replies with an error (for example an `ERR busy` rejection from
-  `max_concurrent_requests`)
-- **THEN** the client SHALL raise `RedisClient::CommandError` with that message

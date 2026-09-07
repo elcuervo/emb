@@ -1,56 +1,41 @@
 # frozen_string_literal: true
 
-require_relative 'round_robin_pool'
+require_relative 'connection_router'
 require 'redis_client'
 
 module Emb
   class Client
     include Commands
 
-    attr_reader :pool, :batch_size, :reconnect_attempts
-
-    def initialize(pool: nil, batch: nil, **redis_options)
+    # Accepts a single redis URL (String) or several (Array of Strings) naming
+    # interchangeable emb instances serving the same model set; each url gets
+    # its own pool of `pool` connections (see ConnectionRouter).
+    def initialize(pool: nil, lazy: nil, **redis_options)
       cfg = Emb.configuration
-      @batch_enabled = batch.nil? ? cfg.batch : batch
+      @lazy_mode = lazy.nil? ? cfg.lazy : validate_lazy!(lazy)
       @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
-
       url = extract_url!(redis_options, cfg)
+      # Captured before ConnectionRouter consumes the merged options, so
+      # fail-closed batches can report the retry budget (Emb::ServerError).
       redis_options = merged_redis_options(redis_options, cfg, url)
-
       @reconnect_attempts = redis_options.fetch(:reconnect_attempts, cfg.reconnect_attempts)
-
-      size = pool.nil? ? cfg.pool : pool
-
-      @pool = RoundRobinPool.new(size) do
-        RedisClient.new(url: url, **redis_options)
-      end
-
+      @router = ConnectionRouter.new(pool || cfg.pool, instance_urls(url), redis_options)
       @registry = {}
     end
 
-    def send_command(*args)
-      return @pool.with { |r| r.call(*args) } unless Emb.debug?
+    def send_command(...) = @router.call(...)
 
-      start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      result = @pool.with { |r| r.call(*args) }
-      elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000
+    def pools = @router.pools
 
-      $stdout.puts "[EMB] #{args.map(&:inspect).join(' ')} (#{format('%.2f', elapsed)}ms)"
-
-      result
-    end
+    attr_reader :batch_size, :lazy_mode, :reconnect_attempts
 
     def [](name)
       @registry[name] ||= Proxy.new(self, name.to_sym)
     end
 
-    def batch
-      @batch ||= BatchProxy.new(self)
-    end
+    def lazy? = @lazy_mode != false
 
-    def batch?
-      @batch_enabled
-    end
+    def parallel_batch? = @lazy_mode == :batch
 
     # Live view of the server's runtime configuration (CONFIG GET/SET).
     def config
@@ -107,9 +92,23 @@ module Emb
 
     private
 
+    def validate_lazy!(value)
+      unless Configuration::LAZY_MODES.include?(value)
+        raise ArgumentError, "lazy must be false, :multi, or :batch (got #{value.inspect})"
+      end
+
+      value
+    end
+
+    def instance_urls(url)
+      raise ArgumentError, 'url array must not be empty' if url.is_a?(Array) && url.empty?
+
+      url.nil? ? [nil] : Array(url)
+    end
+
     def merged_redis_options(opts, cfg, url)
       defaults = cfg.to_h
-      keys = defaults.keys - %i[url pool batch batch_size]
+      keys = defaults.keys - %i[url pool lazy batch_size]
       keys -= %i[host port] if url
 
       keys.each do |key|

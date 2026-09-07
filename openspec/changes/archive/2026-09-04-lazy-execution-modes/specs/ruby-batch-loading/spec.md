@@ -1,10 +1,18 @@
-# ruby-batch-loading
+## REMOVED Requirements
 
-## Purpose
+### Requirement: Emb.batch exposes lazy batched embeddings
 
-Specifies deferred client-side execution for the `emb` gem: under a deferred `lazy` mode (`:multi` or `:batch`), embedding calls made within the same execution scope (thread) coalesce into `EMB` / `EMB.MULTI` commands using the `batch-loader` gem, with the `lazy` mode configuration governing whether the default proxy API defers.
+**Reason**: The explicit `Emb.batch` / `client.batch` lazy proxy is superseded by the `lazy` mode configuration, which makes the standard proxy API (`Emb[:model][text]`) lazy under `lazy: :multi` or `lazy: :batch`. Two entry points for deferred behavior (a config flag AND an explicit API) created ambiguity about which one governs.
 
-## Requirements
+**Migration**: Configure `lazy: :multi` or `lazy: :batch` for deferred proxy behavior, or use `Emb.multi { }` for explicit eager composition. Any code calling `Emb.batch[...]` / `client.batch[...]` must switch to the mode-driven proxy.
+
+### Requirement: Batch mode configuration
+
+**Reason**: The binary `batch` option is replaced by the mutually exclusive `lazy` mode enum (`false` / `:multi` / `:batch`), and the default flips from lazy (`batch: true`) to eager (`lazy: false`) so a default client makes exactly one round trip per embed call.
+
+**Migration**: Replace `batch: true` with `lazy: :multi` (identical coalescing behavior) or `lazy: :batch` (deferred, executed concurrently). Replace `batch: false` with the default (`lazy: false`) or explicit `lazy: false`.
+
+## MODIFIED Requirements
 
 ### Requirement: Per-scope coalescing into EMB.MULTI
 
@@ -160,6 +168,8 @@ When a batch command fails terminally (timeout after send, connection error afte
 
 - **WHEN** several batches fail sequentially in the same scope (with or without retries in between)
 - **THEN** the pending set SHALL NOT grow beyond the items currently deferred in the scope
+
+## ADDED Requirements
 
 ### Requirement: Lazy mode configuration
 

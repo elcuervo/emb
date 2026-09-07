@@ -23,22 +23,29 @@ class JobMiddlewareFakeClient
 end
 
 RSpec.describe Emb::JobMiddleware do
-  after { BatchLoader::Executor.clear_current }
+  after do
+    BatchLoader::Executor.clear_current
+    Emb.instance_variable_set(:@configuration, Emb::Configuration.new)
+  end
+
+  # The scope-tearing contract only exists under deferred modes; job bodies use
+  # explicit loaders so the middleware's clearing behavior is observable here.
+  before { Emb.configure { |c| c.lazy = :multi } }
 
   it 'clears the per-thread scope after each job execution' do
     client = JobMiddlewareFakeClient.new(
-      ['EMB.MULTI', 'minilm', 'hello'] => [JobMiddlewareFakeClient.vec(1.0)]
+      %w[EMB minilm hello] => [JobMiddlewareFakeClient.vec(1.0)]
     )
     middleware = described_class.new
     job = lambda do
-      Emb::BatchProxy.new(client)[:minilm]['hello'].first
+      Emb.build_batch_loader(client, :minilm, 'hello').first
     end
 
     middleware.call(:worker, { 'class' => 'GreetJob' }, 'default') { job.call }
     expect(client.commands.size).to eq(1)
 
     # A second job on the same thread starts a fresh scope: the same pair
-    # must re-send EMB.MULTI rather than reuse the previous job's cache.
+    # must re-send the EMB command rather than reuse the previous job's cache.
     middleware.call(:worker, { 'class' => 'GreetJob' }, 'default') { job.call }
     expect(client.commands.size).to eq(2)
   end
@@ -55,7 +62,7 @@ RSpec.describe Emb::JobMiddleware do
     middleware = described_class.new
 
     middleware.call(:worker, {}, 'default') do
-      Emb::BatchProxy.new(client)[:minilm]['never used']
+      Emb.build_batch_loader(client, :minilm, 'never used')
     end
 
     expect(client.commands).to be_empty

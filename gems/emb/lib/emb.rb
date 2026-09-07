@@ -32,7 +32,6 @@ module Emb
     end
 
     def [](name)    = default_client[name]
-    def batch       = default_client.batch
     def models      = default_client.models
     def info(name)  = default_client.info(name)
     def stats       = default_client.stats
