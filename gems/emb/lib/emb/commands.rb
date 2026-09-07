@@ -19,6 +19,20 @@ module Emb
       parse_info(send_command('INFO', *sections.map(&:to_s)))
     end
 
+    # Remove all cached embeddings, or only entries belonging to +model+.
+    # Returns the server's integer removed-entry count.
+    def cache_flush(model = nil)
+      args = ['EMB.CACHE.FLUSH']
+      args << model.to_s unless model.nil?
+      send_command(*args)
+    end
+
+    # Ask the server to start an asynchronous cache snapshot. Completion and
+    # failures are observable through #stats or #server_info(:cache).
+    def save_cache
+      send_command('EMB.SAVE')
+    end
+
     private
 
     # Parse Redis INFO section text into a nested Hash:

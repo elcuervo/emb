@@ -291,6 +291,28 @@ exceptions (`RedisClient::CommandError`): read-only parameters (`listen`, `tls_*
 `models`), invalid values, and `NOAUTH` on password-protected servers are not
 swallowed.
 
+### Cache lifecycle commands
+
+When server-side caching is enabled, the Ruby client exposes the lifecycle
+commands on module, instance, pooled, and round-robin clients:
+
+```ruby
+Emb.cache_flush             # all models; => removed entry count
+Emb.cache_flush(:minilm)    # one model; => removed entry count
+Emb.save_cache              # => "OK" once the background save is accepted
+
+Emb.stats[:cache_snapshot_in_progress] # 0 or 1
+Emb.server_info(:cache)                # completion, failure, restore limits
+```
+
+Snapshot persistence is configured on the server with `cache_file`,
+`cache_load`, `cache_save`, `cache_save_on_shutdown`, `cache_restore_limit`,
+`cache_restore_reserve`, and `cache_save_rate_limit`. Automatic saves keep
+serving inference and control commands while encoding and I/O run in the
+background. Snapshot files include original input text and embeddings; use
+protected/encrypted storage where appropriate and treat them as disposable
+warm-start data rather than a durable database.
+
 ## Usage
 
 ### Single text
