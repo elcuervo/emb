@@ -281,3 +281,29 @@ return json.encode({PERSON = {"Tim Cook"}, score = 0.9823})`
 }
 
 var _ = lua.LNil
+
+func TestHostRunExplicitDtype(t *testing.T) {
+	// All-integral data with an explicit f32 dtype must produce a float32
+	// tensor (zero-filled inputs like fused-CLIP pixel_values).
+	var gotDType onnx.TensorType
+	src := `
+local out = emb.run({ x = {shape = {2}, data = {0, 0}, dtype = "f32"} })
+return out.x.data[1]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			gotDType = inputs[0].DType
+			return map[string]onnx.NamedTensor{
+				"x": {Name: "x", Shape: []int64{2}, DType: onnx.TensorFloat32, Float: []float32{0, 0}},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotDType != onnx.TensorFloat32 {
+		t.Fatalf("expected float32 tensor, got %v", gotDType)
+	}
+	if v.String() != "0" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}

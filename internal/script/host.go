@@ -253,21 +253,33 @@ func namedTensorFromLua(spec *lua.LTable) (onnx.NamedTensor, error) {
 	if err != nil {
 		return t, fmt.Errorf("data: %w", err)
 	}
-	floats := false
-	for _, n := range data {
-		if math.Trunc(n) != n {
-			floats = true
-			break
+	// An explicit dtype overrides inference (zero-filled float tensors like
+	// fused-CLIP pixel_values are all-integral and would misinfer as int64).
+	if dtype, ok := spec.RawGetString("dtype").(lua.LString); ok {
+		switch string(dtype) {
+		case "f32":
+			t.DType = onnx.TensorFloat32
+		case "i64":
+			t.DType = onnx.TensorInt64
+		default:
+			return t, fmt.Errorf("dtype must be i64 or f32, got %q", string(dtype))
+		}
+	} else {
+		t.DType = onnx.TensorInt64
+		for _, n := range data {
+			if math.Trunc(n) != n {
+				t.DType = onnx.TensorFloat32
+				break
+			}
 		}
 	}
-	if floats {
-		t.DType = onnx.TensorFloat32
+	switch t.DType {
+	case onnx.TensorFloat32:
 		t.Float = make([]float32, len(data))
 		for i, n := range data {
 			t.Float[i] = float32(n)
 		}
-	} else {
-		t.DType = onnx.TensorInt64
+	default:
 		t.Int64 = make([]int64, len(data))
 		for i, n := range data {
 			t.Int64[i] = int64(n)
