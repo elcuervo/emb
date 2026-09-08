@@ -28,8 +28,19 @@ module Emb
     end
 
     def envelope_rows(results)
-      envelope = Emb::ValuesReply.parse(results)
+      envelope = Emb::ValuesReply.parse(rehydrate_envelope(results))
       Emb::ValuesReply.rows(envelope[:shape], envelope[:values])
+    end
+
+    # Under RESP3, redis-client decodes the server's single-model VALUES map
+    # into a Ruby Hash, but dispatch_slice wraps every reply in Array(), which
+    # turns that Hash into an array of [key, value] pairs. Rehydrate those
+    # pairs back into a Hash so parse sees a real envelope; RESP2 flat pair
+    # arrays (top-level strings) pass through untouched.
+    def rehydrate_envelope(results)
+      return results.to_h if results.all? { |e| e.is_a?(Array) && e.size == 2 }
+
+      results
     end
 
     def expect_rows!(slice, got)
@@ -42,7 +53,7 @@ module Emb
     def assign_rows(loader, slice, rows)
       offset = 0
       slice.each do |item|
-        _, _, text, _ = item
+        _, _, text, = item
         texts = Array(text)
         values = rows[offset, texts.size]
         offset += texts.size
@@ -54,7 +65,7 @@ module Emb
       expect_entries!(slice, results.size)
       offset = 0
       slice.each do |item|
-        _, _, text, _ = item
+        _, _, text, = item
         texts = Array(text)
         values = entry_values(results, offset, texts)
         offset += texts.size
