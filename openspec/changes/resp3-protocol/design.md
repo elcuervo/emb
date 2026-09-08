@@ -18,7 +18,7 @@ The fork's `go.mod` declares `module github.com/tidwall/redcon` (go 1.20; no tag
 ```
 go.mod:
     require github.com/tidwall/redcon v1.6.2            (unchanged)
-    replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260908-262156d
+    replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260908152233-262156df7a31
 ```
 
 `go mod tidy` resolves the pseudo-version. All existing imports compile unchanged; the new API surface appears through the same package name.

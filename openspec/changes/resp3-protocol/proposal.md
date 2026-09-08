@@ -1,6 +1,6 @@
 ## Why
 
-emb speaks plain RESP2 and returns embeddings as opaque float32 binary blobs — fast and compact for emb-to-emb traffic, but unusable for generic Redis clients, inspection tooling, and any consumer that cannot decode raw floats. Redis 6+ clients negotiate RESP3 to get semantic replies (typed doubles, maps, `_` nulls), and the Redis tensor precedent (RedisAI `AI.TENSORGET <key> [META] [BLOB|VALUES]`) shows how to offer both a binary fast path and a self-describing typed path. emb should speak RESP3 for all commands and let each embedding query pick its reply representation.
+emb speaks plain RESP2 and returns embeddings as opaque float32 binary blobs — fast and compact for emb-to-emb traffic, but unusable for generic Redis clients, inspection tooling, and any consumer that cannot decode raw floats. Redis 6+ clients negotiate RESP3 to get semantic replies (typed doubles, maps, `_` nulls), and the Redis tensor precedent (RedisAI `AI.TENSORGET <key> [META] [BLOB|VALUES]`) shows how to offer both a binary fast path and a self-describing typed path. emb should let each embedding query pick its reply representation and, for clients that negotiate it (`HELLO 3`), speak RESP3 for all commands while RESP2 stays the default.
 
 ## What Changes
 

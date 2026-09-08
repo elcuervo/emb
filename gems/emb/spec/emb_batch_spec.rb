@@ -1003,6 +1003,28 @@ RSpec.describe Emb do
     expect(client.commands).to eq([['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b']])
   end
 
+  it 'raises ShortReplyError for a short mixed-model VALUES reply' do
+    # Two one-text items but only one per-pair envelope: a protocol failure
+    # that must fail closed (like the BLOB path), not resolve the missing item
+    # to an empty vector.
+    client = FakeEmbClient.new(
+      ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b'] => [
+        ['model', 'minilm', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[1.0 2.0]]
+      ]
+    )
+
+    minilm = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+    bge = described_class.build_batch_loader(client, :bge, 'b', format: :values)
+
+    # Fail-closed like the BLOB path: the batch tail wraps the protocol
+    # violation in ServerError, counting a single attempt (no re-send).
+    expect { minilm.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+      expect(e.attempts).to eq(1)
+      expect(e.cause).to be_a(Emb::ShortReplyError)
+      expect(e.message).to include('expected 2 VALUES reply entries, got 1')
+    end
+  end
+
   it 'keeps nil rows for failing pairs under VALUES' do
     client = FakeEmbClient.new(
       ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'ghost', 'b'] => [

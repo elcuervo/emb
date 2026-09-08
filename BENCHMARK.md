@@ -97,9 +97,11 @@ EMB minilm hello world: 23809.52 requests per second, p50=0.031 msec
 `EMB` replies in two formats: `BLOB` (the default — raw float32 bytes, a
 memcpy of the cached vector) and `VALUES` (a `dtype`/`shape`/`values` envelope
 whose values are serialized as decimals, one `f32→f64→text` conversion per
-dimension). Because the inference is cached, this comparison isolates **pure
-reply serialization cost** — exactly why `BLOB` stays the default and `VALUES`
-is the opt-in path for clients that cannot decode raw floats.
+dimension). Because the inference is cached, this comparison isolates the
+**cache-hit reply-path cost** (server handling, reply encoding — decimal
+conversion and wire size for `VALUES` vs a memcpy for `BLOB` — plus socket
+I/O) — exactly why `BLOB` stays the default and `VALUES` is the opt-in path
+for clients that cannot decode raw floats.
 
 Measured on the same Apple M4 reference machine, `minilm` (dim 384), single
 text `"hello"`, cache-hit (warmed), loopback, `-cache auto`, `redis-benchmark`,
@@ -112,9 +114,10 @@ text `"hello"`, cache-hit (warmed), loopback, `-cache auto`, `redis-benchmark`,
 
 `BLOB` is the baseline — it carries **no penalty**; the reported slowdown is
 entirely on the `VALUES` path. `VALUES` costs 3–4× the reply path on cache
-hits: ~384 decimal conversions per
-query plus a reply roughly 3× the binary size on the wire. Under `HELLO 3` the
-`values` are typed RESP3 doubles (same decimal text, no extra cost); `INFO`
+hits: ~384 decimal conversions per query plus a reply roughly 3× the binary
+size on the wire. Under `HELLO 3` the
+`values` are typed RESP3 doubles of the same decimal text (the runs above do
+not negotiate RESP3, so that encoding is not measured separately); `INFO`
 stays a bulk string in both protocols. The binary `BLOB` path is byte-identical
 to prior emb versions, so all uncached/cached throughput tables above are
 unchanged by this feature.

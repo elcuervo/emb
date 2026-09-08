@@ -15,6 +15,13 @@ RSpec.describe Emb::ValuesReply do
       reply = ['dtype', 'FLOAT', 'shape', [1, 1], 'values', %w[not-a-number]]
       expect { described_class.parse(reply) }.to raise_error(ArgumentError, /not-a-number/)
     end
+
+    it 'handles a RESP3 map reply (already decoded to a Hash)' do
+      reply = { 'dtype' => 'FLOAT', 'shape' => [1, 2], 'values' => [1.5, 2.5] }
+      parsed = described_class.parse(reply)
+      expect(parsed).to eq(dtype: 'FLOAT', shape: [1, 2], values: [1.5, 2.5])
+      expect(parsed[:values].first).to be_a(Float)
+    end
   end
 
   describe '.rows' do

@@ -52,7 +52,7 @@ module Emb
     # retry).
     def resolve_slice(loader, slice, results)
       if slice_format(slice) == :values
-        return resolve_values(loader, slice, results)
+        return ValuesBatch.resolve(loader, slice, results)
       end
 
       expected = slice.sum { |_, _, text, _| Array(text).size }
@@ -75,49 +75,6 @@ module Emb
     def entry_values(results, offset, texts)
       values = results[offset, texts.size].map { |entry| entry&.unpack('e*') }
       values.size == 1 ? values.first : values
-    end
-
-    # ---- values format ----
-
-    # resolve_values replaces resolve_slice's per-entry mapping for VALUES
-    # slices. Single-model slices get ONE envelope reply carrying every text's
-    # flattened values (row-major), so the rows are re-sliced per item;
-    # mixed-model slices get per-pair envelopes and map one row each. Failures
-    # stay nil, mirroring the BLOB path's MGET semantics.
-    def resolve_values(loader, slice, results)
-      if slice.map { |item| item[1] }.uniq.size == 1
-        # dispatch_slice's Array(...) wrap is identity for the single envelope
-        # (a flat 6-element array), so `results` IS the envelope.
-        envelope = Emb::ValuesReply.parse(results)
-        rows = Emb::ValuesReply.rows(envelope[:shape], envelope[:values])
-        expected = slice.sum { |_, _, text, _| Array(text).size }
-        if rows.size < expected
-          raise ShortReplyError, "expected #{expected} VALUES rows, got #{rows.size}"
-        end
-
-        offset = 0
-        slice.each do |item|
-          _, _, text, _ = item
-          texts = Array(text)
-          values = rows[offset, texts.size]
-          offset += texts.size
-          loader.call(item, values.size == 1 ? values.first : values)
-        end
-      else
-        offset = 0
-        slice.each do |item|
-          _, _, text, _ = item
-          texts = Array(text)
-          values = results[offset, texts.size].map do |entry|
-            next nil if entry.nil?
-
-            envelope = Emb::ValuesReply.parse(entry)
-            Emb::ValuesReply.rows(envelope[:shape], envelope[:values]).first
-          end
-          offset += texts.size
-          loader.call(item, values.size == 1 ? values.first : values)
-        end
-      end
     end
 
     # The worker captures failures as outcomes; only the forcing thread

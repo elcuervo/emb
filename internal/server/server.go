@@ -491,13 +491,13 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 // handshakes (e.g. redis-py's) error out right after HELLO 3.
 func (s *Server) handleCLIENT(conn redcon.Conn, cmd redcon.Command) {
 	if len(cmd.Args) < 2 {
-		conn.WriteError("wrong number of arguments for 'CLIENT' command")
+		conn.WriteError("ERR wrong number of arguments for 'CLIENT' command")
 		return
 	}
 	switch strings.ToLower(string(cmd.Args[1])) {
 	case "setinfo":
 		if len(cmd.Args) != 4 {
-			conn.WriteError("wrong number of arguments for 'CLIENT SETINFO' command")
+			conn.WriteError("ERR wrong number of arguments for 'CLIENT SETINFO' command")
 			return
 		}
 		conn.WriteString("OK")

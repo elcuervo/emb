@@ -8,11 +8,13 @@ module Emb
   module ValuesReply
     module_function
 
-    # Parses one envelope (a length-6 pair array) into a Hash. values are
-    # converted to Ruby Floats; an unparsable entry raises ArgumentError
-    # naming the offending value.
+    # Parses one envelope into a Hash. RESP2 replies arrive as a flat 6-element
+    # pair array; under `protocol: 3` redis-client already decoded the server's
+    # RESP3 map into a Ruby Hash (keys frozen strings, values already Floats),
+    # which is used directly. values are converted to Ruby Floats; an
+    # unparsable entry raises ArgumentError naming the offending value.
     def parse(reply)
-      pairs = reply.each_slice(2).to_h
+      pairs = reply.is_a?(Hash) ? reply : reply.each_slice(2).to_h
       shape = pairs.fetch('shape')
       values = Array(pairs.fetch('values')).map { |v| float_value(v) }
       { dtype: pairs.fetch('dtype'), shape: shape, values: values }

@@ -3,6 +3,7 @@
 require 'batch_loader'
 require 'redis_client'
 require_relative 'batch_dispatch'
+require_relative 'values_batch'
 
 module Emb
   extend BatchDispatch

@@ -170,9 +170,11 @@ redis-cli EMB minilm VALUES "hello world"
 key, since per-pair dimensions differ across models), with nulls for failed
 pairs. The keyword is detected only at its fixed position right after the
 model name (or before the pairs) — it is never scanned from the text tail — so
-trailing text that happens to read `BLOB` or `VALUES` embeds normally. As a
-safety measure, `BLOB` and `VALUES` are reserved and cannot be used as model
-names.
+trailing text that happens to read `BLOB` or `VALUES` embeds normally. The one
+collision is a **first** text in a multi-text call: `EMB m VALUES hello`
+treats `VALUES` as the keyword, so to embed the literal word first write it
+twice — `EMB m VALUES VALUES hello` (or reorder the texts). As a safety
+measure, `BLOB` and `VALUES` are reserved and cannot be used as model names.
 
 ### RESP3 and protocol negotiation
 
