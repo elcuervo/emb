@@ -967,3 +967,62 @@ RSpec.describe Emb do
     end
   end
 end
+
+RSpec.describe Emb do
+  describe 'VALUES format batches' do
+  it 'decodes a single-model VALUES envelope into per-text rows' do
+    client = FakeEmbClient.new(
+      %w[EMB minilm VALUES a b] => ['dtype', 'FLOAT', 'shape', [2, 2], 'values', %w[1.0 2.0 3.0 4.0]]
+    )
+
+    l1 = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+    l2 = described_class.build_batch_loader(client, :minilm, 'b', format: :values)
+
+    expect(l1.first).to eq(1.0)
+    expect(l1.last).to eq(2.0)
+    expect(l2.first).to eq(3.0)
+    expect(l2.last).to eq(4.0)
+    expect(client.commands).to eq([%w[EMB minilm VALUES a b]])
+  end
+
+  it 'decodes mixed-model VALUES per-pair envelopes' do
+    client = FakeEmbClient.new(
+      ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b'] => [
+        ['model', 'minilm', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[1.0 2.0]],
+        ['model', 'bge', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[3.0 4.0]]
+      ]
+    )
+
+    minilm = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+    bge = described_class.build_batch_loader(client, :bge, 'b', format: :values)
+
+    expect(minilm.first).to eq(1.0)
+    expect(minilm.last).to eq(2.0)
+    expect(bge.first).to eq(3.0)
+    expect(bge.last).to eq(4.0)
+    expect(client.commands).to eq([['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b']])
+  end
+
+  it 'keeps nil rows for failing pairs under VALUES' do
+    client = FakeEmbClient.new(
+      ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'ghost', 'b'] => [
+        ['model', 'minilm', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[1.0 2.0]],
+        nil
+      ]
+    )
+
+    minilm = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+    ghost = described_class.build_batch_loader(client, :ghost, 'b', format: :values)
+
+    expect(minilm.first).to eq(1.0)
+    expect(minilm.last).to eq(2.0)
+    expect(ghost).to be_nil
+  end
+
+  it 'rejects mixing formats within one batch' do
+    client = FakeEmbClient.new({})
+    slice = [[client, :minilm, 'a', :binary], [client, :minilm, 'b', :values]]
+    expect { Emb.send(:slice_format, slice) }.to raise_error(ArgumentError, /cannot mix/)
+  end
+end
+end

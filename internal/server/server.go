@@ -3,10 +3,13 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -208,6 +211,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 
 	mux := redcon.NewServeMux()
 	mux.HandleFunc("ping", s.handlePING)
+	mux.HandleFunc("hello", s.handleHELLO)
+	mux.HandleFunc("client", s.handleCLIENT)
 	mux.HandleFunc("auth", s.handleAUTH)
 	mux.HandleFunc("emb", s.handleEMB)
 	mux.HandleFunc("emb.models", s.handleMODELS)
@@ -473,6 +478,58 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("PONG")
 }
 
+// handleHELLO negotiates the RESP protocol version for the connection. A bare
+// HELLO reports the current version; HELLO 2|3 switches the connection. The
+// reply carries server metadata in the standard Redis HELLO shape (a map under
+// RESP3, a flat array under RESP2) via the fork's WriteHello helper. HELLO is
+// deliberately NOT auth-exempt, so on a password-protected server the mux gate
+// rejects it with NOAUTH before this handler runs (see the spec's "HELLO
+// respects authentication" scenario).
+// handleCLIENT answers the small subset of CLIENT subcommands that RESP3 client
+// handshakes send. SETINFO carries client library metadata and is acknowledged
+// with OK; unknown subcommands get a NO such subcommand error. Without this,
+// handshakes (e.g. redis-py's) error out right after HELLO 3.
+func (s *Server) handleCLIENT(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) < 2 {
+		conn.WriteError("wrong number of arguments for 'CLIENT' command")
+		return
+	}
+	switch strings.ToLower(string(cmd.Args[1])) {
+	case "setinfo":
+		if len(cmd.Args) != 4 {
+			conn.WriteError("wrong number of arguments for 'CLIENT SETINFO' command")
+			return
+		}
+		conn.WriteString("OK")
+	default:
+		conn.WriteError(fmt.Sprintf("ERR unknown subcommand '%s' for 'CLIENT' command", cmd.Args[1]))
+	}
+}
+
+func (s *Server) handleHELLO(conn redcon.Conn, cmd redcon.Command) {
+	ver := conn.ProtocolVersion()
+	if len(cmd.Args) > 2 {
+		conn.WriteError("ERR wrong number of arguments for 'HELLO' command")
+		return
+	}
+	if len(cmd.Args) == 2 {
+		v, err := strconv.Atoi(string(cmd.Args[1]))
+		if err != nil || (v != 2 && v != 3) {
+			conn.WriteError(fmt.Sprintf("NOPROTO unsupported protocol version: %d", v))
+			return
+		}
+		ver = v
+	}
+	conn.SetProtocolVersion(ver)
+	redcon.WriteHello(conn,
+		"server", "redis",
+		"version", s.version,
+		"proto", strconv.Itoa(ver),
+		"mode", "standalone",
+		"role", "master",
+	)
+}
+
 func (s *Server) handleCACHEFLUSH(conn redcon.Conn, cmd redcon.Command) {
 	if len(cmd.Args) > 2 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.CACHE.FLUSH' command")
@@ -529,6 +586,35 @@ func (s *Server) handleSAVE(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("OK")
 }
 
+// replyFormat selects the reply representation of an embedding query, mirroring
+// RedisAI's AI.TENSORGET <key> [BLOB|VALUES]. BLOB is the default and keeps the
+// compact binary wire; VALUES returns a self-describing envelope.
+type replyFormat int
+
+const (
+	formatBLOB replyFormat = iota
+	formatVALUES
+)
+
+// parseFormatArg recognizes the leading reply-format keyword at a fixed
+// position. A keyword is only recognized when at least one payload argument
+// follows it; otherwise the position is an ordinary text (or model) argument
+// and the format defaults to BLOB. The keyword is never an end-of-command
+// sentinel, so trailing free text can never shadow it.
+func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
+	if len(args) <= keywordPos+1 {
+		return formatBLOB, false
+	}
+	switch strings.ToUpper(string(args[keywordPos])) {
+	case "BLOB":
+		return formatBLOB, true
+	case "VALUES":
+		return formatVALUES, true
+	default:
+		return formatBLOB, false
+	}
+}
+
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
@@ -544,8 +630,16 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	defer s.active.Done()
 
 	modelName := string(cmd.Args[1])
-	texts := make([]string, len(cmd.Args)-2)
-	for i, arg := range cmd.Args[2:] {
+	// Leading reply-format keyword (EMB <model> [BLOB|VALUES] <text>...):
+	// recognized only at the fixed position right after the model, never in the
+	// text tail.
+	format, hasFormat := parseFormatArg(cmd.Args[1:], 1)
+	textArgs := cmd.Args[2:]
+	if hasFormat {
+		textArgs = cmd.Args[3:]
+	}
+	texts := make([]string, len(textArgs))
+	for i, arg := range textArgs {
 		texts[i] = string(arg)
 	}
 
@@ -569,10 +663,6 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 				missIdxs = append(missIdxs, i)
 			}
 		}
-		if len(missIdxs) == 0 {
-			writeEmbReply(conn, results, total)
-			return
-		}
 
 		entry, err := s.reg.GetOrInit(modelName)
 		if err != nil {
@@ -580,6 +670,11 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 			return
 		}
 		s.admitQuarantine(modelName, entry)
+
+		if len(missIdxs) == 0 {
+			writeEmbResult(conn, format, results, total, entry.Dim)
+			return
+		}
 
 		missTexts := make([]string, len(missIdxs))
 		for j, idx := range missIdxs {
@@ -601,14 +696,9 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 			s.cache.Set(modelName+":"+texts[idx], resp.Embeddings[j])
 		}
 
-		if len(results) == 1 {
-			conn.WriteBulk(results[0])
-		} else {
-			conn.WriteArray(len(results))
-			for _, emb := range results {
-				conn.WriteBulk(emb)
-			}
-		}
+		// Single-text requests keep their single-bulk reply shape; multi-text
+		// replies are arrays with null slots for truncated overflow texts.
+		writeEmbResult(conn, format, results, total, entry.Dim)
 		return
 	}
 
@@ -629,7 +719,17 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	writeEmbReply(conn, resp.Embeddings, total)
+	writeEmbResult(conn, format, resp.Embeddings, total, entry.Dim)
+}
+
+// writeEmbResult routes an embedding reply to the requested format: the BLOB
+// binary wire (unchanged shapes) or the RedisAI-style VALUES envelope.
+func writeEmbResult(conn redcon.Conn, format replyFormat, results [][]byte, total, dim int) {
+	if format == formatVALUES {
+		writeValuesEmbReply(conn, results, dim)
+		return
+	}
+	writeEmbReply(conn, results, total)
 }
 
 // writeEmbReply writes one reply slot per requested text: bulks for the results
@@ -649,10 +749,74 @@ func writeEmbReply(conn redcon.Conn, results [][]byte, total int) {
 	}
 }
 
+// writeValuesEmbReply writes the RedisAI META+VALUES envelope for an EMB
+// VALUES reply: dtype, shape [m, dim] (m = processed texts, so a truncated
+// tail is reflected by the shape), and a flat row-major values array. Under
+// RESP3 the values are typed doubles; under RESP2 they are decimal bulk
+// strings, exactly like RedisAI's reply.
+func writeValuesEmbReply(conn redcon.Conn, results [][]byte, dim int) {
+	writePairs(conn, 3)
+	conn.WriteBulkString("dtype")
+	conn.WriteBulkString("FLOAT")
+	conn.WriteBulkString("shape")
+	conn.WriteArray(2)
+	conn.WriteInt(len(results))
+	conn.WriteInt(dim)
+	conn.WriteBulkString("values")
+	writeValuesArray(conn, results, dim)
+}
+
+// writeValuesArray writes the flat values array for the given embedding blobs.
+// Each float32 dimension is widened to float64 and serialized with the standard
+// Redis double representation (typed RESP3 doubles, decimal bulk strings under
+// RESP2) — the same widening RedisAI applies via RAI_TensorGetValueAsDouble.
+func writeValuesArray(conn redcon.Conn, results [][]byte, dim int) {
+	conn.WriteArray(len(results) * dim)
+	for _, emb := range results {
+		for i := 0; i < dim; i++ {
+			v := float64(math.Float32frombits(binary.LittleEndian.Uint32(emb[i*4 : i*4+4])))
+			if conn.ProtocolVersion() == 3 {
+				conn.WriteDouble(v)
+			} else {
+				conn.WriteBulkString(strconv.FormatFloat(v, 'g', -1, 64))
+			}
+		}
+	}
+}
+
+// writePairs opens a flat key/value reply: a RESP3 map header when the
+// connection negotiated protocol 3, and the RESP2 flat array header (2n
+// elements) otherwise. The caller then writes the pairs with the usual
+// Write* calls — the reply body is identical in both encodings.
+func writePairs(conn redcon.Conn, n int) {
+	if conn.ProtocolVersion() == 3 {
+		conn.WriteMap(n)
+	} else {
+		conn.WriteArray(n * 2)
+	}
+}
+
 func (s *Server) handleMODELS(conn redcon.Conn, cmd redcon.Command) {
 	models := s.reg.List()
 	if len(models) == 0 {
-		conn.WriteArray(0)
+		if conn.ProtocolVersion() == 3 {
+			conn.WriteMap(0)
+		} else {
+			conn.WriteArray(0)
+		}
+		return
+	}
+	if conn.ProtocolVersion() == 3 {
+		// RESP3: a map keyed by model name whose values carry dim and status.
+		conn.WriteMap(len(models))
+		for _, m := range models {
+			conn.WriteBulkString(m.Name)
+			conn.WriteMap(2)
+			conn.WriteBulkString("dim")
+			conn.WriteInt(m.Dim)
+			conn.WriteBulkString("status")
+			conn.WriteBulkString("ready")
+		}
 		return
 	}
 	conn.WriteArray(len(models))
@@ -680,9 +844,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	stats := entry.Pool.Stats()
 
 	if s.cache != nil {
-		conn.WriteArray(44)
+		writePairs(conn, 22)
 	} else {
-		conn.WriteArray(30)
+		writePairs(conn, 15)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -785,7 +949,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	conn.WriteArray(88)
+	writePairs(conn, 44)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -893,6 +1057,12 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	pairs := cmd.Args[1:]
+	// Leading reply-format keyword (EMB.MULTI [BLOB|VALUES] <model> <text>...):
+	// recognized only at the fixed first position, never among the pairs.
+	format, hasFormat := parseFormatArg(cmd.Args[1:], 0)
+	if hasFormat {
+		pairs = cmd.Args[2:]
+	}
 	if len(pairs) < 2 || len(pairs)%2 != 0 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.MULTI' command")
 		return
@@ -935,7 +1105,44 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	close(jobs)
 	wg.Wait()
 
+	writeMultiResult(conn, s, format, pairs, results, n, total)
+}
+
+// writeMultiResult writes the EMB.MULTI reply: an ordered array with one slot
+// per requested pair — bulk/null slots under BLOB, per-pair VALUE envelopes
+// (with a model key, since dims are ragged across models) or nulls under
+// VALUES. Truncated overflow pairs stay null in both formats.
+func writeMultiResult(conn redcon.Conn, s *Server, format replyFormat, pairs [][]byte, results [][]byte, n, total int) {
 	conn.WriteArray(total)
+	if format == formatVALUES {
+		for i, r := range results {
+			if r == nil {
+				conn.WriteNull()
+				continue
+			}
+			model := string(pairs[i*2])
+			entry, err := s.reg.GetOrInit(model)
+			if err != nil {
+				conn.WriteNull()
+				continue
+			}
+			writePairs(conn, 4)
+			conn.WriteBulkString("model")
+			conn.WriteBulkString(model)
+			conn.WriteBulkString("dtype")
+			conn.WriteBulkString("FLOAT")
+			conn.WriteBulkString("shape")
+			conn.WriteArray(2)
+			conn.WriteInt(1)
+			conn.WriteInt(entry.Dim)
+			conn.WriteBulkString("values")
+			writeValuesArray(conn, [][]byte{r}, entry.Dim)
+		}
+		for i := n; i < total; i++ {
+			conn.WriteNull()
+		}
+		return
+	}
 	for _, r := range results {
 		if r == nil {
 			conn.WriteNull()
@@ -997,10 +1204,10 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 	help := strings.Join([]string{
-		"EMB <model> <text> [text...] - Generate embeddings for one or more texts (cached)",
+		"EMB <model> [BLOB|VALUES] <text> [text...] - Generate embeddings (default BLOB: float32 binary; VALUES: dtype/shape/values envelope with decimal values)",
 		"EMB.MODELS - List available models and their dimensions",
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
-		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
+		"EMB.MULTI [BLOB|VALUES] <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics (requests, connections, mem/cpu, goroutines)",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.EVAL <model> <script> <numtexts> <text...> <arg...> - Evaluate a Lua script against a model (KEYS=texts, ARGV=args)",

@@ -329,6 +329,32 @@ client = Emb.new(url: "redis://localhost:6379")
 result = client[:minilm]["hello world"]
 ```
 
+### VALUE format (RESP decimal reply)
+
+By default the server replies with the compact float32 binary wire and the gem
+unpacks it. Pass `format: :values` to send the RedisAI-style `VALUES` keyword
+and get the server's self-describing envelope back: `dtype`, `shape`, and the
+embedding values as decimal floats (the float64 widening the server stores, so
+`unpack` is not needed). Single texts return the envelope with flat `values`;
+multiple texts group the values per text (rows of `shape`).
+
+```ruby
+Emb[:minilm]["hello world", format: :values]
+# => { dtype: "FLOAT", shape: [1, 384], values: [0.0123, -0.0456, ...] }
+
+Emb[:minilm]["hello", "world", format: :values]
+# => { dtype: "FLOAT", shape: [2, 384], values: [[...], [...]] }
+```
+
+The batch loaders accept the same keyword; mixed formats within one batch
+raise `ArgumentError`.
+
+> **RESP3 note:** the server emits the decimal values as typed RESP3 doubles when
+> the connection negotiated `HELLO 3` and as decimal bulk strings otherwise.
+> The gem speaks RESP2 (binary default, decimal `values` opt-in) and does not
+> parse RESP3 replies itself — connect with a RESP3-capable client to use the
+> typed doubles on the wire.
+
 ### Multiple texts
 
 ```ruby

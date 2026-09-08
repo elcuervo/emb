@@ -45,11 +45,17 @@ module Emb
     # explicit receiver.
     private(*BatchDispatch.instance_methods(false))
 
-    def build_batch_loader(client, model, text)
+    def build_batch_loader(client, model, text, format: :binary)
+      unless %i[binary values].include?(format)
+        raise ArgumentError, "unknown format #{format.inspect} (expected :binary or :values)"
+      end
+
       # default_value []: an item whose batch failed (fail-closed) resolves to
       # an empty vector collection instead of nil, so resolver methods like
       # `loader.sum` do not blow up with NoMethodError-on-nil.
-      BatchLoader.for([client, model, text]).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
+      # Items carry [client, model, text, format] so the dispatch knows how to
+      # shape and parse the reply.
+      BatchLoader.for([client, model, text, format]).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
     end
 
     # Removes every pending item of the batch scope. batch-loader prunes

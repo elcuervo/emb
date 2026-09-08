@@ -26,3 +26,5 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 )
+
+replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260908152233-262156df7a31

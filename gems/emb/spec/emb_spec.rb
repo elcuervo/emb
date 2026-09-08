@@ -75,6 +75,29 @@ RSpec.describe Emb do
       expect(results.first).to be_a(Array)
       expect(results.first.size).to eq(384)
     end
+
+    it 'embeds values format into an envelope hash' do
+      envelope = described_class[:minilm]['hello world', format: :values]
+      expect(envelope).to be_a(Hash)
+      expect(envelope[:dtype]).to eq('FLOAT')
+      expect(envelope[:shape]).to eq([1, 384])
+      expect(envelope[:values]).to be_an(Array)
+      expect(envelope[:values].size).to eq(384)
+      expect(envelope[:values].first).to be_a(Float)
+    end
+
+    it 'groups multiple values texts per row' do
+      envelope = described_class[:minilm]['hello', 'world', format: :values]
+      expect(envelope[:shape]).to eq([2, 384])
+      expect(envelope[:values]).to be_an(Array)
+      expect(envelope[:values].size).to eq(2)
+      expect(envelope[:values].first.size).to eq(384)
+      expect(envelope[:values].first.first).to be_a(Float)
+    end
+
+    it 'rejects unknown formats' do
+      expect { described_class[:minilm]['hello', format: :tex] }.to raise_error(ArgumentError, /unknown format/)
+    end
   end
 
   describe '.multi' do

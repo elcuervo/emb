@@ -145,6 +145,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	for name, m := range cfg.Models {
+		if strings.EqualFold(name, "blob") || strings.EqualFold(name, "values") {
+			return nil, fmt.Errorf("model %q: %q is a reserved word (reserved for the EMB reply-format keyword)", name, name)
+		}
 		if m.ModelRepo == "" && m.ONNX == "" {
 			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
 		}
