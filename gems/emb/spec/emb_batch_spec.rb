@@ -966,4 +966,101 @@ RSpec.describe Emb do
       expect(client.commands.length).to eq(1)
     end
   end
+
+  describe 'VALUES format batches' do
+    it 'decodes a single-model VALUES envelope into per-text rows' do
+      client = FakeEmbClient.new(
+        %w[EMB minilm VALUES a b] => ['dtype', 'FLOAT', 'shape', [2, 2], 'values', %w[1.0 2.0 3.0 4.0]]
+      )
+
+      l1 = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+      l2 = described_class.build_batch_loader(client, :minilm, 'b', format: :values)
+
+      expect(l1.first).to eq(1.0)
+      expect(l1.last).to eq(2.0)
+      expect(l2.first).to eq(3.0)
+      expect(l2.last).to eq(4.0)
+      expect(client.commands).to eq([%w[EMB minilm VALUES a b]])
+    end
+
+    it 'decodes a RESP3 single-model VALUES map reply (Hash decoded by redis-client)' do
+      # Under protocol: 3 redis-client decodes the server's RESP3 map into a
+      # Ruby Hash; dispatch_slice wraps it with Array(), so the envelope must be
+      # rehydrated back into a Hash before parsing (regression for a crash where
+      # each_slice(2).to_h choked on the pair-array form).
+      client = FakeEmbClient.new(
+        %w[EMB minilm VALUES a b] => { 'dtype' => 'FLOAT', 'shape' => [2, 2], 'values' => %w[1.0 2.0 3.0 4.0] }
+      )
+
+      l1 = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+      l2 = described_class.build_batch_loader(client, :minilm, 'b', format: :values)
+
+      expect(l1.first).to eq(1.0)
+      expect(l1.last).to eq(2.0)
+      expect(l2.first).to eq(3.0)
+      expect(l2.last).to eq(4.0)
+    end
+
+    it 'decodes mixed-model VALUES per-pair envelopes' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b'] => [
+          ['model', 'minilm', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[1.0 2.0]],
+          ['model', 'bge', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[3.0 4.0]]
+        ]
+      )
+
+      minilm = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+      bge = described_class.build_batch_loader(client, :bge, 'b', format: :values)
+
+      expect(minilm.first).to eq(1.0)
+      expect(minilm.last).to eq(2.0)
+      expect(bge.first).to eq(3.0)
+      expect(bge.last).to eq(4.0)
+      expect(client.commands).to eq([['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b']])
+    end
+
+    it 'raises ShortReplyError for a short mixed-model VALUES reply' do
+      # Two one-text items but only one per-pair envelope: a protocol failure
+      # that must fail closed (like the BLOB path), not resolve the missing item
+      # to an empty vector.
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'bge', 'b'] => [
+          ['model', 'minilm', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[1.0 2.0]]
+        ]
+      )
+
+      minilm = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+      _bge = described_class.build_batch_loader(client, :bge, 'b', format: :values)
+
+      # Fail-closed like the BLOB path: the batch tail wraps the protocol
+      # violation in ServerError, counting a single attempt (no re-send).
+      expect { minilm.__send__(:__sync) }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
+        expect(e.cause).to be_a(Emb::ShortReplyError)
+        expect(e.message).to include('expected 2 VALUES reply entries, got 1')
+      end
+    end
+
+    it 'keeps nil rows for failing pairs under VALUES' do
+      client = FakeEmbClient.new(
+        ['EMB.MULTI', 'VALUES', 'minilm', 'a', 'ghost', 'b'] => [
+          ['model', 'minilm', 'dtype', 'FLOAT', 'shape', [1, 2], 'values', %w[1.0 2.0]],
+          nil
+        ]
+      )
+
+      minilm = described_class.build_batch_loader(client, :minilm, 'a', format: :values)
+      ghost = described_class.build_batch_loader(client, :ghost, 'b', format: :values)
+
+      expect(minilm.first).to eq(1.0)
+      expect(minilm.last).to eq(2.0)
+      expect(ghost).to be_nil
+    end
+
+    it 'rejects mixing formats within one batch' do
+      client = FakeEmbClient.new({})
+      slice = [[client, :minilm, 'a', :binary], [client, :minilm, 'b', :values]]
+      expect { described_class.send(:slice_format, slice) }.to raise_error(ArgumentError, /cannot mix/)
+    end
+  end
 end

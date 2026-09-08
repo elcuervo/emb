@@ -11,17 +11,37 @@ module Emb
     # the command may have been sent are terminal and propagate so the forcing
     # thread can fail closed.
     def dispatch_slice(client, slice)
-      models = slice.map { |_, model, _| model }.uniq
+      models = slice.map { |_, model, _, _| model }.uniq
       args = models.size == 1 ? same_model_args(slice, models.first) : mixed_model_args(slice)
       Array(client.send_command(*args))
     end
 
     def same_model_args(slice, model)
-      ['EMB', model.to_s, *slice.flat_map { |_, _, text| Array(text) }]
+      texts = slice.flat_map { |_, _, text, _| Array(text) }
+      if slice_format(slice) == :values
+        ['EMB', model.to_s, 'VALUES', *texts]
+      else
+        ['EMB', model.to_s, *texts]
+      end
     end
 
     def mixed_model_args(slice)
-      ['EMB.MULTI', *slice.flat_map { |_, model, text| Array(text).flat_map { |t| [model.to_s, t] } }]
+      pairs = slice.flat_map { |_, model, text, _| Array(text).flat_map { |t| [model.to_s, t] } }
+      if slice_format(slice) == :values
+        ['EMB.MULTI', 'VALUES', *pairs]
+      else
+        ['EMB.MULTI', *pairs]
+      end
+    end
+
+    # slice_format: the batch item layout is [client, model, text, format];
+    # items created before the format slot existed default to :binary.
+    def slice_format(slice)
+      formats = slice.map { |item| item[3] }.uniq
+      if formats.size > 1
+        raise ArgumentError, "cannot mix :binary and :values formats in one batch"
+      end
+      formats.first || :binary
     end
 
     # Maps a slice's reply entries onto its items in deferral order. Runs on
@@ -31,14 +51,18 @@ module Emb
     # from a client-raised ProtocolError so it is not counted as a transport
     # retry).
     def resolve_slice(loader, slice, results)
-      expected = slice.sum { |_, _, text| Array(text).size }
+      if slice_format(slice) == :values
+        return ValuesBatch.resolve(loader, slice, results)
+      end
+
+      expected = slice.sum { |_, _, text, _| Array(text).size }
       unless results.size >= expected
         raise ShortReplyError, "expected #{expected} reply entries, got #{results.size}"
       end
 
       offset = 0
       slice.each do |item|
-        _, _, text = item
+        _, _, text, _ = item
         texts = Array(text)
         values = entry_values(results, offset, texts)
         offset += texts.size

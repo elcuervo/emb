@@ -11,11 +11,15 @@ A simple yet powerful text embeddings generator.
 
 `emb` is a text-embeddings server speaking the Redis protocol. Every Redis
 client: `redis-cli`, `redis-py`, `redis-rb`, … — can call it without special
-libraries, and embeddings come back as raw float32 bytes:
+libraries, and embeddings come back as raw float32 bytes by default:
 
 ```bash
 redis-cli EMB minilm "hello world"
 # → \x7c\x8e\x80\xbd...   (384 float32s × 4 bytes)
+
+# RESP3 clients can ask for a self-describing decimal reply instead:
+redis-cli -3 EMB minilm VALUES "hello world"
+# → dtype FLOAT / shape [1 384] / values [-0.1974, 0.1776, ...]
 ```
 
 ## Contents
@@ -32,8 +36,10 @@ redis-cli EMB minilm "hello world"
 
 ## Features
 
-- **Redis protocol** — drop-in for any Redis client; RESP2 responses are raw
-  little-endian float32 vectors.
+- **Redis protocol** — drop-in for any Redis client; RESP2 by default with
+  opt-in RESP3 (`HELLO 3`). Embeddings default to compact little-endian float32
+  bytes, with a `VALUES` format that returns self-describing decimal replies
+  (typed RESP3 doubles or RESP2 decimal bulks) for non-binary clients.
 - **ONNX Runtime** — fast CPU/GPU inference via CGo bindings, with optional
   int8 weight quantization.
 - **HuggingFace integration** — auto-download models and auto-detect dim,
@@ -103,8 +109,8 @@ redis-cli EMB minilm "hello world"
 
 | Command | Description |
 |---------|-------------|
-| `EMB <model> <text> [text...]` | Embed one or more texts. Single text → bulk string, multiple → array of bulk strings |
-| `EMB.MULTI <model> <text> [<model> <text>...]` | Embed texts across different models in one call |
+| `EMB <model> [BLOB\|VALUES] <text> [text...]` | Embed one or more texts. Default `BLOB`: single text → bulk string, multiple → array of bulk strings (float32 bytes). `VALUES`: `dtype`/`shape`/`values` envelope with decimal values |
+| `EMB.MULTI [BLOB\|VALUES] <model> <text> [<model> <text>...]` | Embed texts across different models in one call; per-pair `VALUES` envelopes (with `model`) or null on failure |
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, live cache stats |
 | `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown, **mem (RSS MB), cpu user/sys usec, goroutines** |
@@ -120,6 +126,7 @@ redis-cli EMB minilm "hello world"
 | `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `memory`, `cpu`, `clients` |
 | `CONFIG GET [glob]` / `CONFIG SET` | Read or live-tune runtime settings (see [Operations](#operations)) |
 | `AUTH <password>` | Authenticate the connection (required if `password` is set) |
+| `HELLO [2\|3]` | Negotiate the RESP protocol version for the connection (default 2); bare `HELLO` reports the current version |
 | `PING` | PONG |
 
 ### EMB.MULTI
@@ -133,6 +140,57 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 1) \x7c\x8e\x80\xbd...   (minilm, 384 floats)
 2) \x4a\x9f\x31\xc2...   (siglip2, 768 floats)
 ```
+
+### Reply formats: BLOB and VALUES
+
+`EMB` and `EMB.MULTI` accept an optional leading reply-format keyword,
+mirroring RedisAI's `AI.TENSORGET <key> [META] [BLOB|VALUES]`:
+
+- **`BLOB`** (default) — the compact binary wire: raw little-endian float32
+  bytes as bulk string(s). Fastest, and byte-identical to prior emb versions.
+- **`VALUES`** — a self-describing envelope: `dtype` (`FLOAT`), `shape`
+  `[m, dim]`, and a flat row-major `values` array of the embeddings as decimal
+  floats. Handy for clients, tooling, and debugging that cannot decode raw
+  float32 bytes.
+
+```bash
+redis-cli EMB minilm VALUES "hello world"
+1) "dtype"
+2) "FLOAT"
+3) "shape"
+4) 1) (integer) 1
+   2) (integer) 384
+5) "values"
+6) 1) "-0.19744610786437988"
+   2) "0.17766517400741577"
+   ...
+```
+
+`EMB.MULTI ... VALUES` returns one envelope per pair (including a `model`
+key, since per-pair dimensions differ across models), with nulls for failed
+pairs. The keyword is detected only at its fixed position right after the
+model name (or before the pairs) — it is never scanned from the text tail — so
+trailing text that happens to read `BLOB` or `VALUES` embeds normally. The one
+collision is a **first** text in a multi-text call: `EMB m VALUES hello`
+treats `VALUES` as the keyword, so to embed the literal word first write it
+twice — `EMB m VALUES VALUES hello` (or reorder the texts). As a safety
+measure, `BLOB` and `VALUES` are reserved and cannot be used as model names.
+
+### RESP3 and protocol negotiation
+
+Connections speak RESP2 by default. A client can upgrade a connection to
+RESP3 with `HELLO 3` (and back with `HELLO 2`); bare `HELLO` reports the
+current version. Under RESP3:
+
+- `EMB ... VALUES` values are typed RESP3 doubles (`,<decimal>`) instead of
+  decimal bulk strings.
+- `EMB.INFO`, `EMB.STATS`, `EMB.MODELS`, and `CONFIG GET` reply with maps
+  instead of flat key/value arrays; nulls encode as `_` instead of `$-1`.
+- `INFO` stays a bulk string in both protocols (as in real Redis), and errors
+  stay simple errors.
+
+The Ruby client (`gems/emb`) keeps RESP2 and the binary `BLOB` default; pass
+`format: :values` to opt into decimal replies. See [Clients](#clients).
 
 ## Custom scripts
 
@@ -515,9 +573,11 @@ Redis semantics.
 
 ## Clients
 
-The response is raw little-endian float32 bytes, so any Redis client works:
+The response is raw little-endian float32 bytes by default, so any Redis
+client works. To avoid decoding raw floats, ask for `VALUES` (decimal
+values); under `HELLO 3` the values come back as typed doubles:
 
-**Ruby:**
+**Ruby (raw RESP2):**
 
 ```ruby
 require "redis_client"
@@ -525,6 +585,19 @@ require "redis_client"
 redis = RedisClient.new(port: 6379)
 raw = redis.call("EMB", "minilm", "hello world")
 emb = raw.unpack("e*")
+
+# decimal reply (no binary unpack needed):
+envelope = redis.call("EMB", "minilm", "VALUES", "hello world")
+# => ["dtype", "FLOAT", "shape", [1, 384], "values", ["-0.1974...", ...]]
+```
+
+**Python (RESP3, typed doubles):**
+
+```python
+import redis
+r = redis.Redis(port=6379, protocol=3)  # sends HELLO 3
+env = r.execute_command("EMB", "minilm", "VALUES", "hello world")
+# env => {b"dtype": b"FLOAT", b"shape": [1, 384], b"values": [-0.1974...]}
 ```
 
 Or use the [`emb`](gems/emb/README.md) gem — connection pooling, proxy, and

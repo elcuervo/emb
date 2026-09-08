@@ -298,7 +298,7 @@ func (s *Server) handleConfig(conn redcon.Conn, cmd redcon.Command) {
 				matched = append(matched, p)
 			}
 		}
-		conn.WriteArray(len(matched) * 2)
+		writePairs(conn, len(matched))
 		for _, p := range matched {
 			conn.WriteBulkString(p.name)
 			conn.WriteBulkString(p.get(s))

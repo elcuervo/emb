@@ -465,3 +465,18 @@ func TestParseFlagsPersistence(t *testing.T) {
 		t.Fatalf("persistence controls not retained: %#v", fc.Config)
 	}
 }
+
+func TestLoadReservedModelNames(t *testing.T) {
+	for _, name := range []string{"BLOB", "blob", "VALUES", "values"} {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		os.WriteFile(cfgPath, []byte("models:\n  "+name+":\n    onnx: ./m.onnx\n"), 0644)
+		_, err := Load(cfgPath)
+		if err == nil {
+			t.Fatalf("expected reserved-name error for %q", name)
+		}
+		if !strings.Contains(err.Error(), "reserved") {
+			t.Fatalf("expected reserved-word error for %q, got %v", name, err)
+		}
+	}
+}

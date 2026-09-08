@@ -5,7 +5,9 @@ require 'spec_helper'
 RSpec.describe Emb do
   describe 'script evaluation' do
     before(:all) do
-      described_class.setup(port: EMB_PORT, batch: false)
+      # Eager (non-batch) default client: `lazy: false` is the current name for
+      # the pre-lazy-modes `batch: false` this script suite assumed.
+      described_class.setup(port: EMB_PORT, lazy: false)
       described_class.script.flush
     end
 
