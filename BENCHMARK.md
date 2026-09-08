@@ -105,12 +105,14 @@ Measured on the same Apple M4 reference machine, `minilm` (dim 384), single
 text `"hello"`, cache-hit (warmed), loopback, `-cache auto`, `redis-benchmark`,
 2026-09-08 (RESP3 change):
 
-| Clients | BLOB req/s | BLOB p50 | VALUES req/s | VALUES p50 | VALUES penalty |
+| Clients | BLOB req/s | BLOB p50 | VALUES req/s | VALUES p50 | VALUES vs BLOB |
 |---------|------------|----------|--------------|------------|----------------|
-| 1       | 45,455     | 0.015 ms | 16,393       | 0.047 ms   | 2.8×            |
-| 16      | 125,000    | 0.119 ms | 33,333       | 0.367 ms   | 3.8×            |
+| 1       | 45,455     | 0.015 ms | 16,393       | 0.047 ms   | ~2.8× slower   |
+| 16      | 125,000    | 0.119 ms | 33,333       | 0.367 ms   | ~3.8× slower   |
 
-`VALUES` costs 3–4× the reply path on cache hits: ~384 decimal conversions per
+`BLOB` is the baseline — it carries **no penalty**; the reported slowdown is
+entirely on the `VALUES` path. `VALUES` costs 3–4× the reply path on cache
+hits: ~384 decimal conversions per
 query plus a reply roughly 3× the binary size on the wire. Under `HELLO 3` the
 `values` are typed RESP3 doubles (same decimal text, no extra cost); `INFO`
 stays a bulk string in both protocols. The binary `BLOB` path is byte-identical

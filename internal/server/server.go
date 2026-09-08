@@ -601,14 +601,33 @@ const (
 // follows it; otherwise the position is an ordinary text (or model) argument
 // and the format defaults to BLOB. The keyword is never an end-of-command
 // sentinel, so trailing free text can never shadow it.
+// isKeyword reports whether arg equals kw case-insensitively (ASCII) without
+// allocating — so the reply-format check on the default BLOB path adds no
+// per-command allocation.
+func isKeyword(arg []byte, kw string) bool {
+	if len(arg) != len(kw) {
+		return false
+	}
+	for i := 0; i < len(arg); i++ {
+		c := arg[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != kw[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
 	if len(args) <= keywordPos+1 {
 		return formatBLOB, false
 	}
-	switch strings.ToUpper(string(args[keywordPos])) {
-	case "BLOB":
+	switch {
+	case isKeyword(args[keywordPos], "blob"):
 		return formatBLOB, true
-	case "VALUES":
+	case isKeyword(args[keywordPos], "values"):
 		return formatVALUES, true
 	default:
 		return formatBLOB, false
