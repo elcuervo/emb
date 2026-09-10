@@ -1,0 +1,130 @@
+<svg viewBox="0 0 880 600" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">emb system overview</title>
+  <desc id="desc">Clients — the ruby emb gem, redis-cli or any RESP client, and go/rust/python clients — reach one emb process over a single RESP port. Inside the process the RESP surface handles protocol negotiation, auth, idle timeout and the connection cap, then command dispatch. Dispatch probes the LRU embedding cache by model:text; a hit returns the stored bytes to the reply writer without touching the model. A miss goes to the registry, which lazily loads the model into a pool of ONNX Runtime sessions, then to smart batching, which coalesces concurrent requests into one ONNX run. Results are written back into the cache and then to the reply writer, which emits either BLOB float32 bytes or a VALUES envelope depending on the format keyword and negotiated protocol. All three subsystems sit on CGo-linked native libraries — libonnxruntime and libtokenizers — plus model artifacts on disk or downloaded from the HuggingFace hub.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-2)"/>
+    </marker>
+    <marker id="arO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-3)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="600" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="599" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">EMB &#183; ONE RESP PORT, ONE BINARY, THREE SUBSYSTEMS</text>
+
+  <text x="30" y="44" font-size="9" fill="var(--text-muted)" letter-spacing="1">CLIENTS</text>
+  <rect x="30" y="50" width="250" height="46" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="155" y="70" text-anchor="middle" font-size="12" fill="var(--text-bright)">ruby emb gem</text>
+  <text x="155" y="86" text-anchor="middle" font-size="9" fill="var(--text-muted)">eager &#183; lazy :multi &#183; lazy :batch</text>
+
+  <rect x="315" y="50" width="250" height="46" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="70" text-anchor="middle" font-size="12" fill="var(--text-bright)">redis-cli &#183; any RESP client</text>
+  <text x="440" y="86" text-anchor="middle" font-size="9" fill="var(--text-muted)">RESP2 always &#183; RESP3 via HELLO 3</text>
+
+  <rect x="600" y="50" width="250" height="46" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="725" y="70" text-anchor="middle" font-size="12" fill="var(--text-bright)">go / rust / python clients</text>
+  <text x="725" y="86" text-anchor="middle" font-size="9" fill="var(--text-muted)">the compact BLOB path</text>
+
+  <line class="dgm-flow" x1="155" y1="96" x2="155" y2="130" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="96" x2="440" y2="130" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="725" y1="96" x2="725" y2="130" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="30" y="132" width="820" height="332" rx="10" fill="none" stroke="var(--border)"/>
+  <text x="44" y="152" font-size="9" fill="var(--text-muted)" letter-spacing="1">EMB &#8212; ONE GO BINARY, CGO-LINKED TO ONNX RUNTIME</text>
+  <text x="836" y="152" text-anchor="end" font-size="9" fill="var(--text-muted)">RESP over one port &#183; optional AUTH + TLS</text>
+
+  <rect x="50" y="162" width="780" height="40" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="187" text-anchor="middle" font-size="11" fill="var(--text-bright)">RESP surface &#183; RESP2 default, HELLO 3 opt-in &#183; AUTH &#183; idle timeout &#183; connection cap</text>
+
+  <rect x="50" y="214" width="780" height="46" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="234" text-anchor="middle" font-size="12" fill="var(--text-bright)">command dispatch</text>
+  <text x="440" y="250" text-anchor="middle" font-size="9" fill="var(--text-muted)">EMB &#183; EMB.MULTI &#183; EMB.EVAL &#183; INFO &#183; EMB.STATS &#183; EMB.MODELS &#183; CONFIG &#183; EMB.CACHE.FLUSH &#183; EMB.SAVE &#183; MONITOR</text>
+
+  <line class="dgm-flow" x1="170" y1="260" x2="170" y2="284" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <text x="178" y="276" font-size="9" fill="var(--text-muted)">probe</text>
+  <line class="dgm-ants" x1="250" y1="284" x2="250" y2="260" stroke="var(--accent)" marker-end="url(#arR)"/>
+  <text x="258" y="276" font-size="9" fill="var(--accent)">hit</text>
+
+  <rect x="56" y="284" width="228" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="170" y="306" text-anchor="middle" font-size="12" fill="var(--text-bright)">LRU embedding cache</text>
+  <text x="170" y="330" text-anchor="middle" font-size="9" fill="var(--text-muted)">key: model:text</text>
+  <text x="170" y="348" text-anchor="middle" font-size="9" fill="var(--text-muted)">hit &#8594; reply, zero inference</text>
+  <text x="170" y="366" text-anchor="middle" font-size="9" fill="var(--text-muted)">per-model hit / miss stats</text>
+  <text x="170" y="384" text-anchor="middle" font-size="9" fill="var(--text-muted)">optional snapshot to disk</text>
+  <text x="170" y="402" text-anchor="middle" font-size="9" fill="var(--text-muted)">restore gated by fingerprint</text>
+
+  <line class="dgm-flow" x1="284" y1="359" x2="330" y2="359" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <text x="307" y="351" text-anchor="middle" font-size="9" fill="var(--accent-2)">miss</text>
+
+  <rect x="330" y="284" width="228" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="444" y="306" text-anchor="middle" font-size="12" fill="var(--text-bright)">registry &amp; model pool</text>
+  <text x="444" y="330" text-anchor="middle" font-size="9" fill="var(--text-muted)">lazy load on first use</text>
+  <text x="444" y="348" text-anchor="middle" font-size="9" fill="var(--text-muted)">N ONNX sessions per model</text>
+  <text x="444" y="366" text-anchor="middle" font-size="9" fill="var(--text-muted)">workers auto-tuned from RAM</text>
+  <text x="444" y="384" text-anchor="middle" font-size="9" fill="var(--text-muted)">int8 weights when present</text>
+  <text x="444" y="402" text-anchor="middle" font-size="9" fill="var(--text-muted)">sticky failure, no retry storm</text>
+
+  <line class="dgm-flow" x1="558" y1="359" x2="604" y2="359" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <text x="581" y="351" text-anchor="middle" font-size="9" fill="var(--accent-2)">Embed</text>
+
+  <rect x="604" y="284" width="228" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="718" y="306" text-anchor="middle" font-size="12" fill="var(--text-bright)">smart batching</text>
+  <text x="718" y="330" text-anchor="middle" font-size="9" fill="var(--text-muted)">1 ms window, max_batch 32</text>
+  <text x="718" y="348" text-anchor="middle" font-size="9" fill="var(--text-muted)">token budget 16384</text>
+  <text x="718" y="366" text-anchor="middle" font-size="9" fill="var(--text-muted)">async tokenizer workers</text>
+  <text x="718" y="384" text-anchor="middle" font-size="9" fill="var(--text-muted)">one ONNX run per window</text>
+
+  <line class="dgm-flow" x1="170" y1="434" x2="170" y2="468" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="444" y1="434" x2="444" y2="468" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="718" y1="434" x2="718" y2="468" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+
+  <rect x="50" y="468" width="780" height="60" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="494" text-anchor="middle" font-size="11" fill="var(--text-bright)">CGo native layer &#183; libonnxruntime.so &#183; libtokenizers.a &#183; onnx weights + tokenizer.json</text>
+  <text x="440" y="514" text-anchor="middle" font-size="9" fill="var(--text-muted)">artifacts on local disk, or downloaded from the HuggingFace hub on first load</text>
+
+  <text x="30" y="552" font-size="9" fill="var(--text-muted)">no HTTP anywhere: liveness is PING, readiness is EMB.READY, and a draining server rejects new work</text>
+  <text x="30" y="568" font-size="9" fill="var(--text-muted)">observability is INFO / EMB.STATS / EMB.INFO per model / the MONITOR ring, which emb-top renders as a dashboard</text>
+  <text x="30" y="588" font-size="9" fill="var(--text-muted)">dispatch decides the reply shape last: BLOB bytes by default, a dtype/shape/values envelope when VALUES is asked for</text>
+</svg>

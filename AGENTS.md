@@ -74,6 +74,30 @@ wall-clock assertions there.
 - Skills in `.pi/skills/`: `openspec-propose` (create changes), `openspec-apply-change` (implement tasks, mark `- [ ]` → `- [x]` in `tasks.md`), `openspec-archive-change` (sync delta specs → `openspec/specs/`, move to `openspec/changes/archive/`), `openspec-explore`, `openspec-sync-specs`.
 - Implemented-but-uncommitted work is the norm mid-change; commit as a bundle with the change's artifacts.
 
+## Diagrams
+
+`docs/architecture.md` (server internals) and `docs/ruby-client-lazy.md` (the
+gem's `lazy` modes) are built around hand-authored **animated SVGs** in
+`docs/assets/diagrams/`. They are not generated and never mermaid: a mermaid
+fence cannot animate and cannot be reused. They share one contract:
+
+- an `<img>` embed, never an inline `<svg>` or a code fence;
+- a `:root` custom-property palette with a
+  `@media (prefers-color-scheme: dark)` pair, and an opaque `var(--bg)` card
+  painted behind everything — an `<img>`-embedded SVG is isolated from the
+  host page's CSS, so it cannot inherit the site's variables, and
+  `prefers-color-scheme` there follows the OS, not the page;
+- CSS `@keyframes` animation only (`.dgm-flow` / `.dgm-ants` marching ants,
+  `.dgm-gate` staggered pulse), plus a `@media (prefers-reduced-motion:
+  reduce)` block that turns all of it off;
+- each file's `<desc>` is the source of the embedding page's `alt` text —
+  change one and change the other. Keep the alt long enough to carry the
+  diagram's actual argument for a screen reader, not just its title.
+
+When a claim in a diagram changes, the diagram is part of the change: update
+the `<desc>`, the matching `alt`, and any plain-text fallback in the same
+commit.
+
 ## Quick reference
 
 ```bash

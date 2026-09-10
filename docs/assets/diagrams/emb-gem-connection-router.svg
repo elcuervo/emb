@@ -1,0 +1,130 @@
+<svg viewBox="0 0 880 600" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">Connection routing in the emb gem</title>
+  <desc id="desc">Every command the gem sends goes through the client's send_command into a ConnectionRouter. The router owns one RoundRobinPool per configured url — the interchangeable emb instances that serve the same model set — and it picks the instance with a mutex-guarded round-robin counter, so consecutive commands walk the instances in turn. Inside a pool, a second counter rotates across that pool's connections, one command per withdraw; connections are created up front but connect lazily on first use. The reason for rotating connections rather than reusing one is that behind a connection-level load balancer such as AWS Service Connect, an NLB or an Envoy TCP proxy, each keep-alive connection is pinned to a single upstream instance, so spreading commands across the pool spreads load across every instance even from a single thread at zero concurrency. Only one class of failure is retried: a pre-send connection error, where the connection was never established and therefore nothing was written. The router then moves to the next instance, for at most as many attempts as there are pools, and raises the last error if they all fail. Errors that can arrive after a command may have been sent — a read timeout, or a connection lost mid-flight — are never re-dispatched, because the server may already have run the inference. The router also survives fork: a hook on Process._fork resets every registered pool in the child, closing inherited sockets and rebuilding the mutexes and counters so parent and child never share a connection, which is what makes Puma preload, unicorn and resque safe. Pools are tracked in a WeakMap so they are reclaimed with their client, and a nested with from the same thread re-enters the connection that thread already holds instead of taking a second one.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-2)"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="600" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="599" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">EMB GEM &#183; CONNECTION ROUTING &#183; INSTANCES ON TOP, CONNECTIONS INSIDE</text>
+
+  <rect x="30" y="44" width="250" height="56" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="155" y="68" text-anchor="middle" font-size="11" fill="var(--text-bright)">Emb::Client</text>
+  <text x="155" y="86" text-anchor="middle" font-size="9" fill="var(--text-muted)">#send_command(*args)</text>
+  <line class="dgm-flow" x1="282" y1="72" x2="306" y2="72" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <rect x="310" y="44" width="250" height="56" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="435" y="68" text-anchor="middle" font-size="11" fill="var(--text-bright)">ConnectionRouter</text>
+  <text x="435" y="86" text-anchor="middle" font-size="9" fill="var(--text-muted)">call(*args) &#8594; pick an instance</text>
+  <line class="dgm-flow" x1="562" y1="72" x2="586" y2="72" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <rect x="590" y="44" width="260" height="56" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="720" y="68" text-anchor="middle" font-size="11" fill="var(--text-bright)">pools &#183; one per url</text>
+  <text x="720" y="86" text-anchor="middle" font-size="9" fill="var(--text-muted)">url: String or Array&lt;String&gt;</text>
+
+  <rect x="30" y="124" width="820" height="250" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="142" font-size="9" fill="var(--text-muted)" letter-spacing="1">FAN-OUT &#183; INSTANCES ON TOP, CONNECTIONS INSIDE</text>
+  <text x="836" y="142" text-anchor="end" font-size="9" fill="var(--text-muted)">pick_instance() round-robins across urls</text>
+
+  <line class="dgm-flow" x1="435" y1="100" x2="435" y2="122" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <path class="dgm-flow" d="M435 122 L 236 166" fill="none" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <path class="dgm-flow" d="M435 122 L 644 166" fill="none" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="56" y="170" width="360" height="190" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="236" y="190" text-anchor="middle" font-size="10" fill="var(--text-bright)">instance A &#183; url 1</text>
+  <text x="236" y="206" text-anchor="middle" font-size="9" fill="var(--text-muted)">emb-0:6379</text>
+
+  <rect x="76" y="218" width="150" height="32" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="151" y="238" text-anchor="middle" font-size="9" fill="var(--text)">conn 0</text>
+  <rect x="76" y="258" width="150" height="32" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="151" y="278" text-anchor="middle" font-size="9" fill="var(--text)">conn 1</text>
+  <rect x="76" y="298" width="150" height="32" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="151" y="318" text-anchor="middle" font-size="9" fill="var(--text)">conn 2</text>
+
+  <text x="240" y="238" font-size="9" fill="var(--accent-2)">rotation 0 &#8594; 1 &#8594; 2 &#8594; 0</text>
+  <text x="240" y="256" font-size="9" fill="var(--text-muted)">one command per withdraw</text>
+  <text x="240" y="274" font-size="9" fill="var(--text-muted)">created up front, connects</text>
+  <text x="240" y="290" font-size="9" fill="var(--text-muted)">lazily on first use</text>
+  <text x="240" y="308" font-size="9" fill="var(--text-muted)">pool size: cfg.pool (5)</text>
+  <text x="240" y="326" font-size="9" fill="var(--text-muted)">nested with re-enters</text>
+  <text x="240" y="344" font-size="9" fill="var(--text-muted)">the connection already held</text>
+
+  <rect x="464" y="170" width="360" height="190" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="644" y="190" text-anchor="middle" font-size="10" fill="var(--text-bright)">instance B &#183; url 2</text>
+  <text x="644" y="206" text-anchor="middle" font-size="9" fill="var(--text-muted)">emb-1:6379</text>
+
+  <rect x="484" y="218" width="150" height="32" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="559" y="238" text-anchor="middle" font-size="9" fill="var(--text)">conn 0</text>
+  <rect x="484" y="258" width="150" height="32" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="559" y="278" text-anchor="middle" font-size="9" fill="var(--text)">conn 1</text>
+  <rect x="484" y="298" width="150" height="32" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="559" y="318" text-anchor="middle" font-size="9" fill="var(--text)">conn 2</text>
+
+  <text x="648" y="238" font-size="9" fill="var(--accent)">same pool, its own counter</text>
+  <text x="648" y="256" font-size="9" fill="var(--text-muted)">behind an L4 balancer each</text>
+  <text x="648" y="272" font-size="9" fill="var(--text-muted)">keep-alive connection is pinned</text>
+  <text x="648" y="288" font-size="9" fill="var(--text-muted)">to one upstream, so rotating</text>
+  <text x="648" y="304" font-size="9" fill="var(--text-muted)">across the pool spreads load</text>
+  <text x="648" y="320" font-size="9" fill="var(--text-muted)">even single-threaded at zero</text>
+  <text x="648" y="336" font-size="9" fill="var(--text-muted)">concurrency</text>
+
+  <rect x="30" y="392" width="400" height="132" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="230" y="414" text-anchor="middle" font-size="11" fill="var(--text-bright)">pre-send retry &#8212; safe only before a write</text>
+  <text x="46" y="438" font-size="9" fill="var(--err)">CannotConnectError &#8594; try the next instance</text>
+  <text x="46" y="454" font-size="9" fill="var(--text-muted)">at most pools.size attempts, then raise the last</text>
+  <text x="46" y="470" font-size="9" fill="var(--text-muted)">never re-dispatched: read timeout, mid-flight loss</text>
+  <text x="46" y="486" font-size="9" fill="var(--text-muted)">a re-send would run the inference a second time</text>
+  <text x="46" y="508" font-size="9" fill="var(--text-muted)">the constant is captured at load so stubs still work</text>
+
+  <rect x="450" y="392" width="400" height="132" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="650" y="414" text-anchor="middle" font-size="11" fill="var(--text-bright)">fork safety</text>
+  <text x="466" y="438" font-size="9" fill="var(--text-muted)">a hook on Process._fork runs after_fork in the child</text>
+  <text x="466" y="454" font-size="9" fill="var(--text-muted)">inherited sockets are closed, mutexes rebuilt</text>
+  <text x="466" y="470" font-size="9" fill="var(--text-muted)">what makes Puma preload, unicorn and resque safe</text>
+  <text x="466" y="486" font-size="9" fill="var(--text-muted)">pools live in a WeakMap, reclaimed with the client</text>
+  <text x="466" y="508" font-size="9" fill="var(--text-muted)">Emb.debug? logs each command and its elapsed ms</text>
+
+  <text x="30" y="552" font-size="9" fill="var(--text-muted)">up to `pool` commands from one process run in parallel, each on its own connection: the pool is what bounds lazy :batch fan-out</text>
+  <text x="30" y="568" font-size="9" fill="var(--text-muted)">a single url means a single pool, so the instance counter is inert and only connection rotation spreads the load</text>
+</svg>

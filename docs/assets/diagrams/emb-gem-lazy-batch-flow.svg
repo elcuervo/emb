@@ -1,0 +1,134 @@
+<svg viewBox="0 0 880 660" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">The deferred batch lifecycle in the emb gem</title>
+  <desc id="desc">Three stages. First, defer: calling client[:minilm]['hello'] on a lazy client does not touch a socket. Proxy#[] sees that the client is lazy and calls build_batch_loader, which wraps the tuple of client, model, text and format in BatchLoader.for and calls batch with default_value an empty array, the key :emb, and the shared BATCH_BLOCK lambda. That registers one item in the calling thread's ExecutorProxy and returns a handle; every further call on the same thread appends another item to the same scope, whatever model it names. Second, flush: the first value-consuming call on any handle — sum, to_a, each — goes through method_missing into __sync and __ensure_batched, which collects every pending item for this block and runs BATCH_BLOCK exactly once. The block groups items by client, packs them into slices of at most batch_size texts so a single command stays inside the server's pair cap and the client's read timeout, and creates slices no larger than the chunk even when one item alone exceeds it. dispatch_slice chooses the wire shape: a slice whose texts all name one model is sent as a plain EMB with the model named once, while a slice with mixed models becomes EMB.MULTI with one model-and-text pair per item, and a :values slice adds the VALUES keyword. resolve_slice maps the reply entries back onto items in deferral order and calls the loader once per item. On the parallel path the worker threads only capture outcomes; the forcing thread is the one that resolves loaders, so no loader is ever touched off its own thread. Third, settle: on success batch-loader deletes the batch's queued items and each handle caches its value, so later methods on it never re-send. On failure the gem calls clear_batch_pending! to drop the queue that batch-loader would otherwise retain, and a Redis error becomes Emb::ServerError carrying the models and text counts, while any item left without a value falls back to the empty-array default. ShortReplyError is raised locally, so it is never counted as a transport retry. Finally the per-thread scope is cleared in an ensure block by the Rack middleware, the Sidekiq, Shoryuken or ActiveJob job middleware, or an explicit BatchScope.wrap — without one, cached values and pending items would leak into the next request or job.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-4)"/>
+    </marker>
+    <marker id="arG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="660" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="659" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">EMB GEM &#183; THE DEFERRED BATCH LIFECYCLE</text>
+
+  <rect x="30" y="34" width="820" height="168" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="54" font-size="9" fill="var(--text-muted)" letter-spacing="1">1 &#183; DEFER &#8212; ON THE CALLER'S THREAD, NOTHING IS SENT</text>
+
+  <rect x="50" y="66" width="230" height="54" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="165" y="88" text-anchor="middle" font-size="10" fill="var(--text-bright)">client[:minilm]['hello']</text>
+  <text x="165" y="106" text-anchor="middle" font-size="9" fill="var(--text-muted)">Proxy#[] sees client.lazy?</text>
+
+  <line class="dgm-flow" x1="282" y1="93" x2="300" y2="93" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect x="302" y="66" width="250" height="54" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="427" y="88" text-anchor="middle" font-size="10" fill="var(--text-bright)">Emb.build_batch_loader</text>
+  <text x="427" y="106" text-anchor="middle" font-size="9" fill="var(--text-muted)">BatchLoader.for([client, model, text, format])</text>
+
+  <line class="dgm-flow" x1="554" y1="93" x2="572" y2="93" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect x="574" y="66" width="260" height="54" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="704" y="88" text-anchor="middle" font-size="10" fill="var(--text-bright)">.batch(key: :emb, default_value: [])</text>
+  <text x="704" y="106" text-anchor="middle" font-size="9" fill="var(--text-muted)">no socket is touched</text>
+
+  <text x="50" y="140" font-size="9" fill="var(--text-muted)">the handle registers itself in this thread's ExecutorProxy, so every later call joins the same scope:</text>
+
+  <rect x="50" y="150" width="270" height="24" rx="6" fill="none" stroke="var(--border)"/>
+  <text x="185" y="166" text-anchor="middle" font-size="9" fill="var(--text)">[client, :minilm, 'hello', :binary]</text>
+  <rect x="330" y="150" width="270" height="24" rx="6" fill="none" stroke="var(--border)"/>
+  <text x="465" y="166" text-anchor="middle" font-size="9" fill="var(--text)">[client, :minilm, 'world', :binary]</text>
+  <rect x="610" y="150" width="224" height="24" rx="6" fill="none" stroke="var(--border)"/>
+  <text x="722" y="166" text-anchor="middle" font-size="9" fill="var(--text)">[client, :siglip2, 'x', :values]</text>
+
+  <rect x="30" y="212" width="820" height="250" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="232" font-size="9" fill="var(--text-muted)" letter-spacing="1">2 &#183; FLUSH &#8212; THE FIRST VALUE-CONSUMING CALL RUNS THE WHOLE SCOPE, ONCE</text>
+
+  <rect class="dgm-gate" x="50" y="248" width="420" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="260" y="264" text-anchor="middle" font-size="10" fill="var(--text-bright)">method_missing &#8594; __sync &#8594; __ensure_batched</text>
+  <text x="260" y="279" text-anchor="middle" font-size="9" fill="var(--text-muted)">the first force wins; @synced caches every later call</text>
+
+  <line class="dgm-flow" x1="260" y1="286" x2="260" y2="292" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect x="50" y="294" width="420" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="260" y="310" text-anchor="middle" font-size="10" fill="var(--text-bright)">collect every pending item for this block</text>
+  <text x="260" y="325" text-anchor="middle" font-size="9" fill="var(--text-muted)">BATCH_BLOCK(items, loader, _args) runs exactly once</text>
+
+  <line class="dgm-flow" x1="260" y1="332" x2="260" y2="338" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect x="50" y="340" width="420" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="260" y="356" text-anchor="middle" font-size="10" fill="var(--text-bright)">group_by(client) &#8594; pack_slices(items, batch_size)</text>
+  <text x="260" y="371" text-anchor="middle" font-size="9" fill="var(--text-muted)">a slice never exceeds 512 texts; an oversized item goes alone</text>
+
+  <line class="dgm-flow" x1="260" y1="378" x2="260" y2="384" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect x="50" y="386" width="420" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="260" y="402" text-anchor="middle" font-size="10" fill="var(--text-bright)">dispatch_slice &#8594; resolve_slice</text>
+  <text x="260" y="417" text-anchor="middle" font-size="9" fill="var(--text-muted)">loader.call(item, value) hands each item its own value</text>
+
+  <rect x="490" y="248" width="344" height="176" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="662" y="268" text-anchor="middle" font-size="10" fill="var(--text-bright)">the wire shape dispatch_slice picks</text>
+  <text x="504" y="292" font-size="9" fill="var(--text-muted)">one model in the slice &#8594; EMB minilm a b c</text>
+  <text x="504" y="310" font-size="9" fill="var(--text-muted)">mixed models &#8594; EMB.MULTI m1 a m2 b</text>
+  <text x="504" y="328" font-size="9" fill="var(--text-muted)">format :values adds the VALUES keyword</text>
+  <text x="504" y="346" font-size="9" fill="var(--text-muted)">binary &#8594; unpack('e*') on every entry</text>
+  <text x="504" y="364" font-size="9" fill="var(--text-muted)">a nil entry stays nil (EMB.MULTI semantics)</text>
+  <text x="504" y="388" font-size="9" fill="var(--accent-2)">parallel path: workers only capture outcomes;</text>
+  <text x="504" y="404" font-size="9" fill="var(--accent-2)">the forcing thread resolves every loader</text>
+
+  <rect x="30" y="472" width="820" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="492" font-size="9" fill="var(--text-muted)" letter-spacing="1">3 &#183; SETTLE &#8212; SUCCESS, FAILURE, AND THE SCOPE RESET</text>
+
+  <rect x="50" y="504" width="250" height="104" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="175" y="524" text-anchor="middle" font-size="10" fill="var(--accent)">success</text>
+  <text x="62" y="546" font-size="9" fill="var(--text-muted)">batch-loader deletes the queued items</text>
+  <text x="62" y="562" font-size="9" fill="var(--text-muted)">each handle caches its own value</text>
+  <text x="62" y="578" font-size="9" fill="var(--text-muted)">later methods never re-send</text>
+
+  <rect x="315" y="504" width="250" height="104" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="524" text-anchor="middle" font-size="10" fill="var(--err)">failure fails closed</text>
+  <text x="327" y="546" font-size="9" fill="var(--text-muted)">clear_batch_pending! drops the queue</text>
+  <text x="327" y="562" font-size="9" fill="var(--text-muted)">Redis error &#8594; Emb::ServerError</text>
+  <text x="327" y="578" font-size="9" fill="var(--text-muted)">missing values &#8594; default_value []</text>
+
+  <rect x="580" y="504" width="250" height="104" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="705" y="524" text-anchor="middle" font-size="10" fill="var(--accent-4)">scope reset</text>
+  <text x="592" y="546" font-size="9" fill="var(--text-muted)">BatchScope.wrap clears in ensure</text>
+  <text x="592" y="562" font-size="9" fill="var(--text-muted)">Rack, job middleware, or manual</text>
+  <text x="592" y="578" font-size="9" fill="var(--text-muted)">else values leak to the next job</text>
+
+  <text x="440" y="646" text-anchor="middle" font-size="9" fill="var(--text-muted)">the block is keyed by [BATCH_BLOCK.source_location, :emb] — which is exactly what clear_batch_pending! deletes</text>
+</svg>

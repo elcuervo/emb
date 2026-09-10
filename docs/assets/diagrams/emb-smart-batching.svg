@@ -1,0 +1,120 @@
+<svg viewBox="0 0 880 580" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">Smart batching: many requests, one ONNX run</title>
+  <desc id="desc">Requests arriving on many connections — plain EMB calls, EMB.MULTI pairs, scripted evaluations — are pushed onto a bounded request channel. Dedicated tokenizer producers encode them off the run path, so tokenization of later requests overlaps the inference of earlier batches, and hand the encodings to a second bounded channel. The run loop accumulates ready items into a window, adding each item's real token count to a budget. The window flushes on whichever of three triggers comes first: the request count reaching max_batch (32 by default), the accumulated token budget reaching max_batch_tokens (16384 by default), or the batching timer firing (1 millisecond by default). When the window is empty the loop takes an idle-flush fast path and runs the queued burst immediately, so a lone request pays no artificial delay. Every flush pads all encodings to the longest sequence in the window and performs exactly one ONNX Runtime session run, then splits the result back to each caller by remembered offsets. A single request is never split across runs; the window bounds work, not request atomicity. Because padding is per-window, a short text waiting behind a long one is charged for the long one's padding, and that ratio is reported as padding efficiency in EMB.STATS.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-2)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="580" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="579" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">SMART BATCHING &#183; MANY REQUESTS, ONE ONNX RUN</text>
+
+  <rect x="30" y="80" width="170" height="120" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="115" y="104" text-anchor="middle" font-size="12" fill="var(--text-bright)">inbound requests</text>
+  <text x="115" y="126" text-anchor="middle" font-size="9" fill="var(--text-muted)">EMB from any conn</text>
+  <text x="115" y="144" text-anchor="middle" font-size="9" fill="var(--text-muted)">EMB.MULTI pairs</text>
+  <text x="115" y="162" text-anchor="middle" font-size="9" fill="var(--text-muted)">scripted eval</text>
+  <text x="115" y="184" text-anchor="middle" font-size="9" fill="var(--text-muted)">each with a result chan</text>
+
+  <line class="dgm-flow" x1="202" y1="140" x2="248" y2="140" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <text x="225" y="130" text-anchor="middle" font-size="9" fill="var(--text-muted)">reqChan</text>
+  <text x="225" y="158" text-anchor="middle" font-size="9" fill="var(--text-muted)">cap 128</text>
+
+  <rect x="250" y="80" width="160" height="120" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="330" y="104" text-anchor="middle" font-size="12" fill="var(--text-bright)">tokenizer producers</text>
+  <text x="330" y="126" text-anchor="middle" font-size="9" fill="var(--text-muted)">encodeTexts() per request</text>
+  <text x="330" y="144" text-anchor="middle" font-size="9" fill="var(--text-muted)">overlaps inference</text>
+  <text x="330" y="162" text-anchor="middle" font-size="9" fill="var(--text-muted)">default min(4, cores)</text>
+  <text x="330" y="184" text-anchor="middle" font-size="9" fill="var(--text-muted)">0 = encode on run path</text>
+
+  <line class="dgm-flow" x1="412" y1="140" x2="478" y2="140" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <text x="445" y="130" text-anchor="middle" font-size="9" fill="var(--text-muted)">workChan</text>
+  <text x="445" y="158" text-anchor="middle" font-size="9" fill="var(--text-muted)">cap 256</text>
+
+  <rect x="480" y="56" width="370" height="194" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="665" y="80" text-anchor="middle" font-size="12" fill="var(--text-bright)">batching window</text>
+  <text x="665" y="100" text-anchor="middle" font-size="9" fill="var(--text-muted)">appendItem &#8594; budget += real tokens</text>
+  <rect class="dgm-gate" x="496" y="112" width="338" height="22" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="665" y="127" text-anchor="middle" font-size="9" fill="var(--text)">request count &#8805; max_batch (32)</text>
+  <rect class="dgm-gate dgm-g2" x="496" y="140" width="338" height="22" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="665" y="155" text-anchor="middle" font-size="9" fill="var(--text)">tokens &#8805; max_batch_tokens (16384)</text>
+  <rect class="dgm-gate dgm-g3" x="496" y="168" width="338" height="22" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="665" y="183" text-anchor="middle" font-size="9" fill="var(--text)">timer &#8805; batching.timeout (1 ms)</text>
+  <text x="665" y="208" text-anchor="middle" font-size="9" fill="var(--accent)">idle-flush: an empty window runs immediately</text>
+  <text x="665" y="224" text-anchor="middle" font-size="9" fill="var(--accent)">and still drains whatever is already queued</text>
+
+  <line class="dgm-flow" x1="665" y1="250" x2="665" y2="298" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <text x="673" y="276" font-size="9" fill="var(--accent-2)">flush()</text>
+
+  <rect x="480" y="300" width="370" height="80" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="665" y="324" text-anchor="middle" font-size="12" fill="var(--text-bright)">one ONNX Runtime session.Run</text>
+  <text x="665" y="344" text-anchor="middle" font-size="9" fill="var(--text-muted)">PadEncodings &#8594; [batch, seqLen] int64 inputs</text>
+  <text x="665" y="362" text-anchor="middle" font-size="9" fill="var(--text-muted)">attention mask zeroes the padded slots</text>
+
+  <line class="dgm-flow" x1="665" y1="380" x2="665" y2="418" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <text x="673" y="404" font-size="9" fill="var(--text-muted)">split by offset</text>
+
+  <rect x="480" y="420" width="370" height="76" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="665" y="444" text-anchor="middle" font-size="12" fill="var(--text-bright)">fan results back</text>
+  <text x="665" y="464" text-anchor="middle" font-size="9" fill="var(--text-muted)">offsets[i] &#8594; that request's own slice</text>
+  <text x="665" y="482" text-anchor="middle" font-size="9" fill="var(--text-muted)">pooling + normalize run per row, in parallel</text>
+
+  <text x="70" y="300" font-size="9" fill="var(--text-muted)" letter-spacing="1">WHY THE WINDOW SHAPE MATTERS</text>
+  <rect x="70" y="312" width="180" height="18" rx="3" fill="none" stroke="var(--border)"/>
+  <rect x="70" y="312" width="180" height="18" rx="3" fill="var(--accent-2)" fill-opacity="0.35" stroke="var(--border)"/>
+  <text x="260" y="326" font-size="9" fill="var(--text-muted)">text A &#183; 8 tokens, no padding</text>
+  <rect x="70" y="338" width="180" height="18" rx="3" fill="none" stroke="var(--border)"/>
+  <rect x="70" y="338" width="90" height="18" rx="3" fill="var(--accent-2)" fill-opacity="0.35" stroke="var(--border)"/>
+  <text x="260" y="352" font-size="9" fill="var(--text-muted)">text B &#183; 4 tokens + 4 pad slots</text>
+  <text x="70" y="380" font-size="9" fill="var(--text-muted)">padding efficiency = real tokens / padded slots</text>
+  <text x="70" y="396" font-size="9" fill="var(--text-muted)">reported as EMB.STATS padding_efficiency</text>
+  <text x="70" y="420" font-size="9" fill="var(--text-muted)">one long text in a window taxes every short</text>
+  <text x="70" y="436" font-size="9" fill="var(--text-muted)">one behind it; the token budget bounds that</text>
+
+  <path class="dgm-ants" d="M665 496 L 665 522 L 52 522 L 52 202" fill="none" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <text x="390" y="538" text-anchor="middle" font-size="9" fill="var(--text-muted)">each waiting caller unblocks on its own result channel</text>
+
+  <text x="30" y="562" font-size="9" fill="var(--text-muted)">a single request is never split across runs: the window bounds work, not request atomicity</text>
+</svg>

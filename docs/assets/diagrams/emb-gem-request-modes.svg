@@ -1,0 +1,156 @@
+<svg viewBox="0 0 880 660" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">The emb gem's three request modes</title>
+  <desc id="desc">The ruby emb gem has exactly one option, lazy, with three values, and nothing else changes. The default, lazy false, is eager: every client[:model][text] call sends its own EMB immediately and returns the decoded float array, so three calls cost three blocking round trips. lazy :multi defers: the same three calls return BatchLoader handles and nothing is sent. When any one of them is used as a value — calling sum, to_a or each forces it — all pending texts in that thread's scope are packed into shares of at most batch_size texts (512 by default) and sent one after another, serially. A share whose texts all name one model is sent as a plain EMB with the model once; a share with mixed models is sent as EMB.MULTI with per-pair null semantics. lazy :batch defers identically but dispatches the shares on parallel worker threads, capped by the total connection-pool size, so several requests are in flight at once. Deferral is scoped to the calling thread: the Rack middleware, the Sidekiq/Shoryuken/ActiveJob job middleware and an explicit BatchScope.wrap all clear the thread's batch scope in an ensure block, even when the work raises, so cached values and pending items cannot leak into the next request. A share that fails fails closed: the pending set is dropped and the caller gets Emb::ServerError with the models and text counts, and items with no value resolve to an empty array rather than nil.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-2)"/>
+    </marker>
+    <marker id="arP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-4)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="660" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="659" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">EMB GEM &#183; THREE REQUEST MODES, ONE OPTION</text>
+  <text x="440" y="38" text-anchor="middle" font-size="9" fill="var(--text-muted)">lazy: false | :multi | :batch &#8212; the only thing that changes is when the socket is used</text>
+
+  <rect x="30" y="52" width="820" height="134" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="76" font-size="11" fill="var(--text-bright)">lazy: false</text>
+  <text x="44" y="94" font-size="9" fill="var(--text-muted)" letter-spacing="1">EAGER</text>
+  <text x="44" y="110" font-size="9" fill="var(--text-muted)">the default</text>
+  <text x="44" y="130" font-size="9" fill="var(--text-muted)">one EMB per call</text>
+  <text x="44" y="146" font-size="9" fill="var(--text-muted)">the call blocks on the</text>
+  <text x="44" y="162" font-size="9" fill="var(--text-muted)">socket immediately</text>
+
+  <rect x="200" y="70" width="110" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="255" y="87" text-anchor="middle" font-size="9" fill="var(--text)">m['text a']</text>
+  <line class="dgm-flow" x1="312" y1="83" x2="338" y2="83" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <rect x="340" y="70" width="200" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="87" text-anchor="middle" font-size="9" fill="var(--text)">EMB minilm 'text a'</text>
+  <line class="dgm-flow" x1="542" y1="83" x2="568" y2="83" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <rect x="570" y="70" width="120" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="630" y="87" text-anchor="middle" font-size="9" fill="var(--text)">Array&lt;Float&gt;</text>
+
+  <rect x="200" y="106" width="110" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="255" y="123" text-anchor="middle" font-size="9" fill="var(--text)">m['text b']</text>
+  <line class="dgm-flow" x1="312" y1="119" x2="338" y2="119" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <rect x="340" y="106" width="200" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="123" text-anchor="middle" font-size="9" fill="var(--text)">EMB minilm 'text b'</text>
+  <line class="dgm-flow" x1="542" y1="119" x2="568" y2="119" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <rect x="570" y="106" width="120" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="630" y="123" text-anchor="middle" font-size="9" fill="var(--text)">Array&lt;Float&gt;</text>
+
+  <rect x="200" y="142" width="110" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="255" y="159" text-anchor="middle" font-size="9" fill="var(--text)">m['text c']</text>
+  <line class="dgm-flow" x1="312" y1="155" x2="338" y2="155" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <rect x="340" y="142" width="200" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="159" text-anchor="middle" font-size="9" fill="var(--text)">EMB minilm 'text c'</text>
+  <line class="dgm-flow" x1="542" y1="155" x2="568" y2="155" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <rect x="570" y="142" width="120" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="630" y="159" text-anchor="middle" font-size="9" fill="var(--text)">Array&lt;Float&gt;</text>
+
+  <text x="712" y="83" font-size="9" fill="var(--text-muted)">3 round trips</text>
+  <text x="712" y="119" font-size="9" fill="var(--text-muted)">all blocking,</text>
+  <text x="712" y="135" font-size="9" fill="var(--text-muted)">in call order</text>
+
+  <rect x="30" y="200" width="820" height="152" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="224" font-size="11" fill="var(--text-bright)">lazy: :multi</text>
+  <text x="44" y="242" font-size="9" fill="var(--text-muted)" letter-spacing="1">DEFER, THEN SERIAL</text>
+  <text x="44" y="262" font-size="9" fill="var(--text-muted)">calls return a handle</text>
+  <text x="44" y="278" font-size="9" fill="var(--text-muted)">shares are packed at</text>
+  <text x="44" y="294" font-size="9" fill="var(--text-muted)">batch_size (512) texts</text>
+  <text x="44" y="310" font-size="9" fill="var(--text-muted)">and sent one by one</text>
+
+  <rect x="200" y="226" width="90" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="245" y="242" text-anchor="middle" font-size="9" fill="var(--text)">m['a']</text>
+  <rect x="300" y="226" width="90" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="345" y="242" text-anchor="middle" font-size="9" fill="var(--text)">m['b']</text>
+  <rect x="400" y="226" width="90" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="445" y="242" text-anchor="middle" font-size="9" fill="var(--text)">m['c']</text>
+  <text x="506" y="242" font-size="9" fill="var(--accent-4)">nothing sent yet &#8212; BatchLoader</text>
+
+  <line class="dgm-flow" x1="445" y1="252" x2="445" y2="272" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect class="dgm-gate" x="340" y="274" width="210" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="445" y="290" text-anchor="middle" font-size="9" fill="var(--text)">force: .sum &#183; .to_a &#183; .each</text>
+
+  <line class="dgm-flow" x1="445" y1="300" x2="445" y2="318" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect x="340" y="320" width="210" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="445" y="337" text-anchor="middle" font-size="9" fill="var(--text)">EMB minilm a b c</text>
+  <text x="570" y="332" font-size="9" fill="var(--text-muted)">one model &#8594; plain EMB, model once</text>
+  <text x="570" y="348" font-size="9" fill="var(--text-muted)">mixed models &#8594; EMB.MULTI pairs</text>
+
+  <rect x="30" y="364" width="820" height="152" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="44" y="388" font-size="11" fill="var(--text-bright)">lazy: :batch</text>
+  <text x="44" y="406" font-size="9" fill="var(--text-muted)" letter-spacing="1">DEFER, THEN FAN OUT</text>
+  <text x="44" y="426" font-size="9" fill="var(--text-muted)">same packing, but the</text>
+  <text x="44" y="442" font-size="9" fill="var(--text-muted)">shares run on parallel</text>
+  <text x="44" y="458" font-size="9" fill="var(--text-muted)">worker threads, capped</text>
+  <text x="44" y="474" font-size="9" fill="var(--text-muted)">by the pool sizes</text>
+
+  <rect x="200" y="392" width="90" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="245" y="408" text-anchor="middle" font-size="9" fill="var(--text)">m['a']</text>
+  <rect x="300" y="392" width="90" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="345" y="408" text-anchor="middle" font-size="9" fill="var(--text)">m['b']</text>
+  <rect x="400" y="392" width="90" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="445" y="408" text-anchor="middle" font-size="9" fill="var(--text)">m['c']</text>
+  <text x="506" y="408" font-size="9" fill="var(--accent-4)">nothing sent yet &#8212; BatchLoader</text>
+
+  <line class="dgm-flow" x1="445" y1="418" x2="445" y2="434" stroke="var(--accent-4)" marker-end="url(#arP)"/>
+  <rect class="dgm-gate" x="340" y="436" width="210" height="24" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="445" y="452" text-anchor="middle" font-size="9" fill="var(--text)">force: .sum &#183; .to_a &#183; .each</text>
+
+  <path class="dgm-flow" d="M390 460 L 350 486" fill="none" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <path class="dgm-flow" d="M445 460 L 445 486" fill="none" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <path class="dgm-flow" d="M500 460 L 540 486" fill="none" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <rect x="250" y="488" width="580" height="26" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="540" y="505" text-anchor="middle" font-size="9" fill="var(--text)">chunks run concurrently, up to &#931; pool sizes in flight</text>
+
+  <rect x="30" y="528" width="820" height="112" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="550" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">SCOPE &#183; WHENCE A DEFERRED BATCH IS ACTUALLY FLUSHED</text>
+  <text x="46" y="574" font-size="9" fill="var(--text-muted)">deferral lives in the calling thread (BatchLoader::Executor)</text>
+  <text x="46" y="590" font-size="9" fill="var(--text-muted)">Emb::Middleware, JobMiddleware and BatchScope.wrap</text>
+  <text x="46" y="606" font-size="9" fill="var(--text-muted)">clear that scope in ensure, even when the block raises</text>
+  <text x="466" y="574" font-size="9" fill="var(--text-muted)">no scope still works: the first force runs the batch</text>
+  <text x="466" y="590" font-size="9" fill="var(--accent-3)">a failed share fails closed: Emb::ServerError, items &#8594; []</text>
+  <text x="466" y="606" font-size="9" fill="var(--err)">reconnect_attempts &gt; 0 re-sends EMB.MULTI &#8212; not idempotent</text>
+
+  <text x="440" y="652" text-anchor="middle" font-size="9" fill="var(--text-muted)">the reply shape is identical in all three modes: a vector for one text, an array of vectors for many</text>
+</svg>
