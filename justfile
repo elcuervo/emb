@@ -41,6 +41,8 @@ build:
     @mkdir -p bin
     CGO_ENABLED=1 CGO_LDFLAGS="-L{{libtokenizers_dir}}" go build \
         -ldflags="-X main.version={{image_tag}}" -o ./bin/emb ./cmd/emb
+    CGO_ENABLED=0 go build \
+        -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-top ./cmd/emb-top
 
 # Run all tests: Go server, Ruby client
 all: test build
@@ -48,16 +50,16 @@ all: test build
     @EMB_CMD="./bin/emb -config test-two-models.yaml"; \
     pkill -f "emb -config test-two-models" 2>/dev/null || true; \
     if [ -n "{{ort_lib}}" ]; then \
-        DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" $EMB_CMD & \
+        DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" $EMB_CMD >/tmp/emb-all-server.log 2>&1 & \
     else \
-        $EMB_CMD & \
+        $EMB_CMD >/tmp/emb-all-server.log 2>&1 & \
     fi; \
     echo $$! > /tmp/emb-all.pid; \
     sleep 8
     cd gems/emb && bundle exec rake
     @echo "=== All tests passed ==="
     -kill `cat /tmp/emb-all.pid` 2>/dev/null
-    rm -f /tmp/emb-all.pid
+    rm -f /tmp/emb-all.pid /tmp/emb-all-server.log
 
 # Build, install, and validate both gems locally
 validate-gems: build
@@ -65,9 +67,12 @@ validate-gems: build
     cd gems/emb && gem build emb.gemspec && gem install --local emb-*.gem --no-doc && ruby -e "require 'emb'; puts \"emb gem: #{Emb::VERSION}\""
     @echo "=== Validating emb-server gem ==="
     cp bin/emb gems/emb-server/lib/emb-server/emb-binary-arm64-darwin
+    cp bin/emb-top gems/emb-server/lib/emb-server/emb-top-binary-arm64-darwin
     cd gems/emb-server && gem build emb-server.gemspec && gem install --local emb-server-*.gem --no-doc 2>/dev/null
     @which emb || echo "WARNING: emb not on PATH (check GEM_HOME/bin)"
+    @which emb-top || echo "WARNING: emb-top not on PATH (check GEM_HOME/bin)"
     rm gems/emb-server/lib/emb-server/emb-binary-arm64-darwin
+    rm gems/emb-server/lib/emb-server/emb-top-binary-arm64-darwin
     @echo "=== Both gems valid ==="
 
 # Build and run the server

@@ -26,6 +26,7 @@ redis-cli EMB minilm "hello world"
 - [Commands](#commands)
 - [Configuration](#configuration)
 - [Operations](#operations)
+- [Monitoring: emb-top](#monitoring-emb-top)
 - [Clients](#clients)
 - [Development](#development)
 
@@ -107,6 +108,7 @@ redis-cli EMB minilm "hello world"
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, live cache stats |
 | `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown, **mem (RSS MB), cpu user/sys usec, goroutines** |
+| `MONITOR [seq] [limit]` | Recent completed-request events (`seq`, timestamp µs, model, texts, latency µs, error) from a bounded ring. Incremental (`seq`) fetch; **no text payloads** |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
 | `EMB.HELP` | Command reference |
 | `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `memory`, `cpu`, `clients` |
@@ -306,6 +308,13 @@ counters, and the effective
 check to classify a CPU/stuck-traffic incident as volume, saturation, or
 churn (and to confirm no memory leak: RSS/goroutines flat between polls).
 
+`MONITOR [seq] [limit]` exposes the last completed-request events (up to 8192,
+oldest evicted) for per-request visibility: latency percentiles, error and
+volume attribution per model. It is named after Redis's `MONITOR` but is a
+bounded sequence-query rather than a long-lived stream — pass the last `seq`
+you saw to fetch only newer events, which is how [`emb-top`](#monitoring-emb-top)
+keeps its cost near zero. Request texts are never included.
+
 `INFO [section...]` renders Redis-format sections; with no argument it returns
 all of them:
 
@@ -323,6 +332,65 @@ and `CONFIG SET` tunes it at runtime — including **live cache resizing**
 new connections only). Read-only parameters (listen address, TLS, models) are
 reported by `GET` but rejected by `SET`. Both require authentication, matching
 Redis semantics.
+
+## Monitoring: emb-top
+
+`emb-top` is a live terminal dashboard for a running `emb` node. It connects
+over the Redis protocol and polls `EMB.MODELS` / `EMB.INFO <model>` /
+`EMB.STATS` / `MONITOR` once per second — pipelined in a single round trip —
+and renders:
+
+- aggregate **req/s** and **p95 latency** stream charts,
+- a model-activity **heatmap** (rows = models, columns = recent polls, color = req/s),
+- per-model req/s, tok/s, err/s, **p50/p95/p99 latency** (from `MONITOR`
+  events), and identity (dim, pooling, quantization, batching),
+- cache hit ratio and hit/miss/eviction rates, RSS memory, CPU %, connections,
+  active requests, goroutines, and a live event ticker,
+- `AUTH` / TLS support, auto-reconnect with a connection-lost banner, and a
+  headless `-once` mode for scripts and CI.
+
+```
+ emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
+╭ req/s · models × recent polls ───────────────────────────────────────────────╮
+│ minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████                                      │
+│ bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████                                       │
+│ e5-base       ▂▂▃▃▃▄▅▅▆▆▇▇███████▇▆▆▅▅▄▄                                       │
+│ gte-tiny      ▃▅█████████▅▅▃▃▃                                                 │
+╰────────────────────────────────────────────────────────────────────────────────╯
+╭ req/s ──────────────────────────╮╭ p95 latency ────────────────────╮
+│       ╭──╮                     ││    ╭╮    ╭─╮                   │
+│ ╭─────╯  ╰──╮                  ││   ╯ ╰────╯ ╰──╮                │
+│ ╯            ╰──╮              ││ ╯              ╰               │
+╰────────────────────────────────╯╰────────────────────────────────╯
+minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████  280 r/s  11.8k t/s  p50 6.5ms  p95 68.0ms  err 0
+   dim 384 · mean · int8 · batch 32/16384 workers 2
+bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████  151 r/s   5.7k t/s  p50 8.8ms  p95 77.0ms  err 18 ↑
+   dim 384 · cls · fp32 · batch 32/16384 workers 2
+cache 93.6% ██████████  cpu 50.3% ██████  mem 552MB ████████████
+conns 7 · active 1 · goroutines 22 · truncated 0/0
+event bge-small-en-… · 2 texts · 12.7ms ✓
+q quit · p pause · r reset · j/k scroll · ? help
+```
+
+```bash
+# watch a node
+emb-top -addr localhost:6379
+
+# headless: machine-readable lines (rates + latency percentiles from MONITOR)
+emb-top -addr localhost:6379 -once -samples 10 -interval 1s
+# t=... total_requests=6 req_rate=2.0 tok_rate=11.0 cpu_pct=14.5 lat_p50_us=1139 lat_p95_us=1801 …
+
+# secured node
+emb-top -addr localhost:6379 -password secret -tls
+```
+
+Keys: `q` quit · `p`/space pause · `r` reset window · `j`/`k` scroll models ·
+`?` help. Flags: `-addr`, `-interval`, `-password`, `-tls`, `-window`,
+`-once -samples N`. Terminal: UTF-8; a color-capable terminal is recommended.
+
+It ships inside the Docker image (`/usr/local/bin/emb-top`) and the
+`emb-server` gem (`bin/emb-top`). It requires no `onnxruntime` — it is a pure
+RESP client and builds with `CGO_ENABLED=0`.
 
 ## Clients
 

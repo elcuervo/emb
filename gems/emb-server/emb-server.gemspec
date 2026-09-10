@@ -16,12 +16,13 @@ Gem::Specification.new do |spec|
     'lib/emb-server.rb',
     'lib/emb-server/*',
     'lib/emb-server/emb-binary-*',
+    'lib/emb-server/emb-top-binary-*',
     'LICENSE',
     'README.md'
   ]
 
   spec.bindir = 'bin'
-  spec.executables = ['emb']
+  spec.executables = ['emb', 'emb-top']
   spec.require_paths = ['lib']
 
   spec.add_dependency 'onnxruntime', '~> 0.11'
