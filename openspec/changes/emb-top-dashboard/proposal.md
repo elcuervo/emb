@@ -15,7 +15,7 @@ A running `emb` node already exposes everything needed to understand its health 
   - Docker image gains `emb-top` at `/usr/local/bin` (static, CGo-free build).
   - `emb-server` gem gains a per-platform `emb-top` binary (`lib/emb-server/emb-top-binary-*`) and a `bin/emb-top` wrapper (no onnxruntime needed).
   - `just build` / `just validate-gems` and the release workflow produce and publish it.
-- Add a minimal RESP2 polling client (dial, pipeline `EMB.MODELS`/`EMB.INFO`/`EMB.STATS`, `AUTH`, TLS) — no new server-side commands or server code changes.
+- Add a minimal RESP2 polling client (dial, pipeline `EMB.MODELS`/`EMB.INFO`/`EMB.STATS`/`MONITOR`, `AUTH`, TLS); the only server-side work is the new `MONITOR` command and its event recording described below.
 - **New `MONITOR` server command**: a bounded, seq-numbered ring buffer of completed-request events (model, text count, latency µs, error, unix-µs timestamp). Clients fetch incrementally (`MONITOR <afterSeq> [limit]`) on the same poll cycle. Feeds per-request latency percentiles (p50/p95/p99) and exact per-model visibility to the dashboard — no text payloads, best-effort buffer (bounded at 8192 events).
 - Dashboard v2: model-activity **heatmap** (ntcharts heatmap: models × time, color = req/s), **latency percentile** stream chart, per-model p50/p95/p99, live event ticker, richer theme/layout.
 

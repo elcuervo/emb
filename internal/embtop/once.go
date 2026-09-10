@@ -41,14 +41,17 @@ func RunOnce(c *Client, interval time.Duration, samples int, out io.Writer) erro
 		}
 		sampler.PushEvents(res.Events)
 		p := sampler.Push(res)
-		writeOnceLine(out, p, res, sampler)
+		if err := writeOnceLine(out, p, res, sampler); err != nil {
+			return fmt.Errorf("poll %d: %w", i+1, err)
+		}
 		i++
 	}
 	return nil
 }
 
-// writeOnceLine emits one key=value line for the given poll.
-func writeOnceLine(out io.Writer, p Point, res *PollResult, s *Sampler) {
+// writeOnceLine emits one key=value line for the given poll, returning any
+// write error (a closed pipe must not look like a successful run).
+func writeOnceLine(out io.Writer, p Point, res *PollResult, s *Sampler) error {
 	var b []byte
 	b = append(b, "t="...)
 	b = strconv.AppendInt(b, p.At.Unix(), 10)
@@ -100,7 +103,8 @@ func writeOnceLine(out io.Writer, p Point, res *PollResult, s *Sampler) {
 		b = append(b, ms.Quantization...)
 	}
 	b = append(b, '\n')
-	_, _ = out.Write(b)
+	_, err := out.Write(b)
+	return err
 }
 
 func appendF(b []byte, key string, v int64) []byte {

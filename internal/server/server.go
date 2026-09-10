@@ -652,6 +652,10 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	s.active.Add(1)
 	defer s.active.Done()
 
+	// Start the MONITOR clock before argument parsing and conversion so the
+	// recorded latency covers the whole request, not just inference.
+	started := time.Now()
+
 	modelName := string(cmd.Args[1])
 	// Leading reply-format keyword (EMB <model> [BLOB|VALUES] <text>...):
 	// recognized only at the fixed position right after the model, never in the
@@ -669,7 +673,6 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 
 	// Record the request completion for MONITOR (bounded ring, no text
 	// payloads). Latency spans argument parsing through reply writing.
-	started := time.Now()
 	failed := false
 	defer func() {
 		s.monitor.Add(MonitorEvent{

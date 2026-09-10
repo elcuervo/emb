@@ -2,7 +2,7 @@
 
 See proposal.md (motivation) and the delta specs (requirements). Existing state relevant to the approach:
 
-- The server already exposes every metric needed via `EMB.MODELS`, `EMB.INFO <model>`, and `EMB.STATS` — all RESP2, all counters cumulative. Nothing server-side changes.
+- The server already exposes aggregate metrics via `EMB.MODELS`, `EMB.INFO <model>`, and `EMB.STATS` — all RESP2, all counters cumulative. These cannot give per-request latency distributions, so this change adds one server-side command (`MONITOR`): a bounded, seq-numbered ring of completed-request events.
 - `EMB.INFO <model>` returns structured per-model stats (requests, tokens, errors, avg_latency_us, pooling, batching, quantization, model_bytes, per-model cache), so per-model data is parsed structurally — the `per_model` string in `EMB.STATS` is deliberately **not** used.
 - Existing client-side Go tools (`cmd/emb-verify*`) use raw `net.Dial` + hand-rolled RESP; `go.mod` stays lean (no go-redis anywhere).
 - Distribution: `Dockerfile` is multi-stage (CGo build → slim runtime); `gems/emb-server` ships per-platform binaries as `lib/emb-server/emb-binary-<platform>` with a thin `bin/emb` Ruby wrapper; `just validate-gems` copies `bin/emb` into the gem dir before building.

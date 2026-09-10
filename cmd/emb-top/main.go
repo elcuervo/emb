@@ -13,6 +13,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -70,7 +71,8 @@ var (
 func main() {
 	addr := flag.String("addr", "localhost:6379", "emb node address (host:port)")
 	interval := flag.Duration("interval", time.Second, "poll interval")
-	password := flag.String("password", "", "AUTH password")
+	password := flag.String("password", os.Getenv("EMB_TOP_PASSWORD"),
+		"AUTH password (prefer $EMB_TOP_PASSWORD: command-line values are visible in process listings)")
 	useTLS := flag.Bool("tls", false, "connect over TLS")
 	once := flag.Bool("once", false, "headless mode: print polling lines and exit")
 	samples := flag.Int("samples", 10, "number of polls in -once mode")
@@ -81,6 +83,20 @@ func main() {
 	if *showVersion {
 		fmt.Println(version)
 		return
+	}
+
+	// time.NewTicker panics on a non-positive interval; fail clearly instead.
+	if *interval <= 0 {
+		fmt.Fprintln(os.Stderr, "emb-top: -interval must be positive")
+		os.Exit(2)
+	}
+	if *once && *samples < 1 {
+		fmt.Fprintln(os.Stderr, "emb-top: -samples must be at least 1")
+		os.Exit(2)
+	}
+	if *password != "" && !*useTLS && !isLoopback(*addr) {
+		fmt.Fprintln(os.Stderr,
+			"emb-top: warning: sending an AUTH password to a non-loopback address without -tls")
 	}
 
 	client := embtop.NewClient(*addr, *password, *useTLS)
@@ -99,6 +115,20 @@ func main() {
 		fmt.Fprintln(os.Stderr, "emb-top:", err)
 		os.Exit(1)
 	}
+}
+
+// isLoopback reports whether addr (host:port) resolves to a loopback host, so
+// a plaintext AUTH is only silent for local connections.
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // ---- messages ----
@@ -125,6 +155,11 @@ type tuiModel struct {
 	lastGood  time.Time
 	scroll    int
 
+	// tickScheduled/pollInFlight keep exactly one polling chain alive: pause
+	// toggles must not spawn overlapping polls on the shared client conn.
+	tickScheduled bool
+	pollInFlight  bool
+
 	known      []string // models polled via EMB.INFO
 	modelOrder []string // server EMB.MODELS order
 	lastSeq    uint64   // last MONITOR event seq seen
@@ -146,6 +181,8 @@ func newTUI(client *embtop.Client, interval time.Duration, window int) tuiModel 
 		sparks:   map[string]*sparkline.Model{},
 	}
 	m.initCharts(80, 24)
+	// Init returns the first tick, so record it as scheduled.
+	m.tickScheduled = true
 	return m
 }
 
@@ -250,7 +287,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "p", " ":
 			m.paused = !m.paused
-			return m, tea.Tick(m.interval, func(time.Time) tea.Msg { return tickMsg{} })
+			if m.paused {
+				return m, nil
+			}
+			return m, m.schedule()
 		case "r":
 			m.reset()
 			return m, nil
@@ -269,12 +309,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		if m.paused {
+		m.tickScheduled = false
+		if m.paused || m.pollInFlight {
 			return m, nil
 		}
+		m.pollInFlight = true
 		return m, m.pollCmd()
 
 	case pollMsg:
+		m.pollInFlight = false
 		if msg.err != nil {
 			m.connected = false
 		} else {
@@ -282,9 +325,20 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastGood = time.Now()
 			m.applyResult(msg.res)
 		}
-		return m, tea.Tick(m.interval, func(time.Time) tea.Msg { return tickMsg{} })
+		return m, m.schedule()
 	}
 	return m, nil
+}
+
+// schedule starts the next poll tick unless one is already pending, keeping a
+// single polling chain so pause toggles cannot run overlapping polls on the
+// shared client connection.
+func (m *tuiModel) schedule() tea.Cmd {
+	if m.tickScheduled || m.paused {
+		return nil
+	}
+	m.tickScheduled = true
+	return tea.Tick(m.interval, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
 // pollCmd captures a snapshot of the known-model list and does a single
@@ -293,8 +347,14 @@ func (m tuiModel) pollCmd() tea.Cmd {
 	known := append([]string(nil), m.known...)
 	afterSeq := m.lastSeq
 	return func() tea.Msg {
-		if err := m.client.EnsureConn(); err != nil {
+		dialed, err := m.client.EnsureConn()
+		if err != nil {
 			return pollMsg{err: err}
+		}
+		if dialed {
+			// A fresh (or restarted) node numbers events from the start;
+			// a stale cursor would hide every new event.
+			afterSeq = 0
 		}
 		res, err := m.client.Poll(known, afterSeq)
 		if err != nil {
@@ -388,6 +448,10 @@ func (m *tuiModel) reset() {
 	m.latChart.ClearAllData()
 	m.latChart.Clear()
 	m.latChart.Draw()
+	for _, sp := range m.sparks {
+		sp.Clear()
+		sp.Draw()
+	}
 	m.cacheBar = bar(100)
 	m.cpuBar = bar(100)
 	m.memBar = bar(0)

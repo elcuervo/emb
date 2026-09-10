@@ -18,12 +18,7 @@ import (
 // runs the headless once mode against it, asserting line format and
 // non-negativity.
 func TestRunOnceAgainstRealServer(t *testing.T) {
-	reg := registry.New()
-	addr := freeAddr(t)
-	srv := server.New(addr, reg, "", "", nil)
-	go srv.ListenAndServe()
-	t.Cleanup(func() { srv.Close() })
-	time.Sleep(100 * time.Millisecond)
+	addr := serveEmbedded(t)
 
 	c := embtop.NewClient(addr, "", false)
 	var out bytes.Buffer
@@ -61,12 +56,7 @@ func TestRunOnceAgainstRealServer(t *testing.T) {
 // TestPollRealServerEmpty exercises a single pipelined poll against the real
 // server (no models) and the client-side parsing of EMB.MODELS + EMB.STATS.
 func TestPollRealServerEmpty(t *testing.T) {
-	reg := registry.New()
-	addr := freeAddr(t)
-	srv := server.New(addr, reg, "", "", nil)
-	go srv.ListenAndServe()
-	t.Cleanup(func() { srv.Close() })
-	time.Sleep(100 * time.Millisecond)
+	addr := serveEmbedded(t)
 
 	c := embtop.NewClient(addr, "", false)
 	if err := c.Dial(); err != nil {
@@ -96,4 +86,34 @@ func freeAddr(t *testing.T) string {
 	addr := l.Addr().String()
 	l.Close()
 	return addr
+}
+
+// serveEmbedded starts an in-process emb server on a free address and waits
+// until it accepts connections, failing fast if the listener reports an error.
+func serveEmbedded(t *testing.T) string {
+	t.Helper()
+	reg := registry.New()
+	addr := freeAddr(t)
+	srv := server.New(addr, reg, "", "", nil)
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+	t.Cleanup(func() { srv.Close() })
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		select {
+		case err := <-errCh:
+			t.Fatalf("server exited before becoming ready: %v", err)
+		default:
+		}
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return addr
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server at %s not ready within 5s: %v", addr, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

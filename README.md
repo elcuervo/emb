@@ -633,7 +633,10 @@ emb-top -addr localhost:6379 -password secret -tls
 
 Keys: `q` quit · `p`/space pause · `r` reset window · `j`/`k` scroll models ·
 `?` help. Flags: `-addr`, `-interval`, `-password`, `-tls`, `-window`,
-`-once -samples N`. Terminal: UTF-8; a color-capable terminal is recommended.
+`-once -samples N`. Prefer the `EMB_TOP_PASSWORD` environment variable over
+`-password` (command-line arguments are visible in process listings); sending a
+password to a non-loopback address without `-tls` prints a warning. Terminal:
+UTF-8; a color-capable terminal is recommended.
 
 It ships inside the Docker image (`/usr/local/bin/emb-top`) and the
 `emb-server` gem (`bin/emb-top`). It requires no `onnxruntime` — it is a pure

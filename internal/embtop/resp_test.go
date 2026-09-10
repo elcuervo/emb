@@ -331,3 +331,79 @@ func TestClientPollErrorReply(t *testing.T) {
 		t.Fatal("expected poll error")
 	}
 }
+
+func TestSanitizeStripsControlCharacters(t *testing.T) {
+	// Server-provided strings must not be able to inject terminal escapes.
+	got := sanitize("mini\x1b[31mlm\x07\x00")
+	if got != "mini[31mlm" {
+		t.Fatalf("sanitize = %q, want %q", got, "mini[31mlm")
+	}
+	// Printable Unicode (accents, CJK) is preserved.
+	if got := sanitize("modèle-模型"); got != "modèle-模型" {
+		t.Fatalf("sanitize mangled unicode: %q", got)
+	}
+}
+
+func TestClientParsesSanitizedModelNames(t *testing.T) {
+	models := modelsReply([]string{"evil\x1b[2Jname", "384"})
+	stats := statsReply(map[string]int64{"uptime_secs": 1})
+	_, addr := startFake(t, models, stats, encodeArray())
+	c := NewClient(addr, "", false)
+	if err := c.Dial(); err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	res, err := c.Poll(nil, 0)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if len(res.Models) != 1 || strings.ContainsRune(res.Models[0].Name, 0x1b) {
+		t.Fatalf("model name not sanitized: %+v", res.Models)
+	}
+}
+
+func TestReadReplyBoundsOversizedBulk(t *testing.T) {
+	// A peer must not be able to make us allocate an arbitrary buffer.
+	s, addr := startScripted(t, func(cmd []string, n int) []byte {
+		return []byte("$99999999999\r\n")
+	})
+	_ = s
+	c := NewClient(addr, "", false)
+	if err := c.Dial(); err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	if _, err := c.Poll(nil, 0); err == nil {
+		t.Fatal("expected oversized bulk to be rejected")
+	} else if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReadReplyBoundsDeepNesting(t *testing.T) {
+	deep := strings.Repeat("*1\r\n", maxDepth+2) + ":1\r\n"
+	_, addr := startScripted(t, func(cmd []string, n int) []byte { return []byte(deep) })
+	c := NewClient(addr, "", false)
+	if err := c.Dial(); err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	if _, err := c.Poll(nil, 0); err == nil {
+		t.Fatal("expected over-deep reply to be rejected")
+	}
+}
+
+func TestEnsureConnReportsDial(t *testing.T) {
+	_, addr := startScripted(t, func(cmd []string, n int) []byte { return encodeArray() })
+	c := NewClient(addr, "", false)
+	defer c.Close()
+
+	dialed, err := c.EnsureConn()
+	if err != nil || !dialed {
+		t.Fatalf("first EnsureConn: dialed=%v err=%v (want true, nil)", dialed, err)
+	}
+	dialed, err = c.EnsureConn()
+	if err != nil || dialed {
+		t.Fatalf("second EnsureConn: dialed=%v err=%v (want false, nil)", dialed, err)
+	}
+}

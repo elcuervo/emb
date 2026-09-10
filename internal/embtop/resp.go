@@ -41,9 +41,10 @@ func (r Reply) String() string { return r.Str }
 
 // Client is a minimal RESP2 client for an emb node.
 type Client struct {
-	addr     string
-	password string
-	useTLS   bool
+	addr      string
+	password  string
+	useTLS    bool
+	ioTimeout time.Duration
 
 	conn net.Conn
 	r    *bufio.Reader
@@ -59,16 +60,24 @@ func NewClient(addr, password string, useTLS bool) *Client {
 // Addr returns the configured address.
 func (c *Client) Addr() string { return c.addr }
 
+// DefaultTimeout bounds the TLS handshake, each poll's write/read round trip,
+// and the AUTH exchange, so a stalled peer surfaces as an error (and the
+// dashboard's reconnect path) instead of hanging forever.
+const DefaultTimeout = 10 * time.Second
+
 // Dial connects (plain TCP or TLS), authenticates if a password is set, and
 // waits for the AUTH reply when applicable.
 func (c *Client) Dial() error {
 	if c.conn != nil {
 		_ = c.Close()
 	}
+	timeout := c.timeout()
 	nc, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
 	if err != nil {
 		return fmt.Errorf("connect %s: %w", c.addr, err)
 	}
+	// Bound the handshake and AUTH exchange; Poll refreshes the deadline.
+	_ = nc.SetDeadline(time.Now().Add(timeout))
 	if c.useTLS {
 		host := c.addr
 		if h, _, err := net.SplitHostPort(c.addr); err == nil {
@@ -110,13 +119,28 @@ func (c *Client) Dial() error {
 	return nil
 }
 
-// EnsureConn dials the node when not currently connected.
-func (c *Client) EnsureConn() error {
+// EnsureConn dials the node when not currently connected, reporting whether a
+// new connection was established (so callers can rebase sequence cursors).
+func (c *Client) EnsureConn() (dialed bool, err error) {
 	if c.conn == nil {
-		return c.Dial()
+		if err := c.Dial(); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
+
+// timeout returns the effective per-operation deadline.
+func (c *Client) timeout() time.Duration {
+	if c.ioTimeout > 0 {
+		return c.ioTimeout
+	}
+	return DefaultTimeout
+}
+
+// SetTimeout overrides the per-operation deadline (tests use short values).
+func (c *Client) SetTimeout(d time.Duration) { c.ioTimeout = d }
 
 // closeOnErr closes the connection when err is non-nil, so a broken
 // transport is re-established on the next EnsureConn.
@@ -156,8 +180,22 @@ func (c *Client) WriteArgv(args ...string) error {
 // Flush sends the buffered commands.
 func (c *Client) Flush() error { return c.closeOnErr(c.w.Flush()) }
 
+// Parser bounds: the peer controls bulk lengths, array counts and nesting, so
+// cap them before allocating or recursing (a hostile or broken server must not
+// be able to exhaust emb-top's memory or stack).
+const (
+	maxBulkBytes = 16 << 20 // 16 MiB per bulk string
+	maxArrayLen  = 1 << 20  // 1M elements per array
+	maxDepth     = 32       // nested reply depth
+)
+
 // ReadReply decodes one RESP2 reply.
-func (c *Client) ReadReply() (Reply, error) {
+func (c *Client) ReadReply() (Reply, error) { return c.readReply(0) }
+
+func (c *Client) readReply(depth int) (Reply, error) {
+	if depth > maxDepth {
+		return Reply{}, fmt.Errorf("resp: reply nested deeper than %d", maxDepth)
+	}
 	prefix, err := c.r.ReadByte()
 	if err != nil {
 		return Reply{}, err
@@ -185,6 +223,9 @@ func (c *Client) ReadReply() (Reply, error) {
 		if n < 0 {
 			return Reply{Type: '$', Nil: true}, nil
 		}
+		if n > maxBulkBytes {
+			return Reply{}, fmt.Errorf("resp: bulk length %d exceeds %d", n, maxBulkBytes)
+		}
 		payload := make([]byte, n)
 		if _, err := ioReadFull(c.r, payload); err != nil {
 			return Reply{}, err
@@ -205,9 +246,12 @@ func (c *Client) ReadReply() (Reply, error) {
 		if n < 0 {
 			return Reply{Type: '*', Nil: true}, nil
 		}
+		if n > maxArrayLen {
+			return Reply{}, fmt.Errorf("resp: array length %d exceeds %d", n, maxArrayLen)
+		}
 		rep := Reply{Type: '*', Elems: make([]Reply, 0, n)}
 		for i := 0; i < n; i++ {
-			el, err := c.ReadReply()
+			el, err := c.readReply(depth + 1)
 			if err != nil {
 				return Reply{}, err
 			}
@@ -315,6 +359,8 @@ type ModelStats struct {
 // models are returned in Models and picked up on the next poll. afterSeq
 // fetches MONITOR events newer than that sequence (0 = all buffered).
 func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
+	// Bound the whole round trip so a stalled peer cannot block the caller.
+	_ = c.conn.SetDeadline(time.Now().Add(c.timeout()))
 	if err := c.writePoll(known, afterSeq); err != nil {
 		return nil, c.closeOnErr(err)
 	}
@@ -327,7 +373,9 @@ func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
 		return nil, c.closeOnErr(err)
 	}
 	if err := modelsRep.Err(); err != nil {
-		return nil, fmt.Errorf("EMB.MODELS: %w", err)
+		// Remaining pipelined replies are unread: drop the connection so the
+		// next poll starts clean instead of misparsing stale replies.
+		return nil, c.closeOnErr(fmt.Errorf("EMB.MODELS: %w", err))
 	}
 
 	perModel := make(map[string]*ModelStats, len(known))
@@ -348,7 +396,8 @@ func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
 		return nil, c.closeOnErr(err)
 	}
 	if err := statsRep.Err(); err != nil {
-		return nil, fmt.Errorf("EMB.STATS: %w", err)
+		// MONITOR's reply is still unread: drop the connection.
+		return nil, c.closeOnErr(fmt.Errorf("EMB.STATS: %w", err))
 	}
 
 	monRep, err := c.ReadReply()
@@ -387,7 +436,7 @@ func parseEvents(r Reply) []Event {
 			AtUs: row.Elems[1].Int,
 		}
 		if row.Elems[2].Type == '$' || row.Elems[2].Type == '+' {
-			e.Model = row.Elems[2].Str
+			e.Model = sanitize(row.Elems[2].Str)
 		}
 		e.Texts = int(row.Elems[3].Int)
 		e.LatencyUs = row.Elems[4].Int
@@ -426,12 +475,31 @@ func parseModelList(r Reply) []ModelListEntry {
 			dim = int(row.Elems[1].Int)
 		}
 		out = append(out, ModelListEntry{
-			Name:   row.Elems[0].String(),
+			Name:   sanitize(row.Elems[0].String()),
 			Dim:    dim,
-			Status: row.Elems[2].String(),
+			Status: sanitize(row.Elems[2].String()),
 		})
 	}
 	return out
+}
+
+// sanitize strips control characters from server-provided display strings so a
+// hostile or corrupted node cannot inject terminal escape sequences into the
+// dashboard (CWE-150). Printable Unicode is preserved.
+func sanitize(s string) string {
+	if !strings.ContainsFunc(s, isControl) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if isControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func isControl(r rune) bool {
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f)
 }
 
 // pairMap flattens a field/value RESP array into a map.
@@ -453,7 +521,7 @@ func intField(m map[string]Reply, key string) int64 {
 
 func strField(m map[string]Reply, key string) string {
 	if r, ok := m[key]; ok && (r.Type == '$' || r.Type == '+') {
-		return r.Str
+		return sanitize(r.Str)
 	}
 	return ""
 }

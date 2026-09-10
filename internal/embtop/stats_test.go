@@ -193,21 +193,23 @@ func TestPercentilesFromEvents(t *testing.T) {
 	if !ok {
 		t.Fatal("expected percentiles")
 	}
-	// sorted: 100,200,300,400 (+1000 excluded by model filter? no — Latency() is all models)
-	// Latency() includes model b's 1000 → sorted: 100,200,300,400,1000
-	if p50 != 200 { // len=5: p50 idx = int(2.5)-1 = 1 → 200
-		t.Errorf("p50 = %d, want 200", p50)
+	// Non-error samples, sorted: 100,200,300,400,1000. Nearest rank:
+	// p50 = ceil(5*0.5)-1 = 2 -> 300; p95 = ceil(4.75)-1 = 4 -> 1000;
+	// p99 = ceil(4.95)-1 = 4 -> 1000.
+	if p50 != 300 {
+		t.Errorf("p50 = %d, want 300", p50)
 	}
-	if p95 != 400 { // int(4.75)-1 = 3 → 400
-		t.Errorf("p95 = %d, want 400", p95)
+	if p95 != 1000 {
+		t.Errorf("p95 = %d, want 1000", p95)
 	}
-	if p99 != 400 { // int(4.95)-1 = 3 → 400
-		t.Errorf("p99 = %d, want 400", p99)
+	if p99 != 1000 {
+		t.Errorf("p99 = %d, want 1000", p99)
 	}
 
+	// Model a only: 100,200,300,400 -> p50 200, p95 400, p99 400.
 	ma50, ma95, ma99, ok := s.ModelLatency("a")
-	if !ok || ma50 != 200 || ma95 != 300 || ma99 != 300 {
-		t.Errorf("model a percentiles = %d/%d/%d, want 200/300/300", ma50, ma95, ma99)
+	if !ok || ma50 != 200 || ma95 != 400 || ma99 != 400 {
+		t.Errorf("model a percentiles = %d/%d/%d, want 200/400/400", ma50, ma95, ma99)
 	}
 }
 
@@ -232,5 +234,20 @@ func TestEventGapTolerated(t *testing.T) {
 	s.PushEvents([]Event{{Seq: 5, Model: "m", LatencyUs: 10}, {Seq: 8000, Model: "m", LatencyUs: 20}})
 	if _, _, _, ok := s.Latency(); !ok {
 		t.Fatal("expected percentiles after gap")
+	}
+}
+
+func TestSamplerResetClearsEventWindow(t *testing.T) {
+	s := NewSampler(10)
+	s.PushEvents([]Event{{Seq: 1, Model: "m", LatencyUs: 500}})
+	if _, _, _, ok := s.Latency(); !ok {
+		t.Fatal("expected events before reset")
+	}
+	s.Reset()
+	if _, _, _, ok := s.Latency(); ok {
+		t.Fatal("Reset left stale events visible to latency percentiles")
+	}
+	if _, ok := s.LastEvent(); ok {
+		t.Fatal("Reset left a stale last event")
 	}
 }

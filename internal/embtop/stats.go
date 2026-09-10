@@ -1,6 +1,7 @@
 package embtop
 
 import (
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -114,6 +115,7 @@ func (s *Sampler) Reset() {
 	s.Latest = Point{}
 	s.LatestModels = map[string]ModelPoint{}
 	s.LatestRaw = map[string]*ModelStats{}
+	s.Events = nil
 }
 
 // Push diffs res against the previous poll and appends the resulting Point.
@@ -290,9 +292,11 @@ func (s *Sampler) latenciesLocked(model string) []int64 {
 	return lats
 }
 
-// percentileIdx maps a fraction to a sorted slice index (nearest-rank, ≥1).
+// percentileIdx maps a fraction to a sorted slice index using the
+// nearest-rank definition: idx = ceil(n*f) - 1 (so p95 of 5 samples is the
+// largest sample, not the second largest).
 func percentileIdx(n int, f float64) int {
-	idx := int(float64(n)*f) - 1
+	idx := int(math.Ceil(float64(n)*f)) - 1
 	if idx < 0 {
 		idx = 0
 	}

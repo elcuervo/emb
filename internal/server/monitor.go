@@ -33,11 +33,19 @@ func NewMonitor(capacity int) *Monitor {
 	return &Monitor{cap: capacity, buf: make([]MonitorEvent, capacity)}
 }
 
+// maxMonitorModelLen bounds the model identifier retained per event: model
+// names are client-controlled and the ring holds thousands of events, so a
+// hostile caller must not be able to pin memory with huge names (CWE-770).
+const maxMonitorModelLen = 128
+
 // Add appends an event with the next sequence number, evicting the oldest
 // when the ring is full.
 func (m *Monitor) Add(e MonitorEvent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if len(e.Model) > maxMonitorModelLen {
+		e.Model = e.Model[:maxMonitorModelLen]
+	}
 	m.seq++
 	e.Seq = m.seq
 	m.buf[m.head] = e

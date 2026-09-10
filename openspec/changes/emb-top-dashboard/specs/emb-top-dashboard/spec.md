@@ -6,7 +6,7 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 
 ### Requirement: emb-top connects to a running node and polls existing commands
 
-`emb-top` SHALL connect to a running `emb` server and poll `EMB.MODELS`, `EMB.INFO <model>`, and `EMB.STATS` on each tick, pipelined in a single round trip, with no new server commands required.
+`emb-top` SHALL connect to a running `emb` server and poll `EMB.MODELS`, `EMB.INFO <model>`, `EMB.STATS` and `MONITOR` on each tick, pipelined in a single round trip. `MONITOR` support is required: it is the only source of per-request events, so a node that does not implement it (an older server) surfaces as a poll error and the dashboard reports the node as disconnected rather than silently showing stale data.
 
 #### Scenario: Default local connection
 
@@ -21,7 +21,7 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 #### Scenario: Poll cycle pipeline
 
 - **WHEN** a poll tick occurs
-- **THEN** `EMB.MODELS`, one `EMB.INFO` per loaded model, and `EMB.STATS` are sent in a single pipelined round trip
+- **THEN** `EMB.MODELS`, one `EMB.INFO` per loaded model, `EMB.STATS`, and `MONITOR <afterSeq> <limit>` are sent in a single pipelined round trip
 
 ### Requirement: emb-top renders aggregate throughput
 

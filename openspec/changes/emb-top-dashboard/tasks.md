@@ -7,7 +7,7 @@
 
 - [x] 2.1 Implement minimal RESP2 reader/writer (bulk strings, integers, arrays, errors) and verify unit tests cover decode of the reply shapes EMB.MODELS / EMB.INFO / EMB.STATS produce
 - [x] 2.2 Implement dialing (plain TCP and TLS) plus `AUTH` and verify a test connects to a real server, authenticates, and reads EMB.STATS
-- [x] 2.3 Implement one pipelined poll (EMB.MODELS → EMB.INFO per model → EMB.STATS, single write/read) and verify a unit test asserts commands are concatenated into one write and replies parsed in order
+- [x] 2.3 Implement one pipelined poll (EMB.MODELS → EMB.INFO per model → EMB.STATS → MONITOR, single write/read) and verify a unit test asserts commands are concatenated into one write and replies parsed in order
 
 ## 3. Sampler and rates (internal/embtop/stats.go)
 
