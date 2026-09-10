@@ -300,10 +300,11 @@ jobs:
             go build -ldflags="-X main.version=ci" -o /tmp/emb-test/emb ./cmd/emb
 
       - name: Start emb server
+        # Use the same two-model fixture as `just all`: the Ruby suite's
+        # per-model SCRIPT test needs a second registered model (bge).
         run: |
-          mkdir -p /tmp/emb-test/models
           LD_LIBRARY_PATH="/opt/onnxruntime/lib:$LD_LIBRARY_PATH" \
-            /tmp/emb-test/emb -model minilm -model-repo Xenova/all-MiniLM-L6-v2 -listen "127.0.0.1:16379" &
+            /tmp/emb-test/emb -config test-two-models.yaml &
           sleep 10
 
       - name: Run emb gem tests
@@ -319,7 +320,7 @@ jobs:
           gem build emb-server.gemspec
 
       - name: Cleanup
-        run: pkill -f "emb -model-repo" 2>/dev/null || true
+        run: pkill -f "emb-test/emb" 2>/dev/null || true
 
   release-emb:
     needs: [docker]

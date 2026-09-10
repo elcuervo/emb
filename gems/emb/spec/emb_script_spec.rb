@@ -61,9 +61,17 @@ RSpec.describe Emb do
 
     describe '.script' do
       it 'reports per-model existence and flushes' do
+        # Observing that a script loaded for one model is absent from another's
+        # cache needs a second registered model. Discover it rather than
+        # hardcoding a fixture name, so the failure is explicit when the server
+        # only exposes one model (the suite otherwise assumes minilm).
+        names = described_class.models.map { |m| m[:name].to_s }
+        other = (names - ['minilm']).first
+        raise "per-model script test needs a second registered model (got: #{names.inspect})" unless other
+
         sha = described_class.script.load(:minilm, join_script)
         expect(described_class.script.exists(:minilm, sha)).to eq([true])
-        expect(described_class.script.exists(:bge, sha)).to eq([false])
+        expect(described_class.script.exists(other, sha)).to eq([false])
 
         described_class.script.flush(:minilm)
         expect(described_class.script.exists(:minilm, sha)).to eq([false])
