@@ -31,8 +31,10 @@ redis-cli -3 EMB minilm VALUES "hello world"
 - [Custom scripts](#custom-scripts)
 - [Configuration](#configuration)
 - [Operations](#operations)
+- [Internals](docs/architecture.md)
 - [Monitoring: emb-top](#monitoring-emb-top)
 - [Clients](#clients)
+- [Ruby client: lazy modes](docs/ruby-client-lazy.md)
 - [Development](#development)
 
 ## Features
@@ -429,6 +431,9 @@ tokenizer workers hide tokenization behind inference. `timeout: 0` opts out.
 `EMB.MULTI` processes pairs with bounded concurrency (≤ the machine's `GOMAXPROCS`),
 so request storms can't spawn unbounded goroutines that starve inference.
 
+See [docs/architecture.md](docs/architecture.md) for the window's trigger rules,
+the idle-flush fast path, and why padding efficiency is reported.
+
 ### Caching
 
 Embeddings are cached by `model:text` key in an in-process LRU, so repeated
@@ -680,6 +685,9 @@ require "emb"
 Emb[:minilm]["hello world"]
 # => [0.0123, -0.0456, 0.0789, ...]
 ```
+
+For deferred and batched embedding (`lazy: :multi` / `lazy: :batch`), see
+[docs/ruby-client-lazy.md](docs/ruby-client-lazy.md).
 
 **Python:**
 

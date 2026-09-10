@@ -1,0 +1,130 @@
+<svg viewBox="0 0 880 600" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">Embedding cache: hot LRU and optional snapshots</title>
+  <desc id="desc">On the hot path, every EMB and EMB.MULTI text is looked up in an in-process LRU under the key model:text. A hit returns the stored float32 bytes and skips inference entirely; a miss runs the batch and then writes each result back. The cache is a map plus an intrusive list: Get promotes an entry to most-recently-used, and Set evicts the tail while the byte budget is exceeded. The budget is either an explicit size such as 1GB, a percentage of system RAM such as 25%, or auto, which is roughly 13 percent of RAM. Per-model hit, miss, eviction, entry and byte counts are reported through EMB.INFO, EMB.STATS and INFO. Snapshots are completely dormant unless cache_file is set. Three triggers start a save: the cache_save interval, a manual EMB.SAVE, or shutdown when the cache is dirty. The save takes immutable entry descriptors under the cache mutex and then, in one background goroutine, encodes, checksums, throttles, fsyncs and atomically renames a 0600 temporary file, so the previous snapshot survives until the replacement is complete and inference never stops. Only one save runs at a time; clean timer ticks are coalesced and a manual save that overlaps reports an error. At startup the file is streamed into an unpublished staging cache whose ceiling is the smallest of the cache budget, cache_restore_limit and the sampled host headroom of total RAM minus current RSS minus the reserve. Entries are admitted most-recently-used first; a checksum failure leaves the live cache empty. Model and tokenizer fingerprints are hashed once and cached so periodic saves do not re-read model artifacts, and restored rows are quarantined until the model loads and its fingerprint still matches. Snapshot files hold the original input text and can be disabled at any time.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-3)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="600" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="599" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">EMBEDDING CACHE &#183; HOT LRU NOW, OPTIONAL SNAPSHOT ACROSS RESTARTS</text>
+
+  <rect x="30" y="52" width="380" height="148" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="220" y="76" text-anchor="middle" font-size="12" fill="var(--text-bright)">hot path &#183; EMB / EMB.MULTI</text>
+  <text x="220" y="100" text-anchor="middle" font-size="9" fill="var(--text-muted)">Get(model:text) &#8594; float32 bytes</text>
+  <text x="220" y="118" text-anchor="middle" font-size="9" fill="var(--accent)">hit: reply, zero inference</text>
+  <text x="220" y="136" text-anchor="middle" font-size="9" fill="var(--accent-2)">miss: batch, infer, then Set()</text>
+  <text x="220" y="154" text-anchor="middle" font-size="9" fill="var(--text-muted)">no key normalization — the text itself</text>
+  <text x="220" y="172" text-anchor="middle" font-size="9" fill="var(--text-muted)">per-model stats via EMB.INFO &lt;model&gt;</text>
+
+  <rect x="440" y="52" width="410" height="148" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="645" y="76" text-anchor="middle" font-size="12" fill="var(--text-bright)">LRU internals</text>
+  <text x="456" y="100" font-size="9" fill="var(--text-muted)">map[key]*entry + intrusive list</text>
+  <text x="456" y="118" font-size="9" fill="var(--text-muted)">Get promotes the entry to MRU</text>
+  <text x="456" y="136" font-size="9" fill="var(--text-muted)">Set evicts the tail while over budget</text>
+  <text x="456" y="154" font-size="9" fill="var(--text-muted)">budget: auto &#8776; 13% RAM &#183; "1GB" &#183; "25%"</text>
+  <text x="456" y="172" font-size="9" fill="var(--text-muted)">auto = 20% of post-margin RAM, minus a 25% model reserve, floor 64 MB</text>
+  <text x="456" y="190" font-size="9" fill="var(--text-muted)">a bad value fails startup rather than silently degrading</text>
+
+  <line class="dgm-flow" x1="170" y1="200" x2="170" y2="234" stroke="var(--border)" marker-end="url(#ar)"/>
+
+  <text x="440" y="222" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">SNAPSHOT &#183; DORMANT UNLESS cache_file IS SET</text>
+
+  <rect x="30" y="236" width="196" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="128" y="258" text-anchor="middle" font-size="11" fill="var(--text-bright)">1 &#183; triggers</text>
+  <text x="128" y="282" text-anchor="middle" font-size="9" fill="var(--text-muted)">cache_save interval</text>
+  <text x="128" y="300" text-anchor="middle" font-size="9" fill="var(--text-muted)">EMB.SAVE, manual</text>
+  <text x="128" y="318" text-anchor="middle" font-size="9" fill="var(--text-muted)">shutdown, when dirty</text>
+  <text x="128" y="342" text-anchor="middle" font-size="9" fill="var(--text-muted)">all three are the same</text>
+  <text x="128" y="360" text-anchor="middle" font-size="9" fill="var(--text-muted)">code path</text>
+
+  <line class="dgm-flow" x1="226" y1="311" x2="244" y2="311" stroke="var(--accent-3)" marker-end="url(#arO)"/>
+
+  <rect x="246" y="236" width="196" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="344" y="258" text-anchor="middle" font-size="11" fill="var(--text-bright)">2 &#183; save, background</text>
+  <text x="344" y="282" text-anchor="middle" font-size="9" fill="var(--text-muted)">capture descriptors</text>
+  <text x="344" y="300" text-anchor="middle" font-size="9" fill="var(--text-muted)">under the cache mutex</text>
+  <text x="344" y="318" text-anchor="middle" font-size="9" fill="var(--text-muted)">encode &#8594; checksum</text>
+  <text x="344" y="336" text-anchor="middle" font-size="9" fill="var(--text-muted)">throttle &#8594; fsync</text>
+  <text x="344" y="354" text-anchor="middle" font-size="9" fill="var(--text-muted)">rename temp (0600)</text>
+
+  <line class="dgm-flow" x1="442" y1="311" x2="460" y2="311" stroke="var(--accent-3)" marker-end="url(#arO)"/>
+
+  <rect x="462" y="236" width="196" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="560" y="258" text-anchor="middle" font-size="11" fill="var(--text-bright)">3 &#183; snapshot file</text>
+  <text x="560" y="282" text-anchor="middle" font-size="9" fill="var(--text-muted)">emb streaming format</text>
+  <text x="560" y="300" text-anchor="middle" font-size="9" fill="var(--text-muted)">not RDB compatible</text>
+  <text x="560" y="318" text-anchor="middle" font-size="9" fill="var(--text-muted)">original text + f32 bytes</text>
+  <text x="560" y="336" text-anchor="middle" font-size="9" fill="var(--text-muted)">whole-file checksum</text>
+  <text x="560" y="360" text-anchor="middle" font-size="9" fill="var(--text-muted)">disposable, not a backup</text>
+
+  <line class="dgm-flow" x1="658" y1="311" x2="676" y2="311" stroke="var(--accent)" marker-end="url(#arR)"/>
+
+  <rect x="678" y="236" width="196" height="150" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="776" y="258" text-anchor="middle" font-size="11" fill="var(--text-bright)">4 &#183; restore, startup</text>
+  <text x="776" y="282" text-anchor="middle" font-size="9" fill="var(--text-muted)">stage, don't publish</text>
+  <text x="776" y="300" text-anchor="middle" font-size="9" fill="var(--text-muted)">ceiling = smallest of</text>
+  <text x="776" y="318" text-anchor="middle" font-size="9" fill="var(--text-muted)">budget, restore_limit,</text>
+  <text x="776" y="336" text-anchor="middle" font-size="9" fill="var(--text-muted)">RAM &#8722; RSS &#8722; reserve</text>
+  <text x="776" y="358" text-anchor="middle" font-size="9" fill="var(--text-muted)">MRU-first admit</text>
+
+  <rect x="30" y="404" width="400" height="116" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="230" y="426" text-anchor="middle" font-size="11" fill="var(--text-bright)">save guarantees</text>
+  <text x="46" y="448" font-size="9" fill="var(--text-muted)">only one save runs at a time</text>
+  <text x="46" y="466" font-size="9" fill="var(--text-muted)">clean timer ticks are coalesced; an overlapping EMB.SAVE errors</text>
+  <text x="46" y="484" font-size="9" fill="var(--text-muted)">the prior snapshot survives until the rename completes</text>
+  <text x="46" y="502" font-size="9" fill="var(--text-muted)">inference and every other command keep running throughout</text>
+
+  <rect x="450" y="404" width="400" height="116" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="650" y="426" text-anchor="middle" font-size="11" fill="var(--text-bright)">restore guarantees</text>
+  <text x="466" y="448" font-size="9" fill="var(--text-muted)">a checksum failure leaves the live cache empty</text>
+  <text x="466" y="466" font-size="9" fill="var(--text-muted)">a fingerprint mismatch discards the restored rows</text>
+  <text x="466" y="484" font-size="9" fill="var(--text-muted)">model and tokenizer are hashed once, then cached</text>
+  <text x="466" y="502" font-size="9" fill="var(--text-muted)">deleting a bad or incompatible snapshot is always safe</text>
+
+  <text x="30" y="556" font-size="9" fill="var(--text-muted)">cache_file and EMB.SAVE require a password or a loopback-only listener — an unauthenticated client must never be able to</text>
+  <text x="30" y="572" font-size="9" fill="var(--text-muted)">point snapshot writes at an arbitrary path. The default listen address is every interface, so this check only relaxes for localhost.</text>
+  <text x="30" y="588" font-size="9" fill="var(--text-muted)">Snapshots contain the original input text and the embedding bytes: encrypt the volume as the source data requires.</text>
+</svg>

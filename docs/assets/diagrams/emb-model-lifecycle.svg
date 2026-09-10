@@ -1,0 +1,137 @@
+<svg viewBox="0 0 880 600" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">Model lifecycle: config to serving pool</title>
+  <desc id="desc">A model starts as configuration — either a path to an ONNX file or a HuggingFace repo to download — and is registered at startup as a placeholder entry with no pool and nothing read from disk, unless preload is set, which loads it at boot. The first EMB command naming that model calls GetOrInit, whose sync.Once runs ensurePool exactly once; every other concurrent caller waits on the same Once rather than starting a second load. ensurePool builds a tokenizer from tokenizer.json, asks ONNX Runtime for the output tensors so it can pick one and read its rank, reads the input names and the weight bytes, and creates a session from those bytes per worker. It then builds a pool: smart batching by default with a 1 millisecond window, max_batch 32, a 16384 token budget and asynchronous tokenizer workers, or a round-robin worker pool when batching is disabled with timeout 0. Worker count is auto-tuned from available memory against the model's own size. A missing output tensor is auto-selected by rank and logged, the rank decides the default pooling — mean for a 3D last_hidden_state, none for an already pooled 2D output — and a quantized int8 weight file is preferred when present. A load failure is sticky: the Once never retries, so a broken model cannot cause a retry storm, and the error is returned to every caller. Cache snapshot entries restored from disk are quarantined and admitted only after the model loads and its fingerprint — a hash of the weights, the tokenizer and every option that changes emitted bytes — still matches.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="600" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="599" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">MODEL LIFECYCLE &#183; CONFIG &#8594; LAZY LOAD &#8594; SERVING POOL</text>
+
+  <text x="30" y="42" font-size="9" fill="var(--text-muted)" letter-spacing="1">LIFECYCLE</text>
+  <text x="574" y="68" font-size="9" fill="var(--text-muted)" letter-spacing="1">DECISION POINTS DURING LOAD</text>
+
+  <rect x="30" y="54" width="520" height="62" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="290" y="76" text-anchor="middle" font-size="12" fill="var(--text-bright)">1 &#183; config</text>
+  <text x="290" y="94" text-anchor="middle" font-size="9" fill="var(--text-muted)">models: minilm: { onnx: ./models/minilm/model.onnx }</text>
+  <text x="290" y="110" text-anchor="middle" font-size="9" fill="var(--text-muted)">or model_repo: Xenova/all-MiniLM-L6-v2, downloaded on load</text>
+
+  <line class="dgm-flow" x1="290" y1="116" x2="290" y2="124" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="30" y="126" width="520" height="62" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="290" y="148" text-anchor="middle" font-size="12" fill="var(--text-bright)">2 &#183; registry.Add at startup</text>
+  <text x="290" y="166" text-anchor="middle" font-size="9" fill="var(--text-muted)">the entry exists; Pool == nil; nothing read from disk yet</text>
+  <text x="290" y="182" text-anchor="middle" font-size="9" fill="var(--text-muted)">preload: true is the exception — it calls GetOrInit at boot</text>
+
+  <line class="dgm-flow" x1="290" y1="188" x2="290" y2="196" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="30" y="198" width="520" height="68" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="290" y="220" text-anchor="middle" font-size="12" fill="var(--text-bright)">3 &#183; first EMB for that model &#8594; GetOrInit</text>
+  <text x="290" y="238" text-anchor="middle" font-size="9" fill="var(--text-muted)">entry.once.Do(ensurePool) — exactly one attempt, ever</text>
+  <text x="290" y="254" text-anchor="middle" font-size="9" fill="var(--text-muted)">one caller loads; every other caller waits on the same Once</text>
+
+  <line class="dgm-flow" x1="290" y1="266" x2="290" y2="274" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="30" y="276" width="520" height="130" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="290" y="298" text-anchor="middle" font-size="12" fill="var(--text-bright)">4 &#183; ensurePool()</text>
+  <text x="46" y="320" font-size="9" fill="var(--text-muted)">tokenizer.NewTokenizer(cfg.Tokenizer) — tokenizer.json</text>
+  <text x="46" y="338" font-size="9" fill="var(--text-muted)">onnx.GetOutputInfo &#8594; pick the output tensor, read its rank</text>
+  <text x="46" y="356" font-size="9" fill="var(--text-muted)">onnx.GetInputNames + os.ReadFile(weights bytes)</text>
+  <text x="46" y="374" font-size="9" fill="var(--text-muted)">sessionFactory() &#8594; NewRuntimeSessionFromBytes per worker</text>
+  <text x="46" y="392" font-size="9" fill="var(--text-muted)">fingerprint inputs recorded for cache restore</text>
+
+  <line class="dgm-flow" x1="290" y1="406" x2="290" y2="414" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="30" y="416" width="520" height="88" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="290" y="438" text-anchor="middle" font-size="12" fill="var(--text-bright)">5 &#183; Pool</text>
+  <text x="46" y="458" font-size="9" fill="var(--text-muted)">batching on: 1 ms window, max_batch 32, tokens 16384, async tokenizers</text>
+  <text x="46" y="476" font-size="9" fill="var(--text-muted)">or timeout: 0 &#8594; a worker pool of N sessions, round-robin</text>
+  <text x="46" y="494" font-size="9" fill="var(--text-muted)">N auto-tuned: min(cores, half of RAM &#247; (weights &#215; 1.2))</text>
+
+  <line class="dgm-flow" x1="290" y1="504" x2="290" y2="512" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <rect x="30" y="514" width="520" height="58" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="290" y="534" text-anchor="middle" font-size="12" fill="var(--text-bright)">6 &#183; serving</text>
+  <text x="290" y="550" text-anchor="middle" font-size="9" fill="var(--text-muted)">EMB, EMB.MULTI and scripted eval all address the same entry</text>
+  <text x="290" y="566" text-anchor="middle" font-size="9" fill="var(--text-muted)">int8 / fp32 label and weights size are reported through INFO</text>
+
+  <rect x="562" y="50" width="296" height="522" rx="10" fill="none" stroke="var(--border)" stroke-dasharray="4 4"/>
+  <line x1="550" y1="341" x2="562" y2="341" stroke="var(--border)" stroke-dasharray="4 4"/>
+
+  <rect x="574" y="78" width="272" height="58" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="96" text-anchor="middle" font-size="10" fill="var(--text-bright)">output tensor missing</text>
+  <text x="710" y="112" text-anchor="middle" font-size="9" fill="var(--text-muted)">auto-select by rank, logged;</text>
+  <text x="710" y="126" text-anchor="middle" font-size="9" fill="var(--text-muted)">set output_tensor to silence</text>
+
+  <rect x="574" y="146" width="272" height="58" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="164" text-anchor="middle" font-size="10" fill="var(--text-bright)">rank decides default pooling</text>
+  <text x="710" y="180" text-anchor="middle" font-size="9" fill="var(--text-muted)">rank 3 last_hidden_state &#8594; mean</text>
+  <text x="710" y="194" text-anchor="middle" font-size="9" fill="var(--text-muted)">rank 2 pre-pooled &#8594; none</text>
+
+  <rect x="574" y="214" width="272" height="58" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="232" text-anchor="middle" font-size="10" fill="var(--text-bright)">explicit pooling always wins</text>
+  <text x="710" y="248" text-anchor="middle" font-size="9" fill="var(--text-muted)">mean / cls (first token) / none</text>
+  <text x="710" y="262" text-anchor="middle" font-size="9" fill="var(--text-muted)">none on a 3D graph is wrong</text>
+
+  <rect x="574" y="292" width="272" height="58" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="310" text-anchor="middle" font-size="10" fill="var(--text-bright)">quantize</text>
+  <text x="710" y="326" text-anchor="middle" font-size="9" fill="var(--text-muted)">auto &#8594; prefer a quantized file</text>
+  <text x="710" y="340" text-anchor="middle" font-size="9" fill="var(--text-muted)">on &#8594; require it, off &#8594; fp32</text>
+
+  <rect x="574" y="360" width="272" height="64" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="378" text-anchor="middle" font-size="10" fill="var(--text-bright)">load failure is sticky</text>
+  <text x="710" y="396" text-anchor="middle" font-size="9" fill="var(--text-muted)">the Once never retries, so a</text>
+  <text x="710" y="412" text-anchor="middle" font-size="9" fill="var(--text-muted)">broken model can't storm</text>
+
+  <rect x="574" y="432" width="272" height="64" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="450" text-anchor="middle" font-size="10" fill="var(--text-bright)">fingerprint</text>
+  <text x="710" y="466" text-anchor="middle" font-size="9" fill="var(--text-muted)">sha256 of weights + tokenizer +</text>
+  <text x="710" y="482" text-anchor="middle" font-size="9" fill="var(--text-muted)">every option that changes bytes</text>
+
+  <rect x="574" y="504" width="272" height="64" rx="6" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="710" y="522" text-anchor="middle" font-size="10" fill="var(--text-bright)">quarantined snapshot rows</text>
+  <text x="710" y="538" text-anchor="middle" font-size="9" fill="var(--text-muted)">admitted only once the model</text>
+  <text x="710" y="554" text-anchor="middle" font-size="9" fill="var(--text-muted)">loads and the hash still matches</text>
+
+  <text x="30" y="590" font-size="9" fill="var(--text-muted)">the same entry also lazily opens a separate NamedSession pool for EMB.EVAL — a script model need not be embeddable at all</text>
+</svg>

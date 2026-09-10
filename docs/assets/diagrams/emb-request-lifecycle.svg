@@ -1,0 +1,118 @@
+<svg viewBox="0 0 880 620" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-labelledby="ttl desc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <title id="ttl">One EMB command, end to end</title>
+  <desc id="desc">The life of a single EMB command. The socket decodes RESP2 or RESP3, the AUTH gate and the draining check run, then arity is validated and a leading reply-format keyword is read as a complete word at a fixed argument position — never inside the free-text tail. Texts beyond max_texts are dropped and their reply slots become nulls. The cache is probed with the key model:text; a hit jumps straight to the reply writer and skips both model loading and inference. A miss goes to the registry, where GetOrInit loads the model pool on first use — tokenizer, output tensor detection, sessions — and then to Pool.Embed, which hands the texts to the batching window that coalesces concurrent requests into one ONNX run. The run pads to the longest sequence in the window, pools (mean, cls, or none for pre-pooled graphs) and optionally L2-normalizes. Every miss is written back into the LRU cache and a MONITOR event is appended with the model, text count and latency. Finally writeEmbResult emits either the compact BLOB float32 reply or the VALUES envelope, sized per negotiated protocol; RESP2 and RESP3 differ in null and double encoding, and the overflow slots stay null in both.</desc>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --surface-2: #eaeef2; --border: #d0d7de;
+      --text-bright: #1f2328; --text: #424a53; --text-muted: #656d76;
+      --accent: #0f7a5a; --accent-2: #0757ba; --accent-3: #8a4b00; --accent-4: #5b32b0;
+      --err: #b35900;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --surface: #161b22; --surface-2: #21262d; --border: #30363d;
+        --text-bright: #f0f6fc; --text: #c9d1d9; --text-muted: #8b949e;
+        --accent: #56d4a4; --accent-2: #58a6ff; --accent-3: #ffa657; --accent-4: #d2a8ff;
+        --err: #ffa198;
+      }
+    }
+    .dgm-flow { stroke-dasharray: 5 5; animation: dgm-flowdash 1.1s linear infinite; }
+    .dgm-ants { stroke-dasharray: 5 5; animation: dgm-antsdash 2.2s linear infinite; }
+    .dgm-gate { animation: dgm-lit 4s ease-in-out infinite; }
+    .dgm-g2 { animation-delay: .35s; }
+    .dgm-g3 { animation-delay: .7s; }
+    .dgm-g4 { animation-delay: 1.05s; }
+    .dgm-g5 { animation-delay: 1.4s; }
+    @keyframes dgm-flowdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-antsdash { to { stroke-dashoffset: -20; } }
+    @keyframes dgm-lit {
+      0%, 100% { stroke: var(--border); }
+      10%, 22% { stroke: var(--accent); }
+      40% { stroke: var(--border); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dgm-flow, .dgm-ants, .dgm-gate { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-2)"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="620" rx="10" fill="var(--bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="619" rx="10" fill="none" stroke="var(--border)"/>
+
+  <text x="440" y="20" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">ONE EMB COMMAND &#183; THE WHOLE LIFE OF A REQUEST</text>
+
+  <rect x="240" y="56" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="78" text-anchor="middle" font-size="11" fill="var(--text-bright)">socket &#8594; RESP2 / RESP3 decode &#183; AUTH &#183; draining check</text>
+
+  <rect x="240" y="104" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="126" text-anchor="middle" font-size="11" fill="var(--text-bright)">arity validated &#183; leading format keyword read</text>
+
+  <rect x="240" y="152" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="174" text-anchor="middle" font-size="11" fill="var(--text-bright)">truncate to max_texts &#183; overflow &#8594; null slots</text>
+
+  <rect class="dgm-gate" x="240" y="200" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="222" text-anchor="middle" font-size="11" fill="var(--text-bright)">LRU probe &#183; key = model:text</text>
+
+  <rect x="240" y="248" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="270" text-anchor="middle" font-size="11" fill="var(--text-bright)">registry.GetOrInit(model) &#8594; lazy load the pool</text>
+
+  <rect x="240" y="296" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="318" text-anchor="middle" font-size="11" fill="var(--text-bright)">Pool.Embed(misses) &#8594; batching window</text>
+
+  <rect x="240" y="344" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="366" text-anchor="middle" font-size="11" fill="var(--text-bright)">one ONNX run &#8594; pooling &#8594; optional L2 normalize</text>
+
+  <rect x="240" y="392" width="400" height="34" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="414" text-anchor="middle" font-size="11" fill="var(--text-bright)">cache.Set per miss &#183; MONITOR event appended</text>
+
+  <rect x="240" y="440" width="400" height="34" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+  <text x="440" y="462" text-anchor="middle" font-size="11" fill="var(--text-bright)">writeEmbResult &#183; BLOB or VALUES, sized per protocol</text>
+
+  <line class="dgm-flow" x1="440" y1="90" x2="440" y2="102" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="138" x2="440" y2="150" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="186" x2="440" y2="198" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="234" x2="440" y2="246" stroke="var(--accent-2)" marker-end="url(#arB)"/>
+  <text x="452" y="244" font-size="9" fill="var(--accent-2)">miss</text>
+  <line class="dgm-flow" x1="440" y1="282" x2="440" y2="294" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="330" x2="440" y2="342" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="378" x2="440" y2="390" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="426" x2="440" y2="438" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+  <line class="dgm-flow" x1="440" y1="474" x2="440" y2="494" stroke="var(--text-muted)" marker-end="url(#ar)"/>
+
+  <path class="dgm-ants" d="M640 217 L 844 217 L 844 546 L 822 546" fill="none" stroke="var(--accent)" marker-end="url(#arR)"/>
+  <text x="838" y="208" text-anchor="end" font-size="9" fill="var(--accent)">cache hit: skips load and inference</text>
+
+  <text x="232" y="126" text-anchor="end" font-size="9" fill="var(--text-muted)">keyword only at args[2]</text>
+  <text x="232" y="174" text-anchor="end" font-size="9" fill="var(--text-muted)">max_texts default 4096</text>
+  <text x="232" y="318" text-anchor="end" font-size="9" fill="var(--text-muted)">batching is on by default</text>
+  <text x="232" y="366" text-anchor="end" font-size="9" fill="var(--text-muted)">mean / cls / none</text>
+
+  <text x="648" y="270" font-size="9" fill="var(--text-muted)">sticky sync.Once load</text>
+  <text x="648" y="288" font-size="9" fill="var(--text-muted)">no retry storm</text>
+  <text x="648" y="414" font-size="9" fill="var(--text-muted)">one entry per cached miss</text>
+  <text x="648" y="462" font-size="9" fill="var(--text-muted)">format chosen per call</text>
+
+  <rect x="60" y="496" width="760" height="104" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+  <text x="440" y="516" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">REPLY SHAPES</text>
+  <line x1="450" y1="528" x2="450" y2="592" stroke="var(--border)" stroke-dasharray="3 3"/>
+
+  <text x="80" y="538" font-size="11" fill="var(--text-bright)">BLOB  (default)</text>
+  <text x="80" y="556" font-size="9" fill="var(--text-muted)">float32 bytes &#183; 4 &#215; dim per text</text>
+  <text x="80" y="574" font-size="9" fill="var(--text-muted)">1 text &#8594; one bulk &#183; n texts &#8594; array + nulls</text>
+  <text x="80" y="592" font-size="9" fill="var(--text-muted)">overflow slots are null in both formats</text>
+
+  <text x="470" y="538" font-size="11" fill="var(--text-bright)">VALUES  (RedisAI envelope)</text>
+  <text x="470" y="556" font-size="9" fill="var(--text-muted)">dtype FLOAT &#183; shape [m, dim] &#183; values: [...]</text>
+  <text x="470" y="574" font-size="9" fill="var(--text-muted)">RESP2 decimal bulks / RESP3 typed doubles</text>
+  <text x="470" y="592" font-size="9" fill="var(--text-muted)">EMB.MULTI: one envelope per pair, with model</text>
+</svg>
