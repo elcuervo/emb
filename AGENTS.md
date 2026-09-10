@@ -36,7 +36,7 @@ steps in `just all` may fail to find the ORT library).
 | `just lint` | `golangci-lint run ./...` **then** `go vet ./...` (this is the "go vet" check) |
 | `just format` | `golangci-lint fmt ./...` (gofmt + goimports) |
 | `just build` | CGo build with `-ldflags "-X main.version=$(cat VERSION)"` → `bin/emb` |
-| `just all` | `just test` + `just build`, then starts a server on **:16379** (`test-two-models.yaml`) and runs the Ruby client suite (`cd gems/emb && bundle exec rake`) |
+| `just all` | `just test` + `just build`, then starts a server on **127.0.0.1:16379** (`test-two-models.yaml`) and runs the Ruby client suite (`cd gems/emb && bundle exec rake`) |
 | `just validate-gems` | build + install + validate both gems locally |
 | `just bench` / `baseline` | Go benchmarks / captured baseline |
 | `just bench-cache-size size="auto"` | server with `-cache <size>` + `redis-benchmark` hit path |
@@ -54,7 +54,7 @@ golangci-lint run ./...
 
 ## Ruby client checks (`gems/emb`)
 
-- Unit/integration specs: `cd gems/emb && bundle exec rake` — **requires a server running on port 16379** (`./bin/emb -config test-two-models.yaml -listen :16379`, inside `nix develop`).
+- Unit/integration specs: `cd gems/emb && bundle exec rake` — **requires a server running on port 16379** (`./bin/emb -config test-two-models.yaml -listen 127.0.0.1:16379`, inside `nix develop`).
 - Lint: `cd gems/emb && bundle exec rubocop`.
 - Bench harness: `bundle exec rake bench` (server must be running).
 

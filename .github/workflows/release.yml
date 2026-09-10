@@ -303,7 +303,7 @@ jobs:
         run: |
           mkdir -p /tmp/emb-test/models
           LD_LIBRARY_PATH="/opt/onnxruntime/lib:$LD_LIBRARY_PATH" \
-            /tmp/emb-test/emb -model minilm -model-repo Xenova/all-MiniLM-L6-v2 -listen ":16379" &
+            /tmp/emb-test/emb -model minilm -model-repo Xenova/all-MiniLM-L6-v2 -listen "127.0.0.1:16379" &
           sleep 10
 
       - name: Run emb gem tests

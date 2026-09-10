@@ -1,4 +1,4 @@
-listen: ":16379"
+listen: "127.0.0.1:16379"
 
 models:
   minilm:
