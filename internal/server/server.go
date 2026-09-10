@@ -110,6 +110,8 @@ type Server struct {
 	// command bytes at dispatch; TX is counted by countingConn around every reply.
 	netIn  atomic.Uint64
 	netOut atomic.Uint64
+	// monitor records completed-request events for MONITOR (bounded ring).
+	monitor *Monitor
 }
 
 // Option configures a Server.
@@ -197,6 +199,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		idleTimeout:         config.DefaultIdleTimeout,
 		maxTexts:            4096,
 		maxPairs:            4096,
+		monitor:             NewMonitor(8192),
 	}
 	for _, o := range opts {
 		o(s)
@@ -218,6 +221,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.models", s.handleMODELS)
 	mux.HandleFunc("emb.info", s.handleINFO)
 	mux.HandleFunc("emb.stats", s.handleSTATS)
+	mux.HandleFunc("monitor", s.handleMonitor)
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
 	mux.HandleFunc("emb.ready", s.handleREADY)
@@ -648,6 +652,10 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	s.active.Add(1)
 	defer s.active.Done()
 
+	// Start the MONITOR clock before argument parsing and conversion so the
+	// recorded latency covers the whole request, not just inference.
+	started := time.Now()
+
 	modelName := string(cmd.Args[1])
 	// Leading reply-format keyword (EMB <model> [BLOB|VALUES] <text>...):
 	// recognized only at the fixed position right after the model, never in the
@@ -661,11 +669,24 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	for i, arg := range textArgs {
 		texts[i] = string(arg)
 	}
+	total := len(texts)
+
+	// Record the request completion for MONITOR (bounded ring, no text
+	// payloads). Latency spans argument parsing through reply writing.
+	failed := false
+	defer func() {
+		s.monitor.Add(MonitorEvent{
+			AtUs:      started.UnixMicro(),
+			Model:     modelName,
+			Texts:     total,
+			LatencyUs: time.Since(started).Microseconds(),
+			Err:       failed,
+		})
+	}()
 
 	// Truncate oversized commands: process only the first maxTexts texts and
 	// reply with null slots for the overflow. Truncation bounds the inference
 	// work of a single command so the payload size cannot pin the task's cores.
-	total := len(texts)
 	if s.maxTexts > 0 && total > s.maxTexts {
 		s.truncatedTexts.Add(int64(total - s.maxTexts))
 		texts = texts[:s.maxTexts]
@@ -685,6 +706,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 
 		entry, err := s.reg.GetOrInit(modelName)
 		if err != nil {
+			failed = true
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
 			return
 		}
@@ -702,10 +724,12 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 
 		resp, err := entry.Pool.Embed(missTexts)
 		if err != nil {
+			failed = true
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
 			return
 		}
 		if resp.Err != nil {
+			failed = true
 			conn.WriteError(fmt.Sprintf("ERR %v", resp.Err))
 			return
 		}
@@ -723,17 +747,20 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 
 	entry, err := s.reg.GetOrInit(modelName)
 	if err != nil {
+		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
 	resp, err := entry.Pool.Embed(texts)
 	if err != nil {
+		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
 	if resp.Err != nil {
+		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", resp.Err))
 		return
 	}
@@ -765,6 +792,59 @@ func writeEmbReply(conn redcon.Conn, results [][]byte, total int) {
 	}
 	for i := len(results); i < total; i++ {
 		conn.WriteNull()
+	}
+}
+
+func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
+	after := uint64(0)
+	limit := 500
+	if len(cmd.Args) > 1 {
+		if n, err := strconv.ParseUint(string(cmd.Args[1]), 10, 64); err == nil {
+			after = n
+		}
+	}
+	if len(cmd.Args) > 2 {
+		if n, err := strconv.Atoi(string(cmd.Args[2])); err == nil {
+			limit = n
+		}
+	}
+	events := s.monitor.Since(after, limit)
+	conn.WriteArray(len(events))
+	for _, e := range events {
+		if conn.ProtocolVersion() == 3 {
+			// RESP3: a map per event, with the same field names as the
+			// RESP2 flat array (see the resp3-protocol spec).
+			conn.WriteMap(6)
+			conn.WriteBulkString("seq")
+			conn.WriteInt(int(e.Seq))
+			conn.WriteBulkString("at_us")
+			conn.WriteInt(int(e.AtUs))
+			conn.WriteBulkString("model")
+			conn.WriteBulkString(e.Model)
+			conn.WriteBulkString("texts")
+			conn.WriteInt(e.Texts)
+			conn.WriteBulkString("latency_us")
+			conn.WriteInt(int(e.LatencyUs))
+			conn.WriteBulkString("err")
+			if e.Err {
+				conn.WriteInt(1)
+			} else {
+				conn.WriteInt(0)
+			}
+			continue
+		}
+		conn.WriteArray(6)
+		conn.WriteInt(int(e.Seq))
+		conn.WriteInt(int(e.AtUs))
+		conn.WriteBulkString(e.Model)
+		conn.WriteInt(e.Texts)
+		conn.WriteInt(int(e.LatencyUs))
+		if e.Err {
+			conn.WriteInt(1)
+		} else {
+			conn.WriteInt(0)
+		}
+
 	}
 }
 
@@ -812,6 +892,7 @@ func writePairs(conn redcon.Conn, n int) {
 		conn.WriteMap(n)
 	} else {
 		conn.WriteArray(n * 2)
+
 	}
 }
 
@@ -1195,6 +1276,18 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	model := string(pairs[idx*2])
 	text := string(pairs[idx*2+1])
 
+	started := time.Now()
+	failed := false
+	defer func() {
+		s.monitor.Add(MonitorEvent{
+			AtUs:      started.UnixMicro(),
+			Model:     model,
+			Texts:     1,
+			LatencyUs: time.Since(started).Microseconds(),
+			Err:       failed,
+		})
+	}()
+
 	if s.cache != nil {
 		key := model + ":" + text
 		if emb, ok := s.cache.Get(key); ok {
@@ -1205,12 +1298,14 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 
 	entry, err := s.reg.GetOrInit(model)
 	if err != nil {
+		failed = true
 		return
 	}
 	s.admitQuarantine(model, entry)
 
 	resp, err := entry.Pool.Embed([]string{text})
 	if err != nil || resp.Err != nil {
+		failed = true
 		return
 	}
 
@@ -1228,6 +1323,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
 		"EMB.MULTI [BLOB|VALUES] <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics (requests, connections, mem/cpu, goroutines)",
+		"MONITOR [seq] [limit] - Recent completed request events (model, latency, errors; no text)",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.EVAL <model> <script> <numtexts> <text...> <arg...> - Evaluate a Lua script against a model (KEYS=texts, ARGV=args)",
 		"EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...> - Evaluate a cached script by SHA (see EMB.SCRIPT LOAD)",
