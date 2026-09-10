@@ -13,9 +13,13 @@ if defined?(Rails::Railtie)
       config.emb.middleware = true
       config.emb.job_middleware = true
 
+      # Insertion is unconditional (opt-out excepted): during initialization the
+      # stack is a Rails::Configuration::MiddlewareStackProxy, which records
+      # operations but cannot be inspected. Duplicate insertion is safe because
+      # Emb::BatchScope clearing is idempotent, so manual mounts use the opt-out
+      # instead of relying on detection.
       initializer 'emb.middleware' do |app|
         next if config.emb.middleware == false
-        next if app.middleware.include?(Emb::Middleware)
 
         app.middleware.use Emb::Middleware
       end
