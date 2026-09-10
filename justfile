@@ -130,6 +130,24 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
 
+# Download the GLiNER2 scripted-model testbed (cuerbot/gliner2-multi-v1 int8)
+# Used by the gated script-eval/GLiNER tests; ~380MB. Skips files that are
+# already present and fails on HTTP errors (curl -f), mirroring download-model.
+download-gliner-model:
+    @mkdir -p ./models/gliner2
+    @for f in model_int8.onnx tokenizer.json config.json; do \
+        if [ -f "./models/gliner2/$$f" ] && [ "$$(wc -c < "./models/gliner2/$$f")" -gt 100 ]; then \
+            echo "✓ $$f (exists)"; \
+        else \
+            curl -fsSL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/$$f" -o "./models/gliner2/$$f" && echo "✓ $$f" || { rm -f "./models/gliner2/$$f"; echo "failed to download $$f" >&2; exit 1; }; \
+        fi; \
+    done
+
+# GLiNER extraction benchmarks against the real int8 model (Apple sentence
+# material; requires: just download-gliner-model)
+bench-gliner intra="4":
+    @EMB_BENCH_INTRA={{intra}} go test ./internal/script/ -bench=BenchmarkGLiNERExtract -benchtime=5x -run=^$
+
 # Run redis-benchmark with a single-threaded server
 # Uses 1 client, 1 pipeline, 500 requests (~2s at 280 req/s)
 # Requires: redis-benchmark, downloaded model at ./models/minilm
@@ -223,7 +241,12 @@ bench-ruby-multi config="bench-cpu-partition.yaml":
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=$half $(aff0) ./bin/emb -config {{config}} & echo $! > "$tmp/pid0"; \
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=$half $(aff1) ./bin/emb -config "$tmp/node2.yaml" & echo $! > "$tmp/pid1"; \
     sleep 2; \
-    until redis-cli -p 16379 ping >/dev/null 2>&1 && redis-cli -p 16380 ping >/dev/null 2>&1; do sleep 1; done; \
+    deadline=$(( $(date +%s) + 60 )); \
+    until redis-cli -p 16379 ping >/dev/null 2>&1 && redis-cli -p 16380 ping >/dev/null 2>&1; do \
+        kill -0 "$(cat "$tmp/pid0")" 2>/dev/null && kill -0 "$(cat "$tmp/pid1")" 2>/dev/null || { echo "ERROR: an EMB node exited during startup"; exit 1; }; \
+        [ "$(date +%s)" -lt "$deadline" ] || { echo "ERROR: EMB nodes did not become ready within 60 seconds"; exit 1; }; \
+        sleep 1; \
+    done; \
     bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(expr {{app_cpus}} + {{bench_cpus}} - 1)"; }; \
     echo "Both nodes ready — running client harness (benchmark partition: $(bench), EMB_BENCH_PORT2=16380)"; \
     (cd gems/emb && EMB_BENCH_PORT2=16380 EMB_BENCH_APP_CPUS={{app_cpus}} EMB_BENCH_BENCH_CPUS={{bench_cpus}} $(bench) bundle exec ruby bench/bench.rb); \

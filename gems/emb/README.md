@@ -78,7 +78,7 @@ coalescing with `lazy: :multi` or concurrent fan-out with `lazy: :batch` — glo
 can take over a second of inference on a shared CPU, and redis-client's silent default is
 1.0s — a slower reply times out. The gem therefore defaults to an explicit 10s timeout
 and `reconnect_attempts: 0`: a failing batch fails closed after one attempt and raises
-`Emb::ServerError` (see [Lazy execution modes](#lazy-execution-modes)). Set
+`Emb::ServerError` (see [Lazy batching](#lazy-batching)). Set
 `Emb.configure { |c| c.reconnect_attempts = 2 }` and redis-client re-sends
 **connection and protocol failures** up to that many extra times before the batch fails
 closed — each re-send re-runs server inference, so keep the budget small. Operation
@@ -291,6 +291,28 @@ exceptions (`RedisClient::CommandError`): read-only parameters (`listen`, `tls_*
 `models`), invalid values, and `NOAUTH` on password-protected servers are not
 swallowed.
 
+### Cache lifecycle commands
+
+When server-side caching is enabled, the Ruby client exposes the lifecycle
+commands on module, instance, pooled, and round-robin clients:
+
+```ruby
+Emb.cache_flush             # all models; => removed entry count
+Emb.cache_flush(:minilm)    # one model; => removed entry count
+Emb.save_cache              # => "OK" once the background save is accepted
+
+Emb.stats[:cache_snapshot_in_progress] # 0 or 1
+Emb.server_info(:cache)                # completion, failure, restore limits
+```
+
+Snapshot persistence is configured on the server with `cache_file`,
+`cache_load`, `cache_save`, `cache_save_on_shutdown`, `cache_restore_limit`,
+`cache_restore_reserve`, and `cache_save_rate_limit`. Automatic saves keep
+serving inference and control commands while encoding and I/O run in the
+background. Snapshot files include original input text and embeddings; use
+protected/encrypted storage where appropriate and treat them as disposable
+warm-start data rather than a durable database.
+
 ## Usage
 
 ### Single text
@@ -306,6 +328,32 @@ With an instance-based client:
 client = Emb.new(url: "redis://localhost:6379")
 result = client[:minilm]["hello world"]
 ```
+
+### VALUE format (RESP decimal reply)
+
+By default the server replies with the compact float32 binary wire and the gem
+unpacks it. Pass `format: :values` to send the RedisAI-style `VALUES` keyword
+and get the server's self-describing envelope back: `dtype`, `shape`, and the
+embedding values as decimal floats (the float64 widening the server stores, so
+`unpack` is not needed). Single texts return the envelope with flat `values`;
+multiple texts group the values per text (rows of `shape`).
+
+```ruby
+Emb[:minilm]["hello world", format: :values]
+# => { dtype: "FLOAT", shape: [1, 384], values: [0.0123, -0.0456, ...] }
+
+Emb[:minilm]["hello", "world", format: :values]
+# => { dtype: "FLOAT", shape: [2, 384], values: [[...], [...]] }
+```
+
+The batch loaders accept the same keyword; mixed formats within one batch
+raise `ArgumentError`.
+
+> **RESP3 note:** the server emits the decimal values as typed RESP3 doubles when
+> the connection negotiated `HELLO 3` and as decimal bulk strings otherwise.
+> The gem speaks RESP2 (binary default, decimal `values` opt-in) and does not
+> parse RESP3 replies itself — connect with a RESP3-capable client to use the
+> typed doubles on the wire.
 
 ### Multiple texts
 
@@ -336,17 +384,37 @@ client.multi do |m|
 end
 ```
 
-### Lazy execution modes
+### Script replies
 
-Embed-call behavior is governed by a single `lazy` mode — `false` (default, eager),
-`:multi` (defer and coalesce into one `EMB` for a single model / one `EMB.MULTI` for mixed scopes, serial), or `:batch` (defer and execute
-the coalesced chunk shares **concurrently**). The three are mutually exclusive.
+`Emb.eval` / `Emb.evalsha` run a Lua script against a model (KEYS = texts,
+ARGV = args) and parse replies through the RESP grammar — hashes, arrays,
+strings, errors. Unlike the embed path, a scripted reply has no fixed shape,
+so packed vectors are **not** auto-decoded: a `float32_bytes` reply comes back
+as the raw bulk String. Decode it per call with the `decode:` keyword:
 
-| mode | `Emb[:model][text]` | execution |
-|---|---|---|
-| `false` (default) | immediate `EMB` round trip | serial, per call |
-| `:multi` | deferred → coalesces into one `EMB` (single model) or `EMB.MULTI` (mixed) | serial, one command at a time |
-| `:batch` | deferred → coalesces into `EMB`/`EMB.MULTI` chunks | **concurrent** — chunk shares run in parallel |
+```ruby
+sha = client.script.load(:siglip2, siglip_source)
+
+# decode: :f32 — the reply is a packed float32 vector (or a numeric array)
+vec = client.evalsha(:siglip2, sha, ["a photo of a cat"], ["normalize"], decode: :f32)
+# => [0.0123, -0.0456, ...]  768 floats
+
+# multi-text replies decode each element
+vecs = client.evalsha(:siglip2, sha, ["a", "b"], ["normalize"], decode: :f32)
+# => [[0.0123, ...], [-0.0456, ...]]
+
+# decode: {field => :f32} — structured replies decode a named field
+out = client.evalsha(:siglip2, sha, ["a"], ["normalize"], decode: { embedding: :f32 })
+# => {"dim" => 768, "embedding" => [0.0123, ...]}
+```
+
+`decode:` defaults to `nil` (no decoding, exactly today's behavior). Supported
+modes are `:f32` and `{field => :f32}`; anything else, or a reply that is not
+actually a float vector / hash at the decodable position, raises
+`ArgumentError`. A raw bulk can always be decoded by hand with
+`reply.unpack("e*")`.
+
+### Lazy batching
 
 In `:batch` mode the shares fan out across the configured instances (one share per
 instance when the share count allows) or across the instance's pool connections when a

@@ -36,14 +36,29 @@ module Emb
     def info(name)  = default_client.info(name)
     def stats       = default_client.stats
     def server_info(*sections)  = default_client.server_info(*sections)
+    def cache_flush(model = nil) = default_client.cache_flush(model)
+    def save_cache               = default_client.save_cache
     def config                  = default_client.config
     def help        = default_client.help
     def ping        = default_client.ping
     def ready       = default_client.ready
     def ready?      = default_client.ready?
     def multi(&)    = default_client.multi(&)
+
+    def eval(model, script, texts, args = [], decode: nil)
+      default_client.eval(model, script, texts, args, decode: decode)
+    end
+
+    def evalsha(model, sha, texts, args = [], decode: nil)
+      default_client.evalsha(model, sha, texts, args, decode: decode)
+    end
+
+    def script = default_client.script
+
     def reset_registry! = default_client.reset_registry!
+
     def debug? = @debug
+
     def send_command(*) = default_client.send_command(*)
 
     def debug!

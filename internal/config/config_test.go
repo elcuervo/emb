@@ -368,3 +368,115 @@ func TestParseFlagsRequestSizeCapsNegative(t *testing.T) {
 		t.Fatalf("expected non-negative error for -max-pairs -5, got %v", err)
 	}
 }
+
+func TestLoadScriptedInferenceConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  gliner:
+    onnx: ./model.onnx
+    tokenizer: ./tokenizer.json
+    script_workers: 2
+    script_preload: true
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Models["gliner"]
+	if m.ScriptWorkers != 2 {
+		t.Fatalf("script_workers = %d, want 2", m.ScriptWorkers)
+	}
+	if !m.ScriptPreload {
+		t.Fatal("script_preload not parsed")
+	}
+
+	// A model without the keys keeps zero defaults (auto-tune, no preload).
+	os.WriteFile(cfgPath, []byte(`
+models:
+  plain:
+    onnx: ./model.onnx
+`), 0644)
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Models["plain"].ScriptWorkers != 0 || cfg.Models["plain"].ScriptPreload {
+		t.Fatal("defaults must be 0/false")
+	}
+}
+
+func TestPersistenceConfigDefaultsAndValidation(t *testing.T) {
+	defaults := Config{}
+	if !defaults.CacheLoadEnabled() || !defaults.CacheShutdownSaveEnabled() {
+		t.Fatal("cache load and shutdown save must default to enabled")
+	}
+
+	valid := Config{
+		Cache: "auto", CacheFile: "/tmp/cache.embcache", CacheSave: "5m",
+		CacheRestoreLimit: "50%", CacheRestoreReserve: "1GB", CacheSaveRateLimit: "100MB/s",
+	}
+	if err := valid.validatePersistence(); err != nil {
+		t.Fatalf("valid persistence config rejected: %v", err)
+	}
+	// A file-only config is valid but dormant until a cache is also enabled;
+	// this mirrors the runtime CONFIG SET cache_file path.
+	fileOnly := Config{CacheFile: "/tmp/cache.embcache"}
+	if err := fileOnly.validatePersistence(); err != nil {
+		t.Fatalf("dormant file-only config rejected: %v", err)
+	}
+	if rate, err := valid.CacheSaveRateBytes(); err != nil || rate != 100_000_000 {
+		t.Fatalf("rate = %d, %v", rate, err)
+	}
+
+	tests := []Config{
+		{Cache: "1GB", CacheSave: "5m"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheSave: "0"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreLimit: "101%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreLimit: "NaN%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreReserve: "0%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheRestoreReserve: "NaN%"},
+		{Cache: "1GB", CacheFile: "/tmp/cache", CacheSaveRateLimit: "fast"},
+	}
+	for i, cfg := range tests {
+		if err := cfg.validatePersistence(); err == nil {
+			t.Errorf("invalid persistence config %d was accepted: %#v", i, cfg)
+		}
+	}
+}
+
+func TestParseFlagsPersistence(t *testing.T) {
+	fc, err := ParseFlags([]string{
+		"-model", "test", "-model-onnx", "./model.onnx",
+		"-cache", "512MB", "-cache-file", "/tmp/cache.embcache",
+		"-cache-load", "false", "-cache-save", "30s",
+		"-cache-save-on-shutdown", "false", "-cache-restore-limit", "256MB",
+		"-cache-restore-reserve", "20%", "-cache-save-rate-limit", "10MB/s",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.CacheFile != "/tmp/cache.embcache" || fc.CacheLoadEnabled() || fc.CacheShutdownSaveEnabled() {
+		t.Fatalf("persistence flags not retained: %#v", fc.Config)
+	}
+	if fc.CacheSave != "30s" || fc.CacheRestoreLimit != "256MB" || fc.CacheRestoreReserve != "20%" {
+		t.Fatalf("persistence controls not retained: %#v", fc.Config)
+	}
+}
+
+func TestLoadReservedModelNames(t *testing.T) {
+	for _, name := range []string{"BLOB", "blob", "VALUES", "values"} {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		os.WriteFile(cfgPath, []byte("models:\n  "+name+":\n    onnx: ./m.onnx\n"), 0644)
+		_, err := Load(cfgPath)
+		if err == nil {
+			t.Fatalf("expected reserved-name error for %q", name)
+		}
+		if !strings.Contains(err.Error(), "reserved") {
+			t.Fatalf("expected reserved-word error for %q, got %v", name, err)
+		}
+	}
+}

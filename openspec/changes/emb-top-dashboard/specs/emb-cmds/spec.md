@@ -2,7 +2,17 @@
 
 ### Requirement: MONITOR exposes recent request events
 
-The server SHALL respond to `MONITOR` — named after Redis's MONITOR, but a bounded sequence-query rather than a long-lived stream — with the most recent completed-request events from a bounded, seq-numbered ring buffer. Each event SHALL carry a monotonically increasing sequence number, a unix-microsecond timestamp, the model, the number of texts requested, the latency in microseconds, and an error flag. Request text payloads SHALL NOT be included. Clients SHALL be able to fetch only events after a given sequence number, and the buffer SHALL be bounded (old events may be dropped under sustained load).
+The server SHALL respond to `MONITOR` — named after Redis's MONITOR, but a bounded sequence-query rather than a long-lived stream — with the most recent completed-request events from a bounded, seq-numbered ring buffer. Each event SHALL carry a monotonically increasing sequence number, a unix-microsecond timestamp, the model, the number of texts requested, the latency in microseconds, and an error flag. Request text payloads SHALL NOT be included. Clients SHALL be able to fetch only events after a given sequence number, and the buffer SHALL be bounded (old events may be dropped under sustained load). When the connection negotiated RESP3, each event SHALL be a map with those same field names (`seq`, `at_us`, `model`, `texts`, `latency_us`, `err`); under RESP2 each event SHALL remain a flat six-element array.
+
+#### Scenario: RESP3 reply is an array of maps
+
+- **WHEN** a client that negotiated RESP3 with `HELLO 3` sends `MONITOR` after one completed request
+- **THEN** the reply SHALL be an array whose elements are 6-field maps keyed `seq`, `at_us`, `model`, `texts`, `latency_us`, `err`
+
+#### Scenario: RESP2 reply is unchanged
+
+- **WHEN** a RESP2 client sends `MONITOR` after one completed request
+- **THEN** the reply SHALL be an array of flat six-element arrays in the same field order
 
 #### Scenario: Empty monitor before any traffic
 

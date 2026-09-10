@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## What this is
 
-`emb` — a Redis-protocol (RESP2) text-embeddings server in Go (ONNX Runtime via CGo), with Ruby client gems (`gems/emb`, `gems/emb-server`). Models: `internal/{onnx,pipeline,registry,server,config,tokenizer,hfhub}`, entrypoint `cmd/emb`, binary `bin/emb`, version in `VERSION`. OpenSpec change proposals live in `openspec/changes/` (see `.pi/skills/` for the workflow).
+`emb` — a Redis-protocol text-embeddings server in Go (ONNX Runtime via CGo; RESP2 by default with opt-in RESP3 via `HELLO 3`, and `BLOB|VALUES` reply formats on `EMB`/`EMB.MULTI`), with Ruby client gems (`gems/emb`, `gems/emb-server`). Models: `internal/{onnx,pipeline,registry,server,config,tokenizer,hfhub}`, entrypoint `cmd/emb`, binary `bin/emb`, version in `VERSION`. OpenSpec change proposals live in `openspec/changes/` (see `.pi/skills/` for the workflow).
 
 ## The single most important thing: run everything inside `nix develop`
 

@@ -44,6 +44,19 @@ RSpec.describe Emb do
     end
   end
 
+  describe 'cache lifecycle commands' do
+
+    it 'flushes the whole cache or one model and returns the removed count' do
+      expect(described_class.cache_flush).to be_an(Integer)
+      expect(described_class.cache_flush(:minilm)).to be_an(Integer)
+    end
+
+    it 'preserves the raw server error when persistence is disabled' do
+      expect { described_class.save_cache }
+        .to raise_error(RedisClient::CommandError, /persistence is disabled/)
+    end
+  end
+
   describe '.config' do
     it 'returns a RuntimeConfig view' do
       expect(described_class.config).to be_a(Emb::RuntimeConfig)

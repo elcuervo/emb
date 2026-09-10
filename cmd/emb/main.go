@@ -68,12 +68,33 @@ func run() error {
 	if fc.IdleTimeout != nil {
 		idleTimeout = time.Duration(*fc.IdleTimeout)
 	}
+	var cacheSaveInterval time.Duration
+	if fc.CacheSave != "" {
+		cacheSaveInterval, err = time.ParseDuration(fc.CacheSave)
+		if err != nil {
+			return fmt.Errorf("parsing cache_save: %w", err)
+		}
+	}
+	cacheSaveRate, err := fc.CacheSaveRateBytes()
+	if err != nil {
+		return fmt.Errorf("parsing cache_save_rate_limit: %w", err)
+	}
 	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig,
 		server.WithIdleTimeout(idleTimeout),
 		server.WithMaxConnections(fc.MaxConnections),
 		server.WithMaxConcurrentRequests(fc.MaxConcurrentRequests),
 		server.WithMaxTexts(intPtrOrDefault(fc.MaxTexts, 4096)),
 		server.WithMaxPairs(intPtrOrDefault(fc.MaxPairs, 4096)),
+		server.WithPersistence(server.PersistenceConfig{
+			File:           fc.CacheFile,
+			Load:           fc.CacheLoadEnabled(),
+			SaveInterval:   cacheSaveInterval,
+			SaveOnShutdown: fc.CacheShutdownSaveEnabled(),
+			RestoreLimit:   fc.CacheRestoreLimit,
+			RestoreReserve: fc.CacheRestoreReserve,
+			SaveRateBytes:  cacheSaveRate,
+			SaveRateRaw:    fc.CacheSaveRateLimit,
+		}),
 	)
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)

@@ -12,6 +12,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/tidwall/redcon v1.6.2
 	github.com/yalue/onnxruntime_go v1.31.0
+	github.com/yuin/gopher-lua v1.1.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -46,3 +47,5 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 )
+
+replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260908152233-262156df7a31

@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"runtime"
 	"strconv"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/registry"
+	"github.com/elcuervo/emb/internal/script"
 )
 
 type serverState int64
@@ -46,10 +49,30 @@ type Server struct {
 	cache        *Cache
 	// cacheConfig retains the raw boot cache string so CONFIG GET echoes it.
 	cacheConfig string
+	// scripts is the per-model script cache for EMB.SCRIPT/EMB.EVAL/EMB.EVSHA.
+	scripts *scriptCache
+	// compiler caches compiled script prototypes per (model, sha) so repeat
+	// EVSHA executions skip Lua parsing/compiling; FLUSH invalidates it.
+	compiler *script.Compiler
 	// cacheFile/cacheSave are runtime-editable snapshot parameters (consumed by
 	// the cache-snapshot save loop; stored here even before that change lands).
-	cacheFile string
-	cacheSave string
+	cacheFile           string
+	cacheSave           string
+	cacheLoad           bool
+	cacheSaveOnShutdown bool
+	cacheRestoreLimit   string
+	cacheRestoreReserve string
+	cacheSaveRateLimit  string
+	persistenceMu       sync.RWMutex
+	persistenceCfg      *PersistenceConfig
+	snapshot            *snapshotCoordinator
+
+	// quarantine holds restored snapshot entries for configured-but-unloaded
+	// (lazy) models until their first request loads and validates them. It is
+	// bounded by the same restore budget and is never served directly.
+	quarantineMu    sync.Mutex
+	quarantine      map[string]restoreQuarantine
+	quarantineBytes int64
 	// version is the injected build version ("dev" when unset), reported by INFO.
 	version string
 	state   atomic.Int64
@@ -78,6 +101,9 @@ type Server struct {
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
 	fanOut int
+	// scriptDeadline bounds each EMB.EVAL/EMB.EVSHA evaluation's wall-clock
+	// execution; 0 resolves to script.DefaultDeadline.
+	scriptDeadline time.Duration
 	// netIn/netOut are aggregate RESP bytes received from and sent to all
 	// connections since process start, exposed as INFO's
 	// total_net_input_bytes/total_net_output_bytes. RX is counted from the raw
@@ -119,12 +145,33 @@ func WithMaxTexts(n int) Option {
 	return func(s *Server) { s.maxTexts = n }
 }
 
+// WithScriptDeadline bounds each EMB.EVAL/EMB.EVSHA script evaluation's
+// wall-clock execution. Zero (the default) uses script.DefaultDeadline.
+func WithScriptDeadline(d time.Duration) Option {
+	return func(s *Server) { s.scriptDeadline = d }
+}
+
 // WithMaxPairs bounds the pairs processed per EMB.MULTI command; commands beyond
 // the cap are truncated to the first maxPairs pairs (overflow reply slots are
 // null). Zero disables the cap (unlimited, pre-change behavior). The default
 // when unset is 4096.
 func WithMaxPairs(n int) Option {
 	return func(s *Server) { s.maxPairs = n }
+}
+
+func WithPersistence(cfg PersistenceConfig) Option {
+	return func(s *Server) {
+		s.persistenceCfg = &cfg
+		s.cacheFile = cfg.File
+		s.cacheLoad = cfg.Load
+		s.cacheSaveOnShutdown = cfg.SaveOnShutdown
+		s.cacheRestoreLimit = cfg.RestoreLimit
+		s.cacheRestoreReserve = cfg.RestoreReserve
+		s.cacheSaveRateLimit = cfg.SaveRateRaw
+		if cfg.SaveInterval > 0 {
+			s.cacheSave = cfg.SaveInterval.String()
+		}
+	}
 }
 
 func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config, opts ...Option) *Server {
@@ -138,25 +185,37 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	s := &Server{
-		reg:         reg,
-		started:     time.Now(),
-		addr:        addr,
-		tlsConfig:   tlsConfig,
-		cache:       c,
-		cacheConfig: cacheConfig,
-		version:     "dev",
-		idleTimeout: config.DefaultIdleTimeout,
-		maxTexts:    4096,
-		maxPairs:    4096,
-		monitor:     NewMonitor(8192),
+		reg:                 reg,
+		started:             time.Now(),
+		addr:                addr,
+		tlsConfig:           tlsConfig,
+		cache:               c,
+		cacheConfig:         cacheConfig,
+		scripts:             newScriptCache(0),
+		compiler:            script.NewCompiler(),
+		cacheLoad:           true,
+		cacheSaveOnShutdown: true,
+		version:             "dev",
+		idleTimeout:         config.DefaultIdleTimeout,
+		maxTexts:            4096,
+		maxPairs:            4096,
+		monitor:             NewMonitor(8192),
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	s.password.Store(password)
+	if s.persistenceCfg != nil && s.persistenceCfg.File != "" && s.cache != nil {
+		s.snapshot = newSnapshotCoordinator(s.cache, s.reg, *s.persistenceCfg)
+		if s.persistenceCfg.Load {
+			s.restoreSnapshot(*s.persistenceCfg)
+		}
+	}
 
 	mux := redcon.NewServeMux()
 	mux.HandleFunc("ping", s.handlePING)
+	mux.HandleFunc("hello", s.handleHELLO)
+	mux.HandleFunc("client", s.handleCLIENT)
 	mux.HandleFunc("auth", s.handleAUTH)
 	mux.HandleFunc("emb", s.handleEMB)
 	mux.HandleFunc("emb.models", s.handleMODELS)
@@ -166,8 +225,13 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
 	mux.HandleFunc("emb.ready", s.handleREADY)
+	mux.HandleFunc("emb.eval", s.handleEVAL)
+	mux.HandleFunc("emb.evsha", s.handleEVSHA)
+	mux.HandleFunc("emb.script", s.handleSCRIPT)
 	mux.HandleFunc("info", s.handleInfo)
 	mux.HandleFunc("config", s.handleConfig)
+	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
+	mux.HandleFunc("emb.save", s.handleSAVE)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
 		// Account the received command: cmd.Raw is the full RESP bytes including
@@ -189,7 +253,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		// EMB.STATS/INFO report live in-flight counts even when the cap is 0.
 		if len(cmd.Args) > 0 {
 			name := strings.ToLower(string(cmd.Args[0]))
-			if name == "emb" || name == "emb.multi" {
+			if name == "emb" || name == "emb.multi" || name == "emb.eval" || name == "emb.evsha" {
 				if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
 					conn.WriteError(fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs))
 					return
@@ -263,11 +327,87 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		log.Printf("shutdown timeout after %v", ctx.Err())
 	}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		coordinator.Shutdown(ctx)
+	}
 
 	return s.srv.Close()
 }
 
+func (s *Server) restoreSnapshot(cfg PersistenceConfig) {
+	cacheBytes := s.cache.Stats().MaxBytes
+	limit, rss, headroom, err := effectiveRestoreLimit(cacheBytes, cfg.RestoreLimit, cfg.RestoreReserve)
+	status := SnapshotStatus{Enabled: true, RestoreLimitBytes: limit, RestoreRSSBytes: rss, RestoreHeadroomBytes: headroom}
+	if err == nil && limit <= 0 {
+		status.RestoreError = fmt.Sprintf("effective restore limit is zero (host headroom exhausted with cache_restore_reserve %q); snapshot not restored", cfg.RestoreReserve)
+		log.Printf("cache snapshot restore skipped: %s", status.RestoreError)
+	}
+	if err == nil && limit > 0 {
+		models := s.reg.FingerprintState()
+		var restored snapshotRestoreResult
+		restored, err = readSnapshot(cfg.File, limit, models)
+		if err == nil && restored.Found {
+			s.cache.replaceStorageFrom(restored.Cache)
+			s.snapshot.lastGen.Store(s.cache.Stats().Generation)
+			s.snapshot.savedOnce.Store(true)
+			status.RestoredEntries = restored.Restored
+			status.SkippedUnknown = restored.SkippedUnknown
+			status.SkippedFingerprint = restored.SkippedFingerprint
+			status.SkippedMemory = restored.SkippedMemory
+			status.QuarantinedEntries = restored.QuarantinedCount
+			s.quarantineMu.Lock()
+			s.quarantine = restored.Quarantine
+			s.quarantineBytes = restored.QuarantineBytes
+			s.quarantineMu.Unlock()
+		}
+	}
+	if err != nil {
+		status.RestoreError = err.Error()
+		log.Printf("cache snapshot restore skipped: %v", err)
+	}
+	s.snapshot.statusMu.Lock()
+	s.snapshot.status = status
+	s.snapshot.statusMu.Unlock()
+}
+
+// admitQuarantine publishes a lazy model's restored snapshot entries once the
+// model has loaded and its fingerprint matches the snapshot's stored
+// fingerprint. Incompatible or over-budget records are discarded; the
+// quarantine bucket is removed either way so admission runs at most once per
+// model per process.
+func (s *Server) admitQuarantine(model string, entry *registry.ModelEntry) {
+	s.quarantineMu.Lock()
+	q, ok := s.quarantine[model]
+	if !ok {
+		s.quarantineMu.Unlock()
+		return
+	}
+	delete(s.quarantine, model)
+	s.quarantineBytes -= q.bytes
+	s.quarantineMu.Unlock()
+
+	fp, err := entry.Fingerprint()
+	if err != nil || fp != q.fingerprint {
+		// Model files changed since the snapshot was written (or became
+		// unreadable): the restored embeddings no longer match and are unsafe
+		// to serve, so they are discarded.
+		return
+	}
+	for _, e := range q.entries {
+		s.cache.Set(e.Key, e.Value)
+	}
+}
+
 func (s *Server) Close() error {
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		coordinator.Close()
+	}
 	return s.srv.Close()
 }
 
@@ -342,6 +482,162 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("PONG")
 }
 
+// handleHELLO negotiates the RESP protocol version for the connection. A bare
+// HELLO reports the current version; HELLO 2|3 switches the connection. The
+// reply carries server metadata in the standard Redis HELLO shape (a map under
+// RESP3, a flat array under RESP2) via the fork's WriteHello helper. HELLO is
+// deliberately NOT auth-exempt, so on a password-protected server the mux gate
+// rejects it with NOAUTH before this handler runs (see the spec's "HELLO
+// respects authentication" scenario).
+// handleCLIENT answers the small subset of CLIENT subcommands that RESP3 client
+// handshakes send. SETINFO carries client library metadata and is acknowledged
+// with OK; unknown subcommands get a NO such subcommand error. Without this,
+// handshakes (e.g. redis-py's) error out right after HELLO 3.
+func (s *Server) handleCLIENT(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) < 2 {
+		conn.WriteError("ERR wrong number of arguments for 'CLIENT' command")
+		return
+	}
+	switch strings.ToLower(string(cmd.Args[1])) {
+	case "setinfo":
+		if len(cmd.Args) != 4 {
+			conn.WriteError("ERR wrong number of arguments for 'CLIENT SETINFO' command")
+			return
+		}
+		conn.WriteString("OK")
+	default:
+		conn.WriteError(fmt.Sprintf("ERR unknown subcommand '%s' for 'CLIENT' command", cmd.Args[1]))
+	}
+}
+
+func (s *Server) handleHELLO(conn redcon.Conn, cmd redcon.Command) {
+	ver := conn.ProtocolVersion()
+	if len(cmd.Args) > 2 {
+		conn.WriteError("ERR wrong number of arguments for 'HELLO' command")
+		return
+	}
+	if len(cmd.Args) == 2 {
+		v, err := strconv.Atoi(string(cmd.Args[1]))
+		if err != nil || (v != 2 && v != 3) {
+			conn.WriteError(fmt.Sprintf("NOPROTO unsupported protocol version: %d", v))
+			return
+		}
+		ver = v
+	}
+	conn.SetProtocolVersion(ver)
+	redcon.WriteHello(conn,
+		"server", "redis",
+		"version", s.version,
+		"proto", strconv.Itoa(ver),
+		"mode", "standalone",
+		"role", "master",
+	)
+}
+
+func (s *Server) handleCACHEFLUSH(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) > 2 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.CACHE.FLUSH' command")
+		return
+	}
+	s.quarantineMu.Lock()
+	if len(cmd.Args) == 1 {
+		s.quarantine = nil
+		s.quarantineBytes = 0
+	} else {
+		model := string(cmd.Args[1])
+		if q, ok := s.quarantine[model]; ok {
+			s.quarantineBytes -= q.bytes
+			delete(s.quarantine, model)
+		}
+	}
+	s.quarantineMu.Unlock()
+	if s.cache == nil {
+		conn.WriteInt(0)
+		return
+	}
+	if len(cmd.Args) == 1 {
+		conn.WriteInt(s.cache.Flush())
+		return
+	}
+	model := string(cmd.Args[1])
+	if !s.reg.HasModel(model) {
+		conn.WriteError(fmt.Sprintf("ERR model '%s' not found", model))
+		return
+	}
+	conn.WriteInt(s.cache.FlushModel(model))
+}
+
+func (s *Server) handleSAVE(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) != 1 {
+		conn.WriteError("ERR wrong number of arguments for 'EMB.SAVE' command")
+		return
+	}
+	if !s.persistenceControlAllowed() {
+		conn.WriteError("ERR EMB.SAVE requires a configured password or a loopback-only listener")
+		return
+	}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	s.persistenceMu.RUnlock()
+	if coordinator == nil {
+		conn.WriteError("ERR cache persistence is disabled (cache_file is empty)")
+		return
+	}
+	if err := coordinator.Save(context.Background()); err != nil {
+		conn.WriteError("ERR " + err.Error())
+		return
+	}
+	conn.WriteString("OK")
+}
+
+// replyFormat selects the reply representation of an embedding query, mirroring
+// RedisAI's AI.TENSORGET <key> [BLOB|VALUES]. BLOB is the default and keeps the
+// compact binary wire; VALUES returns a self-describing envelope.
+type replyFormat int
+
+const (
+	formatBLOB replyFormat = iota
+	formatVALUES
+)
+
+// parseFormatArg recognizes the leading reply-format keyword at a fixed
+// position. A keyword is only recognized when at least one payload argument
+// follows it; otherwise the position is an ordinary text (or model) argument
+// and the format defaults to BLOB. The keyword is never an end-of-command
+// sentinel, so trailing free text can never shadow it.
+// isKeyword reports whether arg equals kw case-insensitively (ASCII) without
+// allocating — so the reply-format check on the default BLOB path adds no
+// per-command allocation.
+func isKeyword(arg []byte, kw string) bool {
+	if len(arg) != len(kw) {
+		return false
+	}
+	for i := 0; i < len(arg); i++ {
+		c := arg[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != kw[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
+	if len(args) <= keywordPos+1 {
+		return formatBLOB, false
+	}
+	switch {
+	case isKeyword(args[keywordPos], "blob"):
+		return formatBLOB, true
+	case isKeyword(args[keywordPos], "values"):
+		return formatVALUES, true
+	default:
+		return formatBLOB, false
+	}
+}
+
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
@@ -357,8 +653,16 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	defer s.active.Done()
 
 	modelName := string(cmd.Args[1])
-	texts := make([]string, len(cmd.Args)-2)
-	for i, arg := range cmd.Args[2:] {
+	// Leading reply-format keyword (EMB <model> [BLOB|VALUES] <text>...):
+	// recognized only at the fixed position right after the model, never in the
+	// text tail.
+	format, hasFormat := parseFormatArg(cmd.Args[1:], 1)
+	textArgs := cmd.Args[2:]
+	if hasFormat {
+		textArgs = cmd.Args[3:]
+	}
+	texts := make([]string, len(textArgs))
+	for i, arg := range textArgs {
 		texts[i] = string(arg)
 	}
 	total := len(texts)
@@ -396,15 +700,17 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 				missIdxs = append(missIdxs, i)
 			}
 		}
-		if len(missIdxs) == 0 {
-			writeEmbReply(conn, results, total)
-			return
-		}
 
 		entry, err := s.reg.GetOrInit(modelName)
 		if err != nil {
 			failed = true
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
+			return
+		}
+		s.admitQuarantine(modelName, entry)
+
+		if len(missIdxs) == 0 {
+			writeEmbResult(conn, format, results, total, entry.Dim)
 			return
 		}
 
@@ -430,14 +736,9 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 			s.cache.Set(modelName+":"+texts[idx], resp.Embeddings[j])
 		}
 
-		if len(results) == 1 {
-			conn.WriteBulk(results[0])
-		} else {
-			conn.WriteArray(len(results))
-			for _, emb := range results {
-				conn.WriteBulk(emb)
-			}
-		}
+		// Single-text requests keep their single-bulk reply shape; multi-text
+		// replies are arrays with null slots for truncated overflow texts.
+		writeEmbResult(conn, format, results, total, entry.Dim)
 		return
 	}
 
@@ -461,7 +762,17 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	writeEmbReply(conn, resp.Embeddings, total)
+	writeEmbResult(conn, format, resp.Embeddings, total, entry.Dim)
+}
+
+// writeEmbResult routes an embedding reply to the requested format: the BLOB
+// binary wire (unchanged shapes) or the RedisAI-style VALUES envelope.
+func writeEmbResult(conn redcon.Conn, format replyFormat, results [][]byte, total, dim int) {
+	if format == formatVALUES {
+		writeValuesEmbReply(conn, results, dim)
+		return
+	}
+	writeEmbReply(conn, results, total)
 }
 
 // writeEmbReply writes one reply slot per requested text: bulks for the results
@@ -497,6 +808,28 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 	events := s.monitor.Since(after, limit)
 	conn.WriteArray(len(events))
 	for _, e := range events {
+		if conn.ProtocolVersion() == 3 {
+			// RESP3: a map per event, with the same field names as the
+			// RESP2 flat array (see the resp3-protocol spec).
+			conn.WriteMap(6)
+			conn.WriteBulkString("seq")
+			conn.WriteInt(int(e.Seq))
+			conn.WriteBulkString("at_us")
+			conn.WriteInt(int(e.AtUs))
+			conn.WriteBulkString("model")
+			conn.WriteBulkString(e.Model)
+			conn.WriteBulkString("texts")
+			conn.WriteInt(e.Texts)
+			conn.WriteBulkString("latency_us")
+			conn.WriteInt(int(e.LatencyUs))
+			conn.WriteBulkString("err")
+			if e.Err {
+				conn.WriteInt(1)
+			} else {
+				conn.WriteInt(0)
+			}
+			continue
+		}
 		conn.WriteArray(6)
 		conn.WriteInt(int(e.Seq))
 		conn.WriteInt(int(e.AtUs))
@@ -508,13 +841,79 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 		} else {
 			conn.WriteInt(0)
 		}
+
+	}
+}
+
+// writeValuesEmbReply writes the RedisAI META+VALUES envelope for an EMB
+// VALUES reply: dtype, shape [m, dim] (m = processed texts, so a truncated
+// tail is reflected by the shape), and a flat row-major values array. Under
+// RESP3 the values are typed doubles; under RESP2 they are decimal bulk
+// strings, exactly like RedisAI's reply.
+func writeValuesEmbReply(conn redcon.Conn, results [][]byte, dim int) {
+	writePairs(conn, 3)
+	conn.WriteBulkString("dtype")
+	conn.WriteBulkString("FLOAT")
+	conn.WriteBulkString("shape")
+	conn.WriteArray(2)
+	conn.WriteInt(len(results))
+	conn.WriteInt(dim)
+	conn.WriteBulkString("values")
+	writeValuesArray(conn, results, dim)
+}
+
+// writeValuesArray writes the flat values array for the given embedding blobs.
+// Each float32 dimension is widened to float64 and serialized with the standard
+// Redis double representation (typed RESP3 doubles, decimal bulk strings under
+// RESP2) — the same widening RedisAI applies via RAI_TensorGetValueAsDouble.
+func writeValuesArray(conn redcon.Conn, results [][]byte, dim int) {
+	conn.WriteArray(len(results) * dim)
+	for _, emb := range results {
+		for i := 0; i < dim; i++ {
+			v := float64(math.Float32frombits(binary.LittleEndian.Uint32(emb[i*4 : i*4+4])))
+			if conn.ProtocolVersion() == 3 {
+				conn.WriteDouble(v)
+			} else {
+				conn.WriteBulkString(strconv.FormatFloat(v, 'g', -1, 64))
+			}
+		}
+	}
+}
+
+// writePairs opens a flat key/value reply: a RESP3 map header when the
+// connection negotiated protocol 3, and the RESP2 flat array header (2n
+// elements) otherwise. The caller then writes the pairs with the usual
+// Write* calls — the reply body is identical in both encodings.
+func writePairs(conn redcon.Conn, n int) {
+	if conn.ProtocolVersion() == 3 {
+		conn.WriteMap(n)
+	} else {
+		conn.WriteArray(n * 2)
+
 	}
 }
 
 func (s *Server) handleMODELS(conn redcon.Conn, cmd redcon.Command) {
 	models := s.reg.List()
 	if len(models) == 0 {
-		conn.WriteArray(0)
+		if conn.ProtocolVersion() == 3 {
+			conn.WriteMap(0)
+		} else {
+			conn.WriteArray(0)
+		}
+		return
+	}
+	if conn.ProtocolVersion() == 3 {
+		// RESP3: a map keyed by model name whose values carry dim and status.
+		conn.WriteMap(len(models))
+		for _, m := range models {
+			conn.WriteBulkString(m.Name)
+			conn.WriteMap(2)
+			conn.WriteBulkString("dim")
+			conn.WriteInt(m.Dim)
+			conn.WriteBulkString("status")
+			conn.WriteBulkString("ready")
+		}
 		return
 	}
 	conn.WriteArray(len(models))
@@ -542,9 +941,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	stats := entry.Pool.Stats()
 
 	if s.cache != nil {
-		conn.WriteArray(44)
+		writePairs(conn, 22)
 	} else {
-		conn.WriteArray(30)
+		writePairs(conn, 15)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -631,14 +1030,23 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	totalCacheHits := int64(0)
 	totalCacheMisses := int64(0)
 	totalCacheEvictions := int64(0)
+	cacheStats := CacheStats{}
 	if s.cache != nil {
-		cs := s.cache.Stats()
-		totalCacheHits = cs.Hits
-		totalCacheMisses = cs.Misses
-		totalCacheEvictions = cs.Evictions
+		cacheStats = s.cache.Stats()
+		totalCacheHits = cacheStats.Hits
+		totalCacheMisses = cacheStats.Misses
+		totalCacheEvictions = cacheStats.Evictions
+	}
+	snapshotStatus := SnapshotStatus{}
+	s.persistenceMu.RLock()
+	coordinator := s.snapshot
+	saveOnShutdown := s.cacheSaveOnShutdown
+	s.persistenceMu.RUnlock()
+	if coordinator != nil {
+		snapshotStatus = coordinator.Status()
 	}
 
-	conn.WriteArray(40)
+	writePairs(conn, 44)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -682,6 +1090,61 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(totalCacheMisses))
 	conn.WriteBulkString("cache_evictions")
 	conn.WriteInt(int(totalCacheEvictions))
+	conn.WriteBulkString("cache_flushes")
+	conn.WriteInt(int(cacheStats.Flushes))
+	conn.WriteBulkString("cache_flushed_entries")
+	conn.WriteInt(int(cacheStats.FlushedEntries))
+	conn.WriteBulkString("cache_last_flush_duration_usec")
+	conn.WriteInt(int(cacheStats.LastFlushDuration.Microseconds()))
+	conn.WriteBulkString("cache_snapshot_enabled")
+	conn.WriteInt(boolInt(snapshotStatus.Enabled))
+	conn.WriteBulkString("cache_load")
+	conn.WriteInt(boolInt(s.cacheLoad))
+	conn.WriteBulkString("cache_save_on_shutdown")
+	conn.WriteInt(boolInt(saveOnShutdown))
+	conn.WriteBulkString("cache_snapshot_in_progress")
+	conn.WriteInt(boolInt(snapshotStatus.InProgress))
+	conn.WriteBulkString("cache_snapshot_successes")
+	conn.WriteInt(int(snapshotStatus.Successes))
+	conn.WriteBulkString("cache_snapshot_failures")
+	conn.WriteInt(int(snapshotStatus.Failures))
+	conn.WriteBulkString("cache_snapshot_skipped")
+	conn.WriteInt(int(snapshotStatus.Skipped))
+	conn.WriteBulkString("cache_snapshot_last_success_unix")
+	conn.WriteInt(int(snapshotStatus.LastSuccessUnix))
+	conn.WriteBulkString("cache_snapshot_last_duration_usec")
+	conn.WriteInt(int(snapshotStatus.LastDuration.Microseconds()))
+	conn.WriteBulkString("cache_snapshot_last_entries")
+	conn.WriteInt(int(snapshotStatus.LastEntries))
+	conn.WriteBulkString("cache_snapshot_last_bytes")
+	conn.WriteInt(int(snapshotStatus.LastBytes))
+	conn.WriteBulkString("cache_snapshot_capture_duration_usec")
+	conn.WriteInt(int(snapshotStatus.LastCaptureDuration.Microseconds()))
+	conn.WriteBulkString("cache_restore_limit_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreLimitBytes))
+	conn.WriteBulkString("cache_restore_rss_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreRSSBytes))
+	conn.WriteBulkString("cache_restore_headroom_bytes")
+	conn.WriteInt(int(snapshotStatus.RestoreHeadroomBytes))
+	conn.WriteBulkString("cache_restore_entries")
+	conn.WriteInt(int(snapshotStatus.RestoredEntries))
+	conn.WriteBulkString("cache_restore_skipped_unknown")
+	conn.WriteInt(int(snapshotStatus.SkippedUnknown))
+	conn.WriteBulkString("cache_restore_skipped_fingerprint")
+	conn.WriteInt(int(snapshotStatus.SkippedFingerprint))
+	conn.WriteBulkString("cache_restore_skipped_memory")
+	conn.WriteInt(int(snapshotStatus.SkippedMemory))
+	conn.WriteBulkString("cache_restore_quarantined")
+	conn.WriteInt(int(snapshotStatus.QuarantinedEntries))
+	conn.WriteBulkString("cache_restore_error")
+	conn.WriteBulkString(snapshotStatus.RestoreError)
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
@@ -691,6 +1154,12 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	pairs := cmd.Args[1:]
+	// Leading reply-format keyword (EMB.MULTI [BLOB|VALUES] <model> <text>...):
+	// recognized only at the fixed first position, never among the pairs.
+	format, hasFormat := parseFormatArg(cmd.Args[1:], 0)
+	if hasFormat {
+		pairs = cmd.Args[2:]
+	}
 	if len(pairs) < 2 || len(pairs)%2 != 0 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.MULTI' command")
 		return
@@ -733,7 +1202,44 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	close(jobs)
 	wg.Wait()
 
+	writeMultiResult(conn, s, format, pairs, results, n, total)
+}
+
+// writeMultiResult writes the EMB.MULTI reply: an ordered array with one slot
+// per requested pair — bulk/null slots under BLOB, per-pair VALUE envelopes
+// (with a model key, since dims are ragged across models) or nulls under
+// VALUES. Truncated overflow pairs stay null in both formats.
+func writeMultiResult(conn redcon.Conn, s *Server, format replyFormat, pairs [][]byte, results [][]byte, n, total int) {
 	conn.WriteArray(total)
+	if format == formatVALUES {
+		for i, r := range results {
+			if r == nil {
+				conn.WriteNull()
+				continue
+			}
+			model := string(pairs[i*2])
+			entry, err := s.reg.GetOrInit(model)
+			if err != nil {
+				conn.WriteNull()
+				continue
+			}
+			writePairs(conn, 4)
+			conn.WriteBulkString("model")
+			conn.WriteBulkString(model)
+			conn.WriteBulkString("dtype")
+			conn.WriteBulkString("FLOAT")
+			conn.WriteBulkString("shape")
+			conn.WriteArray(2)
+			conn.WriteInt(1)
+			conn.WriteInt(entry.Dim)
+			conn.WriteBulkString("values")
+			writeValuesArray(conn, [][]byte{r}, entry.Dim)
+		}
+		for i := n; i < total; i++ {
+			conn.WriteNull()
+		}
+		return
+	}
 	for _, r := range results {
 		if r == nil {
 			conn.WriteNull()
@@ -792,6 +1298,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		failed = true
 		return
 	}
+	s.admitQuarantine(model, entry)
 
 	resp, err := entry.Pool.Embed([]string{text})
 	if err != nil || resp.Err != nil {
@@ -808,19 +1315,29 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 	help := strings.Join([]string{
-		"EMB <model> <text> [text...] - Generate embeddings for one or more texts (cached)",
+		"EMB <model> [BLOB|VALUES] <text> [text...] - Generate embeddings (default BLOB: float32 binary; VALUES: dtype/shape/values envelope with decimal values)",
 		"EMB.MODELS - List available models and their dimensions",
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
-		"EMB.MULTI <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
+		"EMB.MULTI [BLOB|VALUES] <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
 		"EMB.STATS - Show server statistics (requests, connections, mem/cpu, goroutines)",
 		"MONITOR [seq] [limit] - Recent completed request events (model, latency, errors; no text)",
 		"EMB.READY - Check server readiness (OK/loading/draining)",
+		"EMB.EVAL <model> <script> <numtexts> <text...> <arg...> - Evaluate a Lua script against a model (KEYS=texts, ARGV=args)",
+		"EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...> - Evaluate a cached script by SHA (see EMB.SCRIPT LOAD)",
+		"EMB.SCRIPT LOAD <model> <script> - Compile, cache and return the script SHA1",
+		"EMB.SCRIPT EXISTS <model> <sha...> - Check which scripts are cached (1/0 per sha)",
+		"EMB.SCRIPT FLUSH [<model>] - Clear cached scripts (all models when omitted)",
 		"EMB.HELP - Show this help message",
+		"EMB.CACHE.FLUSH [model] - Invalidate all cached embeddings or one model",
+		"EMB.SAVE - Asynchronously save the embedding cache snapshot",
 		"INFO [section ...] - Redis-style server info (version, stats, memory, cpu, cache hit ratios)",
 		"CONFIG GET [pattern] - List runtime configuration parameters",
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
+		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
+		"Script input specs: {shape, data|fill, dtype} - fill builds a constant tensor host-side (no Lua data table); fill+data error",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

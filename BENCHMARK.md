@@ -92,6 +92,36 @@ $ redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"
 EMB minilm hello world: 23809.52 requests per second, p50=0.031 msec
 ```
 
+### Reply format cost: BLOB vs VALUES
+
+`EMB` replies in two formats: `BLOB` (the default — raw float32 bytes, a
+memcpy of the cached vector) and `VALUES` (a `dtype`/`shape`/`values` envelope
+whose values are serialized as decimals, one `f32→f64→text` conversion per
+dimension). Because the inference is cached, this comparison isolates the
+**cache-hit reply-path cost** (server handling, reply encoding — decimal
+conversion and wire size for `VALUES` vs a memcpy for `BLOB` — plus socket
+I/O) — exactly why `BLOB` stays the default and `VALUES` is the opt-in path
+for clients that cannot decode raw floats.
+
+Measured on the same Apple M4 reference machine, `minilm` (dim 384), single
+text `"hello"`, cache-hit (warmed), loopback, `-cache auto`, `redis-benchmark`,
+2026-09-08 (RESP3 change):
+
+| Clients | BLOB req/s | BLOB p50 | VALUES req/s | VALUES p50 | VALUES vs BLOB |
+|---------|------------|----------|--------------|------------|----------------|
+| 1       | 45,455     | 0.015 ms | 16,393       | 0.047 ms   | ~2.8× slower   |
+| 16      | 125,000    | 0.119 ms | 33,333       | 0.367 ms   | ~3.8× slower   |
+
+`BLOB` is the baseline — it carries **no penalty**; the reported slowdown is
+entirely on the `VALUES` path. `VALUES` costs 3–4× the reply path on cache
+hits: ~384 decimal conversions per query plus a reply roughly 3× the binary
+size on the wire. Under `HELLO 3` the
+`values` are typed RESP3 doubles of the same decimal text (the runs above do
+not negotiate RESP3, so that encoding is not measured separately); `INFO`
+stays a bulk string in both protocols. The binary `BLOB` path is byte-identical
+to prior emb versions, so all uncached/cached throughput tables above are
+unchanged by this feature.
+
 ### Cache miss (unique texts)
 
 When every text is unique, the cache provides no benefit: throughput matches the

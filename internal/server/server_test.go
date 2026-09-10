@@ -686,7 +686,12 @@ func TestREADYNoModels(t *testing.T) {
 	c.Close()
 }
 
-func serveTestWithCache(t *testing.T, cacheConfig string) string {
+func serveTestWithCache(t testing.TB, cacheConfig string) string {
+	addr, _ := serveTestWithCacheOptions(t, cacheConfig)
+	return addr
+}
+
+func serveTestWithCacheOptions(t testing.TB, cacheConfig string, opts ...Option) (string, *Server) {
 	t.Helper()
 	reg := registry.New()
 	pool, err := pipeline.NewPool(
@@ -700,11 +705,11 @@ func serveTestWithCache(t *testing.T, cacheConfig string) string {
 	reg.Add("test", &registry.ModelEntry{Pool: pool, Dim: 4, Name: "test"})
 
 	addr := getFreeAddr()
-	srv := New(addr, reg, "", cacheConfig, nil)
+	srv := New(addr, reg, "", cacheConfig, nil, opts...)
 	go srv.ListenAndServe()
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
-	return addr
+	return addr, srv
 }
 
 func dial(t *testing.T, addr string) net.Conn {
@@ -1371,11 +1376,11 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 40 {
-				t.Fatalf("expected 40 declared elements, got %d: %q", declared, resp)
+			if declared != 88 {
+				t.Fatalf("expected 88 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 40 {
-				t.Fatalf("expected 40 actual elements, got %d: %q", actual, resp)
+			if actual != 88 {
+				t.Fatalf("expected 88 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
@@ -1709,6 +1714,14 @@ func respValueLen(s []byte) (int, bool) {
 					return 0, false
 				}
 				p += j + 2
+			case '*':
+				// Nested array (e.g. hash replies whose values are arrays):
+				// parse recursively from the element start.
+				elem, ok := respValueLen(s[p:])
+				if !ok {
+					return 0, false
+				}
+				p += elem
 			default:
 				return 0, false
 			}
