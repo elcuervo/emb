@@ -6,6 +6,13 @@ require 'rubocop/rake_task'
 RSpec::Core::RakeTask.new(:spec)
 RuboCop::RakeTask.new
 
+namespace :spec do
+  desc 'Run the real-Rails Railtie boot suite (no emb server required)'
+  RSpec::Core::RakeTask.new(:rails) do |task|
+    task.pattern = 'spec/integration/**/*_spec.rb'
+  end
+end
+
 task default: :spec
 
 desc 'Run the end-to-end client benchmark harness (server must be running)'

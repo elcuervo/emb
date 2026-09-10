@@ -14,5 +14,6 @@ reference-embeddings.json
 *.gem
 config-prod.yaml
 gems/emb/vendor/*
+gems/emb/.bundle/
 dist/
 bench/fargate/out/

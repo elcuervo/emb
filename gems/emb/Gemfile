@@ -9,6 +9,11 @@ gem 'redis-client'
 gem 'rake', require: false
 gem 'rspec', require: false
 
+# Development-only: the Railtie integration suite boots a real Rails app so the
+# real middleware-stack objects and boot order are exercised. Rails is never a
+# runtime dependency of the gem. Select a line with RAILS_VERSION.
+gem 'rails', ENV.fetch('RAILS_VERSION', '~> 8.0'), require: false
+
 gem 'rubocop', require: false
 gem 'rubocop-rake', require: false
 gem 'rubocop-rspec', require: false

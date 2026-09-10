@@ -66,6 +66,34 @@ jobs:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
 
+  # Real-Rails Railtie boot suite for the emb gem. `rake spec:rails` boots a
+  # minimal Rails app and asserts middleware behavior against the real
+  # ActionDispatch::MiddlewareStack, so it needs no emb server and no Go
+  # toolchain. One job per supported Rails line on the dev-shell Ruby.
+  gem-rails:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rails: ["~> 7.2.0", "~> 8.0"]
+    env:
+      RAILS_VERSION: ${{ matrix.rails }}
+      BUNDLE_FROZEN: "false"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Install gems
+        working-directory: gems/emb
+        run: bundle install
+
+      - name: Run Rails boot suite
+        working-directory: gems/emb
+        run: bundle exec rake spec:rails
+
   # STAGED (manual trigger): Fargate-shaped harness noise gate on an ARM64 runner.
   # Builds the linux/arm64 image, runs a short baseline twice, and asserts the
   # per-cell noise tolerance (req/s >= -5%, p50 <= +10%). Enable once the harness

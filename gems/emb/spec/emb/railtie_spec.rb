@@ -85,21 +85,12 @@ module RailtieFakeRails
     end
   end
 
+  # Minimal stand-in for Rails::Configuration::MiddlewareStackProxy, the object
+  # the Railtie sees at initialization time. It deliberately mirrors only the
+  # real surface the Railtie uses (a no-op `use`); the fake-contract example
+  # below fails if it ever grows a method the real proxy does not have.
   class MiddlewareStack
-    attr_reader :entries
-
-    def initialize
-      @entries = []
-    end
-
-    # use always appends; idempotency comes from the caller's include? guard.
-    def use(middleware)
-      @entries << middleware
-    end
-
-    def include?(middleware)
-      @entries.include?(middleware)
-    end
+    def use(_middleware); end
   end
 
   module ActiveSupport
@@ -226,20 +217,10 @@ RSpec.describe 'Emb::Railtie' do
     # rubocop:enable RSpec/RemoveConst
   end
 
-  it 'loads only when Rails::Railtie is defined and mounts the middleware' do
-    app = boot_railtie
+  it 'loads only when Rails::Railtie is defined' do
+    boot_railtie
 
     expect(Emb::Railtie).to be < RailtieFakeRails::Railtie
-    expect(app.middleware.entries).to eq([Emb::Middleware])
-  end
-
-  it 'does not duplicate a manually mounted Emb::Middleware' do
-    app = RailtieFakeRails::App.new
-    app.middleware.use Emb::Middleware # manual mount before boot
-
-    boot_railtie(app)
-
-    expect(app.middleware.entries).to eq([Emb::Middleware])
   end
 
   it 'is not defined when the gem loads without Rails (guarded require)' do
@@ -297,9 +278,12 @@ RSpec.describe 'Emb::Railtie' do
     expect(sidekiq.added).to be_nil
   end
 
-  it 'does not mount the middleware when config.emb.middleware is false' do
-    app = boot_railtie { |config| config.emb.middleware = false }
+  it 'keeps the fake middleware stack within the real Rails proxy API' do
+    require 'rails/configuration'
 
-    expect(app.middleware.entries).to be_empty
+    fake = RailtieFakeRails::MiddlewareStack.instance_methods(false)
+    real = Rails::Configuration::MiddlewareStackProxy.instance_methods
+
+    expect(fake - real).to be_empty
   end
 end

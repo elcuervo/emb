@@ -38,3 +38,14 @@ RSpec/ExampleLength:
 
 RSpec/BeforeAfterAll:
   Enabled: false
+
+# The integration suite orchestrates a real Rails boot in subprocesses: its
+# describe targets cross-process behavior rather than a loadable class, and its
+# probe script exists to emit a JSON fact sheet on stdout.
+RSpec/DescribeClass:
+  Exclude:
+    - spec/integration/**/*
+
+RSpec/Output:
+  Exclude:
+    - spec/integration/**/*

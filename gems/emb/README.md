@@ -533,12 +533,21 @@ If your Gemfile loads `emb` before Rails is required (non-standard boot order), 
 guarded railtie require in `emb.rb` is skipped — add `require "emb/railtie"` in
 `config/application.rb` right after `require "rails/all"` (or in an initializer).
 
-The middleware is also safe to mount manually in any Rack app (the Railtie
-skips insertion when it is already present):
+The middleware is also safe to mount manually in any Rack app. In a Rails app,
+set the opt-out as well so the Railtie does not add a second copy:
 
 ```ruby
+# config/application.rb
+config.emb.middleware = false
+```
+
+```ruby
+# wherever you build the stack
 use Emb::Middleware
 ```
+
+A duplicate mount is harmless — clearing the per-thread scope is idempotent — but
+the opt-out keeps the stack clean and makes the intended wiring explicit.
 
 The scope is cleared even when the app raises, and a fresh scope starts
 automatically with the next request. Loaders created but never used within a
