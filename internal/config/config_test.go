@@ -466,6 +466,67 @@ func TestParseFlagsPersistence(t *testing.T) {
 	}
 }
 
+func TestLoadScriptsPathResolution(t *testing.T) {
+	dir := t.TempDir()
+	scriptsDir := filepath.Join(dir, "scripts")
+	os.MkdirAll(scriptsDir, 0755)
+	scriptPath := filepath.Join(scriptsDir, "classify.lua")
+	os.WriteFile(scriptPath, []byte("return KEYS[1]"), 0644)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  test:
+    onnx: ./model.onnx
+    scripts:
+      - scripts/classify.lua
+      - /absolute/script.lua
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Models["test"]
+	if len(m.Scripts) != 2 {
+		t.Fatalf("expected 2 scripts, got %d", len(m.Scripts))
+	}
+	wantRel := filepath.Join(dir, "scripts", "classify.lua")
+	if m.Scripts[0] != wantRel {
+		t.Fatalf("relative path: got %q, want %q", m.Scripts[0], wantRel)
+	}
+	if m.Scripts[1] != "/absolute/script.lua" {
+		t.Fatalf("absolute path: got %q, want /absolute/script.lua", m.Scripts[1])
+	}
+}
+
+func TestLoadScriptsMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  test:
+    onnx: ./model.onnx
+    scripts:
+      - scripts/nonexistent.lua
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Load resolves paths but does NOT validate file existence; the server
+	// (or caller) reads the file and reports the error at boot time.
+	m := cfg.Models["test"]
+	if len(m.Scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(m.Scripts))
+	}
+	want := filepath.Join(dir, "scripts", "nonexistent.lua")
+	if m.Scripts[0] != want {
+		t.Fatalf("resolved path: got %q, want %q", m.Scripts[0], want)
+	}
+}
+
 func TestLoadReservedModelNames(t *testing.T) {
 	for _, name := range []string{"BLOB", "blob", "VALUES", "values"} {
 		dir := t.TempDir()

@@ -3,6 +3,8 @@ listen: "127.0.0.1:16379"
 models:
   minilm:
     model_repo: Xenova/all-MiniLM-L6-v2
+    scripts:
+      - scripts/hello.lua
 
   bge:
     model_repo: Xenova/bge-small-en-v1.5

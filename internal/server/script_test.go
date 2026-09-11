@@ -17,6 +17,18 @@ import (
 // real minilm fixture, plus a blocking pool model "block" for gate tests. The
 // minilm files are downloaded via `just download-model`; tests skip when the
 // fixture is absent (e.g. fresh CI checkouts).
+// serveScriptTestWithPreload is like serveScriptTest but preloads script
+// sources before starting the server. scripts is modelName → source.
+func serveScriptTestWithPreload(t *testing.T, cacheCfg string, scripts map[string]string, opts ...Option) (string, *Server) {
+	t.Helper()
+	addr, srv := serveScriptTest(t, cacheCfg, opts...)
+	for model, src := range scripts {
+		if _, err := srv.PreloadScript(model, src); err != nil {
+			t.Fatalf("preloading script for %q: %v", model, err)
+		}
+	}
+	return addr, srv
+}
 func serveScriptTest(t *testing.T, cacheCfg string, opts ...Option) (string, *Server) {
 	t.Helper()
 	reg := registry.New()
@@ -70,6 +82,81 @@ func doCmd(t *testing.T, c net.Conn, args ...string) string {
 }
 
 const helloScript = `return KEYS[1] .. "|" .. ARGV[1]`
+
+func TestPreloadScriptRejectsUnknownModel(t *testing.T) {
+	addr, srv := serveScriptTest(t, "")
+	_, err := srv.PreloadScript("nope", "return 1")
+	if err == nil {
+		t.Fatal("expected error for unknown model")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected model-not-found error, got %v", err)
+	}
+	// Clean up the listener created by serveScriptTest.
+	srv.Close()
+	net.Dial("tcp", addr)
+}
+
+func TestScriptPreloadExists(t *testing.T) {
+	addr, _ := serveScriptTestWithPreload(t, "", map[string]string{
+		"test": helloScript,
+	})
+	c := dial(t, addr)
+	sha := scriptSHA(helloScript)
+	if got := doCmd(t, c, "EMB.SCRIPT", "EXISTS", "test", sha); got != "*1\r\n:1\r\n" {
+		t.Fatalf("expected EXISTS [1] for preloaded script, got %q", got)
+	}
+	c.Close()
+}
+
+func TestScriptPreloadEvshaWithoutLoad(t *testing.T) {
+	addr, _ := serveScriptTestWithPreload(t, "", map[string]string{
+		"test": helloScript,
+	})
+	c := dial(t, addr)
+	sha := scriptSHA(helloScript)
+	resp := doCmd(t, c, "EMB.EVSHA", "test", sha, "1", "hello world", "PERSON")
+	if resp != "$18\r\nhello world|PERSON\r\n" {
+		t.Fatalf("unexpected EVSHA reply %q", resp)
+	}
+	c.Close()
+}
+
+func TestScriptPreloadFlushDrops(t *testing.T) {
+	addr, _ := serveScriptTestWithPreload(t, "", map[string]string{
+		"test": helloScript,
+	})
+	c := dial(t, addr)
+	sha := scriptSHA(helloScript)
+	if got := doCmd(t, c, "EMB.SCRIPT", "EXISTS", "test", sha); got != "*1\r\n:1\r\n" {
+		t.Fatalf("expected EXISTS [1] before flush, got %q", got)
+	}
+	if got := doCmd(t, c, "EMB.SCRIPT", "FLUSH", "test"); got != "+OK\r\n" {
+		t.Fatalf("unexpected FLUSH reply %q", got)
+	}
+	if got := doCmd(t, c, "EMB.SCRIPT", "EXISTS", "test", sha); got != "*1\r\n:0\r\n" {
+		t.Fatalf("expected EXISTS [0] after flush, got %q", got)
+	}
+	c.Close()
+}
+
+func TestScriptPreloadCompilerWarmed(t *testing.T) {
+	addr, srv := serveScriptTestWithPreload(t, "", map[string]string{
+		"test": helloScript,
+	})
+	before := srv.compiler.Compiles.Load()
+	c := dial(t, addr)
+	sha := scriptSHA(helloScript)
+	resp := doCmd(t, c, "EMB.EVSHA", "test", sha, "1", "hello", "PERSON")
+	if resp != "$12\r\nhello|PERSON\r\n" {
+		t.Fatalf("unexpected EVSHA reply %q", resp)
+	}
+	after := srv.compiler.Compiles.Load()
+	if after != before {
+		t.Fatalf("expected no compile increment (was %d, now %d)", before, after)
+	}
+	c.Close()
+}
 
 func TestScriptLoadExistsFlush(t *testing.T) {
 	addr, _ := serveScriptTest(t, "")

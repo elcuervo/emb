@@ -132,23 +132,11 @@ func (s *Server) handleScriptLoad(conn redcon.Conn, args []string) {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.SCRIPT LOAD'")
 		return
 	}
-	model, src := args[0], args[1]
-	if _, err := s.reg.Resolve(model); err != nil {
+	sha, err := s.PreloadScript(args[0], args[1])
+	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
-	// Reject oversized sources before they enter the source cache: EVAL/EVSHA
-	// enforce the same cap at evaluation time, so LOAD must not accept what a
-	// later EVSHA cannot run.
-	if len(src) > script.DefaultMaxScriptBytes {
-		conn.WriteError(fmt.Sprintf("ERR %v", script.ErrScriptTooLarge))
-		return
-	}
-	if err := script.Compile(src); err != nil {
-		conn.WriteError(fmt.Sprintf("ERR %v", err))
-		return
-	}
-	sha, _ := s.scripts.Load(model, src)
 	conn.WriteBulkString(sha)
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -123,6 +124,10 @@ type ModelConfig struct {
 	// ScriptPreload warms the scripted session + tokenizer at load time
 	// instead of on the first script evaluation.
 	ScriptPreload bool `yaml:"script_preload"`
+	// Scripts is a list of file paths to Lua scripts that the server SHALL
+	// preload at boot. Relative paths are resolved against the config file's
+	// directory; absolute paths are used as-is.
+	Scripts []string `yaml:"scripts"`
 }
 
 func Load(path string) (*Config, error) {
@@ -153,6 +158,16 @@ func Load(path string) (*Config, error) {
 		}
 		if m.ExecutionMode != "" && m.ExecutionMode != "sequential" && m.ExecutionMode != "parallel" {
 			return nil, fmt.Errorf("model %q: execution_mode must be \"sequential\", \"parallel\", or unset, got %q", name, m.ExecutionMode)
+		}
+		cfg.Models[name] = m
+	}
+
+	configDir := filepath.Dir(path)
+	for name, m := range cfg.Models {
+		for i, sp := range m.Scripts {
+			if !filepath.IsAbs(sp) {
+				m.Scripts[i] = filepath.Join(configDir, sp)
+			}
 		}
 		cfg.Models[name] = m
 	}

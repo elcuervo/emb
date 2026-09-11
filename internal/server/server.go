@@ -432,6 +432,27 @@ func (s *Server) SetTLSConfigPaths(cert, key string) {
 	s.tlsKey = key
 }
 
+// PreloadScript validates, caches, and precompiles a script for a model.
+// It is used at boot time from file paths declared in config. A bad script
+// (unknown model, oversized, invalid Lua) returns an error so the caller can
+// fail fatally. The returned string is the script's SHA1.
+func (s *Server) PreloadScript(model, src string) (string, error) {
+	if _, err := s.reg.Resolve(model); err != nil {
+		return "", err
+	}
+	if len(src) > script.DefaultMaxScriptBytes {
+		return "", script.ErrScriptTooLarge
+	}
+	if err := script.Compile(src); err != nil {
+		return "", err
+	}
+	sha, _ := s.scripts.Load(model, src)
+	if err := s.compiler.Precompile(model, src); err != nil {
+		return "", err
+	}
+	return sha, nil
+}
+
 func (s *Server) handleREADY(conn redcon.Conn, cmd redcon.Command) {
 	state := serverState(s.state.Load())
 	if state == stateLoading && len(s.reg.List()) == 0 {
@@ -1327,7 +1348,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"EMB.READY - Check server readiness (OK/loading/draining)",
 		"EMB.EVAL <model> <script> <numtexts> <text...> <arg...> - Evaluate a Lua script against a model (KEYS=texts, ARGV=args)",
 		"EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...> - Evaluate a cached script by SHA (see EMB.SCRIPT LOAD)",
-		"EMB.SCRIPT LOAD <model> <script> - Compile, cache and return the script SHA1",
+		"EMB.SCRIPT LOAD <model> <script> - Compile, cache and return the script SHA1 (scripts can also be preloaded from config at boot)",
 		"EMB.SCRIPT EXISTS <model> <sha...> - Check which scripts are cached (1/0 per sha)",
 		"EMB.SCRIPT FLUSH [<model>] - Clear cached scripts (all models when omitted)",
 		"EMB.HELP - Show this help message",

@@ -51,6 +51,17 @@ func (c *Compiler) Eval(model, source string, keys, argv []string, hosts Hosts, 
 	return runProto(proto, keys, argv, hosts, opts)
 }
 
+// Precompile validates source size, parses/compiles the script, and stores
+// the prototype in the cache so the first EVSHA skips the compile step.
+// It returns an error if the script is oversized or fails to compile.
+func (c *Compiler) Precompile(model, source string) error {
+	if len(source) > DefaultMaxScriptBytes {
+		return ErrScriptTooLarge
+	}
+	_, err := c.compile(model, source)
+	return err
+}
+
 // Flush drops cached prototypes for a model ("" clears all).
 func (c *Compiler) Flush(model string) {
 	c.mu.Lock()
