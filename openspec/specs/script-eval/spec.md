@@ -49,6 +49,11 @@ Scripts SHALL be cached per model keyed by SHA1 of the script source. `EMB.SCRIP
 - **WHEN** `EMB.SCRIPT LOAD` receives a script that fails to compile
 - **THEN** the server replies with an error and caches nothing
 
+#### Scenario: Boot-preloaded script is present without LOAD
+
+- **WHEN** a script was preloaded at boot from a config file path
+- **THEN** `EMB.SCRIPT EXISTS` reports it and `EMB.EVSHA` executes it without any client-side `EMB.SCRIPT LOAD`
+
 ### Requirement: Lua-to-RESP reply conversion
 
 The server SHALL convert each script's return value to RESP2 using a Redis-faithful grammar: Lua string → bulk (byte-safe; UTF-8/JSON/binary all valid), integral Lua number → integer reply, non-integral Lua number → bulk string (RESP2 has no double, so the decimal is not truncated), list-form table (sequential integer keys from 1) → array reply, string-keyed table → hash reply as flat field/value pairs (HGETALL shape), `nil`/`false` → null, and a table with an `err` string field → error reply (an `err` value containing CR or LF SHALL be rejected so the error cannot splice extra RESP frames). Values SHALL nest recursively (a hash value may be an array, hash, bulk, integer, or null).
