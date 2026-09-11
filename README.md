@@ -418,7 +418,30 @@ models:
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
 | `workers` | auto-tuned | Number of worker goroutines |
 | `intra_op_threads` | `cores−2` | ONNX intra-op threads per session. Defaults to `cores−2` to reserve cores for request parsing/dispatch; set explicitly to override |
+| `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
 | `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies |
+
+### Preloading scripts
+
+Scripts normally enter the cache via `EMB.SCRIPT LOAD`, which costs a client
+round-trip and a server-side compile on first use. For deployments with known
+scripts, declare them in model config and the server reads, validates, and
+precompiles them at boot so `EMB.EVSHA` works immediately:
+
+```yaml
+models:
+  minilm:
+    model_repo: Xenova/all-MiniLM-L6-v2
+    scripts:
+      - scripts/classify.lua      # relative → config file's directory
+      - /etc/emb/normalize.lua    # absolute, used as-is
+```
+
+A bad script (missing file, invalid Lua, oversized) is **fatal at boot** — the
+server refuses to start half-configured, matching existing model validation
+semantics. Preloaded scripts are indistinguishable from dynamically loaded
+ones: `EMB.SCRIPT EXISTS` reports `1`, `EMB.EVSHA` replies immediately, and
+`EMB.SCRIPT FLUSH` drops them like any other cache entry.
 
 ### Batching
 

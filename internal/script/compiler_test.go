@@ -110,6 +110,47 @@ func TestCompilerProtoCacheBounded(t *testing.T) {
 	}
 }
 
+func TestPrecompileWarmsCache(t *testing.T) {
+	c := NewCompiler()
+	const src = "return KEYS[1] .. '|' .. ARGV[1]"
+	if err := c.Precompile("m", src); err != nil {
+		t.Fatal(err)
+	}
+	// Precompile should have compiled the proto.
+	if got := c.Compiles.Load(); got != 1 {
+		t.Fatalf("expected 1 compile after Precompile, got %d", got)
+	}
+	// Eval with the same source should reuse the cached proto.
+	if _, err := c.Eval("m", src, []string{"a"}, []string{"b"}, Hosts{}, EvalOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Compiles.Load(); got != 1 {
+		t.Fatalf("expected 1 compile (reused), got %d", got)
+	}
+}
+
+func TestPrecompileRejectsOversized(t *testing.T) {
+	c := NewCompiler()
+	if err := c.Precompile("m", "return 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Precompile("m", "return 1"); err != nil {
+		// repeated precompile of same source is idempotent (cache hit)
+		t.Fatal(err)
+	}
+	big := make([]byte, DefaultMaxScriptBytes+1)
+	if err := c.Precompile("m", string(big)); err != ErrScriptTooLarge {
+		t.Fatalf("expected ErrScriptTooLarge, got %v", err)
+	}
+}
+
+func TestPrecompileRejectsInvalidLua(t *testing.T) {
+	c := NewCompiler()
+	if err := c.Precompile("m", "this is not lua ("); err == nil {
+		t.Fatal("expected compile error")
+	}
+}
+
 func TestCompilerBudgetAndSandbox(t *testing.T) {
 	c := NewCompiler()
 	if _, err := c.Eval("m", "return 1", nil, nil, Hosts{}, EvalOptions{MaxScriptBytes: 3}); err != ErrScriptTooLarge {

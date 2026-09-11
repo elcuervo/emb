@@ -98,6 +98,22 @@ func run() error {
 	)
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
+
+	for name, modelCfg := range fc.Models {
+		for _, scriptPath := range modelCfg.Scripts {
+			src, err := os.ReadFile(scriptPath)
+			if err != nil {
+				onnx.DestroyEnvironment()
+				return fmt.Errorf("reading script %q for model %q: %w", scriptPath, name, err)
+			}
+			if _, err := srv.PreloadScript(name, string(src)); err != nil {
+				onnx.DestroyEnvironment()
+				return fmt.Errorf("preloading script %q for model %q: %w", scriptPath, name, err)
+			}
+			log.Printf("preloaded script %s for model %q", scriptPath, name)
+		}
+	}
+
 	if modelCount > 0 {
 		srv.SetReady()
 	}
