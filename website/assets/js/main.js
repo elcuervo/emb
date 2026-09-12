@@ -24,6 +24,24 @@
 
   ready(function () {
     var pipeline = document.querySelector('.pipeline');
+    var menu = document.querySelector('.mobile-nav');
+    if (menu) {
+      var menuToggle = menu.querySelector('summary');
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && menu.open) {
+          menu.open = false;
+          menuToggle.focus();
+        }
+      });
+      document.addEventListener('click', function (event) {
+        if (!menu.contains(event.target) || event.target.closest('.mobile-nav a')) {
+          menu.open = false;
+        }
+      });
+      window.matchMedia('(max-width: 1000px)').addEventListener('change', function () {
+        menu.open = false;
+      });
+    }
 
     /* ── 1. hero entrance ───────────────────────────────────────────
        The wordmark, spine and prose are painted from the start; the
