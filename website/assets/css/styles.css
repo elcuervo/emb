@@ -50,11 +50,28 @@
 
   --maxw: 1720px;
   --gut: clamp(22px, 3.7vw, 64px);
+  /* gutters that survive a notch: everything that cancels --gut to reach the
+     sheet's edge cancels --pad-* instead, or a landscape phone would show a
+     strip of paper beside the terrain */
+  --pad-l: var(--gut);
+  --pad-l: max(var(--gut), env(safe-area-inset-left, 0px));
+  --pad-r: var(--gut);
+  --pad-r: max(var(--gut), env(safe-area-inset-right, 0px));
 
   /* the isometric stack: half-width 182 x 2, ratio .326, pitch 130 */
   --plate: clamp(220px, 33.5vw, 470px);
   /* the prose column: 5 of 12 shells */
   --col-prose: 41.5%;
+
+  /* the terrain. The artwork is 2172 x 724 and the page hands it a
+     2172 x 770.2 box; the extra 46.2 units at the top are sky, which lets
+     the route start level with the band's top edge. 78vw of artwork is
+     therefore 27.66vw of band -- keep --band and --art-w in those
+     proportions or the cut-out distorts. Both cap at the shell, otherwise
+     the massif slides off the spine on a very wide display. */
+  --band: clamp(210px, 27.66vw, calc(.2766 * var(--maxw)));
+  --art-w: min(78vw, calc(.78 * var(--maxw)));
+  --art-right: max(-1.8vw, calc(-.018 * var(--maxw)));
 
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -123,13 +140,13 @@ button{ font: inherit; color: inherit; }
 
 .defs{ position: absolute; width: 0; height: 0; overflow: hidden; }
 
-[id]{ scroll-margin-top: clamp(70px, 6vw, 96px); }
+[id]{ scroll-margin-top: calc(clamp(70px, 6vw, 96px) + env(safe-area-inset-top, 0px)); }
 
 .shell{
   width: 100%;
   max-width: var(--maxw);
   margin-inline: auto;
-  padding-inline: var(--gut);
+  padding-inline: var(--pad-l) var(--pad-r);
 }
 .mono{ font-family: var(--mono); }
 
@@ -209,6 +226,8 @@ button{ font: inherit; color: inherit; }
   z-index: 80;
   background: var(--bg);
   border-bottom: 1px solid transparent;
+  /* a standalone window puts the status bar over the top of the sheet */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .masthead__inner{
   display: grid;
@@ -482,19 +501,28 @@ html.js .sig{
 }
 html.js.is-ready .sig{ stroke-dashoffset: 0; }
 
-/* slabs activate in sequence: INPUT → INFERENCE → EMBEDDINGS → SERVE */
+/* slabs activate in sequence: INPUT → INFERENCE → EMBEDDINGS → SERVE.
+   The entrance rides `transform`; the hover lift rides `translate`. They are
+   separate properties on purpose: `transition-delay` is per element, not per
+   state, so a shared property would make every hover wait out the slab's
+   stagger delay. `translate` on an SVG group is the progressive part -- where
+   it is unsupported the lift is simply absent, and the note's own hover state
+   still carries the link. */
 .slab{
   transform-box: fill-box;
   transform-origin: 50% 50%;
-  transition: opacity .45s ease, transform .55s cubic-bezier(.2, .8, .3, 1);
+  transition: opacity .45s ease,
+              transform .55s cubic-bezier(.2, .8, .3, 1),
+              translate .25s cubic-bezier(.2, .8, .3, 1);
 }
 html.js .slab{ opacity: 0; transform: translateY(-14px); }
 html.js .pipeline.is-live .slab{ opacity: 1; transform: translateY(0); }
-html.js .pipeline.is-live .slab:nth-of-type(1){ transition-delay: 0s; }
-html.js .pipeline.is-live .slab:nth-of-type(2){ transition-delay: .17s; }
-html.js .pipeline.is-live .slab:nth-of-type(3){ transition-delay: .34s; }
-html.js .pipeline.is-live .slab:nth-of-type(4){ transition-delay: .51s; }
-html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
+/* keyed by name rather than :nth-of-type so reordering the plates cannot
+   silently reshuffle the sequence. The third delay is the hover lift. */
+html.js .pipeline.is-live .slab[data-slab="inference"]{ transition-delay: .17s, .17s, 0s; }
+html.js .pipeline.is-live .slab[data-slab="embedding"]{ transition-delay: .34s, .34s, 0s; }
+html.js .pipeline.is-live .slab[data-slab="serve"]{ transition-delay: .51s, .51s, 0s; }
+html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
 
 /* (the plates carry no port markers: on the poster the signal line itself is
    the only orange in the stack) */
@@ -524,7 +552,7 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
   /* the poster's technical labels run out to the edge of the sheet, not to
      the shell gutter: without this the description column is 116px and
      "Raw text, documents," wraps onto a third line */
-  margin-right: calc(-1 * var(--gut));
+  margin-right: calc(-1 * var(--pad-r));
 }
 .note{
   position: absolute;
@@ -536,10 +564,10 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
   column-gap: 0;
   align-items: baseline;
 }
-.note--1{ top: 11.8%; }
-.note--2{ top: 32.1%; }
-.note--3{ top: 56.0%; }
-.note--4{ top: 78.6%; }
+.note--1{ top: 11.8%; --i: 0; }
+.note--2{ top: 32.1%; --i: 1; }
+.note--3{ top: 56.0%; --i: 2; }
+.note--4{ top: 78.6%; --i: 3; }
 
 /* leader: plate edge → right → down → right (three segments, hairline grey) */
 .note::before{
@@ -587,55 +615,60 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 .note.is-hot .note__desc{ color: var(--fg); }
 
 /* ── 07 landscape ──────────────────────────────────────────────────── */
+/* Stacking is explicit here rather than incidental. The cut-out, the route and
+   the annotation band are three layers of one drawing, so the section owns a
+   stacking context (isolation) and each layer carries its own level. Nothing
+   about the terrain depends on the compositor's mood any more, and the image
+   is a real alpha cut-out, so it cannot flash its own off-white ground while
+   a layer is being promoted. */
 .landscape{
   position: relative;
-  /* Let the image blend with the page paper rather than an isolated layer. */
+  isolation: isolate;
+  z-index: 1;
   /* the spine hands over to the ridge line with no gap */
-  /* compensates the pipeline's -22px so the ridge keeps its poster position
-     (top ~1105) while the stack above it moves up */
   margin-top: -11px;
-  /* reach the viewport's right edge, and back to the pipeline column */
-  margin-right: calc(-1 * var(--gut));
+  /* reach the sheet's right edge, and back to the pipeline column */
+  margin-right: calc(-1 * var(--pad-r));
   margin-left: calc(-1 * (40.7% - var(--plate) / 2));
-  /* .4302 of the width: the crop window of the source photograph
-     (1900 x 790 of mountain.jpg, see tools/gen-isometric.py) */
-  height: clamp(210px, 26.6vw, 375px);
+  height: var(--band);
 }
 
-.landscape__plate{
+/* One box for the cut-out and the route: whatever the viewport does to its
+   width, both are stretched identically, so the orange line can never slide
+   off the ridge it was traced onto. */
+.landscape__art{
   position: absolute;
-  inset: 0;
-  overflow: visible;
+  bottom: 0;
+  right: var(--art-right);
+  width: var(--art-w);
+  aspect-ratio: 2172 / 770.2;
+  z-index: 1;
+  pointer-events: none;
 }
-/* The generated dry-rock massif is graded onto the paper. Its background
-   becomes white before multiply compositing, avoiding a rectangular edge. */
+
 .landscape__photo{
   position: absolute;
-  top: 6%;
-  right: -1.8vw;
+  inset: auto 0 0 0;
+  width: 100%;
   height: 94%;
-  width: 78vw;
-  max-width: none;
   object-fit: fill;
-  clip-path: polygon(0 100%, 3% 90%, 3% 0, 100% 0, 100% 100%);
   display: block;
-  filter: grayscale(1) brightness(1.08);
-  mix-blend-mode: multiply;
 }
 
 .landscape__route{
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 1;
   width: 100%;
   height: 100%;
   color: var(--accent);
-  overflow: visible;
 }
 .route--signal{
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 4;
+  stroke: currentColor;
+  /* viewBox units: 10/2172 of the artwork box is the spine's 4/364, so the
+     two orange strokes meet at the same weight as they hand over */
+  stroke-width: 10;
   stroke-linecap: square;
   stroke-linejoin: miter;
 }
@@ -643,7 +676,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 
 .anno{
   position: absolute;
-  z-index: 4;
+  z-index: 2;
   top: clamp(20px, 3.7vw, 52px);
   font-family: var(--mono);
   font-size: clamp(11px, 1.02vw, 14px);
@@ -666,7 +699,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 /* registration mark */
 .reg{
   position: absolute;
-  z-index: 4;
+  z-index: 2;
   top: clamp(-22px, -1.5vw, -6px);
   right: 7.2vw;
   width: 38px;
@@ -702,11 +735,22 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .footer__mark{ color: var(--fg); }
 
 /* ── 09 motion + responsive ───────────────────────────────────────── */
+/* The reveals ripple through a group instead of flipping as one block. --i is
+   the element's place in its list; there is no wall clock involved, and with
+   prefers-reduced-motion the whole cascade collapses to a single frame. */
+.features__list > .feat:nth-child(1){ --i: 0; }
+.features__list > .feat:nth-child(2){ --i: 1; }
+.features__list > .feat:nth-child(3){ --i: 2; }
+.features__list > .feat:nth-child(4){ --i: 3; }
+.features__list > .feat:nth-child(5){ --i: 4; }
+.features__list > .feat:nth-child(6){ --i: 5; }
+
 html.js [data-reveal]{ opacity: 0; translate: 0 14px; }
 html.js [data-reveal].in{
   opacity: 1;
   translate: none;
   transition: opacity .5s ease, translate .6s cubic-bezier(.2, .8, .3, 1);
+  transition-delay: calc(var(--i, 0) * 55ms);
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -714,7 +758,7 @@ html.js [data-reveal].in{
   html.js [data-reveal]{ opacity: 1; translate: none; }
   html.js .sig,
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
-  html.js .slab{ opacity: 1; transform: none; }
+  html.js .slab{ opacity: 1; transform: none; translate: none; }
   .btn{ translate: none; }
   *, *::before, *::after{
     animation-duration: .001ms !important;
@@ -728,8 +772,10 @@ html.js [data-reveal].in{
 
 /* Tablet and phone layouts prioritize reading and touch interaction. */
 @media (max-width: 1000px){
+  /* --pad-l / --pad-r resolve against --gut, so overriding the gutter is
+     enough to move every full-bleed edge with it */
   :root{ --gut: clamp(20px, 4vw, 40px); }
-  [id]{ scroll-margin-top: 100px; }
+  [id]{ scroll-margin-top: calc(100px + env(safe-area-inset-top, 0px)); }
   .masthead{ border-bottom-color: var(--rule-soft); }
   .masthead__inner{
     position: relative;
@@ -762,14 +808,15 @@ html.js [data-reveal].in{
   .mobile-nav nav{
     position: absolute;
     top: 100%;
-    left: var(--gut);
-    right: var(--gut);
+    left: var(--pad-l);
+    right: var(--pad-r);
     padding: 8px 16px;
     border: 1px solid var(--fg);
     background: var(--bg);
     box-shadow: 4px 4px 0 var(--fg);
     max-height: calc(100dvh - 100px);
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .mobile-nav a{
     display: flex;
@@ -827,14 +874,15 @@ html.js [data-reveal].in{
   .note__num{ font-size: 13px; }
   .note__desc{ font-size: 14px; line-height: 1.5; }
   .landscape{
-    margin: 28px calc(-1 * var(--gut)) 0;
-    height: clamp(300px, 42vw, 400px);
+    margin: 28px calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
+    /* 112vw of artwork is 39.72vw of band, plus the room the annotations
+       need above the massif */
+    height: clamp(240px, calc(39.72vw + 96px), 470px);
   }
-  .landscape__photo{ width: 110vw; top: 30%; height: 70%; }
-  .landscape__route{ left: -29.1%; width: 129.1%; }
+  .landscape__art{ right: -6vw; width: 112vw; }
   .anno{ top: 20px; font-size: 12px; }
-  .anno--left{ left: var(--gut); }
-  .anno--right{ right: var(--gut); }
+  .anno--left{ left: var(--pad-l); }
+  .anno--right{ right: var(--pad-r); }
   .reg{ display: none; }
   .footer__inner{ padding-block: 20px max(24px, env(safe-area-inset-bottom)); gap: 12px; }
   .footer__copy, .footer__mark{ font-size: 12px; line-height: 1.6; letter-spacing: 0; }
@@ -855,31 +903,54 @@ html.js [data-reveal].in{
   .ghlink{ justify-self: center; }
   .features__list{ grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .feat{ padding-block: 14px; }
+
+  /* Phones keep the isometric stack: the four slabs are the page's whole
+     argument, and a phone is exactly where a reader has the attention for
+     them. They run full width under the prose, then the notes follow as a
+     ruled list. */
   .hero__pipeline{ margin-top: 36px; }
   .pipeline{ grid-template-columns: minmax(0, 1fr); }
-  .pipeline__stack{ display: none; }
-  .pipeline__notes{ grid-column: 1; padding-left: 24px; border-left: 3px solid var(--accent); }
+  /* one column, two rows: say so rather than leaning on auto-placement */
+  .pipeline__stack{ grid-column: 1 / -1; align-items: flex-start; overflow: hidden; }
+  /* On a wide screen the spine's tail runs on to the terrain. Here the
+     terrain is a screen and a half below, behind the notes, so the diagram
+     ends at the last plate instead of dangling: the 47 empty units below
+     SERVE are 12.9% of the artwork's width. */
+  .pipeline__svg{ margin-bottom: -12.9%; }
+  .pipeline__notes{ grid-column: 1 / -1; padding-left: 0; margin-top: 28px; }
   .note{
     position: relative;
     inset: auto;
     transform: none;
-    grid-template-columns: 36px minmax(0, 1fr);
-    padding-bottom: 24px;
-    margin-bottom: 24px;
-    border-bottom: 1px solid var(--rule-soft);
+    grid-template-columns: 40px minmax(0, 1fr);
+    padding-block: 16px;
+    border-top: 1px solid var(--rule-soft);
   }
-  .note:last-child{ margin-bottom: 0; }
+  /* the closing rule carries its own inset, so nothing lands flush on it */
+  .note:last-child{ padding-bottom: 16px; border-bottom: 1px solid var(--rule-soft); }
   .note::before{ display: none; }
-  .note__desc br{ display: none; }
-  .landscape{ height: 290px; }
-  .landscape__photo{ top: 38%; height: 62%; right: calc(-1 * var(--gut)); }
-  .landscape__route{ left: 0; width: 100%; top: 32%; height: 68%; }
+  .note__label{ font-size: 15px; }
+  .note__desc{ font-size: 14px; line-height: 1.5; }
+  .landscape{
+    height: clamp(250px, calc(43.97vw + 100px), 470px);
+  }
+  .landscape__art{ right: -12vw; width: 124vw; }
   .footer__inner{ display: grid; }
 }
 
-/* Short landscape screens should not lose space to a persistent header. */
-@media (max-width: 1000px) and (max-height: 500px){
+/* Short landscape screens should not lose space to a persistent header, and
+   must not crop the wordmark to make room. */
+@media (max-width: 1000px) and (max-height: 520px){
   .masthead{ position: relative; }
-  .hero__wordmark{ height: 28vw; overflow: hidden; }
-  .wordmark{ top: -13vw; }
+  /* The wrapper is a layout box, not the artwork's box: the word deliberately
+     overflows it on a normal window. On a short one the height has to win, so
+     the artwork is scaled down to fit instead of being cropped. */
+  .hero__wordmark{ height: min(44.2vw, 56vh); }
+  .wordmark{
+    top: 0;
+    left: 50%;
+    width: auto;
+    height: 100%;
+    translate: -50% 0;
+  }
 }

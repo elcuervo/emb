@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Generate the four-plate SVG. Use --write to update index.html in place.
 
-The terrain is a separate generated image, assets/img/terrain-v2.png.
+The terrain is a separate generated image: assets/img/terrain-v2.png is the
+source artwork, and assets/img/terrain-matte.png is the alpha cut-out the page
+actually loads. Both are owned by tools/gen-terrain-matte.py.
 """
 import argparse
 from pathlib import Path

@@ -132,21 +132,25 @@
       note.addEventListener('focusout', off);
     });
 
-    /* ── 5. the signal becomes a route across the terrain ───────── */
-    var frame = document.querySelector('.landscape__plate');
-    var routes = [].slice.call(document.querySelectorAll('.route--signal'));
+    /* ── 5. the signal becomes a route across the terrain ─────────
+       The band is measured, not the artwork: on a short window the band can
+       be taller than the artwork, and the line must still finish. The route
+       completes at 86% of the band's travel, which is where the massif is
+       fully in view on every viewport we checked — a denominator of the
+       whole band leaves the last branch undrawn at the page bottom. */
     var land = document.querySelector('.landscape');
+    var routes = [].slice.call(document.querySelectorAll('.route--signal'));
 
-    if (frame && routes.length && land && !reduceMotion.matches) {
+    if (land && routes.length && !reduceMotion.matches) {
       routes.forEach(function (r) { r.style.strokeDashoffset = '1'; });
       var ticking = false;
 
       var drawRoute = function () {
         ticking = false;
-        var rect = frame.getBoundingClientRect();
+        var rect = land.getBoundingClientRect();
         var vh = window.innerHeight || doc.clientHeight;
-        /* 0 when the frame is about to enter, 1 once it is in view */
-        var progress = clamp((vh - rect.top) / rect.height, 0, 1);
+        /* 0 when the band is about to enter, 1 once the massif is in view */
+        var progress = clamp((vh - rect.top) / (rect.height * 0.86), 0, 1);
         routes.forEach(function (r) { r.style.strokeDashoffset = String(1 - progress); });
       };
 

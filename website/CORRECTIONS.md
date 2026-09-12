@@ -697,3 +697,168 @@ The seven-width browser checks, keyboard focus, note hover, completed route
 drawing and JavaScript syntax checks pass. The generated terrain and vector
 pipeline remain interpretations of the reference, rather than its original
 source assets. Generation prompts are in `assets/img/terrain-v2.md`.
+
+---
+
+# Addendum — fifth pass (mobile, compositing, one cut-out)
+
+Three reported defects: the terrain flashing its own off-white ground before
+settling, animation/z-order that could not be trusted, and a mobile scaffold
+that stopped short. One change fixes the first two and most of the third.
+
+## The terrain is now a real cut-out
+
+`terrain-v2.png` was generated as an RGB image with a flat warm ground, not
+alpha, and the page faked the cut-out with
+`mix-blend-mode: multiply` + `filter: grayscale(1) brightness(1.08)` + a
+polygon `clip-path`. `multiply` blends against its *backdrop*: where the image
+sits in a stacking context whose backdrop is empty there is nothing to
+darken, and the source paints as-is — the off-white ground, i.e. an opaque
+rectangle. That is the flash. It is also the exact failure the notes in the
+README were already excusing ("the landscape must not establish an isolated
+stacking context"), which is a fragility, not a design.
+
+`tools/gen-terrain-matte.py` (stdlib only, via `tools/png_lib.py`) now bakes
+the same grade into the pixels and writes `terrain-matte.png`:
+
+```
+alpha = 1 - L / 235      rgb = 0 (black)      L = .213r + .715g + .072b
+```
+
+Black at that alpha over the paper *is* `multiply`: `paper·(1−a) = paper·L/235`.
+235 is the ground's own level (1st percentile of the sky sample), so the ground
+lands on alpha **0** and no compositor state can bring it back.
+
+Measured, not asserted:
+
+| check | result |
+|---|---|
+| matte vs the old multiply chain | mean **0.33/255**, peak **1.6/255** |
+| sky pixels above alpha 8 | **37 of 797,399** (0.0046%, all isolated single px) |
+| rock coverage | 34.6% of the frame |
+| file size | **0.80 MB**, 37% of the 2.29 MB source |
+
+`clip-path`, `filter` and `mix-blend-mode` are all gone from
+`.landscape__photo`. That also removes a 78vw-wide filtered, blended layer
+from the compositor, which is the expensive kind on a phone.
+
+## Z-order is now stated, not inherited
+
+`.landscape` owns a stacking context (`isolation: isolate`) and each layer
+carries its level: cut-out 0, route 1, annotations and the registration mark
+2. The section also takes `z-index: 1` so the terrain always paints above the
+pipeline it overlaps by 11px, instead of depending on DOM order.
+
+## The route is glued to the rock
+
+The route used to live in a `630 × 272` viewBox stretched across the landscape
+band while the artwork lived in its own box with its own offsets. They drifted
+against each other as the viewport changed, and the `left: -29.1%` mobile
+override was where that drift had been patched by hand.
+
+Now the cut-out and the route share one box — `.landscape__art` — whose
+`aspect-ratio` is the artwork's (`2172 / 770.2`); the polyline is authored in
+the artwork's own pixels. Two consequences, both measurable:
+
+- the box is 78vw wide with a 1.8vw bleed, and the fork at `x1124.3/2172`
+  lands on the signal axis at **every** width. Worst error over 1001px → 3440px
+  is **0.09px** (it is exact below the shell's 1720px cap, where both the art
+  box and the spine are linear in the viewport);
+- `--band` is 27.66vw, which is 78vw of artwork at `2172 : 770.2`. Band height
+  and artwork height now agree to **0.02px** at every width, so the massif is
+  no longer squeezed: it was 4% off below 1410px and **27% off at 1720px**,
+  because a `375px` cap froze the height while `78vw` kept growing. Both the
+  band and the art width now cap at the shell (`--maxw`), which also stops the
+  massif sliding out from under the spine on a very wide display.
+
+The route's stem (the spine's continuation, `y0 → y243.5`) and its fork
+therefore stay collinear with `.sig` at every width, and the two orange
+strokes now match in weight (5.17px vs 5.16px at 1440px) because
+`vector-effect: non-scaling-stroke` was replaced by `stroke-width: 10` in a
+viewBox whose scale is uniform.
+
+## Motion
+
+- **The slab stagger no longer leaks into the hover.** `transition-delay` is
+  per element, not per state, so `transform: translateY(-6px)` on `.is-hot`
+  was waiting out that slab's entrance delay — up to 0.51s on SERVE. The
+  entrance now rides `transform` and the lift rides `translate`, with a
+  per-property delay list (`.17s, .17s, 0s`), so hovering is immediate in both
+  directions. `translate` on an SVG group is the progressive part: where it is
+  unsupported the lift is merely absent.
+- **The slab delays are keyed by `data-slab` name**, not `:nth-of-type`, so
+  regenerating the pipeline cannot silently reshuffle the sequence.
+- **The route always finishes.** Progress is measured against the band at
+  `86%` of its travel; at the full band height that branch was reaching the
+  page bottom at 97% on a 1440 × 900 window, leaving the last segment undrawn.
+- **Reveals ripple.** `--i` carries each feature's and each stage's place in
+  its list, so a group resolves as a sequence rather than one block flip.
+  Reduced motion still collapses the whole cascade to a single frame.
+
+## Mobile
+
+- **Phones keep the isometric stack.** It was `display: none` below 640px —
+  the page's central argument, deleted at the width where a reader has the
+  most attention for it. It now runs full width under the prose, and the four
+  stages follow as a ruled list.
+- **The accent left border is gone** (`border-left: 3px solid var(--accent)` on
+  `.pipeline__notes`), which the review rules call out by name. The list is
+  closed by a hairline rule on the container instead.
+- **The terrain is aspect-true on phones and tablets** rather than
+  `object-fit: fill` over `110vw × 62%` (2.38:1 against the artwork's 3.00:1).
+  Both the ≤1000px and ≤640px overrides are now one rule each, and the route
+  follows because it shares the box.
+- **Notches.** `--pad-l` / `--pad-r` fold in `env(safe-area-inset-*)`, and
+  everything that cancels a gutter to reach the sheet's edge — the terrain,
+  the annotation band, the mobile menu — cancels those instead. The masthead
+  also carries the top inset, for a standalone window.
+- **Short landscape windows** scale the wordmark to the available height
+  (`min(44.2vw, 56vh)`) instead of cropping it with `overflow: hidden` and a
+  `-13vw` nudge.
+
+## What this changes in the composition
+
+At 1086px the band goes from 289px (26.6vw) to 300.4px (27.66vw): the
+landscape top stays at 1096, the footer rule moves 1386 → **1397**, page height
+1449 → **≈1460**. Those three figures are arithmetic on the recorded
+measurements, not a fresh browser pass.
+
+## Verification
+
+This pass was first verified by measurement rather than by looking — the matte
+against the pipeline it replaces (pixel diff), the sky against transparency
+(alpha histogram over the whole region above the ridge), the layout against
+itself (the spine/fork and band/art agreement recomputed at 13 widths from
+1001px to 3440px), and the files against the detector, which parses both
+cleanly.
+
+It has since been looked at, in Chromium, once the browser tooling was in
+place (`agent-browser` from nixpkgs plus Chrome for Testing, or the Playwright
+Chromium already on this machine via `AGENT_BROWSER_EXECUTABLE_PATH`).
+
+**Desktop, 1280px.** The cut-out shows no rectangle and no flash; the route
+forks exactly where the spine lands and rides the ridge down both flanks; the
+annotations and the registration mark sit in the sky above the rock.
+`scrollWidth` equals the viewport, so nothing bleeds sideways.
+
+**Phone, 390px.** `scrollWidth 390` against a 390 viewport — no horizontal
+overflow. The isometric stack is present and full width, the spine reads
+through each plate, the four stages follow as a ruled list with hairline
+separators and no accent bar, and the terrain is aspect-true with the route on
+the ridge.
+
+One defect the browser found and measurement could not: on a phone the
+spine's tail ran 47 units past the last plate into empty space, because in the
+stacked layout the terrain it is heading for is a screen and a half below. The
+diagram now ends at the plate, clipped by its container
+(`.pipeline__svg{margin-bottom:-12.9%}` — the empty tail is 12.9% of the
+artwork's width). Page height at 390px went 2708 → 2574.
+
+Two things to know about the harness. The pi wrapper **strips `--viewport`**
+before spawning upstream, so a width check cannot be driven from the wrapper's
+launch flags; the 390px render above was taken by injecting a
+`position:fixed;width:390px` iframe and screenshotting the outer document,
+where the media queries evaluate against the iframe's own viewport. And
+`just website-shot` passes `--viewport` to the CLI directly, for shells where
+the wrapper is not in the way — that flag is upstream's, not the wrapper's, so
+it is exercised by the maintainer rather than by this pass.

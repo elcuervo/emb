@@ -418,6 +418,8 @@
           </div>
 
           <ol class="pipeline__notes" aria-labelledby="arch-h">
+            <!-- `data-reveal` ripples: --i on .note--n / .feat spaces the
+                 entrances so the list reads as a sequence, not a block -->
             <li class="note note--1" data-note="input" data-reveal>
               <span class="note__num">01</span>
               <h3 class="note__label">INPUT</h3>
@@ -449,16 +451,19 @@
           <p class="anno anno--right" data-reveal>HIGHER<br>DIMENSIONS<br>BRIGHTER<br>APPLICATIONS<span class="anno__dash" aria-hidden="true"></span></p>
           <span class="reg" aria-hidden="true"></span>
 
-          <div class="landscape__plate">
-            <img class="landscape__photo" src="assets/img/terrain-v2.png" width="2172" height="724" alt="" decoding="async">
-            <svg class="landscape__route" viewBox="0 0 630 272" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <!-- the signal becomes the ridge line: the spine drops to the
-                   summit, then one continuous route falls away down both
-                   flanks (vertices traced from the poster's overlay) -->
-              <path class="route--signal" vector-effect="non-scaling-stroke" pathLength="1"
-                    d="M273 0 L273 86 L249 102 L227 119 L204 134 L181 141 L165 148 L148 166 L136 178 L115 195 L98 203 L77 211 L56 228 L29 249 L-13 263 L-43 272"/>
-              <path class="route--signal" vector-effect="non-scaling-stroke" pathLength="1"
-                    d="M273 86 L292 97 L306 97 L322 108 L328 119 L335 127 L340 141 L355 160 L366 165 L383 178 L420 197 L465 214 L512 233 L574 261 L618 272"/>
+          <!-- The cut-out and the route share one box, so the orange line is
+               glued to the rock at every viewport width. The route is traced
+               from the reference poster and expressed in the artwork's own
+               pixels: the spine's axis meets the artwork at x1124.3, which is
+               exactly where the two branches fork. y0 is the band's top edge,
+               y46.2 the top of the rock's frame, y770.2 the footer rule. -->
+          <div class="landscape__art">
+            <img class="landscape__photo" src="assets/img/terrain-matte.png" width="2172" height="724" alt="" decoding="async" fetchpriority="low">
+            <svg class="landscape__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <path class="route--signal" pathLength="1"
+                    d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
+              <path class="route--signal" pathLength="1"
+                    d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
             </svg>
           </div>
         </section>

@@ -3,8 +3,27 @@
 File: `terrain-v2.png`, 2172 × 724, RGB PNG.
 Created 12 September 2026 with the built-in image generation tool, using the
 user-provided `drop-20260912-180449.png` poster as a visual reference.
-The image has a light background, not an alpha channel. The website blends
-it onto its cream paper using CSS. The original Unsplash asset is unused.
+The image has a light background, not an alpha channel. The original Unsplash
+asset is unused.
+
+## The shipped cut-out
+
+The page does not load this file. It loads `terrain-matte.png`, a 2172 × 724
+grey+alpha cut-out derived from it by `tools/gen-terrain-matte.py`:
+
+```
+alpha = 1 - L / 235        rgb = 0 (black)
+```
+
+235 is the ground's own level, taken as the 1st percentile of the sky sample
+(the top strip plus the upper third of both side columns). The file only
+ever carried a flat ground rather than real transparency, so keying it by
+luminance is exactly what `mix-blend-mode: multiply` was already doing at
+composite time — now baked in, where no compositor state can undo it.
+Compositing the matte over `#F3F0E8` reproduces the old pipeline to a mean
+error of 0.33/255 and a peak of 1.6/255; the ground lands on alpha 0 (37 of
+797,399 sky pixels exceed alpha 8). The matte is 0.80 MB against this file's
+2.29 MB.
 
 ## Generation prompt
 

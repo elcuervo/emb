@@ -11,6 +11,17 @@ Guidance for coding agents working in this repository.
 The host shell has **no `go`** (`go: command not found`). The Nix dev shell provides the toolchain AND the CGo/runtime environment:
 
 - Tools: `go`, `gopls`, `golangci-lint`, `just`, `python3`, `redis`, `ruby_3_4`, `bundler`, `act`, `xan`
+- Website tools (same shell, plus `nix develop .#website` on its own): `agent-browser`,
+  `nodejs_22`, `imagemagick`, `pngquant`, `optipng`, `jpegoptim`, `cwebp`, `tidy`,
+  and `python3Packages.pillow`/`numpy` for image measurement. `just website-browser`
+  fetches Chrome for Testing once; `nix profile install .#agent-browser` puts the CLI
+  on the host `PATH` for editors and agent harnesses.
+- The dependency lists are split in `flake.nix`: `serverDeps` (Go, ONNX, Redis, Ruby)
+  and `websiteDeps` (browsers, image tools), behind `devShells.{default,server,website}`.
+  `nix develop` = both, so every command documented here keeps working. Anything added
+  to `websiteDeps` must stay substitutable — check with
+  `nix-store -qR $(nix eval --raw .#devShells.aarch64-darwin.website.drvPath) | grep '\.source.*\.drv$'`
+  (that is how `firefox` was caught building from source on darwin).
 - `flake.nix` `shellHook` exports `CGO_CFLAGS`/`CGO_LDFLAGS`, `C_INCLUDE_PATH`, `LIBRARY_PATH`, and — critically for running the server — `DYLD_LIBRARY_PATH`/`LD_LIBRARY_PATH` pointing at the nix **onnxruntime** lib.
 
 **First entry may take a while** (builds/fetches onnxruntime + libtokenizers once).

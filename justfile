@@ -351,6 +351,20 @@ version:
 website port="8080":
     python3 -m http.server {{port}} --directory website
 
+# One-time browser fetch for the site's checks (needs `nix develop .#website`).
+# agent-browser drives Chrome for Testing; nixpkgs ships the CLI only. Set
+# AGENT_BROWSER_EXECUTABLE_PATH to an existing Chromium to skip the download.
+website-browser:
+    agent-browser install
+    agent-browser doctor --offline --quick
+
+# Full-page screenshot of the served site (`just website` first). Pass
+# viewport="390x844" for a phone-width check; agent-browser takes the viewport
+# as a launch flag, so it belongs on the open.
+website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
+    agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser screenshot --full {{out}}
+    @echo "wrote {{out}}"
+
 # Clean build artifacts
 clean:
     rm -rf bin/ dist/
