@@ -118,9 +118,10 @@ Absences that must **not** be fabricated: customers, logo walls, testimonials,
 case studies, press mentions, funding, adoption metrics, pricing, service-level
 commitments, hosted cloud, or benchmark numbers not present in `BENCHMARK.md`.
 
-Asset caveat: `website/assets/img/mountain.jpg` is an Unsplash photograph used
-as a **placeholder pending licensing review** (`website/README.md`). Swapping it
-requires re-tracing the terrain clip path in `website/tools/gen-isometric.py`.
+The page now uses generated `website/assets/img/terrain-v2.png`; prompts and
+provenance are recorded in `website/assets/img/terrain-v2.md`. The original
+`mountain.jpg` remains in the repository but is unused by the page; its
+**placeholder pending licensing review** caveat still applies to any reuse.
 
 ## Product Principles
 

@@ -147,7 +147,7 @@ button{ font: inherit; color: inherit; }
 .rule-head__rule{
   flex: 0 0 clamp(64px, 7.6vw, 100px);
   height: 1.5px;
-  background: var(--fg);
+  background: var(--rule);
 }
 
 .btn{
@@ -161,8 +161,8 @@ button{ font: inherit; color: inherit; }
   border: 1px solid var(--fg);
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--sans);
-  font-size: clamp(15px, 1.95vw, 22px);
+  font-family: var(--mono);
+  font-size: clamp(15px, 1.75vw, 21px);
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
@@ -173,30 +173,33 @@ button{ font: inherit; color: inherit; }
   transition: translate .12s ease, box-shadow .12s ease, background-color .12s ease, color .12s ease;
 }
 .btn--sm{
+  min-height: 44px;
+  min-width: 158px;
   padding: .85em 1.05em;
-  font-size: clamp(12px, 1.5vw, 16.5px);
+  font-size: clamp(12px, 1.3vw, 16.5px);
   letter-spacing: .01em;
   box-shadow: none;
 }
 .btn--dark{ background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .btn--dark:hover{ background: var(--accent); color: var(--fg); border-color: var(--accent); }
-.btn--accent{ background: var(--accent); color: var(--fg); --shadow-s: 5px; padding-block: .83em; }
+.btn--accent{ min-width: 20.7vw; min-height: 5.16vw; background: var(--accent); color: var(--fg); --shadow-s: 5px; padding-block: .83em; }
 .btn--accent:hover{ --shift: 2px; --shadow-s: 3px; }
 .btn--accent:active{ --shift: 5px; --shadow-s: 0px; }
 
 .ghlink{
   display: inline-flex;
   align-items: center;
-  gap: .55em;
+  gap: 1em;
   padding-bottom: 3px;
-  border-bottom: 2px solid var(--muted);
+  border-bottom: 0;
   font-family: var(--mono);
-  font-size: clamp(11px, 1.18vw, 14px);
+  font-size: clamp(11px, 1.04vw, 14px);
   font-weight: 500;
   letter-spacing: .01em;
   transition: border-color .15s ease, color .15s ease;
 }
-.ghlink__ico{ width: 1.35em; height: 1.35em; flex: none; }
+.ghlink > span{ text-decoration: underline; text-underline-offset: 4px; }
+.ghlink__ico{ width: 21px; height: 21px; flex: none; }
 .ghlink:hover{ color: var(--accent); border-color: var(--accent); }
 
 /* ── 03 masthead ───────────────────────────────────────────────────── */
@@ -205,7 +208,7 @@ button{ font: inherit; color: inherit; }
   top: 0;
   z-index: 80;
   background: var(--bg);
-  border-bottom: 1px solid var(--rule-soft);
+  border-bottom: 1px solid transparent;
 }
 .masthead__inner{
   display: grid;
@@ -338,53 +341,20 @@ button{ font: inherit; color: inherit; }
   /* full bleed: the word runs off both edges of the paper, centred on the
      viewport rather than on the shell's content box */
   width: 100vw;
+  height: 38.808vw;
+  margin-top: -12.219vw;
   margin-inline: calc(50% - 50vw);
 }
 .wordmark{
-  display: flex;
-  justify-content: center;
-  font-family: var(--display);
-  /* 53.9vw puts the x-height at ~323px at a 1086px viewport — the poster's
-     ink band, measured (reference x-height 323, baseline 546) */
-  font-size: clamp(7.3rem, 53.9vw, 56rem);
-  line-height: .72;
-  /* pull the ink up under the masthead so the `b` ascender rises beside the
-     meta band, as on the poster, instead of leaving a dead band of paper */
-  margin-top: -.2267em;
-  /* the poster's logotype is set to near-zero sidebearings: the `e`/`m`
-     touch and `m`/`b` clear each other by ~10px. Measured at 1086px with
-     -.03em the gaps were 20px and 32px, so the tracking closes ~22px per
-     gap (pre-scale) to land on the poster's spacing. */
-  letter-spacing: -.067em;
+  position: absolute;
+  top: -.3vw;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: auto;
   color: var(--fg);
-  white-space: nowrap;
-  /* wider than the viewport: the speckle mask below only paints inside the
-     border box, so the box has to be big enough to let the word bleed at
-     every breakpoint (the word is ~2.17x its font-size wide) */
-  width: 132vw;
-  margin-inline: calc(50% - 66vw);
-  /* Inter 900 already matches the poster's stem/x-height (0.35) and its `b`
-     counter; the light compression lands the wordmark on the poster's ink
-     width, and the hairline stroke buys back the weight the compression
-     takes out of the vertical stems */
-  transform: scaleX(.93);
-  transform-origin: center bottom;
-  -webkit-text-stroke: .014em currentColor;
-  paint-order: stroke fill;
-  /* the poster's ink is solid black carrying an irregular photocopy speckle,
-     not a regular halftone screen: an opaque tile with sparse punched holes */
-  -webkit-mask-image: url("../img/speckle.svg");
-  mask-image: url("../img/speckle.svg");
-  -webkit-mask-size: 240px 240px;
-  mask-size: 240px 240px;
-  -webkit-mask-repeat: repeat;
-  mask-repeat: repeat;
-  font-variant-ligatures: none;
+  overflow: visible;
 }
-/* the poster's `e`→`m` gap is ~35px at 1086 where Inter's natural gap is
-   ~70: the lockup takes one extra pull between those two letters only, so
-   the `m`→`b` gap keeps its own optical spacing */
-.wm-e{ letter-spacing: -.06em; }
 
 /* annotation riding inside the counter of the `b`: the counter scales with
    the wordmark, so the block is positioned as a percentage of it and the
@@ -394,15 +364,16 @@ button{ font: inherit; color: inherit; }
   /* centred in the counter (measured on the poster: counter 853–961, note
      867–952); the counter scales with the wordmark, so this is a
      percentage, not a fixed offset */
-  left: 87.6%;
-  transform: translateX(-50%);
-  bottom: 27%;
+  left: 80.2%;
+  transform: none;
+  top: 25.9vw;
+  bottom: auto;
   font-family: var(--mono);
-  font-size: clamp(10.5px, .96vw, 12.5px);
+  font-size: clamp(10.5px, 1.06vw, 13px);
   font-weight: 500;
   letter-spacing: .06em;
   /* the counter is an oval: keep the block short enough to stay inside it */
-  line-height: 1.2;
+  line-height: 1.28;
   white-space: nowrap;
 }
 
@@ -431,9 +402,9 @@ button{ font: inherit; color: inherit; }
 
 .hero__sub{
   margin-top: clamp(14px, 1.57vw, 24px);
-  max-width: 40ch;
+  max-width: 41ch;
   font-family: var(--mono);
-  font-size: clamp(12.5px, 1.34vw, 15.5px);
+  font-size: clamp(12.5px, 1.39vw, 16px);
   line-height: 1.45;
   color: var(--muted);
 }
@@ -443,7 +414,9 @@ button{ font: inherit; color: inherit; }
   align-items: center;
   flex-wrap: wrap;
   gap: clamp(18px, 4.15vw, 54px);
-  margin-top: clamp(26px, 3.13vw, 47px);
+  width: max-content;
+  max-width: calc(100% + 18px);
+  margin-top: clamp(26px, 2.85vw, 47px);
 }
 
 /* ── 05 features ───────────────────────────────────────────────────── */
@@ -464,9 +437,9 @@ button{ font: inherit; color: inherit; }
 }
 .feat__ico svg{ width: 100%; height: 100%; display: block; }
 .feat__name{
-  font-family: var(--sans);
+  font-family: var(--mono);
   font-size: clamp(12.5px, 1.215vw, 15.5px);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: .01em;
   line-height: 1.2;
 }
@@ -474,7 +447,7 @@ button{ font: inherit; color: inherit; }
   grid-column: 2;
   margin-top: 3px;
   font-family: var(--mono);
-  font-size: clamp(10px, .94vw, 12px);
+  font-size: clamp(10px, 1.02vw, 12px);
   line-height: 1.55;
   color: var(--muted);
 }
@@ -528,9 +501,9 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 /* isometric plate labels */
 .plate-label{
   font-family: var(--mono);
-  font-size: clamp(9px, .95vw, 12px);
-  font-weight: 700;
-  letter-spacing: .14em;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: .02em;
   fill: var(--fg);
 }
 .plate-label--light{ fill: var(--bg); }
@@ -554,8 +527,8 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 }
 .note{
   position: absolute;
-  left: 0;
-  right: 0;
+  left: var(--lead);
+  right: -10px;
   transform: translateY(-50%);
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -571,21 +544,12 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 .note::before{
   content: "";
   position: absolute;
-  left: calc(-1 * var(--lead));
-  top: calc(50% - 24px);
-  width: calc(var(--lead) - 14px);
-  height: 1px;
-  background: var(--leader-c);
-}
-.note::after{
-  content: "";
-  position: absolute;
-  left: -14px;
-  top: calc(50% - 24px);
-  width: 14px;
-  height: 24px;
-  border-left: 1px solid var(--leader-c);
-  border-bottom: 1px solid var(--leader-c);
+  right: calc(100% + 18px);
+  top: 8px;
+  width: 50px;
+  height: clamp(78px, 8.6vw, 110px);
+  border-block: 1px solid var(--leader-c);
+  border-right: 1px solid var(--leader-c);
 }
 
 .note__num{
@@ -599,9 +563,9 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 }
 .note__label{
   grid-column: 2;
-  font-family: var(--sans);
+  font-family: var(--mono);
   font-size: clamp(12px, 1.15vw, 14px);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: .07em;
   text-transform: uppercase;
   line-height: 1.2;
@@ -624,7 +588,7 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 /* ── 07 landscape ──────────────────────────────────────────────────── */
 .landscape{
   position: relative;
-  z-index: 1;
+  /* Let the image blend with the page paper rather than an isolated layer. */
   /* the spine hands over to the ridge line with no gap */
   /* compensates the pipeline's -22px so the ridge keeps its poster position
      (top ~1105) while the stack above it moves up */
@@ -640,38 +604,23 @@ html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 .landscape__plate{
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  overflow: visible;
 }
-/* the terrain: an inline SVG whose clip-path is the skyline traced from the
-   photograph, so the frame is knocked straight out of the paper — no plate,
-   no vignette, no colour wash. */
+/* The generated dry-rock massif is graded onto the paper. Its background
+   becomes white before multiply compositing, avoiding a rectangular edge. */
 .landscape__photo{
   position: absolute;
-  /* the ridge sits below the annotation band, the base is cut by the footer rule */
   top: 6%;
-  right: calc(-1 * clamp(0px, 1.8vw, 30px));
+  right: -1.8vw;
   height: 94%;
-  width: auto;
+  width: 78vw;
+  max-width: none;
+  object-fit: fill;
+  clip-path: polygon(0 100%, 3% 90%, 3% 0, 100% 0, 100% 100%);
   display: block;
-  /* Screen-print treatment, matched to the poster's terrain by measurement
-     over boxes that are mountain in both images (page x700-1000 y1250-1400):
-     mean 118 / 38.6% below 80/255 / 25.0% above 190, snow p90 236.
-
-     Two earlier shapes were wrong. `contrast(2.6) brightness(.6)` capped
-     every highlight at 60% grey, so the snow could never reach paper and 42%
-     of the mass sat in the 90-170 mudtones. `contrast(3) brightness(.9)`
-     replaced that with the opposite failure: contrast() clamps everything
-     above ~0.67 to a single value, so 39% of the mass blew out to one flat
-     white. Putting brightness FIRST and letting contrast ramp after it keeps
-     a real gradient through the highlights - black below 0.35, paper above
-     ~0.86, a steep curve between - which is the screen print the poster has.
-     Measured after this change: mean 120, 34.9% below 80, 22.2% above 190,
-     snow p90 238. */
-  filter: grayscale(1) brightness(.68) contrast(3);
+  filter: grayscale(1) brightness(1.08);
+  mix-blend-mode: multiply;
 }
-/* The print screen lives inside the terrain SVG, clipped to the traced
-   skyline (see index.html) — as a CSS ::after it also screened the sky and
-   printed a hard rectangle edge the poster does not have. */
 
 .landscape__route{
   position: absolute;
@@ -697,13 +646,13 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   top: clamp(20px, 3.7vw, 52px);
   font-family: var(--mono);
   font-size: clamp(11px, 1.02vw, 14px);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: .12em;
   line-height: 1.58;
   color: var(--fg);
 }
 .anno--left{ left: 0; }
-.anno--right{ right: var(--gut); text-align: right; }
+.anno--right{ right: 2.1vw; text-align: left; font-weight: 400; line-height: 1.35; }
 .anno__dash{
   display: block;
   width: 33px;
@@ -711,14 +660,14 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   margin-top: 14px;
   background: var(--fg);
 }
-.anno--right .anno__dash{ margin-left: auto; }
+.anno--right .anno__dash{ margin-left: 0; background: var(--muted); }
 
 /* registration mark */
 .reg{
   position: absolute;
   z-index: 4;
   top: clamp(-22px, -1.5vw, -6px);
-  right: var(--gut);
+  right: 7.2vw;
   width: 38px;
   height: 38px;
 }
@@ -732,7 +681,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
 
 /* ── 08 footer ─────────────────────────────────────────────────────── */
-.footer{ border-top: 1px solid var(--fg); background: var(--bg); }
+.footer{ border-top: 1px solid var(--rule-soft); background: var(--bg); }
 .footer__inner{
   display: flex;
   align-items: center;
@@ -780,9 +729,11 @@ html.js [data-reveal].in{
 @media (max-width: 980px){
   .masthead__tagline{ display: none; }
   .vrule{ display: none; }
-  /* below this the `b` counter is too small to hold the annotation, so it
-     becomes a normal annotation under the word (see the poster's intent) */
+  /* Keep the outlined lockup below the metadata at narrow widths. The
+     decorative counter caption is omitted when it no longer fits. */
+  .hero__wordmark{ height: 44.2vw; margin-top: 0; }
   .wordmark-note{
+    display: none;
     position: static;
     transform: none;
     margin-top: 12px;
@@ -815,11 +766,6 @@ html.js [data-reveal].in{
   .hero__prose{ grid-column: 1; padding-right: 0; }
   .hero__pipeline{ grid-column: 1; margin-top: clamp(34px, 6vw, 66px); }
 
-  /* the `b` counter is too small to hold the annotation once the wordmark
-     scales down, so below the tablet breakpoint it becomes a normal
-     annotation under the word */
-  .wordmark-note{ font-size: 11.5px; }
-
   .pipeline{ margin-left: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .pipeline__stack{ grid-column: 1; overflow: visible; }
   .pipeline__notes{ grid-column: 2; }
@@ -830,6 +776,9 @@ html.js [data-reveal].in{
     margin-right: calc(-1 * var(--gut));
     height: clamp(220px, 40vw, 360px);
   }
+  /* Align the route with the centre of the tablet's half-width stack. */
+  .landscape__route{ left: -29.1%; width: 129.1%; }
+  .landscape__photo{ width: 110vw; }
   /* stacked below the prose, the signal's long tail would run up through the
      feature list: clip it to the stack so the spine starts at the INPUT plate */
   .pipeline__svg{ overflow: hidden; }
@@ -842,16 +791,26 @@ html.js [data-reveal].in{
 @media (max-width: 640px){
   .brand{ font-size: 1.5rem; }
 
-  .wordmark{ font-size: 60vw; letter-spacing: -.03em; }
+  .hero__meta{ row-gap: 24px; padding-top: 26px; }
+  .hero__meta-a{ font-size: 15px; letter-spacing: .12em; }
+  .hero__meta-b{ font-size: 9px; margin-top: 0; }
+  .hero__tech{ margin-top: 0; font-size: 12px; gap: 16px; }
+  .hero__tech br{ display: none; }
+  .hero__tech .meta-rule{ display: none; }
+  .hero__body{ padding-top: 28px; }
+  .hero__actions{ width: auto; max-width: 100%; gap: 24px; }
+  .btn--accent{ min-height: 48px; }
+  .feat__desc, .note__desc{ font-size: 12px; }
   .wordmark-note{ font-size: 11.5px; }
 
-  .hero__meta-a{ grid-column: 1 / 5; }
+  .hero__meta-a{ grid-column: 1 / 4; }
   .hero__meta-b{ grid-column: 4 / 7; margin-left: 0; }
   .claim{ font-size: clamp(2.15rem, 10vw, 3.6rem); }
 
   .pipeline{ grid-template-columns: minmax(0, 1fr); }
   .pipeline__stack{ display: none; }
   .pipeline__notes{
+    margin-right: 0;
     grid-column: 1;
     padding-left: 36px;
   }
@@ -881,13 +840,14 @@ html.js [data-reveal].in{
   .note::after{ display: none; }
 
   .landscape{ height: clamp(190px, 62vw, 300px); }
-  .anno--right{ text-align: left; margin-top: 22px; }
+  .anno--right{ text-align: left; margin-top: 0; }
   .anno--right .anno__dash{ margin-left: 0; }
   .landscape .anno{ position: absolute; }
   .anno--left{ left: var(--gut); }
   .anno--right{ right: var(--gut); }
   .reg{ display: none; }
-  .landscape__photo{ right: calc(-1 * var(--gut)); }
+  .landscape__photo{ top: 36%; height: 64%; right: calc(-1 * var(--gut)); width: 110vw; }
+  .landscape__route{ left: 0; width: 100%; top: 30%; height: 70%; }
 
   .footer__inner{ justify-content: flex-start; }
 }

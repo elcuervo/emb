@@ -66,12 +66,29 @@
     <div class="hero__meta">
       <p class="hero__meta-a">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
       <p class="hero__meta-b">OPEN SOURCE<br>EMBEDDING SERVER<br>FOR A MORE<br>VECTOR-NATIVE WORLD.<span class="meta-rule" aria-hidden="true"></span></p>
-      <p class="hero__tech">RESP/3<br>384D<br>ONNX<span class="meta-rule meta-rule--end" aria-hidden="true"></span></p>
+      <p class="hero__tech"><span>RESP/3</span><br><span>384D</span><br><span>ONNX</span><span class="meta-rule meta-rule--end" aria-hidden="true"></span></p>
     </div>
 
     <!-- the giant word is the layout; the semantic h1 is the claim below -->
     <div class="hero__wordmark" aria-hidden="true">
-      <span class="wordmark"><span class="wm-e">e</span>mb</span>
+      <svg class="wordmark" viewBox="0 0 1086 480" focusable="false">
+        <defs>
+          <filter id="ink-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" seed="8"/>
+            <feColorMatrix type="saturate" values="0"/>
+            <feComponentTransfer><feFuncA type="linear" slope=".025"/></feComponentTransfer>
+            <feComposite in2="SourceGraphic" operator="in"/>
+            <feBlend in2="SourceGraphic" mode="screen"/>
+          </filter>
+        </defs>
+        <!-- Optical outlines follow the reference lockup, independently of fonts. -->
+        <g fill="currentColor" fill-rule="evenodd" filter="url(#ink-grain)">
+          <path d="M319 334H121C120 375 132 393 162 393C184 393 199 384 207 365H316C297 436 243 479 165 479C58 479-5 416-5 310C-5 203 63 131 168 131C269 131 319 197 319 296ZM123 269H203C203 236 191 219 166 219C142 219 127 235 123 269Z"/>
+          <path d="M321 467V140H433V162C450 140 470 131 495 131C531 131 552 147 564 177C581 147 608 131 645 131C705 131 737 164 737 225V461H619V263C619 244 614 237 603 237C589 237 580 250 580 274V461H463V266C463 245 459 237 448 237C435 237 430 250 430 274V467Z"/>
+          <path d="M747 463V0H865V164C887 142 914 131 947 131C1035 131 1091 198 1091 305C1091 415 1035 480 947 480C906 480 876 470 851 447V463ZM852 315C852 369 870 393 907 393C944 393 962 369 962 315C962 261 945 236 909 236C872 236 852 263 852 315Z"/>
+        </g>
+        <path d="M310 273 533 316 740 367 1034 459" fill="none" stroke="var(--bg)" stroke-width=".8" stroke-dasharray="6 2 1 4" opacity=".22"/>
+      </svg>
       <p class="wordmark-note">SAME<br>PROTOCOL.<br>A&nbsp;MORE<br>SEMANTIC<br>WORLD.</p>
     </div>
 
@@ -108,7 +125,7 @@
           <ol class="features__list">
             <li class="feat" data-reveal>
               <span class="feat__ico" aria-hidden="true">
-                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2.9 16.7 10.3 24.6 10.5 18.4 15.2 20.6 22.7 14 18.2 7.4 22.7 9.6 15.2 3.4 10.5 11.3 10.3Z" fill="url(#hatch)" stroke-width="1.9" stroke-linejoin="round"/><circle cx="24.2" cy="24.2" r="1.5" fill="currentColor" stroke="none"/></svg>
+                <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M16 2 20 10 29 13 24 21 25 29 16 26 7 29 8 20 3 13 12 10Z"/><path d="m16 2-4 8 8 0 4 11-8 5-8-6 4-10 4 16 4-16 9 3-13 3-13-3 5 7 16 1M7 29l9-13 9 13"/><path d="m12 10 4 6 4-6M8 20l8-4 8 5"/><g fill="currentColor"><circle cx="16" cy="2" r="1.5"/><circle cx="3" cy="13" r="1.5"/><circle cx="29" cy="13" r="1.5"/><circle cx="7" cy="29" r="1.5"/><circle cx="25" cy="29" r="1.5"/></g></svg>
               </span>
               <h3 class="feat__name">ONNX Runtime</h3>
               <p class="feat__desc">Fast, portable inference.</p>
@@ -116,7 +133,7 @@
 
             <li class="feat" data-reveal>
               <span class="feat__ico" aria-hidden="true">
-                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2.9c5.9 0 10.6 4 10.6 9.3 0 3.2-1.3 5.6-3.2 7.4-.9.9-2.2 2.1-3.2 3.3-.9 1-2.3 1.6-4.2 1.6s-3.3-.6-4.2-1.6c-1-1.2-2.3-2.4-3.2-3.3-1.9-1.8-3.2-4.2-3.2-7.4C3.4 6.9 8.1 2.9 14 2.9Z" fill="url(#hatch)" stroke-width="1.9"/><circle cx="10.4" cy="11.9" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.6" cy="11.9" r="1.5" fill="currentColor" stroke="none"/><path d="M9.7 16.1c1.1 1.7 2.8 2.6 4.3 2.6s3.2-.9 4.3-2.6" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"><path d="M6 13C6 6 10 2 16 2s10 4 10 11l3 12c1 4-4 6-7 3-4 2-8 2-12 0-4 3-8 1-7-3Z"/><ellipse cx="12" cy="13" rx="1.3" ry="2"/><ellipse cx="20" cy="13" rx="1.3" ry="2"/><path d="M12 19q4 4 8 0M9 18l-2 1m16-1 2 1M7 23l2 2m16-2-2 2" stroke-linecap="round"/></svg>
               </span>
               <h3 class="feat__name">Hugging Face</h3>
               <p class="feat__desc">Thousands of models, instantly.</p>
@@ -124,7 +141,7 @@
 
             <li class="feat" data-reveal>
               <span class="feat__ico" aria-hidden="true">
-                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3.4 25 9.4 14 15.4 3 9.4Z" fill="url(#hatch)"/><path d="M3 14.4 14 20.4 25 14.4"/><path d="M3 19.4 14 25.4 25 19.4"/></svg>
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3.4 25 9.4 14 15.4 3 9.4Z" fill="none"/><path d="M3 14.4 14 20.4 25 14.4"/><path d="M3 19.4 14 25.4 25 19.4"/></svg>
               </span>
               <h3 class="feat__name">Smart Batching</h3>
               <p class="feat__desc">High throughput, low latency.</p>
@@ -132,7 +149,7 @@
 
             <li class="feat" data-reveal>
               <span class="feat__ico" aria-hidden="true">
-                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4Z" fill="url(#hatch)" stroke="none"/><ellipse cx="14" cy="7.4" rx="9.6" ry="3.6"/><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4"/><path d="M4.4 13.6c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6"/></svg>
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4Z" fill="none" stroke="none"/><ellipse cx="14" cy="7.4" rx="9.6" ry="3.6"/><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4"/><path d="M4.4 13.6c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6"/></svg>
               </span>
               <h3 class="feat__name">LRU Cache</h3>
               <p class="feat__desc">Serve hot embeddings fast.</p>
@@ -140,7 +157,7 @@
 
             <li class="feat" data-reveal>
               <span class="feat__ico" aria-hidden="true">
-                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.6" y="3.6" width="9" height="9" fill="url(#hatch)"/><rect x="15.4" y="3.6" width="9" height="9"/><rect x="3.6" y="15.4" width="9" height="9"/><rect x="15.4" y="15.4" width="9" height="9" fill="url(#hatch)"/></svg>
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.6" y="3.6" width="9" height="9" fill="none"/><rect x="15.4" y="3.6" width="9" height="9"/><rect x="3.6" y="15.4" width="9" height="9"/><rect x="15.4" y="15.4" width="9" height="9" fill="none"/></svg>
               </span>
               <h3 class="feat__name">Multi-Model</h3>
               <p class="feat__desc">Load and switch models on the fly.</p>
@@ -148,7 +165,7 @@
 
             <li class="feat" data-reveal>
               <span class="feat__ico" aria-hidden="true">
-                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6.4 3.4h9.2l6 6v15.2h-15.2Z" fill="url(#hatch)"/><path d="M15.4 3.4v6h6"/><path d="M10 15.4h8M10 19.4h5.5" stroke-linecap="round"/></svg>
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6.4 3.4h9.2l6 6v15.2h-15.2Z" fill="none"/><path d="M15.4 3.4v6h6"/><path d="M10 15.4h8M10 19.4h5.5" stroke-linecap="round"/></svg>
               </span>
               <h3 class="feat__name">Lua Scripting</h3>
               <p class="feat__desc">Extend, compose, automate.</p>
@@ -164,151 +181,229 @@
           <div class="pipeline__stack">
             <svg class="pipeline__svg" viewBox="0 0 364 553" aria-hidden="true" focusable="false">
   <defs>
-    <pattern id="p-dots" width="34" height="34" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
-      <circle cx="5" cy="8" r="1.9"/><circle cx="21" cy="4" r="1.3"/>
-      <circle cx="12" cy="19" r="2.1"/><circle cx="28" cy="23" r="1.4"/>
-      <circle cx="3" cy="28" r="1.2"/><circle cx="22" cy="31" r="1.7"/>
-      <circle cx="14" cy="10" r="1"/><circle cx="8" cy="15" r=".9"/>
+    <filter id="plate-grain" x="-5%" y="-10%" width="110%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency=".65" numOctaves="3" seed="12"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".23"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in2="SourceGraphic" mode="multiply"/>
+    </filter>
+    <pattern id="edge-lines" width="23" height="24" patternUnits="userSpaceOnUse">
+      <path d="M0 0V24M2 0V24M0 7H23" fill="none" stroke="#F3F0E8" stroke-width=".6"/>
     </pattern>
     <pattern id="p-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
       <path d="M0 0H20M0 0V20" fill="none" stroke="#0B0B0B" stroke-width="1.1"/>
     </pattern>
-    <pattern id="p-fine" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
-      <path d="M0 0H9M0 0V9" fill="none" stroke="#F3F0E8" stroke-width=".55"/>
+    <pattern id="p-fine" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
+      <path d="M0 0H24M0 0V24" fill="none" stroke="#F3F0E8" stroke-width=".65"/>
     </pattern>
     <linearGradient id="ramp" x1="0" y1=".62" x2="1" y2=".06">
-      <stop offset="0" stop-color="#000"/><stop offset=".52" stop-color="#000"/>
-      <stop offset=".93" stop-color="#fff"/><stop offset="1" stop-color="#fff"/>
+      <stop offset="0" stop-color="#000"/><stop offset=".28" stop-color="#000"/>
+      <stop offset=".64" stop-color="#fff"/><stop offset="1" stop-color="#fff"/>
     </linearGradient>
     <mask id="ramp-mask"><rect x="0" y="0" width="364" height="553" fill="url(#ramp)"/></mask>
+    <mask id="signal-depth" maskUnits="userSpaceOnUse" x="0" y="-500" width="364" height="1100">
+      <rect x="0" y="-500" width="364" height="1100" fill="white"/>
+      <path d="M182 42V149M182 200V268M182 289V387M182 460V506" stroke="black" stroke-width="10"/>
+    </mask>
     <g id="cube">
-      <path d="M-13 -6.125 L0 -1.25 L0 12.75 L-13 7.875Z" fill="var(--cl)"/>
-      <path d="M13 -6.125 L0 -1.25 L0 12.75 L13 7.875Z" fill="var(--cr)"/>
+      <ellipse cx="3" cy="20" rx="17" ry="5" fill="#0B0B0B" opacity=".16"/>
+      <path d="M-13 -6.125 L0 -1.25 L0 21 L-13 16.125Z" fill="var(--cl)"/>
+      <path d="M13 -6.125 L0 -1.25 L0 21 L13 16.125Z" fill="var(--cr)"/>
       <path d="M0 -11 L13 -6.125 L0 -1.25 L-13 -6.125Z" fill="var(--ct)"/>
     </g>
   </defs>
 
       <!-- ── 01 INPUT -->
-      <g class="slab" data-slab="input">
-        <path d="M364 65 L182 125 L182 153 L364 93Z" fill="#B6B2A7"/>
-        <path d="M0 65 L182 125 L182 153 L0 93Z" fill="#9E9A90"/>
+      <g class="slab" data-slab="input" filter="url(#plate-grain)">
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="#C9C6BD"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="#BDBAB1"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="url(#edge-lines)" opacity=".3"/>
         <path d="M182 6 L364 65 L182 125 L0 65Z" fill="#EFECE3"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="url(#p-dots)"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="#0B0B0B" stroke-width="1"/>
-        <text class="plate-label" x="26" y="162.7" transform="matrix(1 0.326 -1 0.326 182 6)">TEXT</text>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="url(#p-grid)" opacity=".065"/>
+        <ellipse cx="188.0" cy="18.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="204.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="220.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="96.0" cy="49.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="228.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="244.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="120.0" cy="41.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="136.0" cy="67.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="268.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="144.0" cy="34.7" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="160.0" cy="60.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="176.0" cy="85.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="168.0" cy="27.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="184.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="200.0" cy="78.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="192.0" cy="20.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="208.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="224.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="100.0" cy="51.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="232.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="248.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="124.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="140.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="272.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="148.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="164.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="180.0" cy="87.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="172.0" cy="29.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="188.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="204.0" cy="80.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="196.0" cy="22.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="212.0" cy="47.7" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="228.0" cy="73.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="104.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="236.0" cy="40.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="252.0" cy="66.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="128.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="144.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="276.0" cy="58.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="152.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="168.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="184.0" cy="89.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="176.0" cy="31.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="192.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="208.0" cy="82.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="200.0" cy="24.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 74)">TEXT</text>
       </g>
 
       <!-- ── 02 INFERENCE -->
-      <g class="slab" data-slab="inference">
-        <path d="M364 195 L182 255 L182 283 L364 223Z" fill="#B6B2A7"/>
-        <path d="M0 195 L182 255 L182 283 L0 223Z" fill="#9E9A90"/>
-        <path d="M182 136 L364 195 L182 255 L0 195Z" fill="#E9E6DC"/>
-        <path d="M182 136 L364 195 L182 255 L0 195Z" fill="url(#p-grid)" opacity=".5"/>
+      <g class="slab" data-slab="inference" filter="url(#plate-grain)">
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="#C9C6BD"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="#BDBAB1"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#E9E6DC"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-grid)" opacity=".5"/>
         <g mask="url(#ramp-mask)">
-          <path d="M182 136 L364 195 L182 255 L0 195Z" fill="#0B0B0B"/>
-          <path d="M182 136 L364 195 L182 255 L0 195Z" fill="url(#p-fine)" opacity=".45"/>
+          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#0B0B0B"/>
+          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-fine)" opacity=".45"/>
         </g>
-        <path d="M182 136 L364 195 L182 255 L0 195Z" fill="none" stroke="#0B0B0B" stroke-width="1"/>
-        <text class="plate-label" x="26" y="162.7" transform="matrix(1 0.326 -1 0.326 182 136)">MODEL</text>
+        <path d="M206.0 148.5L206.0 138.5L70.0 182.8M70.0 182.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 146.3L297.0 183.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 146.0L93.0 190.3M93.0 190.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 153.8L274.0 191.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 153.5L116.0 197.8M116.0 197.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 161.3L251.0 198.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 161.0L139.0 205.3M139.0 205.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 168.8L228.0 206.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 168.5L162.0 212.8M162.0 212.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 176.3L205.0 213.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 148.5L206.0 126.5L70.0 170.8M70.0 170.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 134.3L297.0 171.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 134.0L93.0 178.3M93.0 178.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 141.8L274.0 179.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 141.5L116.0 185.8M116.0 185.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 149.3L251.0 186.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 149.0L139.0 193.3M139.0 193.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 156.8L228.0 194.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 156.5L162.0 200.8M162.0 200.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 164.3L205.0 201.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 193)">MODEL</text>
       </g>
 
       <!-- ── 03 EMBEDDING -->
-      <g class="slab" data-slab="embedding">
-        <path d="M364 325 L182 385 L182 413 L364 353Z" fill="#B6B2A7"/>
-        <path d="M0 325 L182 385 L182 413 L0 353Z" fill="#9E9A90"/>
-        <path d="M182 266 L364 325 L182 385 L0 325Z" fill="#E9E6DC"/>
+      <g class="slab" data-slab="embedding" filter="url(#plate-grain)">
+        <path d="M364 303 L182 363 L182 387 L364 327Z" fill="#C9C6BD"/>
+        <path d="M0 303 L182 363 L182 387 L0 327Z" fill="#BDBAB1"/>
+        <path d="M0 303 L182 363 L182 387 L0 327Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 303 L182 363 L182 387 L364 327Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="#E9E6DC"/>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="url(#p-grid)" opacity=".09"/>
         <g class="cube-field">
-          <use href="#cube" class="cb cb--d" transform="translate(177.0 285.1) scale(0.79)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(156.2 286.9) scale(0.76)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(202.9 289.8) scale(0.41)"/>
-          <use href="#cube" class="cb cb--o" transform="translate(224.7 290.9) scale(0.44)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(226.4 292.0) scale(0.81)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(161.2 295.1) scale(0.71)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(168.0 295.3) scale(0.37)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(239.3 297.7) scale(0.36)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(141.3 300.0) scale(0.42)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(184.1 300.1) scale(0.57)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(250.1 300.2) scale(0.56)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(198.2 301.4) scale(0.50)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(197.2 303.8) scale(0.50)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(210.8 303.9) scale(0.57)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(191.1 304.8) scale(0.38)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(236.1 304.8) scale(0.38)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(148.8 305.4) scale(0.58)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(99.1 305.5) scale(0.43)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(116.0 306.1) scale(0.56)"/>
-          <use href="#cube" class="cb cb--o" transform="translate(253.6 307.8) scale(0.64)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(118.5 309.0) scale(0.68)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(272.3 310.1) scale(0.49)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(214.1 310.2) scale(0.76)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(151.9 310.7) scale(0.81)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(192.6 313.5) scale(0.50)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(200.1 314.2) scale(0.49)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(184.3 315.8) scale(0.66)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(71.9 316.4) scale(0.76)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(103.7 317.1) scale(0.63)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(268.8 317.9) scale(0.45)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(125.0 318.6) scale(0.61)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(118.8 320.2) scale(0.56)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(67.8 322.6) scale(0.70)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(167.3 322.8) scale(0.75)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(163.6 323.1) scale(0.62)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(128.2 324.9) scale(0.77)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(264.2 325.1) scale(0.74)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(239.7 325.9) scale(0.57)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(276.0 325.9) scale(0.47)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(133.2 327.6) scale(0.38)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(227.8 327.7) scale(0.61)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(292.2 327.8) scale(0.61)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(214.6 328.0) scale(0.60)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(236.6 329.8) scale(0.65)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(240.9 330.1) scale(0.51)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(113.6 330.9) scale(0.62)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(145.3 332.1) scale(0.51)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(277.4 332.6) scale(0.39)"/>
-          <use href="#cube" class="cb cb--o" transform="translate(246.7 332.7) scale(0.55)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(303.3 332.9) scale(0.37)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(241.3 334.6) scale(0.67)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(166.6 335.1) scale(0.51)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(299.8 335.7) scale(0.67)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(161.9 336.6) scale(0.41)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(170.3 338.0) scale(0.44)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(184.3 338.2) scale(0.52)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(118.5 343.3) scale(0.48)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(254.3 345.9) scale(0.70)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(179.3 346.3) scale(0.59)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(97.9 346.5) scale(0.78)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(142.7 347.8) scale(0.43)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(194.1 348.1) scale(0.39)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(115.0 348.3) scale(0.64)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(174.6 349.2) scale(0.75)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(166.6 349.9) scale(0.54)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(217.6 352.3) scale(0.77)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(198.8 352.9) scale(0.81)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(188.7 353.0) scale(0.62)"/>
-          <use href="#cube" class="cb cb--o" transform="translate(222.3 357.4) scale(0.55)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(222.8 360.7) scale(0.54)"/>
-          <use href="#cube" class="cb cb--g" transform="translate(190.2 361.4) scale(0.50)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(198.3 362.0) scale(0.62)"/>
-          <use href="#cube" class="cb cb--d" transform="translate(168.9 363.5) scale(0.64)"/>
-          <use href="#cube" class="cb cb--w" transform="translate(196.2 366.5) scale(0.46)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(190.5 261.2) scale(0.30)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(209.3 266.7) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(169.1 269.0) scale(0.30)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(231.5 272.4) scale(0.27)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(190.8 274.3) scale(0.28)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(141.6 275.6) scale(0.40)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(243.3 279.5) scale(0.35)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(204.9 281.0) scale(0.33)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(125.3 282.3) scale(0.23)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(165.6 283.2) scale(0.31)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(261.8 284.4) scale(0.41)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(221.4 285.0) scale(0.26)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(181.7 288.6) scale(0.40)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(140.5 289.8) scale(0.26)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(240.8 290.3) scale(0.42)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(280.4 291.2) scale(0.26)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(100.7 292.0) scale(0.42)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(197.7 293.3) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(156.5 295.9) scale(0.28)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(115.4 296.0) scale(0.32)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(302.3 296.2) scale(0.32)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(259.6 296.9) scale(0.29)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(217.2 298.2) scale(0.38)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(77.5 299.4) scale(0.24)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(135.0 301.1) scale(0.40)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(177.3 302.5) scale(0.29)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(317.5 303.6) scale(0.35)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(279.2 303.8) scale(0.36)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(237.8 305.4) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(95.3 305.4) scale(0.34)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(198.8 307.2) scale(0.24)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(158.4 308.6) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(294.4 309.9) scale(0.30)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(116.3 310.2) scale(0.39)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(254.6 312.8) scale(0.28)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(212.4 313.8) scale(0.31)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(168.9 314.1) scale(0.35)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(271.4 316.9) scale(0.40)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(132.4 317.1) scale(0.41)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(231.6 317.7) scale(0.29)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(191.8 319.0) scale(0.42)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(145.7 321.1) scale(0.26)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(250.2 323.7) scale(0.32)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(212.9 326.5) scale(0.23)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(165.8 327.2) scale(0.43)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(225.4 330.8) scale(0.23)"/>
+          <use href="#cube" class="cb cb--o" transform="translate(187.9 333.0) scale(0.35)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(203.4 338.7) scale(0.24)"/>
         </g>
-        <path d="M182 266 L364 325 L182 385 L0 325Z" fill="none" stroke="#0B0B0B" stroke-width="1"/>
-        <text class="plate-label" x="26" y="162.7" transform="matrix(1 0.326 -1 0.326 182 266)">VECTORS</text>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 312)">VECTORS</text>
       </g>
 
       <!-- ── 04 SERVE -->
-      <g class="slab" data-slab="serve">
-        <path d="M364 455 L182 515 L182 543 L364 483Z" fill="#B6B2A7"/>
-        <path d="M0 455 L182 515 L182 543 L0 483Z" fill="#9E9A90"/>
-        <path d="M182 396 L364 455 L182 515 L0 455Z" fill="#111110"/>
-        <path d="M182 396 L364 455 L182 515 L0 455Z" fill="url(#p-fine)" opacity=".45"/>
-        <path d="M182 396 L364 455 L182 515 L0 455Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
-        <text class="plate-label plate-label--light" x="26" y="162.7" transform="matrix(1 0.326 -1 0.326 182 396)">REDIS</text>
+      <g class="slab" data-slab="serve" filter="url(#plate-grain)">
+        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="#292823"/>
+        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="#171714"/>
+        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="#111110"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="url(#p-fine)" opacity=".45"/>
+        <path d="M206.0 386.5L206.0 376.5L70.0 420.8M70.0 420.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 384.3L297.0 421.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 384.0L93.0 428.3M93.0 428.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 391.8L274.0 429.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 391.5L116.0 435.8M116.0 435.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 399.3L251.0 436.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 399.0L139.0 443.3M139.0 443.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 406.8L228.0 444.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 406.5L162.0 450.8M162.0 450.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 414.3L205.0 451.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 386.5L206.0 364.5L70.0 408.8M70.0 408.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 372.3L297.0 409.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 372.0L93.0 416.3M93.0 416.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 379.8L274.0 417.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 379.5L116.0 423.8M116.0 423.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 387.3L251.0 424.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 387.0L139.0 431.3M139.0 431.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 394.8L228.0 432.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 394.5L162.0 438.8M162.0 438.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 402.3L205.0 439.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
+        <text class="plate-label plate-label--light" transform="matrix(1 -0.326 1 0.326 48 431)">REDIS</text>
       </g>
 
-      <!-- the signal rides ON TOP of the stack -->
-      <line class="sig" x1="182" y1="-520" x2="182" y2="553" pathLength="1"/>
+      <!-- The signal enters each surface and passes behind its front edge. -->
+      <line class="sig" x1="182" y1="-490" x2="182" y2="553" pathLength="1" mask="url(#signal-depth)"/>
 </svg>
           </div>
 
@@ -345,31 +440,15 @@
           <span class="reg" aria-hidden="true"></span>
 
           <div class="landscape__plate">
-            <svg class="landscape__photo" viewBox="0 0 1900 790" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <defs>
-                <clipPath id="skyline" clipPathUnits="userSpaceOnUse">
-                  <path d="M0 790 L164 332 L196 312 L228 318 L244 308 L260 314 L324 264 L356 268 L404 258 L468 278 L516 274 L532 294 L580 276 L596 260 L676 244 L724 252 L772 274 L852 182 L964 132 L996 108 L1028 60 L1044 54 L1060 78 L1076 70 L1092 92 L1108 150 L1124 164 L1140 162 L1156 172 L1172 268 L1188 278 L1220 228 L1236 234 L1268 260 L1300 310 L1332 316 L1380 348 L1412 352 L1460 338 L1476 348 L1492 324 L1508 320 L1556 342 L1604 342 L1620 360 L1652 340 L1684 358 L1700 322 L1748 338 L1900 790 Z"/>
-                </clipPath>
-                <pattern id="print-dots" width="9" height="9" patternUnits="userSpaceOnUse">
-                  <circle cx="2.2" cy="2.2" r="1.1" fill="#0B0B0B"/>
-                  <circle cx="6.8" cy="6.8" r=".8" fill="#0B0B0B"/>
-                </pattern>
-              </defs>
-              <image href="assets/img/mountain.jpg" x="-140" y="-590" width="2600" height="1722"
-                     preserveAspectRatio="none" clip-path="url(#skyline)"/>
-              <!-- print screen: clipped to the traced skyline so it never
-                   prints a hard rectangle over the paper -->
-              <rect x="0" y="0" width="1900" height="790" fill="url(#print-dots)"
-                    clip-path="url(#skyline)" opacity=".14" style="mix-blend-mode:multiply"/>
-            </svg>
+            <img class="landscape__photo" src="assets/img/terrain-v2.png" width="2172" height="724" alt="" decoding="async">
             <svg class="landscape__route" viewBox="0 0 630 272" preserveAspectRatio="none" aria-hidden="true" focusable="false">
               <!-- the signal becomes the ridge line: the spine drops to the
                    summit, then one continuous route falls away down both
                    flanks (vertices traced from the poster's overlay) -->
               <path class="route--signal" vector-effect="non-scaling-stroke" pathLength="1"
-                    d="M273 0 L273 82 L229 108 L184 138 L143 159 L99 197 L66 219 L33 247 L0 259"/>
+                    d="M273 0 L273 86 L249 102 L227 119 L204 134 L181 141 L165 148 L148 166 L136 178 L115 195 L98 203 L77 211 L56 228 L29 249 L-13 263 L-43 272"/>
               <path class="route--signal" vector-effect="non-scaling-stroke" pathLength="1"
-                    d="M273 82 L309 99 L331 116 L353 153 L386 176 L419 195 L452 204 L485 215 L518 230 L551 244 L595 265 L630 272"/>
+                    d="M273 86 L292 97 L306 97 L322 108 L328 119 L335 127 L340 141 L355 160 L366 165 L383 178 L420 197 L465 214 L512 233 L574 261 L618 272"/>
             </svg>
           </div>
         </section>

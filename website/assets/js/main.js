@@ -2,7 +2,7 @@
    emb — interaction
    Nothing here carries information: every panel, label and route is
    already in the markup. This file only sequences motion, syncs the
-   hover states, and wires the small client-example tabs.
+   hover states, and draws the terrain route.
    ══════════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -128,7 +128,7 @@
         var rect = frame.getBoundingClientRect();
         var vh = window.innerHeight || doc.clientHeight;
         /* 0 when the frame is about to enter, 1 once it is in view */
-        var progress = clamp((vh * 0.94 - rect.top) / (vh * 0.96), 0, 1);
+        var progress = clamp((vh - rect.top) / rect.height, 0, 1);
         routes.forEach(function (r) { r.style.strokeDashoffset = String(1 - progress); });
       };
 

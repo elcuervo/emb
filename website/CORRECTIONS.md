@@ -11,7 +11,10 @@
 > feature-list numbers in this file to be wrong. The addendum lists what
 > changed; the first-pass numbers are kept for history.
 
-Source of truth: `/tmp/rootshell-uploads/drop-20260911-195139.png`
+Current reference: `/tmp/rootshell-uploads/drop-20260912-180449.png`.
+The fourth-pass addendum below supersedes earlier implementation notes.
+
+Original source: `/tmp/rootshell-uploads/drop-20260911-195139.png`
 (referred to below as **the poster**; frame is **1086 × 1448**, aspect **1 : 1.333**).
 
 Method: the poster frame was rendered with a pixel grid overlay, and the current
@@ -618,3 +621,79 @@ clipped at that breakpoint so the spine starts at the INPUT plate.
 - **Wide tracking (`.2em`–`.29em`) on mono annotations** is flagged as a
   body-text antipattern; here it *is* the poster's treatment, restricted to
   short uppercase metadata blocks.
+
+---
+
+# Addendum — third pass (12 September 2026)
+
+Compared the current implementation with the newly supplied 1086 × 1448
+reference using local Chrome screenshots. The earlier claim that the font
+wordmark was the closest available match left a substantial visible gap.
+
+## Changes
+
+- Replaced the giant font lockup with three native SVG outlines following the
+  reference: horizontal `e` terminal, narrow `m` arches, taller `b`, and the
+  larger oval counter. Its visible bounds now run from y87 to y567, with the
+  x-height beginning at y218. The counter caption fits at approximately 11.5px.
+  Added restrained ink grain and the diagonal print crease.
+- Corrected the CTA and feature typography, sentence-case GitHub underline,
+  metadata treatment, quiet footer rule, and feature icons. Kept the confirmed
+  **2026** copyright year. The main button starts at y875.
+- Regenerated the pipeline with 119-unit pitch, 24-unit thickness, 46 input
+  marks, and 48 smaller, taller blocks. Light slab edges, black SERVE side
+  faces, surface grain, larger plate lettering and a darker INFERENCE ramp
+  bring the diagram closer to the reference. Tall return brackets replace
+  the small elbows, and note text sits to the right of the plate edge.
+- Widened the existing mountain crop to bleed left beneath the feature list;
+  the knockout edge now follows an irregular slope. Moved the registration
+  mark and left-aligned the right annotation.
+- Fixed the route's scroll calculation. Previously its denominator was almost
+  an entire viewport, so neither branch finished drawing at the page bottom.
+  It now finishes when the terrain has entered view.
+- Fixed overlapping mobile metadata, separated the technical values, kept
+  terrain annotations above the image, and aligned the tablet route with the
+  stacked diagram. Preserved reduced motion and the static no-JavaScript view.
+
+## Measurements and limits
+
+At 1086px wide: page height **1449px**, wordmark top **86.8px**, wordmark bottom
+**566.8px**, main CTA top **875px**, footer rule **1394px**. The reference frame
+is 1448px high. Desktop and mobile screenshots were inspected directly.
+
+The mountain is still a different photograph, and the pipeline remains SVG
+artwork rather than the reference's photographic rendering. These are the
+main remaining visual differences; this is not a pixel-identical replica.
+
+Browser checks cover 320, 390, 768, 980, 1086, 1440 and 1920px widths for
+horizontal overflow, heading overflow, font loading, asset failures, duplicate
+IDs, six features and four stages. Motion checks cover completed routes and
+reveals at the bottom of the page, plus note hover and keyboard focus.
+
+---
+
+# Addendum — fourth pass (continued visual refinement)
+
+- Replaced the snowy placeholder with `assets/img/terrain-v2.png`, generated
+  from the supplied poster as a visual reference. The new dry, craggy massif
+  has the broader foothills, twin peak, dark left face and right saddle of
+  the reference. Its light background blends into the paper; it is not an
+  alpha-transparent PNG. Removing the landscape's isolated stacking context
+  is necessary for that blend to work correctly. The old photograph remains
+  in the repository but is no longer used by the page.
+- Refined the orange ridge route, including its lower-left endpoint at the
+  footer and the short stepped bends on the right shoulder.
+- Added ruled slab edges, stronger print texture, cube contact shadows and
+  lifted wire lattices. Corrected plate labels to rise toward the right along
+  the plate plane. The signal now disappears behind each plate's front edge,
+  matching the depth visible in the reference; this supersedes C1.3's earlier
+  assumption that the entire line should remain visible over every surface.
+- Simplified `tools/gen-isometric.py` to own only the pipeline and added
+  `--write` for deterministic updates to `index.html`. It no longer emits
+  obsolete terrain clip paths or requires manual copy/paste.
+
+The 1086px composition still measures 1449px high, with the footer at y1394.
+The seven-width browser checks, keyboard focus, note hover, completed route
+drawing and JavaScript syntax checks pass. The generated terrain and vector
+pipeline remain interpretations of the reference, rather than its original
+source assets. Generation prompts are in `assets/img/terrain-v2.md`.
