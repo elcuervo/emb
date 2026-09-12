@@ -347,6 +347,10 @@ version:
 	cd gems/emb && bundle
 	cd gems/emb-server && bundle
 
+# Serve the static product site (website/) at http://localhost:8080
+website port="8080":
+    python3 -m http.server {{port}} --directory website
+
 # Clean build artifacts
 clean:
     rm -rf bin/ dist/

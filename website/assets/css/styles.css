@@ -1,0 +1,781 @@
+/* ══════════════════════════════════════════════════════════════════════
+   emb — neo-brutalist technical poster
+   ─────────────────────────────────────────────────────────────────────
+   00 tokens          05 features
+   01 base            06 pipeline
+   02 primitives      07 landscape
+   03 masthead        08 footer
+   04 hero            09 motion / responsive
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── 00 tokens ─────────────────────────────────────────────────────── */
+:root{
+  --bg:        #F3F0E8;
+  --fg:        #0B0B0B;
+  --accent:    #FF5A1F;
+  --muted:     #77756F;
+  --rule:      #B8B5AC;
+  --rule-soft: #D5D1C6;
+  --leader:    #A9A69D;
+
+  --maxw: 1720px;
+  --gut: clamp(20px, 3.2vw, 56px);
+
+  /* the composition's backbone: the signal axis, the plate centres and the
+     route's branch point all sit on this line (measured from the poster) */
+  --spine-x: 65%;
+  /* the isometric stack: half-width 197 x 2, ratio .3046, pitch 130 */
+  --plate: clamp(230px, 36.3vw, 500px);
+  /* the prose column: 5 of 12 shells */
+  --col-prose: 41.5%;
+
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --display: "Archivo Black", "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* ── 01 base ───────────────────────────────────────────────────────── */
+*, *::before, *::after{ box-sizing: border-box; }
+
+html{
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  background: var(--bg);
+  overflow-x: clip;
+}
+
+body{
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  font-synthesis-weight: none;
+  /* NOT `antialiased`: the poster's ink is heavier than macOS antialiasing */
+  -webkit-font-smoothing: auto;
+  overflow-x: clip;
+}
+
+/* archival paper grain */
+body::after{
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  opacity: .045;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+h1, h2, h3, p, dl, dd, ol, ul{ margin: 0; }
+ol, ul{ padding: 0; list-style: none; }
+img{ max-width: 100%; display: block; }
+a{ color: inherit; text-decoration: none; }
+button{ font: inherit; color: inherit; }
+
+::selection{ background: var(--accent); color: var(--fg); }
+:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.sr-only{
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.skip{
+  position: absolute; left: -9999px; top: 0; z-index: 200;
+  background: var(--fg); color: var(--bg);
+  padding: 10px 16px; font: 600 12px/1 var(--mono); letter-spacing: .1em;
+}
+.skip:focus{ left: 8px; top: 8px; }
+
+.defs{ position: absolute; width: 0; height: 0; overflow: hidden; }
+
+[id]{ scroll-margin-top: clamp(70px, 6vw, 96px); }
+
+.shell{
+  width: 100%;
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--gut);
+}
+.mono{ font-family: var(--mono); }
+
+/* ── 02 primitives ─────────────────────────────────────────────────── */
+.rule-head{
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 1.6vw, 22px);
+  font-family: var(--mono);
+  font-size: clamp(10.5px, .95vw, 13px);
+  font-weight: 700;
+  letter-spacing: .16em;
+  white-space: nowrap;
+}
+.rule-head__rule{
+  flex: 0 0 clamp(58px, 7.4vw, 92px);
+  height: 1.5px;
+  background: var(--fg);
+}
+
+.btn{
+  --shift: 0px;
+  --shadow-c: var(--fg);
+  --shadow-s: 0px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.1em;
+  padding: .95em 1.5em;
+  border: 1px solid var(--fg);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: clamp(15px, 1.95vw, 22px);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-s) var(--shadow-s) 0 0 var(--shadow-c);
+  translate: var(--shift) var(--shift);
+  transition: translate .12s ease, box-shadow .12s ease, background-color .12s ease, color .12s ease;
+}
+.btn--sm{
+  padding: .5em .85em;
+  font-size: clamp(12px, 1.05vw, 15px);
+  box-shadow: none;
+}
+.btn--dark{ background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn--dark:hover{ background: var(--accent); color: var(--fg); border-color: var(--accent); }
+.btn--accent{ background: var(--accent); color: var(--fg); --shadow-s: 5px; }
+.btn--accent:hover{ --shift: 2px; --shadow-s: 3px; }
+.btn--accent:active{ --shift: 5px; --shadow-s: 0px; }
+
+.ghlink{
+  display: inline-flex;
+  align-items: center;
+  gap: .55em;
+  padding-bottom: 3px;
+  border-bottom: 2px solid var(--muted);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.15vw, 14px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  transition: border-color .15s ease, color .15s ease;
+}
+.ghlink__ico{ width: 1.35em; height: 1.35em; flex: none; }
+.ghlink:hover{ color: var(--accent); border-color: var(--accent); }
+
+/* ── 03 masthead ───────────────────────────────────────────────────── */
+.masthead{
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.masthead__inner{
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 26px);
+  min-height: clamp(52px, 5.7vw, 74px);
+  padding-block: 6px;
+}
+.masthead__brand{ display: flex; align-items: center; gap: clamp(12px, 1.4vw, 22px); min-width: 0; }
+.brand{
+  font-family: var(--display);
+  font-size: clamp(1.35rem, 2.3vw, 2.05rem);
+  line-height: .9;
+  letter-spacing: -.04em;
+}
+.vrule{ width: 1px; height: clamp(24px, 2.2vw, 34px); background: var(--rule); flex: none; }
+.masthead__tagline{
+  font-family: var(--mono);
+  font-size: clamp(10px, .82vw, 12px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.nav{ display: flex; align-items: center; justify-content: center; gap: clamp(16px, 2.2vw, 38px); }
+.nav a{
+  position: relative;
+  padding-block: 6px;
+  font-family: var(--mono);
+  font-size: clamp(11px, .92vw, 13px);
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.nav a::after{
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .18s ease;
+}
+.nav a:hover::after{ transform: scaleX(1); }
+
+.masthead__cta{ justify-self: end; }
+
+/* ── 04 hero ───────────────────────────────────────────────────────── */
+.hero{
+  position: relative;
+  overflow: clip;
+  /* no trailing gap: the terrain's base IS the footer rule on the poster */
+  padding-block: clamp(16px, 2vw, 30px) 0;
+}
+
+.hero__meta{
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 28px);
+  align-items: start;
+  /* the poster has no rule under this band */
+  padding-bottom: clamp(16px, 2vw, 30px);
+}
+.hero__meta-a{
+  grid-column: 1 / 4;
+  font-family: var(--mono);
+  font-size: clamp(15px, 1.85vw, 26px);
+  font-weight: 500;
+  letter-spacing: .07em;
+  line-height: 1.45;
+}
+.hero__meta-b{
+  grid-column: 5 / 9;
+  font-family: var(--mono);
+  font-size: clamp(11.5px, 1.05vw, 14.5px);
+  font-weight: 500;
+  letter-spacing: .08em;
+  line-height: 1.4;
+}
+.hero__tech{
+  grid-column: 9 / 13;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: clamp(15px, 1.85vw, 26px);
+  font-weight: 500;
+  letter-spacing: .06em;
+  line-height: 1.45;
+}
+.meta-rule{
+  display: block;
+  width: 33px;
+  height: 2px;
+  margin-top: 13px;
+  background: var(--fg);
+}
+.meta-rule--end{ margin-left: auto; }
+
+/* ── the giant word ────────────────────────────────────────────────── */
+.hero__wordmark{
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}
+.wordmark{
+  display: block;
+  font-family: var(--display);
+  font-size: clamp(6.5rem, 41.6vw, 44rem);
+  line-height: .72;
+  letter-spacing: -.048em;
+  color: var(--fg);
+  white-space: nowrap;
+  /* full bleed: the word runs off both edges of the paper */
+  margin-left: calc(-1 * var(--gut));
+  transform: scaleX(1.18);
+  transform-origin: 0 100%;
+  /* the poster's ink is solid black carrying an irregular photocopy speckle,
+     not a regular halftone screen: an opaque tile with sparse punched holes */
+  -webkit-mask-image: url("../img/speckle.svg");
+  mask-image: url("../img/speckle.svg");
+  -webkit-mask-size: 240px 240px;
+  mask-size: 240px 240px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  font-variant-ligatures: none;
+}
+/* annotation riding inside the counter of the `b` */
+.wordmark-note{
+  position: absolute;
+  left: 80.5%;
+  bottom: 27%;
+  font-family: var(--mono);
+  font-size: clamp(11px, .95vw, 13px);
+  font-weight: 500;
+  letter-spacing: .08em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* ── hero body: prose left, pipeline + terrain right ───────────────── */
+.hero__body{
+  display: grid;
+  grid-template-columns: var(--col-prose) minmax(0, 1fr);
+  padding-top: clamp(24px, 3.2vw, 52px);
+}
+.hero__prose{
+  grid-column: 1;
+  min-width: 0;
+  padding-right: clamp(22px, 3vw, 56px);
+}
+
+.claim{
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(2rem, 3.95vw, 4.7rem);
+  line-height: .95;
+  letter-spacing: -.005em;
+}
+.claim span{ display: block; }
+
+.hero__sub{
+  margin-top: clamp(18px, 2vw, 30px);
+  max-width: 40ch;
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.34vw, 15.5px);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.hero__actions{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: clamp(18px, 2.6vw, 40px);
+  margin-top: clamp(24px, 2.8vw, 42px);
+}
+
+/* ── 05 features ───────────────────────────────────────────────────── */
+.features{ margin-top: clamp(46px, 5.6vw, 86px); }
+.features__list{ margin-top: clamp(22px, 2.4vw, 34px); }
+.feat{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(14px, 1.4vw, 22px);
+  align-items: start;
+  padding-block: clamp(11px, 1.05vw, 17px);
+}
+.feat__ico{
+  grid-row: span 2;
+  width: clamp(26px, 2.5vw, 34px);
+  height: clamp(26px, 2.5vw, 34px);
+  margin-top: 1px;
+}
+.feat__ico svg{ width: 100%; height: 100%; display: block; }
+.feat__name{
+  font-family: var(--sans);
+  font-size: clamp(13px, 1.28vw, 16px);
+  font-weight: 700;
+  letter-spacing: .01em;
+  line-height: 1.2;
+}
+.feat__desc{
+  grid-column: 2;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: clamp(11.5px, 1vw, 13px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── 06 pipeline ───────────────────────────────────────────────────── */
+.hero__pipeline{ grid-column: 2; min-width: 0; }
+
+.pipeline{
+  display: grid;
+  grid-template-columns: var(--plate) minmax(0, 1fr);
+  align-items: stretch;
+  /* put the plate centre (not the column edge) on the signal axis */
+  margin-left: calc(40.2% - var(--plate) / 2);
+}
+.pipeline__stack{
+  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+}
+.pipeline__svg{ display: block; width: 100%; height: auto; overflow: visible; }
+/* the spine starts just under the masthead, as on the poster */
+.sig{ fill: none; stroke: var(--accent); stroke-width: 5; }
+html.js .sig{
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset .85s cubic-bezier(.22, .8, .28, 1) .15s;
+}
+html.js.is-ready .sig{ stroke-dashoffset: 0; }
+
+/* slabs activate in sequence: INPUT → INFERENCE → EMBEDDINGS → SERVE */
+.slab{
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transition: opacity .45s ease, transform .55s cubic-bezier(.2, .8, .3, 1);
+}
+html.js .slab{ opacity: 0; transform: translateY(-14px); }
+html.js .pipeline.is-live .slab{ opacity: 1; transform: translateY(0); }
+html.js .pipeline.is-live .slab:nth-of-type(1){ transition-delay: 0s; }
+html.js .pipeline.is-live .slab:nth-of-type(2){ transition-delay: .17s; }
+html.js .pipeline.is-live .slab:nth-of-type(3){ transition-delay: .34s; }
+html.js .pipeline.is-live .slab:nth-of-type(4){ transition-delay: .51s; }
+html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
+
+.port{ fill: var(--accent); }
+html.js .port{ opacity: 0; transition: opacity .3s ease; }
+html.js .pipeline.is-live .port{ opacity: 1; transition-delay: .45s; }
+html.js .pipeline.is-live .slab:nth-of-type(2) .port{ transition-delay: .62s; }
+html.js .pipeline.is-live .slab:nth-of-type(3) .port{ transition-delay: .79s; }
+html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
+
+/* isometric plate labels */
+.plate-label{
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  fill: var(--fg);
+}
+.plate-label--light{ fill: var(--bg); }
+
+/* isometric blocks, tinted through custom properties */
+.cb{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
+.cb--w{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
+.cb--g{ --ct:#B8B4A9; --cl:#8E8B82; --cr:#7C7970; }
+.cb--d{ --ct:#3A3833; --cl:#1E1D19; --cr:#141310; }
+.cb--o{ --ct:#FF5A1F; --cl:#C7430F; --cr:#A63709; }
+
+/* annotations + stepped leaders */
+.pipeline__notes{
+  grid-column: 2;
+  min-width: 0;
+  position: relative;
+  padding-left: 10px;
+}
+.note{
+  position: absolute;
+  left: var(--leader);
+  right: 0;
+  transform: translateY(-50%);
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 0;
+  align-items: baseline;
+}
+.note--1{ top: 12.04%; }
+.note--2{ top: 35.77%; }
+.note--3{ top: 59.49%; }
+.note--4{ top: 83.21%; }
+
+/* leader: plate edge → right → down → right (three segments, hairline grey) */
+.note::before{
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--leader));
+  top: calc(50% - 26px);
+  width: calc(var(--leader) - 15px);
+  height: 1px;
+  background: var(--leader);
+}
+.note::after{
+  content: "";
+  position: absolute;
+  left: -15px;
+  top: calc(50% - 26px);
+  width: 15px;
+  height: 26px;
+  border-left: 1px solid var(--leader);
+  border-bottom: 1px solid var(--leader);
+}
+
+.note__num{
+  grid-column: 1;
+  font-family: var(--mono);
+  font-size: clamp(10.5px, 1.1vw, 13px);
+  font-weight: 500;
+  letter-spacing: .06em;
+  color: var(--muted);
+  transition: color .2s ease;
+}
+.note__label{
+  grid-column: 2;
+  font-family: var(--sans);
+  font-size: clamp(12.5px, 1.24vw, 16px);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.note__desc{
+  grid-column: 2;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: clamp(8.5px, .88vw, 11.5px);
+  line-height: 1.55;
+  color: var(--muted);
+  transition: color .25s ease;
+}
+
+.note:hover .note__num,
+.note.is-hot .note__num{ color: var(--accent); }
+.note:hover .note__desc,
+.note.is-hot .note__desc{ color: var(--fg); }
+
+/* ── 07 landscape ──────────────────────────────────────────────────── */
+.landscape{
+  position: relative;
+  z-index: 1;
+  /* the spine hands over to the ridge line with no gap */
+  margin-top: 0;
+  /* reach the viewport's right edge, and back to the pipeline column */
+  margin-right: calc(-1 * var(--gut));
+  margin-left: calc(-1 * (40.2% - var(--plate) / 2));
+  /* .4302 of the width: the frame of the source photograph (2600 x 1078) */
+  height: clamp(210px, 26.7vw, 370px);
+}
+
+.landscape__plate{
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+/* the terrain: an inline SVG whose clip-path is the skyline traced from the
+   photograph, so the frame is knocked straight out of the paper — no plate,
+   no vignette, no colour wash. */
+.landscape__photo{
+  position: absolute;
+  /* the ridge sits below the annotation band, the base is cut by the footer rule */
+  top: 14%;
+  right: calc(-1 * clamp(0px, 1.8vw, 30px));
+  height: 86%;
+  width: auto;
+  display: block;
+  filter: grayscale(1) contrast(2) brightness(.5);
+}
+/* printing screen over the terrain, so it reads as the same ink as the plates */
+.landscape__plate::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: .22;
+  background-image: radial-gradient(circle at 50% 50%, #0B0B0B 0 .8px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+.landscape__route{
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+  overflow: visible;
+}
+.route--signal{
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
+
+.anno{
+  position: absolute;
+  z-index: 4;
+  top: clamp(28px, 3.2vw, 48px);
+  font-family: var(--mono);
+  font-size: clamp(11px, 1.02vw, 14px);
+  font-weight: 700;
+  letter-spacing: .17em;
+  line-height: 1.4;
+  color: var(--fg);
+}
+.anno--left{ left: 0; }
+.anno--right{ right: var(--gut); text-align: right; }
+.anno__dash{
+  display: block;
+  width: 33px;
+  height: 2px;
+  margin-top: 14px;
+  background: var(--fg);
+}
+.anno--right .anno__dash{ margin-left: auto; }
+
+/* registration mark */
+.reg{
+  position: absolute;
+  z-index: 4;
+  top: clamp(-14px, -1vw, -4px);
+  right: calc(var(--gut) + 51px);
+  width: 38px;
+  height: 38px;
+}
+.reg::before,
+.reg::after{
+  content: "";
+  position: absolute;
+  background: var(--fg);
+}
+.reg::before{ left: 50%; top: 0; width: 1px; height: 100%; }
+.reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
+
+/* ── 08 footer ─────────────────────────────────────────────────────── */
+.footer{ border-top: 1px solid var(--fg); background: var(--bg); }
+.footer__inner{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  min-height: clamp(52px, 4.2vw, 64px);
+  padding-block: 10px;
+}
+.footer__copy,
+.footer__mark{
+  font-size: clamp(10px, .82vw, 12px);
+  font-weight: 500;
+  letter-spacing: .13em;
+  color: var(--muted);
+}
+.footer__mark{ color: var(--fg); }
+
+/* ── 09 motion + responsive ───────────────────────────────────────── */
+html.js [data-reveal]{ opacity: 0; translate: 0 14px; }
+html.js [data-reveal].in{
+  opacity: 1;
+  translate: none;
+  transition: opacity .5s ease, translate .6s cubic-bezier(.2, .8, .3, 1);
+}
+
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior: auto; }
+  html.js [data-reveal]{ opacity: 1; translate: none; }
+  html.js .sig,
+  html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
+  html.js .slab{ opacity: 1; transform: none; }
+  html.js .port{ opacity: 1; }
+  .btn{ translate: none; }
+  *, *::before, *::after{
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+@media (max-width: 1180px){
+  .nav a{ letter-spacing: .1em; }
+}
+
+/* the poster's tagline survives down to the small tablet */
+@media (max-width: 980px){
+  .masthead__tagline{ display: none; }
+  .vrule{ display: none; }
+}
+
+/* tablet: the pipeline drops under the copy and keeps its isometric form */
+@media (max-width: 900px){
+  .masthead__inner{ grid-template-columns: auto 1fr; }
+  .nav{ display: none; }
+  .masthead__cta{ grid-column: 2; }
+
+  .hero__meta{ grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .hero__meta-a{ grid-column: 1 / 4; }
+  .hero__meta-b{ grid-column: 4 / 7; }
+  .hero__tech{
+    grid-column: 1 / 7;
+    text-align: left;
+    display: flex;
+    gap: 22px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .meta-rule--end{ margin-left: 0; }
+
+  .hero__body{ grid-template-columns: minmax(0, 1fr); }
+  .hero__prose{ grid-column: 1; padding-right: 0; }
+  .hero__pipeline{ grid-column: 1; margin-top: clamp(34px, 6vw, 66px); }
+
+  .pipeline{ margin-left: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pipeline__stack{ grid-column: 1; overflow: hidden; }
+  .pipeline__notes{ grid-column: 2; }
+  .note__desc{ font-size: clamp(10px, 1.1vw, 12px); }
+
+  .landscape{
+    margin-left: calc(-1 * var(--gut));
+    margin-right: calc(-1 * var(--gut));
+    height: clamp(220px, 40vw, 360px);
+  }
+  .anno--left{ left: var(--gut); }
+  .reg{ top: 14px; right: calc(var(--gut) + 34vw); }
+  .pipeline__svg{ max-width: 100%; }
+}
+
+/* mobile: dramatic, vertical, orange line visible throughout */
+@media (max-width: 640px){
+  .brand{ font-size: 1.5rem; }
+
+  .wordmark{ font-size: 48vw; letter-spacing: -.05em; margin-right: -6vw; }
+  .wordmark-note{
+    position: static;
+    margin-top: 16px;
+    padding-right: 6vw;
+    text-align: right;
+    font-size: 11.5px;
+  }
+
+  .hero__meta-a{ grid-column: 1 / 5; }
+  .hero__meta-b{ grid-column: 5 / 7; }
+  .claim{ font-size: clamp(2.15rem, 10vw, 3.6rem); }
+
+  .pipeline{ grid-template-columns: minmax(0, 1fr); }
+  .pipeline__stack{ display: none; }
+  .pipeline__notes{
+    grid-column: 1;
+    padding-left: 36px;
+  }
+  .pipeline__notes::before{
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: var(--accent);
+  }
+  .note{
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto;
+    transform: none;
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding: 0 0 22px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .note--1, .note--2, .note--3, .note--4{ top: auto; }
+  .note:last-child{ margin-bottom: 0; }
+  .note::before,
+  .note::after{ display: none; }
+
+  .landscape{ height: clamp(190px, 62vw, 300px); }
+  .anno{ position: static; }
+  .anno--right{ text-align: left; margin-top: 22px; }
+  .anno--right .anno__dash{ margin-left: 0; }
+  .landscape .anno{ position: absolute; }
+  .anno--left{ left: var(--gut); }
+  .anno--right{ right: var(--gut); }
+  .reg{ display: none; }
+  .landscape__photo{ right: calc(-1 * var(--gut)); }
+
+  .footer__inner{ justify-content: flex-start; }
+}

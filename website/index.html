@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emb — text in. floats out.</title>
+<meta name="description" content="emb is a fast text-embeddings server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache, multi-model queries.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — text in. floats out.">
+<meta property="og:description" content="A fast embedding server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache.">
+<meta property="og:image" content="assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — text in. floats out.">
+<meta name="twitter:description" content="A fast embedding server that speaks the Redis protocol.">
+<meta name="twitter:image" content="assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<link rel="preload" href="assets/fonts/archivo-black-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- shared engraving hatch for the feature plates -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <defs>
+    <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <path d="M0 0V5" stroke="currentColor" stroke-width="1.1"/>
+    </pattern>
+  </defs>
+</svg>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="#top" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="https://github.com/elcuervo/emb#commands" rel="noopener">Docs</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+      <a href="https://github.com/elcuervo/emb#configuration" rel="noopener">Models</a>
+      <a href="https://github.com/elcuervo/emb/issues" rel="noopener">Community</a>
+    </nav>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="https://github.com/elcuervo/emb#quick-start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ══════════════════════════════════════════════════════════════ HERO -->
+<section class="hero" id="top" aria-labelledby="claim">
+  <div class="shell">
+
+    <div class="hero__meta">
+      <p class="hero__meta-a">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
+      <p class="hero__meta-b">OPEN SOURCE<br>EMBEDDING SERVER<br>FOR A MORE<br>VECTOR-NATIVE WORLD.<span class="meta-rule" aria-hidden="true"></span></p>
+      <p class="hero__tech">RESP/3<br>384D<br>ONNX<span class="meta-rule meta-rule--end" aria-hidden="true"></span></p>
+    </div>
+
+    <!-- the giant word is the layout; the semantic h1 is the claim below -->
+    <div class="hero__wordmark" aria-hidden="true">
+      <span class="wordmark">emb</span>
+      <p class="wordmark-note">SAME<br>PROTOCOL.<br>A&nbsp;MORE<br>SEMANTIC<br>WORLD.</p>
+    </div>
+
+    <div class="hero__body">
+
+      <div class="hero__prose">
+        <h1 class="claim" id="claim">
+          <span>A fast</span>
+          <span>embedding server</span>
+          <span>that speaks the</span>
+          <span>Redis protocol.</span>
+        </h1>
+
+        <p class="hero__sub">
+          Drop-in compatible. Production ready.
+          Turn text, images, and more into vectors
+          at massive speed.
+        </p>
+
+        <div class="hero__actions">
+          <a class="btn btn--accent" href="https://github.com/elcuervo/emb#quick-start">Get Started <span aria-hidden="true">&#8594;</span></a>
+          <a class="ghlink" href="https://github.com/elcuervo/emb" rel="noopener">
+            <span>View on GitHub</span>
+            <svg class="ghlink__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.1 3.29 9.42 7.86 10.95.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.11-.76.41-1.27.74-1.56-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.42.36.79 1.08.79 2.18 0 1.57-.01 2.84-.01 3.23 0 .31.21.68.8.56A11.52 11.52 0 0 0 23.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
+          </a>
+        </div>
+
+        <section class="features" aria-labelledby="features-h">
+          <h2 class="rule-head" id="features-h">
+            BUILT FOR REAL SYSTEMS
+            <span class="rule-head__rule" aria-hidden="true"></span>
+          </h2>
+
+          <ol class="features__list">
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3.2 16.2 11.8 24.8 14 16.2 16.2 14 24.8 11.8 16.2 3.2 14 11.8 11.8Z" stroke-linejoin="round"/><path d="M6 6h5M8.5 3.5v5" stroke-width="1.5"/><circle cx="21.8" cy="21.8" r="1.6" fill="currentColor" stroke="none"/></svg>
+              </span>
+              <h3 class="feat__name">ONNX Runtime</h3>
+              <p class="feat__desc">Fast, portable inference.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3.6c-5.8 0-10.4 4.3-10.4 9.7 0 5.4 4.6 9.7 10.4 9.7s10.4-4.3 10.4-9.7c0-2.5-1-4.8-2.7-6.5v3.1a1 1 0 0 1-2 0V4.4c0-1 .5-1.6 1.4-1.8" stroke-linecap="round"/><circle cx="10.3" cy="12.4" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.7" cy="12.4" r="1.5" fill="currentColor" stroke="none"/><path d="M9.6 16.6c1.2 1.7 2.9 2.6 4.4 2.6s3.2-.9 4.4-2.6" stroke-linecap="round"/></svg>
+              </span>
+              <h3 class="feat__name">Hugging Face</h3>
+              <p class="feat__desc">Thousands of models, instantly.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3.4 25 9.4 14 15.4 3 9.4Z"/><path d="M3 14.4 14 20.4 25 14.4"/><path d="M3 19.4 14 25.4 25 19.4"/></svg>
+              </span>
+              <h3 class="feat__name">Smart Batching</h3>
+              <p class="feat__desc">High throughput, low latency.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="14" cy="7.4" rx="9.6" ry="3.6"/><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4"/><path d="M4.4 13.6c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6"/></svg>
+              </span>
+              <h3 class="feat__name">LRU Cache</h3>
+              <p class="feat__desc">Serve hot embeddings fast.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.6" y="3.6" width="9" height="9"/><rect x="15.4" y="3.6" width="9" height="9"/><rect x="3.6" y="15.4" width="9" height="9"/><rect x="15.4" y="15.4" width="9" height="9"/></svg>
+              </span>
+              <h3 class="feat__name">Multi-Model</h3>
+              <p class="feat__desc">Load and switch models on the fly.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6.4 3.4h9.2l6 6v15.2h-15.2Z"/><path d="M15.4 3.4v6h6"/><path d="M10 15.4h8M10 19.4h5.5" stroke-linecap="round"/></svg>
+              </span>
+              <h3 class="feat__name">Lua Scripting</h3>
+              <p class="feat__desc">Extend, compose, automate.</p>
+            </li>
+          </ol>
+        </section>
+      </div>
+
+      <div class="hero__pipeline">
+        <div class="pipeline" id="pipeline">
+
+          <div class="pipeline__stack">
+            <svg class="pipeline__svg" viewBox="0 0 394 548" aria-hidden="true" focusable="false">
+    <defs>
+      <pattern id="p-dots" width="34" height="34" patternUnits="userSpaceOnUse" patternTransform="matrix(1 .3046 -1 .3046 0 0)">
+        <circle cx="5" cy="8" r="1.9"/><circle cx="21" cy="4" r="1.3"/>
+        <circle cx="12" cy="19" r="2.1"/><circle cx="28" cy="23" r="1.4"/>
+        <circle cx="3" cy="28" r="1.2"/><circle cx="22" cy="31" r="1.7"/>
+        <circle cx="14" cy="10" r="1"/><circle cx="8" cy="15" r=".9"/>
+      </pattern>
+      <pattern id="p-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="matrix(1 .3046 -1 .3046 0 0)">
+        <path d="M0 0H20M0 0V20" fill="none" stroke="#0B0B0B" stroke-width="1.1"/>
+      </pattern>
+      <pattern id="p-fine" width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="matrix(1 .3046 -1 .3046 0 0)">
+        <path d="M0 0H11M0 0V11" fill="none" stroke="#F3F0E8" stroke-width=".7"/>
+      </pattern>
+      <linearGradient id="ramp" x1="0" y1=".62" x2="1" y2=".06">
+        <stop offset="0" stop-color="#000"/><stop offset=".34" stop-color="#000"/>
+        <stop offset=".88" stop-color="#fff"/><stop offset="1" stop-color="#fff"/>
+      </linearGradient>
+      <mask id="ramp-mask"><rect x="0" y="0" width="394" height="548" fill="url(#ramp)"/></mask>
+      <g id="cube">
+        <path d="M-13 -6.125 L0 -1.25 L0 12.75 L-13 7.875Z" fill="var(--cl)"/>
+        <path d="M13 -6.125 L0 -1.25 L0 12.75 L13 7.875Z" fill="var(--cr)"/>
+        <path d="M0 -11 L13 -6.125 L0 -1.25 L-13 -6.125Z" fill="var(--ct)"/>
+      </g>
+    </defs>
+
+        <!-- ── 01 INPUT -->
+        <g class="slab" data-slab="input">
+          <path d="M394 66 L197 126 L197 148 L394 88Z" fill="#B6B2A7"/>
+          <path d="M0 66 L197 126 L197 148 L0 88Z" fill="#9E9A90"/>
+          <path d="M197 6 L394 66 L197 126 L0 66Z" fill="#EFECE3"/>
+          <path d="M197 6 L394 66 L197 126 L0 66Z" fill="url(#p-dots)"/>
+          <path d="M197 6 L394 66 L197 126 L0 66Z" fill="none" stroke="#0B0B0B" stroke-width="1"/>
+          <text class="plate-label" x="28" y="165" transform="matrix(1 .3046 -1 .3046 197 6)">TEXT</text>
+          <ellipse class="port" cx="197" cy="66" rx="11" ry="4.2"/>
+        </g>
+
+        <!-- ── 02 INFERENCE -->
+        <g class="slab" data-slab="inference">
+          <path d="M394 196 L197 256 L197 278 L394 218Z" fill="#B6B2A7"/>
+          <path d="M0 196 L197 256 L197 278 L0 218Z" fill="#9E9A90"/>
+          <path d="M197 136 L394 196 L197 256 L0 196Z" fill="#E9E6DC"/>
+          <path d="M197 136 L394 196 L197 256 L0 196Z" fill="url(#p-grid)" opacity=".5"/>
+          <g mask="url(#ramp-mask)">
+            <path d="M197 136 L394 196 L197 256 L0 196Z" fill="#0B0B0B"/>
+            <path d="M197 136 L394 196 L197 256 L0 196Z" fill="url(#p-fine)" opacity=".6"/>
+          </g>
+          <path d="M197 136 L394 196 L197 256 L0 196Z" fill="none" stroke="#0B0B0B" stroke-width="1"/>
+          <text class="plate-label" x="28" y="165" transform="matrix(1 .3046 -1 .3046 197 136)">MODEL</text>
+          <ellipse class="port" cx="197" cy="196" rx="11" ry="4.2"/>
+        </g>
+
+        <!-- ── 03 EMBEDDING -->
+        <g class="slab" data-slab="embedding">
+          <path d="M394 326 L197 386 L197 408 L394 348Z" fill="#B6B2A7"/>
+          <path d="M0 326 L197 386 L197 408 L0 348Z" fill="#9E9A90"/>
+          <path d="M197 266 L394 326 L197 386 L0 326Z" fill="#E9E6DC"/>
+          <g class="cube-field">
+            <use href="#cube" class="cb cb--d" transform="translate(191.5 284.7) scale(1.51)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(168.7 286.6) scale(1.45)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(245.9 291.7) scale(1.55)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(174.1 295.0) scale(1.38)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(181.6 295.1) scale(0.74)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(260.0 297.6) scale(0.73)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(152.2 300.0) scale(0.84)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(214.8 301.4) scale(0.98)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(213.7 303.9) scale(0.97)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(228.7 304.0) scale(1.10)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(124.4 306.2) scale(1.09)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(75.9 316.8) scale(1.46)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(110.8 317.5) scale(1.22)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(292.5 318.3) scale(0.89)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(134.3 319.1) scale(1.18)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(180.8 323.4) scale(1.44)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(176.8 323.7) scale(1.19)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(137.8 325.6) scale(1.47)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(260.5 326.6) scale(1.11)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(300.4 326.6) scale(0.93)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(247.4 328.4) scale(1.18)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(318.2 328.5) scale(1.18)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(257.0 330.6) scale(1.25)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(156.6 333.0) scale(1.00)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(302.0 333.5) scale(0.78)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(330.4 333.8) scale(0.74)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(180.0 336.0) scale(1.00)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(184.2 339.0) scale(0.86)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(199.5 339.3) scale(1.01)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(127.2 344.4) scale(0.95)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(194.1 347.5) scale(1.14)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(153.7 349.1) scale(0.86)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(210.3 349.4) scale(0.77)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(123.3 349.6) scale(1.24)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(188.9 350.5) scale(1.44)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(180.0 351.3) scale(1.06)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(215.5 354.4) scale(1.55)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(204.3 354.4) scale(1.20)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(241.9 362.3) scale(1.04)"/>
+            <use href="#cube" class="cb cb--g" transform="translate(206.0 363.1) scale(0.99)"/>
+            <use href="#cube" class="cb cb--d" transform="translate(182.6 365.3) scale(1.23)"/>
+            <use href="#cube" class="cb cb--w" transform="translate(212.6 368.3) scale(0.91)"/>
+          </g>
+          <path d="M197 266 L394 326 L197 386 L0 326Z" fill="none" stroke="#0B0B0B" stroke-width="1"/>
+          <text class="plate-label" x="28" y="165" transform="matrix(1 .3046 -1 .3046 197 266)">VECTORS</text>
+          <ellipse class="port" cx="197" cy="326" rx="11" ry="4.2"/>
+        </g>
+
+        <!-- ── 04 SERVE -->
+        <g class="slab" data-slab="serve">
+          <path d="M394 456 L197 516 L197 538 L394 478Z" fill="#B6B2A7"/>
+          <path d="M0 456 L197 516 L197 538 L0 478Z" fill="#9E9A90"/>
+          <path d="M197 396 L394 456 L197 516 L0 456Z" fill="#111110"/>
+          <path d="M197 396 L394 456 L197 516 L0 456Z" fill="url(#p-fine)" opacity=".6"/>
+          <path d="M197 396 L394 456 L197 516 L0 456Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
+          <text class="plate-label plate-label--light" x="28" y="165" transform="matrix(1 .3046 -1 .3046 197 396)">REDIS</text>
+          <ellipse class="port" cx="197" cy="456" rx="11" ry="4.2"/>
+        </g>
+
+        <!-- the signal rides ON TOP of the stack -->
+        <line class="sig" x1="197" y1="-520" x2="197" y2="548" pathLength="1"/>
+  </svg>
+          </div>
+
+          <ol class="pipeline__notes" aria-label="Architecture: four stages of the embedding pipeline">
+            <li class="note note--1" data-note="input" data-reveal>
+              <span class="note__num">01</span>
+              <h3 class="note__label">INPUT</h3>
+              <p class="note__desc">Raw text, documents,<br>or images.</p>
+            </li>
+            <li class="note note--2" data-note="inference" data-reveal>
+              <span class="note__num">02</span>
+              <h3 class="note__label">INFERENCE</h3>
+              <p class="note__desc">ONNX Runtime,<br>optimized execution.</p>
+            </li>
+            <li class="note note--3" data-note="embedding" data-reveal>
+              <span class="note__num">03</span>
+              <h3 class="note__label">EMBEDDINGS</h3>
+              <p class="note__desc">High-dimensional<br>vectors (e.g. 384D).</p>
+            </li>
+            <li class="note note--4" data-note="serve" data-reveal>
+              <span class="note__num">04</span>
+              <h3 class="note__label">SERVE</h3>
+              <p class="note__desc">Speak Redis (RESP/3).<br>Fast. Familiar. Powerful.</p>
+            </li>
+          </ol>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════ TERRAIN -->
+        <section class="landscape" aria-labelledby="scale-h">
+          <h2 class="sr-only" id="scale-h">Scale</h2>
+
+          <p class="anno anno--left" data-reveal>EMBED<br>EVERYTHING<br>FURTHER<span class="anno__dash" aria-hidden="true"></span></p>
+          <p class="anno anno--right" data-reveal>HIGHER<br>DIMENSIONS<br>BRIGHTER<br>APPLICATIONS<span class="anno__dash" aria-hidden="true"></span></p>
+          <span class="reg" aria-hidden="true"></span>
+
+          <div class="landscape__plate">
+            <svg class="landscape__photo" viewBox="0 0 2100 870" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <defs>
+                <clipPath id="skyline" clipPathUnits="userSpaceOnUse">
+                  <path d="M0 870 L156 314 L172 334 L220 316 L236 300 L316 284 L364 292 L412 314 L492 222 L604 172 L636 148 L668 100 L684 94 L700 118 L716 110 L732 132 L748 190 L764 204 L780 202 L796 212 L812 308 L828 318 L860 268 L876 274 L908 300 L940 350 L972 356 L1020 388 L1052 392 L1100 378 L1116 388 L1132 364 L1148 360 L1196 382 L1244 382 L1260 400 L1292 380 L1324 398 L1340 362 L1388 378 L1404 366 L1452 362 L1484 360 L1516 370 L1580 350 L1660 282 L1708 286 L1788 378 L1836 382 L1852 396 L1868 324 L1900 298 L1916 300 L2100 870 L2100 870 Z"/>
+                </clipPath>
+              </defs>
+              <image href="assets/img/mountain.jpg" x="-500" y="-550" width="2600" height="1722"
+                     preserveAspectRatio="none" clip-path="url(#skyline)"/>
+            </svg>
+            <svg class="landscape__route" viewBox="0 0 630 272" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <path class="route--signal" vector-effect="non-scaling-stroke" pathLength="1"
+                    d="M243 0 L243 14 L185 95 L120 140 L60 200 L0 246"/>
+              <path class="route--signal" vector-effect="non-scaling-stroke" pathLength="1"
+                    d="M243 14 L290 105 L335 152 L382 192 L452 236 L560 268 L630 288"/>
+            </svg>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2024 emb. Open source, forever.</p>
+    <p class="footer__mark mono">TEXT IN. FLOATS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>
