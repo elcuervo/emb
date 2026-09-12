@@ -8,30 +8,57 @@
    04 hero            09 motion / responsive
    ══════════════════════════════════════════════════════════════════════ */
 
+/* ── 00a fonts ───────────────────────────────────────────────────────
+   Self-hosted, preloaded in <head>. Each file is the *only* cut we ship,
+   so the weight ranges are declared wide: any requested weight maps to the
+   real file instead of letting the browser synthesise a thinner/fatter one
+   (`body{font-synthesis-weight:none}` then guarantees no fake bold). */
+@font-face{
+  font-family: "Inter";
+  src: url("../fonts/inter-900-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face{
+  font-family: "Archivo";
+  src: url("../fonts/archivo-var-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face{
+  font-family: "JetBrains Mono";
+  src: url("../fonts/jetbrains-mono-var-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── 00 tokens ─────────────────────────────────────────────────────── */
 :root{
   --bg:        #F3F0E8;
   --fg:        #0B0B0B;
   --accent:    #FF5A1F;
-  --muted:     #77756F;
+  --muted:     #6B6963;
   --rule:      #B8B5AC;
   --rule-soft: #D5D1C6;
-  --leader:    #A9A69D;
+  --leader-c:  #A9A69D;
+  /* the stepped leader: its run, and the notes' inline padding (= the gap
+     between the plate's right edge and the note's own box) */
+  --lead: 31px;
 
   --maxw: 1720px;
-  --gut: clamp(20px, 3.2vw, 56px);
+  --gut: clamp(22px, 3.7vw, 64px);
 
-  /* the composition's backbone: the signal axis, the plate centres and the
-     route's branch point all sit on this line (measured from the poster) */
-  --spine-x: 65%;
-  /* the isometric stack: half-width 197 x 2, ratio .3046, pitch 130 */
-  --plate: clamp(230px, 36.3vw, 500px);
+  /* the isometric stack: half-width 182 x 2, ratio .326, pitch 130 */
+  --plate: clamp(220px, 33.5vw, 470px);
   /* the prose column: 5 of 12 shells */
   --col-prose: 41.5%;
 
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --display: "Archivo Black", "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --display: "Inter", "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 /* ── 01 base ───────────────────────────────────────────────────────── */
@@ -78,6 +105,9 @@ button{ font: inherit; color: inherit; }
 
 ::selection{ background: var(--accent); color: var(--fg); }
 :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the accent button's own fill is the accent, so its ring has to invert */
+.btn--accent:focus-visible,
+.btn--dark:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
 
 .sr-only{
   position: absolute; width: 1px; height: 1px;
@@ -111,11 +141,11 @@ button{ font: inherit; color: inherit; }
   font-family: var(--mono);
   font-size: clamp(10.5px, .95vw, 13px);
   font-weight: 700;
-  letter-spacing: .16em;
+  letter-spacing: .1em;
   white-space: nowrap;
 }
 .rule-head__rule{
-  flex: 0 0 clamp(58px, 7.4vw, 92px);
+  flex: 0 0 clamp(64px, 7.6vw, 100px);
   height: 1.5px;
   background: var(--fg);
 }
@@ -143,13 +173,14 @@ button{ font: inherit; color: inherit; }
   transition: translate .12s ease, box-shadow .12s ease, background-color .12s ease, color .12s ease;
 }
 .btn--sm{
-  padding: .5em .85em;
-  font-size: clamp(12px, 1.05vw, 15px);
+  padding: .85em 1.05em;
+  font-size: clamp(12px, 1.5vw, 16.5px);
+  letter-spacing: .01em;
   box-shadow: none;
 }
 .btn--dark{ background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .btn--dark:hover{ background: var(--accent); color: var(--fg); border-color: var(--accent); }
-.btn--accent{ background: var(--accent); color: var(--fg); --shadow-s: 5px; }
+.btn--accent{ background: var(--accent); color: var(--fg); --shadow-s: 5px; padding-block: .83em; }
 .btn--accent:hover{ --shift: 2px; --shadow-s: 3px; }
 .btn--accent:active{ --shift: 5px; --shadow-s: 0px; }
 
@@ -160,7 +191,7 @@ button{ font: inherit; color: inherit; }
   padding-bottom: 3px;
   border-bottom: 2px solid var(--muted);
   font-family: var(--mono);
-  font-size: clamp(12px, 1.15vw, 14px);
+  font-size: clamp(11px, 1.18vw, 14px);
   font-weight: 500;
   letter-spacing: .01em;
   transition: border-color .15s ease, color .15s ease;
@@ -178,30 +209,45 @@ button{ font: inherit; color: inherit; }
 }
 .masthead__inner{
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* three clusters: brand+tagline, nav, CTA. The poster's nav block sits on
+     55.6% of the frame — right of centre — and its CTA is flush with the
+     sheet's right gutter, so the nav is anchored to its right end instead of
+     being centred in the leftover space. */
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: clamp(12px, 1.6vw, 26px);
   min-height: clamp(52px, 5.7vw, 74px);
-  padding-block: 6px;
+  /* the poster centres the masthead's content low in the band: the rule
+     still lands on 62, the type sits 6px under the optical centre */
+  padding-top: 14px;
+  padding-bottom: 2px;
 }
-.masthead__brand{ display: flex; align-items: center; gap: clamp(12px, 1.4vw, 22px); min-width: 0; }
+.masthead__brand{ display: flex; align-items: center; gap: clamp(14px, 2.65vw, 44px); min-width: 0; }
 .brand{
   font-family: var(--display);
-  font-size: clamp(1.35rem, 2.3vw, 2.05rem);
+  font-size: clamp(1.6rem, 3.15vw, 3rem);
   line-height: .9;
   letter-spacing: -.04em;
 }
 .vrule{ width: 1px; height: clamp(24px, 2.2vw, 34px); background: var(--rule); flex: none; }
 .masthead__tagline{
   font-family: var(--mono);
-  font-size: clamp(10px, .82vw, 12px);
+  font-size: clamp(9.5px, 1.02vw, 12.5px);
   font-weight: 500;
-  letter-spacing: .1em;
-  line-height: 1.35;
+  letter-spacing: .2em;
+  line-height: 1.28;
   white-space: nowrap;
 }
 
-.nav{ display: flex; align-items: center; justify-content: center; gap: clamp(16px, 2.2vw, 38px); }
+.nav{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(18px, 3.34vw, 56px);
+  /* the poster leaves 10.3vw of air between the nav and the CTA */
+  justify-self: end;
+  margin-right: 10.3vw;
+}
 .nav a{
   position: relative;
   padding-block: 6px;
@@ -238,33 +284,42 @@ button{ font: inherit; color: inherit; }
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: clamp(14px, 2vw, 28px);
   align-items: start;
+  /* the poster hangs the meta band well below the masthead, leaving the
+     `b` ascender to rise past it; the wordmark's negative margin absorbs it */
+  padding-top: clamp(38px, 4.2vw, 64px);
   /* the poster has no rule under this band */
   padding-bottom: clamp(16px, 2vw, 30px);
 }
 .hero__meta-a{
   grid-column: 1 / 4;
   font-family: var(--mono);
-  font-size: clamp(15px, 1.85vw, 26px);
+  font-size: clamp(15px, 1.89vw, 27px);
   font-weight: 500;
-  letter-spacing: .07em;
-  line-height: 1.45;
+  /* the poster's top-left block is set very wide — 0.29em, not 0.07em */
+  letter-spacing: .29em;
+  line-height: 1.27;
 }
 .hero__meta-b{
-  grid-column: 5 / 9;
+  grid-column: 6 / 9;
+  margin-left: -26px;
+  /* the poster hangs this block 21px above the left one */
+  margin-top: clamp(-26px, -1.95vw, -12px);
   font-family: var(--mono);
-  font-size: clamp(11.5px, 1.05vw, 14.5px);
+  font-size: clamp(10.5px, .96vw, 13px);
   font-weight: 500;
-  letter-spacing: .08em;
-  line-height: 1.4;
+  letter-spacing: .13em;
+  line-height: 1.45;
 }
 .hero__tech{
   grid-column: 9 / 13;
   text-align: right;
+  /* and this one 25px above it */
+  margin-top: clamp(-30px, -2.3vw, -14px);
   font-family: var(--mono);
-  font-size: clamp(15px, 1.85vw, 26px);
+  font-size: clamp(13.5px, 1.6vw, 23px);
   font-weight: 500;
-  letter-spacing: .06em;
-  line-height: 1.45;
+  letter-spacing: .08em;
+  line-height: 1.55;
 }
 .meta-rule{
   display: block;
@@ -280,19 +335,42 @@ button{ font: inherit; color: inherit; }
   position: relative;
   z-index: 3;
   pointer-events: none;
+  /* full bleed: the word runs off both edges of the paper, centred on the
+     viewport rather than on the shell's content box */
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);
 }
 .wordmark{
-  display: block;
+  display: flex;
+  justify-content: center;
   font-family: var(--display);
-  font-size: clamp(6.5rem, 41.6vw, 44rem);
+  /* 53.9vw puts the x-height at ~323px at a 1086px viewport — the poster's
+     ink band, measured (reference x-height 323, baseline 546) */
+  font-size: clamp(7.3rem, 53.9vw, 56rem);
   line-height: .72;
-  letter-spacing: -.048em;
+  /* pull the ink up under the masthead so the `b` ascender rises beside the
+     meta band, as on the poster, instead of leaving a dead band of paper */
+  margin-top: -.2267em;
+  /* the poster's logotype is set to near-zero sidebearings: the `e`/`m`
+     touch and `m`/`b` clear each other by ~10px. Measured at 1086px with
+     -.03em the gaps were 20px and 32px, so the tracking closes ~22px per
+     gap (pre-scale) to land on the poster's spacing. */
+  letter-spacing: -.067em;
   color: var(--fg);
   white-space: nowrap;
-  /* full bleed: the word runs off both edges of the paper */
-  margin-left: calc(-1 * var(--gut));
-  transform: scaleX(1.18);
-  transform-origin: 0 100%;
+  /* wider than the viewport: the speckle mask below only paints inside the
+     border box, so the box has to be big enough to let the word bleed at
+     every breakpoint (the word is ~2.17x its font-size wide) */
+  width: 132vw;
+  margin-inline: calc(50% - 66vw);
+  /* Inter 900 already matches the poster's stem/x-height (0.35) and its `b`
+     counter; the light compression lands the wordmark on the poster's ink
+     width, and the hairline stroke buys back the weight the compression
+     takes out of the vertical stems */
+  transform: scaleX(.93);
+  transform-origin: center bottom;
+  -webkit-text-stroke: .014em currentColor;
+  paint-order: stroke fill;
   /* the poster's ink is solid black carrying an irregular photocopy speckle,
      not a regular halftone screen: an opaque tile with sparse punched holes */
   -webkit-mask-image: url("../img/speckle.svg");
@@ -303,16 +381,28 @@ button{ font: inherit; color: inherit; }
   mask-repeat: repeat;
   font-variant-ligatures: none;
 }
-/* annotation riding inside the counter of the `b` */
+/* the poster's `e`→`m` gap is ~35px at 1086 where Inter's natural gap is
+   ~70: the lockup takes one extra pull between those two letters only, so
+   the `m`→`b` gap keeps its own optical spacing */
+.wm-e{ letter-spacing: -.06em; }
+
+/* annotation riding inside the counter of the `b`: the counter scales with
+   the wordmark, so the block is positioned as a percentage of it and the
+   lines stay left-aligned like the poster's */
 .wordmark-note{
   position: absolute;
-  left: 80.5%;
+  /* centred in the counter (measured on the poster: counter 853–961, note
+     867–952); the counter scales with the wordmark, so this is a
+     percentage, not a fixed offset */
+  left: 87.6%;
+  transform: translateX(-50%);
   bottom: 27%;
   font-family: var(--mono);
-  font-size: clamp(11px, .95vw, 13px);
+  font-size: clamp(10.5px, .96vw, 12.5px);
   font-weight: 500;
-  letter-spacing: .08em;
-  line-height: 1.5;
+  letter-spacing: .06em;
+  /* the counter is an oval: keep the block short enough to stay inside it */
+  line-height: 1.2;
   white-space: nowrap;
 }
 
@@ -320,17 +410,19 @@ button{ font: inherit; color: inherit; }
 .hero__body{
   display: grid;
   grid-template-columns: var(--col-prose) minmax(0, 1fr);
-  padding-top: clamp(24px, 3.2vw, 52px);
+  padding-top: clamp(46px, 6.81vw, 96px);
 }
 .hero__prose{
   grid-column: 1;
   min-width: 0;
-  padding-right: clamp(22px, 3vw, 56px);
+  /* the prose sits 13px below the pipeline's top edge on the poster */
+  padding-top: clamp(0px, 1.2vw, 26px);
+  padding-right: clamp(12px, 1.2vw, 26px);
 }
 
 .claim{
   font-family: var(--sans);
-  font-weight: 700;
+  font-weight: 750;
   font-size: clamp(2rem, 3.95vw, 4.7rem);
   line-height: .95;
   letter-spacing: -.005em;
@@ -338,11 +430,11 @@ button{ font: inherit; color: inherit; }
 .claim span{ display: block; }
 
 .hero__sub{
-  margin-top: clamp(18px, 2vw, 30px);
+  margin-top: clamp(14px, 1.57vw, 24px);
   max-width: 40ch;
   font-family: var(--mono);
   font-size: clamp(12.5px, 1.34vw, 15.5px);
-  line-height: 1.6;
+  line-height: 1.45;
   color: var(--muted);
 }
 
@@ -350,30 +442,30 @@ button{ font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: clamp(18px, 2.6vw, 40px);
-  margin-top: clamp(24px, 2.8vw, 42px);
+  gap: clamp(18px, 4.15vw, 54px);
+  margin-top: clamp(26px, 3.13vw, 47px);
 }
 
 /* ── 05 features ───────────────────────────────────────────────────── */
-.features{ margin-top: clamp(46px, 5.6vw, 86px); }
-.features__list{ margin-top: clamp(22px, 2.4vw, 34px); }
+.features{ margin-top: clamp(40px, 5vw, 76px); }
+.features__list{ margin-top: clamp(8px, 1.2vw, 18px); padding-left: clamp(4px, .55vw, 10px); }
 .feat{
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  column-gap: clamp(14px, 1.4vw, 22px);
+  column-gap: clamp(16px, 2.03vw, 30px);
   align-items: start;
-  padding-block: clamp(11px, 1.05vw, 17px);
+  padding-block: clamp(9px, .85vw, 14px);
 }
 .feat__ico{
   grid-row: span 2;
-  width: clamp(26px, 2.5vw, 34px);
-  height: clamp(26px, 2.5vw, 34px);
+  width: clamp(30px, 3.25vw, 36px);
+  height: clamp(30px, 3.25vw, 36px);
   margin-top: 1px;
 }
 .feat__ico svg{ width: 100%; height: 100%; display: block; }
 .feat__name{
   font-family: var(--sans);
-  font-size: clamp(13px, 1.28vw, 16px);
+  font-size: clamp(12.5px, 1.215vw, 15.5px);
   font-weight: 700;
   letter-spacing: .01em;
   line-height: 1.2;
@@ -382,7 +474,7 @@ button{ font: inherit; color: inherit; }
   grid-column: 2;
   margin-top: 3px;
   font-family: var(--mono);
-  font-size: clamp(11.5px, 1vw, 13px);
+  font-size: clamp(10px, .94vw, 12px);
   line-height: 1.55;
   color: var(--muted);
 }
@@ -395,7 +487,9 @@ button{ font: inherit; color: inherit; }
   grid-template-columns: var(--plate) minmax(0, 1fr);
   align-items: stretch;
   /* put the plate centre (not the column edge) on the signal axis */
-  margin-left: calc(40.2% - var(--plate) / 2);
+  margin-left: calc(40.7% - var(--plate) / 2);
+  /* the poster's stack: no port dots, the signal line is the only marker */
+  margin-top: -22px;
 }
 .pipeline__stack{
   grid-column: 1;
@@ -406,7 +500,7 @@ button{ font: inherit; color: inherit; }
 }
 .pipeline__svg{ display: block; width: 100%; height: auto; overflow: visible; }
 /* the spine starts just under the masthead, as on the poster */
-.sig{ fill: none; stroke: var(--accent); stroke-width: 5; }
+.sig{ fill: none; stroke: var(--accent); stroke-width: 4; }
 html.js .sig{
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -428,17 +522,13 @@ html.js .pipeline.is-live .slab:nth-of-type(3){ transition-delay: .34s; }
 html.js .pipeline.is-live .slab:nth-of-type(4){ transition-delay: .51s; }
 html.js .pipeline.is-live .slab.is-hot{ transform: translateY(-6px); }
 
-.port{ fill: var(--accent); }
-html.js .port{ opacity: 0; transition: opacity .3s ease; }
-html.js .pipeline.is-live .port{ opacity: 1; transition-delay: .45s; }
-html.js .pipeline.is-live .slab:nth-of-type(2) .port{ transition-delay: .62s; }
-html.js .pipeline.is-live .slab:nth-of-type(3) .port{ transition-delay: .79s; }
-html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
+/* (the plates carry no port markers: on the poster the signal line itself is
+   the only orange in the stack) */
 
 /* isometric plate labels */
 .plate-label{
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: clamp(9px, .95vw, 12px);
   font-weight: 700;
   letter-spacing: .14em;
   fill: var(--fg);
@@ -450,49 +540,52 @@ html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
 .cb--w{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
 .cb--g{ --ct:#B8B4A9; --cl:#8E8B82; --cr:#7C7970; }
 .cb--d{ --ct:#3A3833; --cl:#1E1D19; --cr:#141310; }
-.cb--o{ --ct:#FF5A1F; --cl:#C7430F; --cr:#A63709; }
 
 /* annotations + stepped leaders */
 .pipeline__notes{
   grid-column: 2;
   min-width: 0;
   position: relative;
-  padding-left: 10px;
+  padding-left: var(--lead);
+  /* the poster's technical labels run out to the edge of the sheet, not to
+     the shell gutter: without this the description column is 116px and
+     "Raw text, documents," wraps onto a third line */
+  margin-right: calc(-1 * var(--gut));
 }
 .note{
   position: absolute;
-  left: var(--leader);
+  left: 0;
   right: 0;
   transform: translateY(-50%);
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
   column-gap: 0;
   align-items: baseline;
 }
-.note--1{ top: 12.04%; }
-.note--2{ top: 35.77%; }
-.note--3{ top: 59.49%; }
-.note--4{ top: 83.21%; }
+.note--1{ top: 11.8%; }
+.note--2{ top: 32.1%; }
+.note--3{ top: 56.0%; }
+.note--4{ top: 78.6%; }
 
 /* leader: plate edge → right → down → right (three segments, hairline grey) */
 .note::before{
   content: "";
   position: absolute;
-  left: calc(-1 * var(--leader));
-  top: calc(50% - 26px);
-  width: calc(var(--leader) - 15px);
+  left: calc(-1 * var(--lead));
+  top: calc(50% - 24px);
+  width: calc(var(--lead) - 14px);
   height: 1px;
-  background: var(--leader);
+  background: var(--leader-c);
 }
 .note::after{
   content: "";
   position: absolute;
-  left: -15px;
-  top: calc(50% - 26px);
-  width: 15px;
-  height: 26px;
-  border-left: 1px solid var(--leader);
-  border-bottom: 1px solid var(--leader);
+  left: -14px;
+  top: calc(50% - 24px);
+  width: 14px;
+  height: 24px;
+  border-left: 1px solid var(--leader-c);
+  border-bottom: 1px solid var(--leader-c);
 }
 
 .note__num{
@@ -507,7 +600,7 @@ html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
 .note__label{
   grid-column: 2;
   font-family: var(--sans);
-  font-size: clamp(12.5px, 1.24vw, 16px);
+  font-size: clamp(12px, 1.15vw, 14px);
   font-weight: 700;
   letter-spacing: .07em;
   text-transform: uppercase;
@@ -517,8 +610,8 @@ html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
   grid-column: 2;
   margin-top: 5px;
   font-family: var(--mono);
-  font-size: clamp(8.5px, .88vw, 11.5px);
-  line-height: 1.55;
+  font-size: clamp(10px, .97vw, 12px);
+  line-height: 1.3;
   color: var(--muted);
   transition: color .25s ease;
 }
@@ -533,12 +626,15 @@ html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
   position: relative;
   z-index: 1;
   /* the spine hands over to the ridge line with no gap */
-  margin-top: 0;
+  /* compensates the pipeline's -22px so the ridge keeps its poster position
+     (top ~1105) while the stack above it moves up */
+  margin-top: -11px;
   /* reach the viewport's right edge, and back to the pipeline column */
   margin-right: calc(-1 * var(--gut));
-  margin-left: calc(-1 * (40.2% - var(--plate) / 2));
-  /* .4302 of the width: the frame of the source photograph (2600 x 1078) */
-  height: clamp(210px, 26.7vw, 370px);
+  margin-left: calc(-1 * (40.7% - var(--plate) / 2));
+  /* .4302 of the width: the crop window of the source photograph
+     (1900 x 790 of mountain.jpg, see tools/gen-isometric.py) */
+  height: clamp(210px, 26.6vw, 375px);
 }
 
 .landscape__plate{
@@ -552,24 +648,30 @@ html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
 .landscape__photo{
   position: absolute;
   /* the ridge sits below the annotation band, the base is cut by the footer rule */
-  top: 14%;
+  top: 6%;
   right: calc(-1 * clamp(0px, 1.8vw, 30px));
-  height: 86%;
+  height: 94%;
   width: auto;
   display: block;
-  filter: grayscale(1) contrast(2) brightness(.5);
+  /* Screen-print treatment, matched to the poster's terrain by measurement
+     over boxes that are mountain in both images (page x700-1000 y1250-1400):
+     mean 118 / 38.6% below 80/255 / 25.0% above 190, snow p90 236.
+
+     Two earlier shapes were wrong. `contrast(2.6) brightness(.6)` capped
+     every highlight at 60% grey, so the snow could never reach paper and 42%
+     of the mass sat in the 90-170 mudtones. `contrast(3) brightness(.9)`
+     replaced that with the opposite failure: contrast() clamps everything
+     above ~0.67 to a single value, so 39% of the mass blew out to one flat
+     white. Putting brightness FIRST and letting contrast ramp after it keeps
+     a real gradient through the highlights - black below 0.35, paper above
+     ~0.86, a steep curve between - which is the screen print the poster has.
+     Measured after this change: mean 120, 34.9% below 80, 22.2% above 190,
+     snow p90 238. */
+  filter: grayscale(1) brightness(.68) contrast(3);
 }
-/* printing screen over the terrain, so it reads as the same ink as the plates */
-.landscape__plate::after{
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  mix-blend-mode: multiply;
-  opacity: .22;
-  background-image: radial-gradient(circle at 50% 50%, #0B0B0B 0 .8px, transparent 1px);
-  background-size: 3px 3px;
-}
+/* The print screen lives inside the terrain SVG, clipped to the traced
+   skyline (see index.html) — as a CSS ::after it also screened the sky and
+   printed a hard rectangle edge the poster does not have. */
 
 .landscape__route{
   position: absolute;
@@ -583,7 +685,7 @@ html.js .pipeline.is-live .slab:nth-of-type(4) .port{ transition-delay: .96s; }
 .route--signal{
   fill: none;
   stroke: var(--accent);
-  stroke-width: 5;
+  stroke-width: 4;
   stroke-linecap: square;
   stroke-linejoin: miter;
 }
@@ -592,12 +694,12 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .anno{
   position: absolute;
   z-index: 4;
-  top: clamp(28px, 3.2vw, 48px);
+  top: clamp(20px, 3.7vw, 52px);
   font-family: var(--mono);
   font-size: clamp(11px, 1.02vw, 14px);
   font-weight: 700;
-  letter-spacing: .17em;
-  line-height: 1.4;
+  letter-spacing: .12em;
+  line-height: 1.58;
   color: var(--fg);
 }
 .anno--left{ left: 0; }
@@ -615,8 +717,8 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .reg{
   position: absolute;
   z-index: 4;
-  top: clamp(-14px, -1vw, -4px);
-  right: calc(var(--gut) + 51px);
+  top: clamp(-22px, -1.5vw, -6px);
+  right: var(--gut);
   width: 38px;
   height: 38px;
 }
@@ -637,14 +739,14 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  min-height: clamp(52px, 4.2vw, 64px);
-  padding-block: 10px;
+  min-height: 0;
+  padding-block: 14px 25px;
 }
 .footer__copy,
 .footer__mark{
-  font-size: clamp(10px, .82vw, 12px);
+  font-size: clamp(10px, .92vw, 13px);
   font-weight: 500;
-  letter-spacing: .13em;
+  letter-spacing: .04em;
   color: var(--muted);
 }
 .footer__mark{ color: var(--fg); }
@@ -663,7 +765,6 @@ html.js [data-reveal].in{
   html.js .sig,
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   html.js .slab{ opacity: 1; transform: none; }
-  html.js .port{ opacity: 1; }
   .btn{ translate: none; }
   *, *::before, *::after{
     animation-duration: .001ms !important;
@@ -679,13 +780,23 @@ html.js [data-reveal].in{
 @media (max-width: 980px){
   .masthead__tagline{ display: none; }
   .vrule{ display: none; }
+  /* below this the `b` counter is too small to hold the annotation, so it
+     becomes a normal annotation under the word (see the poster's intent) */
+  .wordmark-note{
+    position: static;
+    transform: none;
+    margin-top: 12px;
+    padding-left: var(--gut);
+    text-align: left;
+    font-size: 11.5px;
+  }
 }
 
 /* tablet: the pipeline drops under the copy and keeps its isometric form */
 @media (max-width: 900px){
   .masthead__inner{ grid-template-columns: auto 1fr; }
   .nav{ display: none; }
-  .masthead__cta{ grid-column: 2; }
+  .masthead__cta{ grid-column: 2; margin-right: 0; }
 
   .hero__meta{ grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .hero__meta-a{ grid-column: 1 / 4; }
@@ -704,16 +815,24 @@ html.js [data-reveal].in{
   .hero__prose{ grid-column: 1; padding-right: 0; }
   .hero__pipeline{ grid-column: 1; margin-top: clamp(34px, 6vw, 66px); }
 
+  /* the `b` counter is too small to hold the annotation once the wordmark
+     scales down, so below the tablet breakpoint it becomes a normal
+     annotation under the word */
+  .wordmark-note{ font-size: 11.5px; }
+
   .pipeline{ margin-left: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .pipeline__stack{ grid-column: 1; overflow: hidden; }
+  .pipeline__stack{ grid-column: 1; overflow: visible; }
   .pipeline__notes{ grid-column: 2; }
-  .note__desc{ font-size: clamp(10px, 1.1vw, 12px); }
+  .note__desc{ font-size: clamp(11.5px, 1.2vw, 12.5px); }
 
   .landscape{
     margin-left: calc(-1 * var(--gut));
     margin-right: calc(-1 * var(--gut));
     height: clamp(220px, 40vw, 360px);
   }
+  /* stacked below the prose, the signal's long tail would run up through the
+     feature list: clip it to the stack so the spine starts at the INPUT plate */
+  .pipeline__svg{ overflow: hidden; }
   .anno--left{ left: var(--gut); }
   .reg{ top: 14px; right: calc(var(--gut) + 34vw); }
   .pipeline__svg{ max-width: 100%; }
@@ -723,17 +842,11 @@ html.js [data-reveal].in{
 @media (max-width: 640px){
   .brand{ font-size: 1.5rem; }
 
-  .wordmark{ font-size: 48vw; letter-spacing: -.05em; margin-right: -6vw; }
-  .wordmark-note{
-    position: static;
-    margin-top: 16px;
-    padding-right: 6vw;
-    text-align: right;
-    font-size: 11.5px;
-  }
+  .wordmark{ font-size: 60vw; letter-spacing: -.03em; }
+  .wordmark-note{ font-size: 11.5px; }
 
   .hero__meta-a{ grid-column: 1 / 5; }
-  .hero__meta-b{ grid-column: 5 / 7; }
+  .hero__meta-b{ grid-column: 4 / 7; margin-left: 0; }
   .claim{ font-size: clamp(2.15rem, 10vw, 3.6rem); }
 
   .pipeline{ grid-template-columns: minmax(0, 1fr); }
@@ -768,7 +881,6 @@ html.js [data-reveal].in{
   .note::after{ display: none; }
 
   .landscape{ height: clamp(190px, 62vw, 300px); }
-  .anno{ position: static; }
   .anno--right{ text-align: left; margin-top: 22px; }
   .anno--right .anno__dash{ margin-left: 0; }
   .landscape .anno{ position: absolute; }

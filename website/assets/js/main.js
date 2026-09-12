@@ -130,7 +130,6 @@
         /* 0 when the frame is about to enter, 1 once it is in view */
         var progress = clamp((vh * 0.94 - rect.top) / (vh * 0.96), 0, 1);
         routes.forEach(function (r) { r.style.strokeDashoffset = String(1 - progress); });
-        land.style.setProperty('--route', progress.toFixed(4));
       };
 
       var onRouteScroll = function () {

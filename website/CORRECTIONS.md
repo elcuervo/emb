@@ -4,6 +4,12 @@
 > `index.html`, `assets/css/styles.css` and `tools/gen-isometric.py`. The
 > measured after-state at a 1086px viewport is recorded at the end of this
 > file; the numbers below are the *before* measurements that drove the work.
+>
+> **Second pass (see the addendum at the end).** A later polish pass re-measured
+> the poster with an objective method (same-string ink widths, not eyeballed
+> grid overlays) and found the masthead, nav, CTA, meta-band tracking and
+> feature-list numbers in this file to be wrong. The addendum lists what
+> changed; the first-pass numbers are kept for history.
 
 Source of truth: `/tmp/rootshell-uploads/drop-20260911-195139.png`
 (referred to below as **the poster**; frame is **1086 × 1448**, aspect **1 : 1.333**).
@@ -360,8 +366,10 @@ track the (now shorter) stack: `top: 8% / 31% / 57% / 79%` after the C1 resize.
 
 ### 3.6 Footer
 
-`© 2026` → **`© 2024`** (the poster says 2024). Keep the 60px band, 1px rule and
-the left/right mono pair.
+`© 2024` → **`© 2026`** (the poster prints 2024, but the maintainer confirmed
+2026 is correct and `LICENSE` already reads `Copyright (c) 2026 elcuervo`;
+the poster is out of date here and must not be copied back). Keep the 60px
+band, 1px rule and the left/right mono pair.
 
 ---
 
@@ -489,3 +497,124 @@ After the changes, at a **1086 px viewport** — measured with
 - **`font-stretch` is dead code everywhere**: `archivo-var-latin.woff2` has
   no `wdth` axis (62.5% / 100% / 125% all measure identically). The `wght`
   axis does work.
+
+---
+
+# Addendum — second pass (same poster, objective measurements)
+
+The poster is `/tmp/rootshell-uploads/drop-20260912-171157.png` (byte-identical
+to the file the first pass used). Method changed: instead of eyeballing a grid
+overlay, both images are loaded into a `<canvas>` and probed pixel-wise, and the
+site's DOM is measured with `getBoundingClientRect()`. The key trick is
+**same-string comparison**: the poster and the site contain the same words, so
+the ratio of their ink widths gives the size/tracking error directly, with no
+character counting.
+
+## First-pass numbers that were wrong
+
+| item | first pass said | poster actually |
+|---|---|---|
+| masthead nav | DOCS at x379, gaps 29px, block centre 46.3% | DOCS at x**456**, gaps **41px**, centre **55.6%** |
+| masthead CTA | x742–875 (133 wide), inset 190px from the right | x**891–1049** (158 wide), flush to the right gutter |
+| masthead tagline | mono ~10px, tracking .1em | 11px, tracking **.2em**, pitch 14 |
+| brand `emb` | ~30px display | 34px (ink 68 × 25) |
+| hero meta left | tracking .07em | tracking **.29em** (advance 18.3px at 20.5px) |
+| hero meta right | 26px | ~17px (advance 11.8px) |
+| features | icon x45, names 14px | icon x**49** (drawn ~30px), names ~13.5px, descs ~10px |
+| note labels | ~16px | ~**12.5px** (INPUT = 40px of ink, not 53) |
+| footer | tracking .13em | tracking ~.01em (advance 6.06px at 10px) |
+
+## What changed in this pass
+
+**Masthead** — brand 3.15vw, tagline 11px/.2em/1.28, nav gap 3.34vw with the
+block anchored to the right end of its column (10.3vw of air before the CTA),
+CTA flush to the gutter at ~160 × 45 with sentence-case bold ~16px, and the
+whole cluster nudged 6px below the optical centre.
+
+**Hero meta band** — left block 20.5px/.29em/1.27, middle 10.4px/.13em/1.45
+hung 21px above it, right block 17.3px/.08em/1.55 hung 25px above it. This is
+what produces the poster's "wide technical annotation + tiny code block"
+contrast; the site previously had all three at roughly one tracking.
+
+**Prose column** — the claim sits 13px below the pipeline's top edge, the
+sub-paragraph runs at 1.45 leading, and the column's right padding shrank so
+the CTA row (button + `View on GitHub`) fits on one line as it does on the
+poster (it was silently wrapping to two).
+
+**Feature list** — 9px indent (icon ink lands on x49), 22px icon gap, 30px
+icons, 55.4px row pitch, `.1em` head tracking, 83px head rule. The block starts
+at y983 so the head's ink lands on the poster's 990.
+
+**Pipeline notes** — labels 12.5px, descriptions 10.5px at 1.3 leading, and the
+stepped leader actually draws now: `--leader` was defined as a *colour* and used
+in `calc(-1 * var(--leader))`, so every leader was an invalid declaration and
+the pseudo-elements fell back to their static position. `--leader-c` (colour)
+and `--lead` (length) are now separate; the leader runs from the plate's edge →
+right → down → right into each note.
+
+**Pipeline artwork** (regenerated from `tools/gen-isometric.py`) — plate
+half-width 197 → **182**, dimetric ratio .3046 → **.326**, thickness 22 → **28**,
+viewBox 394 × 548 → **364 × 553**; port ellipses deleted (the poster's stack has
+no port dots — the signal line is the only orange); cube field 42 → **74** blocks
+at 0.36–0.82 scale; the INFERENCE ramp pushed further toward black; the light
+lattice on SERVE dimmed to .45.
+
+**Wordmark** — size 53.9vw (x-height 323px, the poster's), `scaleX(.93)` instead
+of `.98` so the `em` ink ends at 735 rather than 800, and one extra pull of
+`-.06em` between `e` and `m` only (the poster's `e`→`m` gap is 35px where
+Inter's is 70, while its `m`→`b` gap of 13px matches Inter's exactly). The `b`
+counter annotation moved into the counter (x87.6%, bottom 27%) and its leading
+was tightened to 1.2 so the five lines stay inside the oval — at 1.5 the last
+two lines were clipped by the bowl.
+
+**Landscape** — crop window 1900 × 790 at (140, 590) so the massif sits under
+the signal spine; contrast raised to `brightness(.68) contrast(3)` (region means
+now match the poster's within ~5/255); the route is a vertex-by-vertex trace of
+the poster's orange polyline, forking from the spine at the summit; annotations
+moved to `top: 3.7vw`, line-height 1.58; the registration mark back to the
+gutter. The print-screen `<rect>` is emitted by the generator again (the first
+pass added it by hand, and it was dropped when the block was regenerated).
+
+**Tablet (≤900px)** — the signal's long tail (`y1=-520`) ran up through the
+feature list once the pipeline stacks below the prose; `.pipeline__svg` is
+clipped at that breakpoint so the spine starts at the INPUT plate.
+
+## Verified after the pass (1086px viewport)
+
+| | poster | site |
+|---|---|---|
+| `scrollHeight` | 1448 | **1449** |
+| masthead brand ink | x42–108 | x41–110 |
+| nav words | 456 / 523 / 605 / 688 | 455 / 522 / 604 / 687 |
+| CTA box | 891–1048 × 17–61 | 885–1044 × 16–60 |
+| meta-left rows | 134, 160 | 135, 161 |
+| meta-mid rows | 113, 128, 143, 158 | 112, 127, 143, 158 |
+| claim ink | 601–766 | 601–761 |
+| hero button | 44–268 × 875–930 | 41–263 × 877–932 |
+| `View on GitHub` | x317–444 | x317–437 |
+| feature head ink | 990 | 991 |
+| note 1 / note 4 label ink | 607 / 976 | 607 / 976 |
+| terrain ink | 1142–1394 | ~1145–1394 |
+| footer band / rule | 1394–1448 | 1394–1447 |
+
+## Intentional exceptions
+
+- **The poster's mountain is a different photograph.** Its silhouette cannot be
+  reproduced from `assets/img/mountain.jpg` (a pixel search over crop windows
+  cannot match the poster's ridge within ~50px anywhere). The site keeps its
+  own placeholder asset — already flagged in `PRODUCT.md` as pending licensing —
+  with the poster's silhouette height, darkness, annotation band and route.
+- **The `b` counter is smaller than the poster's** (Inter's bowl opening is
+  narrower than the logotype's), so the counter annotation runs at 10.5px there
+  while the poster's is ~11.7px. At 12px+ the oval clips the first and last
+  characters of a line.
+- **Small mono still runs below the 12px floor** in `PRODUCT.md` — feature
+  descriptions 10.2px, note descriptions 10.5px, footer 10px — because the
+  poster sets them at 10–10.5px. The muted grey measures 4.74:1 on the cream
+  ground, so this is a size deviation, not a contrast one. Flagged, not hidden.
+- **Inter remains the display face.** The detector flags it as overused, but
+  its stem-to-x-height ratio (0.36) matches the poster's logotype where Archivo
+  Black's does not; the poster's `e` terminal is the one letterform that differs.
+- **Wide tracking (`.2em`–`.29em`) on mono annotations** is flagged as a
+  body-text antipattern; here it *is* the poster's treatment, restricted to
+  short uppercase metadata blocks.
