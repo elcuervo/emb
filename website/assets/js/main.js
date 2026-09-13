@@ -161,7 +161,7 @@
        completes at 86% of the band's travel, which is where the massif is
        fully in view on every viewport we checked — a denominator of the
        whole band leaves the last branch undrawn at the page bottom. */
-    var land = document.querySelector('.landscape');
+    var land = document.querySelector('.terrain');
     var routes = [].slice.call(document.querySelectorAll('.route--signal'));
 
     if (land && routes.length && !reduceMotion.matches) {
@@ -174,15 +174,10 @@
         var vh = window.innerHeight || doc.clientHeight;
         /* 0 when the band is about to enter, 1 once the massif is in view */
         var progress = clamp((vh - rect.top) / (rect.height * 0.86), 0, 1);
-        routes.forEach(function (r) {
-          var seq = Number(r.getAttribute('data-seq')) || 0;
-          /* The trunk (seq 0) is the ridge route and draws across the whole
-             travel. Each data branch then runs over the following 58% of it,
-             14% apart, so the extra facts arrive in sequence rather than all
-             at once. */
-          var p = seq ? clamp((progress - seq * 0.14) / 0.58, 0, 1) : progress;
-          r.style.strokeDashoffset = String(1 - p);
-        });
+        /* One route, two halves of the same trunk: both run the full travel.
+           The staged data branches that used to fork off it are gone, so
+           there is no per-path offset left to compute. */
+        routes.forEach(function (r) { r.style.strokeDashoffset = String(1 - progress); });
       };
 
       var onRouteScroll = function () {
@@ -281,6 +276,33 @@
       var state = { mode: 'redis' };
       var timers = [];
 
+      /* Code highlighting. The specimens in the markup are marked up by hand;
+         these transcripts are plain strings, so the identical four token
+         classes are applied by pattern. It marks what a token IS -- a string,
+         a command, a number -- and never colours text for emphasis. */
+      var HL = /("(?:[^"\\]|\\.)*")|(\bEMB(?:\.[A-Z]+)*\b|\bHELLO\b|\bVALUES\b|\bBLOB\b|\bPING\b|\bLOAD\b|\bEXISTS\b|\bFLUSH\b)|(\b\d+(?:\.\d+)?\b|\\x[0-9a-f]{2})/g;
+
+      function highlight(text) {
+        var frag = document.createDocumentFragment();
+        var last = 0;
+        var m;
+        HL.lastIndex = 0;
+        while ((m = HL.exec(text)) !== null) {
+          if (m.index > last) {
+            frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          }
+          var sp = document.createElement('span');
+          sp.className = m[1] ? 't-str' : m[2] ? 't-cmd' : 't-num';
+          sp.textContent = m[0];
+          frag.appendChild(sp);
+          last = m.index + m[0].length;
+        }
+        if (last < text.length) {
+          frag.appendChild(document.createTextNode(text.slice(last)));
+        }
+        return frag;
+      }
+
       function lineEl(line) {
         var el = document.createElement('span');
         el.className = 'console__line' + (line.k ? ' console__line--' + line.k : '');
@@ -289,9 +311,12 @@
           caret.className = 'console__caret';
           caret.textContent = 'EMB ›';
           el.appendChild(caret);
-          el.appendChild(document.createTextNode(' ' + line.t));
-        } else {
+          el.appendChild(document.createTextNode(' '));
+          el.appendChild(highlight(line.t));
+        } else if (line.k) {
           el.textContent = line.t;
+        } else {
+          el.appendChild(highlight(line.t));
         }
         return el;
       }

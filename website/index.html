@@ -451,174 +451,312 @@
           </ol>
         </div>
 
-        <!-- ══════════════════════════════════════════════════════ TERRAIN -->
-        <section class="landscape" aria-labelledby="scale-h">
-          <h2 class="sr-only" id="scale-h">Scale</h2>
-
-          <p class="anno anno--left" data-reveal>EMBED<br>EVERYTHING<br>FURTHER<span class="anno__dash" aria-hidden="true"></span></p>
-          <p class="anno anno--right" data-reveal>HIGHER<br>DIMENSIONS<br>BRIGHTER<br>APPLICATIONS<span class="anno__dash" aria-hidden="true"></span></p>
-          <!-- Three branches of the same signal, carrying facts out of
-               README.md: the reply formats, RESP3 negotiation, and the
-               batching window. They fork off the trunk above the massif and
-               are drawn in sequence, after the ridge route. -->
-          <p class="anno anno--b" data-reveal>BLOB OR VALUES<br>BYTES STAY<br>BYTES<span class="anno__dash" aria-hidden="true"></span></p>
-          <p class="anno anno--c" data-reveal>HELLO 3<br>RESP2 RISES<br>TO RESP3<span class="anno__dash" aria-hidden="true"></span></p>
-          <p class="anno anno--d" data-reveal>1 MS WINDOW<br>SHARED<br>ONNX RUNS<span class="anno__dash" aria-hidden="true"></span></p>
-          <span class="reg" aria-hidden="true"></span>
-
-          <!-- The cut-out and the route share one box, so the orange line is
-               glued to the rock at every viewport width. The route is traced
-               from the reference poster and expressed in the artwork's own
-               pixels: the spine's axis meets the artwork at x1124.3, which is
-               exactly where the two branches fork. y0 is the band's top edge,
-               y46.2 the top of the rock's frame, y770.2 the footer rule. -->
-          <div class="landscape__art">
-            <img class="landscape__photo" src="assets/img/terrain-matte.png" width="2172" height="724" alt="" decoding="async" fetchpriority="low">
-            <svg class="landscape__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <path class="route--signal" pathLength="1" data-seq="0"
-                    d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
-              <path class="route--signal" pathLength="1" data-seq="0"
-                    d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
-              <path class="route--signal route--branch" pathLength="1" data-seq="1"
-                    d="M1124.3 62 L700 62 L700 84"/>
-              <path class="route--signal route--branch" pathLength="1" data-seq="2"
-                    d="M1124.3 100 L1560 100 L1560 122"/>
-              <path class="route--signal route--branch" pathLength="1" data-seq="3"
-                    d="M1124.3 138 L920 138 L920 160"/>
-            </svg>
-          </div>
-        </section>
+        <span class="spine spine--hero" aria-hidden="true"></span>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════════════════════════════ CAPABILITY ═════ -->
-<!-- One merged region, placed after the terrain so the pipeline → ridge
-     handover stays unbroken. Everything here is the poster's own atoms: a
-     rule-head, ruled entries, and dark panels built from the SERVE plate's
-     faces so the console reads as the fourth plate turned to face the
-     reader rather than a widget bolted onto the page. The console is a
-     placeholder: real controls, deterministic transcripts, no network. -->
-<section class="capability" id="capability" aria-labelledby="capability-h">
-  <div class="shell">
+    <!-- ════════════════════════════════════════════════════ BLOCK · PROTOCOL -->
+    <!-- Block 1 of 3. Paper ground, the spine in an explicit lane, and the
+         console plate covering the lane where it crosses: the same rule the
+         hero's plates follow. Facts sit right of the fold in the annotation
+         strip; body text never touches the line. -->
+    <section class="block block--paper" id="protocol" aria-labelledby="protocol-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
 
-    <h2 class="rule-head" id="capability-h">
-      THE PROTOCOL IS THE INTEGRATION
-      <span class="rule-head__rule" aria-hidden="true"></span>
-    </h2>
-    <p class="capability__deck">
-      One connection. No SDK to adopt, no sidecar to run,
-      no second service to operate.
-    </p>
+        <h2 class="block__head" id="protocol-h">THE PROTOCOL IS THE INTEGRATION</h2>
 
-    <div class="capability__body">
+        <div class="block__grid">
+          <div class="block__main">
 
-      <div class="capability__entries">
-        <article class="cap" data-reveal>
-          <h3 class="cap__label">ANY REDIS CLIENT</h3>
-          <p class="cap__claim">
-            redis-cli, redis-py, redis-rb — the client you already have
-            is the SDK. Embeddings come back as raw float32 bytes.
-          </p>
-          <p class="cap__facts">
-            RESP2 default · HELLO 3 for RESP3 · BLOB bytes or a VALUES envelope
-          </p>
-        </article>
+            <article class="cap">
+              <h3 class="cap__label">ANY REDIS CLIENT</h3>
+              <p class="cap__claim">
+                redis-cli, redis-py, redis-rb — the client you already have is
+                the SDK. Nothing to install but the server.
+              </p>
+            </article>
 
-        <article class="cap" data-reveal>
-          <h3 class="cap__label">THE MODEL, AS A FUNCTION</h3>
-          <p class="cap__claim">
-            Sandboxed Lua wraps the same model call — your preprocessing,
-            your postprocessing, your reply.
-          </p>
-          <p class="cap__facts">
-            EMB.EVAL · EMB.EVSHA · cached by SHA1 per model · pure compute
-          </p>
-        </article>
+            <figure class="code">
+<pre class="code__body"><span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB</span> minilm <span class="t-str">"hello world"</span>
+<span class="t-dim"># → \x7c\x8e\x80\xbd…           384 float32s × 4 bytes</span>
 
-        <article class="cap" data-reveal>
-          <h3 class="cap__label">OPERATIONS, NO NEW DASHBOARD</h3>
-          <p class="cap__claim">
-            Redis-shaped INFO and CONFIG, a readiness probe, and
-            backpressure instead of unbounded queues.
-          </p>
-          <p class="cap__facts">
-            INFO · CONFIG GET/SET · EMB.READY · ERR busy
-          </p>
-        </article>
-      </div>
+<span class="t-cmd">redis-cli</span> -3 <span class="t-cmd">EMB</span> minilm <span class="t-cmd">VALUES</span> <span class="t-str">"hello world"</span>
+<span class="t-dim"># →</span> dtype <span class="t-num">FLOAT</span>  shape <span class="t-num">[1 384]</span>  values <span class="t-num">[-0.1974, 0.1776, …]</span></pre>
+              <figcaption class="code__cap">
+                bytes by default; <span class="t-cmd">VALUES</span> for clients
+                that cannot unpack float32
+              </figcaption>
+            </figure>
 
-      <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal>
-        <h3 class="sr-only" id="console-h">Console</h3>
+            <article class="cap">
+              <h3 class="cap__label">MANY MODELS, ONE ROUND TRIP</h3>
+              <p class="cap__claim">
+                <span class="t-cmd">EMB.MULTI</span> asks different models in a
+                single command and answers MGET-style: a failed pair fails in
+                its slot, not the call.
+              </p>
+            </article>
 
-        <div class="console__bar">
-          <div class="console__modes" role="tablist" aria-label="Console mode">
-            <button class="console__mode" type="button" role="tab" id="tab-redis"
-                    aria-controls="console-screen" aria-selected="true" data-mode="redis"
-                    data-tab="0">REDIS</button>
-            <button class="console__mode" type="button" role="tab" id="tab-scripts"
-                    aria-controls="console-screen" aria-selected="false" data-mode="scripts"
-                    data-tab="1" tabindex="-1">SCRIPTS</button>
           </div>
-          <p class="console__badge">DEMO · NOT A LIVE SERVER</p>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>WIRE</dt><dd>RESP2 · <span class="t-cmd">HELLO 3</span> for RESP3</dd>
+              <dt>REPLY</dt><dd>BLOB bytes · VALUES envelope</dd>
+              <dt>ACCESS</dt><dd><span class="t-cmd">AUTH</span> · TLS</dd>
+              <dt>CLIENTS</dt><dd>any Redis client, unchanged</dd>
+            </dl>
+          </div>
         </div>
 
-        <div class="console__screen" id="console-screen" role="tabpanel"
-             aria-labelledby="tab-redis" tabindex="-1">
-          <pre class="console__out" id="console-out" aria-live="off"></pre>
-          <noscript>
-            <pre class="console__out console__out--static">EMB minilm "hello world"
-\x7c\x8e\x80\xbd…   (384 float32s × 4 bytes)
+                <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal>
+          <h3 class="sr-only" id="console-h">Console</h3>
 
-EMB minilm VALUES "hello world"
-dtype  FLOAT
-shape  [1 384]
-values [-0.19744610786437988, 0.17766517400741577, …]
+          <div class="console__bar">
+            <div class="console__modes" role="tablist" aria-label="Console mode">
+              <button class="console__mode" type="button" role="tab" id="tab-redis"
+                      aria-controls="console-screen" aria-selected="true" data-mode="redis"
+                      data-tab="0">REDIS</button>
+              <button class="console__mode" type="button" role="tab" id="tab-scripts"
+                      aria-controls="console-screen" aria-selected="false" data-mode="scripts"
+                      data-tab="1" tabindex="-1">SCRIPTS</button>
+            </div>
+            <p class="console__badge">DEMO · NOT A LIVE SERVER</p>
+          </div>
 
-EMB.SCRIPT LOAD sst2 "…sst2.lua…"
-"77c1e0c01d3c43e8f07b262869d13c21b93b28f9"
+          <div class="console__screen" id="console-screen" role="tabpanel"
+               aria-labelledby="tab-redis" tabindex="-1">
+            <pre class="console__out" id="console-out" aria-live="off"></pre>
+            <noscript>
+              <pre class="console__out console__out--static">EMB minilm "hello world"
+  \x7c\x8e\x80\xbd…   (384 float32s × 4 bytes)
 
-EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
-label       POSITIVE
-confidence  0.99
-scores      […]</pre>
-          </noscript>
+  EMB minilm VALUES "hello world"
+  dtype  FLOAT
+  shape  [1 384]
+  values [-0.19744610786437988, 0.17766517400741577, …]
+
+  EMB.SCRIPT LOAD sst2 "…sst2.lua…"
+  "77c1e0c01d3c43e8f07b262869d13c21b93b28f9"
+
+  EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
+  label       POSITIVE
+  confidence  0.99
+  scores      […]</pre>
+            </noscript>
+          </div>
+
+          <form class="console__form" id="console-form" autocomplete="off">
+            <label class="console__prompt" for="console-in">EMB ›</label>
+            <input class="console__input" id="console-in" name="command" type="text"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   spellcheck="false" enterkeyhint="go"
+                   placeholder='EMB minilm "hello world"'>
+            <button class="console__run" type="submit">RUN</button>
+          </form>
+          <p class="console__note">
+            Placeholder transcript from the reference server. The live client
+            is not wired yet.
+          </p>
+        </section>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ BLOCK · SCRIPTS -->
+    <!-- Block 2 of 3. The page's single inversion: full-bleed #111110, the
+         plates' own material, and the one place the spine crosses a dark
+         ground in plain sight. Code is the content here, not an illustration
+         of it. -->
+    <section class="block block--dark" id="scripts" aria-labelledby="scripts-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="scripts-h">THE MODEL, AS A FUNCTION</h2>
+
+        <div class="block__grid">
+          <div class="block__main">
+
+            <p class="block__deck">
+              The plain embed command is a fixed pipeline:
+              <span class="t-cmd">model(input) → output</span>. A script
+              replaces the edges around that same call with your own code —
+              preprocessing, postprocessing, and the reply itself.
+            </p>
+
+            <div class="shift">
+              <p class="shift__row">
+                <span class="shift__args">model(<span class="shift__fn">input</span>)</span>
+                <span class="shift__arrow" aria-hidden="true">→</span>
+                <span class="shift__out">output</span>
+                <span class="shift__tag">EMB</span>
+              </p>
+              <p class="shift__row shift__row--script">
+                <span class="shift__args">model(<span class="shift__fn">fn(input)</span>)</span>
+                <span class="shift__arrow" aria-hidden="true">→</span>
+                <span class="shift__out">output</span>
+                <span class="shift__tag">EMB.EVAL</span>
+              </p>
+            </div>
+
+            <figure class="code code--dark">
+<pre class="code__body"><span class="t-cmd">local</span> enc <span class="t-dim">=</span> emb.tokenize.<span class="t-cmd">encode</span>(<span class="t-str">KEYS[1]</span>, <span class="t-num">512</span>)
+<span class="t-cmd">local</span> out <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({
+  input_ids      <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids}, data <span class="t-dim">=</span> enc.ids },
+  attention_mask <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids}, data <span class="t-dim">=</span> enc.mask },
+})
+<span class="t-cmd">local</span> probs <span class="t-dim">=</span> emb.math.<span class="t-cmd">softmax</span>(out.logits.data)
+<span class="t-cmd">local</span> idx, score <span class="t-dim">=</span> emb.math.<span class="t-cmd">argmax</span>(probs)
+<span class="t-dim">-- labels arrive in the model's training order</span>
+<span class="t-cmd">return</span> { label <span class="t-dim">=</span> labels[idx], confidence <span class="t-dim">=</span> score }</pre>
+              <figcaption class="code__cap">
+                <span class="t-cmd">examples/scripts/sst2.lua</span> — a raw-logits
+                text model becomes a labelled classifier
+              </figcaption>
+            </figure>
+
+            <ol class="uses" role="list">
+              <li class="uses__i"><span class="uses__n">sst2</span> classify</li>
+              <li class="uses__i"><span class="uses__n">qa</span> extractive QA</li>
+              <li class="uses__i"><span class="uses__n">rerank</span> sigmoid scores</li>
+              <li class="uses__i"><span class="uses__n">gliner2</span> span extraction</li>
+              <li class="uses__i"><span class="uses__n">siglip2</span> image + text</li>
+            </ol>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>CALLS</dt><dd><span class="t-cmd">EMB.EVAL</span> · <span class="t-cmd">EMB.EVSHA</span></dd>
+              <dt>CACHE</dt><dd>by SHA1, per model</dd>
+              <dt>BOOT</dt><dd>preload from config</dd>
+              <dt>SAFETY</dt><dd>pure compute · no os, io, require</dd>
+            </dl>
+          </div>
         </div>
 
-        <form class="console__form" id="console-form" autocomplete="off">
-          <label class="console__prompt" for="console-in">EMB ›</label>
-          <input class="console__input" id="console-in" name="command" type="text"
-                 autocomplete="off" autocapitalize="off" autocorrect="off"
-                 spellcheck="false" enterkeyhint="go"
-                 placeholder='EMB minilm "hello world"'>
-          <button class="console__run" type="submit">RUN</button>
-        </form>
-        <p class="console__note">
-          Placeholder transcript from the reference server. The live client
-          is not wired yet.
-        </p>
-      </section>
-    </div>
+        </div>
+      </div>
+    </section>
 
-    <section class="topviz" aria-labelledby="topviz-h" data-reveal>
-      <h3 class="cap__label" id="topviz-h">EMB-TOP</h3>
-      <p class="topviz__claim">
-        Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one
-        round trip, over the same protocol.
-      </p>
-      <pre class="topviz__screen"> emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
+    <!-- ══════════════════════════════════════════════════ BLOCK · OPERATIONS -->
+    <!-- Block 3 of 3. Back to paper, and the densest measure on the page: a
+         ledger of the commands an operator already knows, with the emb-top
+         capture as the dark plate that proves it. -->
+    <section class="block block--paper" id="operations" aria-labelledby="operations-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="operations-h">OPERATIONS, NO NEW DASHBOARD</h2>
+
+        <div class="block__grid">
+          <div class="block__main block__main--ledger">
+
+            <article class="cap">
+              <h3 class="cap__label">READ AND TUNE, LIVE</h3>
+              <p class="cap__claim">
+                Redis-shaped <span class="t-cmd">INFO</span> and
+                <span class="t-cmd">CONFIG</span>, including live cache
+                resizing — no restart, no new config format.
+              </p>
+            </article>
+
+            <article class="cap">
+              <h3 class="cap__label">A REAL READINESS PROBE</h3>
+              <p class="cap__claim">
+                <span class="t-cmd">EMB.READY</span> answers <span
+                class="t-num">+OK</span> or says why not — loading, draining,
+                no models.
+              </p>
+            </article>
+
+            <article class="cap">
+              <h3 class="cap__label">BACKPRESSURE, NOT QUEUING</h3>
+              <p class="cap__claim">
+                At the concurrency cap the server answers
+                <span class="t-num">ERR busy</span> instead of stacking
+                unbounded work. Control commands still answer.
+              </p>
+            </article>
+
+            <article class="cap">
+              <h3 class="cap__label">WHAT IT DOES TO THE MACHINE</h3>
+              <p class="cap__claim">
+                RSS, CPU, goroutines, connections and per-model latency, in the
+                same <span class="t-cmd">EMB.STATS</span> reply.
+              </p>
+            </article>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>INFO</dt><dd>server · cache · stats · memory · cpu</dd>
+              <dt>CONFIG</dt><dd>GET / SET, live</dd>
+              <dt>MONITOR</dt><dd>recent requests, no text payloads</dd>
+              <dt>EMB.READY</dt><dd>health probe</dd>
+            </dl>
+          </div>
+        </div>
+
+        <section class="topviz" aria-labelledby="topviz-h" data-reveal>
+          <h3 class="cap__label" id="topviz-h">EMB-TOP</h3>
+          <p class="topviz__claim">
+            Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
+            trip, over the same protocol you already speak.
+          </p>
+          <pre class="topviz__screen"> emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
 minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████  280 r/s  11.8k t/s  p50 6.5ms  p95 68.0ms  err 0
    dim 384 · mean · int8 · batch 32/16384 workers 2
 bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████  151 r/s   5.7k t/s  p50 8.8ms  p95 77.0ms  err 18 ↑
    dim 384 · cls · fp32 · batch 32/16384 workers 2
 cache 93.6% ██████████  cpu 50.3% ██████  mem 552MB ████████████
 conns 7 · active 1 · goroutines 22 · truncated 0/0</pre>
-      <p class="topviz__src">Sample run · rows omitted</p>
+          <p class="topviz__src">Sample run · rows omitted</p>
+        </section>
+
+        </div>
+      </div>
     </section>
 
-  </div>
-</section>
+    <!-- ══════════════════════════════════════════════════════════ TERRAIN -->
+    <!-- Last, where the signal lands. The spine reaches the art box's top edge
+         and the route takes over from there. -->
+    <section class="terrain" aria-labelledby="scale-h">
+      <h2 class="sr-only" id="scale-h">Scale</h2>
+
+      <div class="shell">
+        <div class="terrain__inner">
+        <span class="spine spine--terrain" aria-hidden="true"></span>
+        <p class="anno anno--left" data-reveal>EMBED<br>EVERYTHING<br>FURTHER<span class="anno__dash" aria-hidden="true"></span></p>
+        <p class="anno anno--right" data-reveal>HIGHER<br>DIMENSIONS<br>BRIGHTER<br>APPLICATIONS<span class="anno__dash" aria-hidden="true"></span></p>
+        <span class="reg" aria-hidden="true"></span>
+
+      <!-- The cut-out and the route share one box, so the orange line is
+           glued to the rock at every viewport width. The box is anchored by
+           its LEFT edge, derived from --fold and the fork's own x, so the
+           route's fork lands on the spine by construction rather than by a
+           tuned offset: left = fold - (1124.3 / 2172) x art-width. -->
+        <div class="terrain__art">
+        <img class="terrain__photo" src="assets/img/terrain-matte.png" width="2172" height="724" alt="" decoding="async" fetchpriority="low">
+        <svg class="terrain__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path class="route--signal" pathLength="1"
+          d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
+          <path class="route--signal" pathLength="1"
+          d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
+        </svg>
+        </div>
+        </div>
+      </div>
+    </section>
+
 
 </main>
 

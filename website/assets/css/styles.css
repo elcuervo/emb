@@ -3,10 +3,12 @@
    ─────────────────────────────────────────────────────────────────────
    00 tokens          05 features
    01 base            06 pipeline
-   02 primitives      07 landscape
-   03 masthead        08 capability
-   04 hero            09 footer
-                      10 motion / responsive
+   02 primitives      07 blocks
+   03 masthead        08 terrain
+   04 hero            09 console
+                      10 topviz
+                      11 footer
+                      12 motion
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── 00a fonts ───────────────────────────────────────────────────────
@@ -68,15 +70,40 @@
   /* the prose column: 5 of 12 shells */
   --col-prose: 41.5%;
 
-  /* the terrain. The artwork is 2172 x 724 and the page hands it a
-     2172 x 770.2 box; the extra 46.2 units at the top are sky, which lets
-     the route start level with the band's top edge. 78vw of artwork is
-     therefore 27.66vw of band -- keep --band and --art-w in those
-     proportions or the cut-out distorts. Both cap at the shell, otherwise
-     the massif slides off the spine on a very wide display. */
-  --band: clamp(210px, 27.66vw, calc(.2766 * var(--maxw)));
+  /* THE FOLD -- the page's signal axis, in shell-content coordinates, and the
+     one value every spine segment and the terrain route are derived from.
+
+     It is the hero's own geometry, not a tuned number: .pipeline sits in
+     column 2 of .hero__body (which has no `gap`), so column 2 is
+     (100% - --col-prose) wide, and the spine is at 40.7% of that column
+     (40.7% - --plate/2 + --plate/2). --plate therefore cancels out and the
+     axis is width-independent:
+         41.5% + 40.7% x (100% - 41.5%) = 65.31%
+     Change any of the three inputs above and this constant must change with
+     them; the render test in CORRECTIONS.md pass 8 measures it. */
+  --fold: 65.31%;
+  /* ...and the same point in .hero__pipeline's own coordinates, which is
+     40.7% of that container at desktop and 25%/50% once the pipeline stacks */
+  --fold-hero: 40.7%;
+  /* the gap between body copy and the line, either side of the lane */
+  --fold-gap: clamp(14px, 1.4vw, 22px);
+  /* The SVG spine is stroke-width 4 in a 364-unit viewBox, so its rendered
+     width scales with whatever the SVG is stretched to -- and that stops
+     being --plate the moment the pipeline stacks. Each breakpoint below
+     redeclares this to match the stack's actual share of the content box
+     (50%, then 100%); measured at 600px, a fixed calc() off --plate gave a
+     2.41px CSS line against a 6.07px SVG stroke. */
+  --spine-w: calc(var(--plate) * 4 / 364);
+
+  /* the terrain. The artwork is 2172 x 770.2 (the extra 46.2 units at the top
+     are sky, which lets the route start level with the band's top edge), so
+     its height is .3546 of its width. --band is never shorter than the art,
+     which is what guarantees the route's trunk starts exactly where the spine
+     ends; the clamp only adds sky above the massif on small screens. */
+  --art-ratio: .3546;
   --art-w: min(78vw, calc(.78 * var(--maxw)));
-  --art-right: max(-1.8vw, calc(-.018 * var(--maxw)));
+  --art-h: calc(var(--art-w) * var(--art-ratio));
+  --band: max(var(--art-h), clamp(210px, 27.66vw, calc(.2766 * var(--maxw))));
 
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -144,6 +171,24 @@ button{ font: inherit; color: inherit; }
 .skip:focus{ left: 8px; top: 8px; }
 
 .defs{ position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* the page's signal, as a structural element. Each section that carries one
+   is position:relative, and sections have NO vertical margins -- only padding
+   -- so consecutive segments abut exactly. Content is lifted to z-index 1 and
+   opaque plates cover the line, the same rule the hero's masked SVG spine
+   follows between plates. */
+.spine{
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--fold) - var(--spine-w) / 2);
+  width: var(--spine-w);
+  background: var(--accent);
+  z-index: 0;
+  pointer-events: none;
+}
+.reserved-spine-anchor{}
+
 
 [id]{ scroll-margin-top: calc(clamp(70px, 6vw, 96px) + env(safe-area-inset-top, 0px)); }
 
@@ -480,7 +525,26 @@ button{ font: inherit; color: inherit; }
 }
 
 /* ── 06 pipeline ───────────────────────────────────────────────────── */
-.hero__pipeline{ grid-column: 2; min-width: 0; }
+/* Row 1 is the plate stack; row 2 is the CSS spine. The SVG spine (.sig) ends
+   at the bottom of the SVG box, which is the bottom of row 1, so the two meet
+   exactly -- .pipeline's -22px top margin cancels out of both. Row 2 runs to
+   the bottom of the hero's right column, which is the hero's own bottom. */
+.hero__pipeline{
+  grid-column: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  position: relative;
+}
+.spine--hero{
+  position: relative;
+  inset: auto;
+  grid-row: 2;
+  justify-self: start;
+  /* 40.7% of this container is the same point --fold names in the shell's
+     coordinates, so the two expressions cannot disagree */
+  margin-left: calc(var(--fold-hero) - var(--spine-w) / 2);
+}
 
 .pipeline{
   display: grid;
@@ -621,39 +685,239 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
 .note:hover .note__desc,
 .note.is-hot .note__desc{ color: var(--fg); }
 
-/* ── 07 landscape ──────────────────────────────────────────────────── */
-/* Stacking is explicit here rather than incidental. The cut-out, the route and
-   the annotation band are three layers of one drawing, so the section owns a
-   stacking context (isolation) and each layer carries its own level. Nothing
-   about the terrain depends on the compositor's mood any more, and the image
-   is a real alpha cut-out, so it cannot flash its own off-white ground while
-   a layer is being promoted. */
-.landscape{
+/* ── 07 blocks ─────────────────────────────────────────────────────── */
+/* Three movements between the hero and the massif. Each is built only from
+   the poster's atoms and carries the same spine; what changes is the ground
+   and the measure, because four capabilities at one weight read as a list.
+
+   The dark block is the page's only inversion, and it is made of material
+   already on the page: the SERVE plate's own #111110 and #292823. It is not
+   a new palette, it is this one turned over. Its --muted is remapped to
+   --rule because #6B6963 is only 3.40:1 on #111110.
+
+   Sections carry padding and NEVER vertical margins: that is what lets
+   consecutive spine segments abut with no seam. */
+.block{ position: relative; }
+/* The positioned wrapper IS the shell's content box, which is what makes
+   `left: <percentage>` mean the same thing here as it means for the hero's
+   spine. It also owns the section's vertical padding, so a block's height and
+   its spine segment are the same thing and consecutive segments abut. */
+.block > .shell{ padding-block: 0; }
+.block__body{
+  position: relative;
+  z-index: 1;
+  padding-block: clamp(34px, 4vw, 62px);
+}
+.block--paper{ background: var(--bg); }
+.block--dark{
+  background: #111110;
+  color: var(--bg);
+  --muted: var(--rule);
+}
+/* The block header is a solid bar, not a label with a hairline: the poster's
+   loudest typographic move, and the one thing on the page that can carry a
+   whole section without a rule. It inverts with its ground -- black on the
+   paper blocks, paper on the dark one -- so the sequence has a beat at every
+   block boundary and the dark block reads as the page turned over rather than
+   as a page with a dark patch.
+   Archivo at 750 is the page's own display voice (the claim's face), so this
+   is the existing system used louder, not a new one. */
+.block__head{
+  background: var(--fg);
+  color: var(--bg);
+  padding: clamp(11px, 1.15vw, 16px) clamp(14px, 1.5vw, 22px);
+  font-family: var(--sans);
+  font-weight: 750;
+  font-size: clamp(19px, 2.5vw, 34px);
+  letter-spacing: -.005em;
+  line-height: 1.04;
+  text-wrap: balance;
+  text-transform: uppercase;
+}
+.block--dark .block__head{ background: var(--bg); color: var(--fg); }
+
+/* The prose column ends before the lane and the facts begin after it, so no
+   body text can ever sit on the line. The gap either side is --fold-gap, and
+   the lane itself is the spine's own width. */
+.block__grid{
+  display: grid;
+  grid-template-columns:
+    calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap))
+    minmax(0, 1fr);
+  column-gap: calc(var(--spine-w) + var(--fold-gap) * 2);
+  margin-top: clamp(22px, 2.6vw, 42px);
+}
+.block__main{ min-width: 0; }
+.block__main--ledger{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(20px, 2.4vw, 44px);
+}
+.block__aside{ min-width: 0; }
+.block__deck{
+  max-width: 58ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.5;
+}
+
+/* the block's unit of argument: a hairline, a mono label, a short claim.
+   Not a card -- the rule is the only container it ever gets. */
+.cap{
+  padding-block: clamp(15px, 1.7vw, 23px);
+  border-top: 1px solid var(--rule-soft);
+}
+.cap:first-child{ border-top-color: var(--rule); }
+.cap__label{
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.215vw, 15.5px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  line-height: 1.25;
+}
+.cap__claim{
+  margin-top: 7px;
+  max-width: 42ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.45;
+}
+.block--dark .cap{ border-top-color: #292823; }
+.block--dark .cap:first-child{ border-top-color: var(--rule); }
+
+.facts{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(10px, 1.1vw, 18px);
+  row-gap: clamp(9px, .95vw, 14px);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.5;
+}
+.facts dt{ color: var(--muted); letter-spacing: .05em; }
+.facts dd{ min-width: 0; overflow-wrap: anywhere; }
+
+/* ── 07b code ─────────────────────────────────────────────────────── */
+/* Code is a material, not an illustration of one. It is typeset in the mono
+   face with four token classes, and its container is a rule above and below
+   -- never a coloured side border, which the craft floor refuses and the
+   poster's own language does not use. */
+.code{
+  margin-top: clamp(18px, 2vw, 30px);
+  border-top: 1px solid var(--rule);
+  padding-top: clamp(12px, 1.3vw, 18px);
+}
+.block--dark .code{ border-top-color: #292823; }
+.code__body{
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.code__cap{
+  margin-top: clamp(10px, 1.1vw, 16px);
+  max-width: 62ch;
+  font-family: var(--mono);
+  font-size: clamp(12px, .95vw, 12.5px);
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* Four token classes. Emphasis is weight and colour-role, never a second hue:
+   the page has exactly one accent and this does not spend it twice.
+   Paper: --fg 17.3:1, --accent-ink 4.66:1, --muted 4.82:1.
+   Dark:  --bg 16.59:1, --accent 6.06:1, --rule 9.22:1. All clear AA. */
+.t-cmd{ font-weight: 700; }
+.t-str{ color: var(--accent-ink); }
+.t-num{ font-variant-numeric: tabular-nums; }
+.t-dim{ color: var(--muted); }
+.block--dark .t-str,
+.console .t-str{ color: var(--accent); }
+.block--dark .t-dim,
+.console .t-dim{ color: var(--rule); }
+
+/* ── 07c the model(fn(input)) shift ───────────────────────────────── */
+.shift{
+  margin-top: clamp(20px, 2.2vw, 32px);
+  border-top: 1px solid #292823;
+  border-bottom: 1px solid #292823;
+  padding-block: clamp(12px, 1.4vw, 20px);
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.25vw, 16px);
+  font-variant-numeric: tabular-nums;
+}
+.shift__row{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: baseline;
+  gap: clamp(10px, 1.4vw, 24px);
+  padding-block: 5px;
+}
+.shift__fn{ color: var(--accent); font-weight: 700; }
+.shift__out{ color: var(--rule); }
+.shift__tag{
+  font-size: clamp(12px, .95vw, 12.5px);
+  letter-spacing: .05em;
+  color: var(--rule);
+}
+
+/* ── 07d what the scripts are for ─────────────────────────────────── */
+.uses{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  margin-top: clamp(20px, 2.2vw, 32px);
+  border-top: 1px solid #292823;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+}
+.uses__i{
+  display: flex;
+  gap: 10px;
+  padding-block: clamp(9px, 1vw, 13px);
+  border-bottom: 1px solid #292823;
+  color: var(--rule);
+}
+.uses__n{ color: var(--bg); font-weight: 500; letter-spacing: .05em; }
+
+/* ── 08 terrain ────────────────────────────────────────────────────── */
+/* LAST, where the signal lands. Stacking is explicit rather than incidental:
+   the cut-out, the route and the annotation band are three layers of one
+   drawing, so the section owns a stacking context and each layer carries its
+   own level -- which also stops the alpha cut-out flashing its own off-white
+   ground while a layer is being promoted.
+
+   The art box is anchored by its LEFT edge, derived from --fold and the
+   fork's own x in the artwork (1124.3 of 2172), so the route's fork lands on
+   the spine by construction instead of by an offset that has to be defended
+   at seven widths. The right edge is free to bleed past the shell;
+   html{overflow-x:clip} holds it. */
+.terrain{
   position: relative;
   isolation: isolate;
   z-index: 1;
-  /* the spine hands over to the ridge line with no gap */
-  margin-top: -11px;
-  /* reach the sheet's right edge, and back to the pipeline column */
-  margin-right: calc(-1 * var(--pad-r));
-  margin-left: calc(-1 * (40.7% - var(--plate) / 2));
   height: var(--band);
+  background: var(--bg);
 }
+.terrain > .shell{ padding-block: 0; height: 100%; z-index: 3; }
+/* same reason as .block__body: the positioned box must be the content box */
+.terrain__inner{ position: relative; height: 100%; }
+/* the spine ends exactly where the artwork begins: the route's trunk starts
+   at the art box's y=0, and --band is never shorter than --art-h, so this
+   lands on the band's top edge only when there is sky to spare */
+.spine--terrain{ bottom: var(--art-h); }
 
-/* One box for the cut-out and the route: whatever the viewport does to its
-   width, both are stretched identically, so the orange line can never slide
-   off the ridge it was traced onto. */
-.landscape__art{
+.terrain__art{
   position: absolute;
   bottom: 0;
-  right: var(--art-right);
+  left: calc(var(--fold) - (1124.3 / 2172) * var(--art-w));
   width: var(--art-w);
   aspect-ratio: 2172 / 770.2;
   z-index: 1;
   pointer-events: none;
 }
-
-.landscape__photo{
+.terrain__photo{
   position: absolute;
   inset: auto 0 0 0;
   width: 100%;
@@ -661,8 +925,7 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
   object-fit: fill;
   display: block;
 }
-
-.landscape__route{
+.terrain__route{
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -670,6 +933,7 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
   height: 100%;
   color: var(--accent);
 }
+
 .route--signal{
   fill: none;
   stroke: currentColor;
@@ -685,6 +949,13 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   position: absolute;
   z-index: 2;
   top: clamp(20px, 3.7vw, 52px);
+  /* The massif's silhouette passes under these labels at some width, and a
+     4-line annotation cannot move every time it does. They carry the paper
+     with them instead -- the same knockout the spine gets from the content
+     above it. Invisible where a label already sits on paper; legible where it
+     does not, and it keeps the text off an unpredictable photograph. */
+  background: var(--bg);
+  padding: 2px 6px;
   font-family: var(--mono);
   font-size: clamp(12px, 1.02vw, 14px);
   font-weight: 500;
@@ -692,8 +963,8 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   line-height: 1.58;
   color: var(--fg);
 }
-.anno--left{ left: 0; }
-.anno--right{ right: 2.1vw; text-align: left; font-weight: 400; line-height: 1.35; }
+.anno--left{ left: var(--pad-l); }
+.anno--right{ right: var(--pad-r); text-align: left; font-weight: 400; line-height: 1.35; }
 .anno__dash{
   display: block;
   width: 33px;
@@ -703,17 +974,14 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 }
 .anno--right .anno__dash{ margin-left: 0; background: var(--muted); }
 
-/* The branch annotations are margin labels, not callouts: they sit in the
    paper beside the massif, in `--right`'s lighter voice. Their spurs stay in
    the sky above the peak (x 46-81%, y 31-83 of the band), so linework and
    label can never collide at any width. */
-.anno--b{ left: 16%; }
-.anno--c{ right: 22%; }
-.anno--d{ left: 0; top: clamp(150px, 10.4vw, 172px); }
-.anno--b, .anno--c, .anno--d{ font-weight: 400; line-height: 1.35; }
-.anno--b .anno__dash,
-.anno--c .anno__dash,
-.anno--d .anno__dash{ background: var(--muted); }
+/* The two slogans sit in the sky band. The right one bleeds into the gutter
+   as the poster draws it -- 2.1vw past the content edge -- which is what the
+   mockup does and keeps it off the route's right-hand run. */
+.anno--left, .anno--right{ top: clamp(20px, 3.7vw, 52px); }
+.anno--right{ right: calc(-1 * 2.1vw); }
 
 /* registration mark */
 .reg{
@@ -733,76 +1001,17 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .reg::before{ left: 50%; top: 0; width: 1px; height: 100%; }
 .reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
 
-/* ── 08 capability ───────────────────────────────────────────────────
-   The poster's second spread: the same prose column and the same signal
-   axis as the hero, entered from the terrain's foot.
 
-   It introduces no new colour. The dark panels are the SERVE plate's own
-   faces -- #111110 top, #292823 side -- stroked with the same 1px paper
-   edge every other plate carries, and the type lifts the page's existing
-   tokens onto them: --bg (15-17:1 there) for ink, --rule (9.1:1) for the
-   dim voice and for control boundaries, --accent (5.98:1) as the one
-   accent. On this surface --accent clears AA as text, which is why the
-   prompt and the error prefix use it and --accent-ink (3.52:1 here) is not
-   used at all. Every figure is measured in website/README.md. */
-.capability{
-  border-top: 1px solid var(--rule);
-  margin-top: clamp(52px, 6.4vw, 104px);
-  padding-top: clamp(26px, 3vw, 44px);
-}
-.capability__deck{
-  margin-top: clamp(12px, 1.3vw, 20px);
-  max-width: 50ch;
-  font-family: var(--mono);
-  font-size: clamp(12px, 1.1vw, 14px);
-  line-height: 1.5;
-  color: var(--muted);
-}
-.capability__body{
-  display: grid;
-  grid-template-columns: var(--col-prose) minmax(0, 1fr);
-  gap: clamp(28px, 4.4vw, 84px);
-  margin-top: clamp(26px, 3.2vw, 52px);
-}
-.capability__entries{ min-width: 0; }
-
-/* ruled entries, not cards: a hairline and a mono ladder */
-.cap{
-  padding-block: clamp(16px, 1.7vw, 24px);
-  border-top: 1px solid var(--rule-soft);
-}
-.cap:first-child{ border-top-color: var(--rule); }
-.cap__label{
-  font-family: var(--mono);
-  font-size: clamp(12.5px, 1.215vw, 15.5px);
-  font-weight: 500;
-  letter-spacing: .01em;
-  line-height: 1.25;
-}
-.cap__claim{
-  margin-top: 7px;
-  max-width: 42ch;
-  font-family: var(--mono);
-  font-size: clamp(13px, 1.25vw, 16px);
-  line-height: 1.45;
-}
-.cap__facts{
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-size: clamp(12px, 1.02vw, 12.5px);
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-/* the console is the spread's second column. It is the only interactive
-   thing on the page and the only element that could ever become live. */
-
-/* ── the console ─────────────────────────────────────────────────────
+/* ── 09 console ─────────────────────────────────────────────────────
    The fourth plate, laid flat. It is a placeholder: the executor below is
    a transcript map on the page and a documented seam for a real RESP
    client (see website/README.md). No endpoint is implied anywhere. */
 .console{
   min-width: 0;
+  /* above the spine: the line passes behind this plate and re-emerges below
+     it, exactly as it passes behind the hero's slabs */
+  position: relative;
+  z-index: 1;
   background: #111110;
   border: 1px solid var(--bg);
   color: var(--bg);
@@ -934,7 +1143,7 @@ html.js .console__form{
 .console :focus-visible,
 .topviz :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ── the emb-top panel ───────────────────────────────────────────────
+/* ── 10 the emb-top panel ───────────────────────────────────────────────
    A full-width band rather than a second column: the capture's longest
    line is ~100 characters, which no 640px column can hold without either
    cutting it or wrapping the bars mid-run. The direction contract put it
@@ -953,6 +1162,8 @@ html.js .console__form{
   line-height: 1.45;
 }
 .topviz__screen{
+  position: relative;
+  z-index: 1;
   margin-top: 12px;
   padding: clamp(12px, 1.4vw, 18px);
   background: #111110;
@@ -978,8 +1189,18 @@ html.js .console__form{
   color: var(--muted);
 }
 
-/* ── 09 footer ─────────────────────────────────────────────────────── */
-.footer{ border-top: 1px solid var(--rule-soft); background: var(--bg); }
+/* ── 11 footer ─────────────────────────────────────────────────────── */
+/* The footer is dark, and it is the same dark as the console, the emb-top
+   capture and the scripts block: #111110, the SERVE plate's own face. It
+   closes the page under the massif rather than putting a paper strip back
+   after the photograph. --muted is remapped for the same reason it is in the
+   dark block: #6B6963 is only 3.40:1 on #111110. */
+.footer{
+  border-top: 1px solid var(--rule);
+  background: #111110;
+  color: var(--bg);
+  --muted: var(--rule);
+}
 .footer__inner{
   display: flex;
   align-items: center;
@@ -996,9 +1217,9 @@ html.js .console__form{
   letter-spacing: .04em;
   color: var(--muted);
 }
-.footer__mark{ color: var(--fg); }
+.footer__mark{ color: var(--bg); }
 
-/* ── 10 motion + responsive ───────────────────────────────────────── */
+/* ── 12 motion + responsive ───────────────────────────────────────── */
 /* The reveals ripple through a group instead of flipping as one block. --i is
    the element's place in its list; there is no wall clock involved, and with
    prefers-reduced-motion the whole cascade collapses to a single frame. */
@@ -1008,10 +1229,16 @@ html.js .console__form{
 .features__list > .feat:nth-child(4){ --i: 3; }
 .features__list > .feat:nth-child(5){ --i: 4; }
 .features__list > .feat:nth-child(6){ --i: 5; }
-.capability__entries > .cap:nth-child(1){ --i: 0; }
-.capability__entries > .cap:nth-child(2){ --i: 1; }
-.capability__entries > .cap:nth-child(3){ --i: 2; }
-.capability__body > .console{ --i: 3; }
+/* each block ripples on its own: --i is the element's place in its block,
+   so a block's entrance never waits out another block's delay */
+.block__main > .cap:nth-child(1){ --i: 0; }
+.block__main > .cap:nth-child(2){ --i: 1; }
+.block__main > .cap:nth-child(3){ --i: 2; }
+.block__main > .cap:nth-child(4){ --i: 3; }
+.block .code{ --i: 2; }
+.block .shift{ --i: 1; }
+.block .uses{ --i: 3; }
+.block .console{ --i: 4; }
 
 html.js [data-reveal]{ opacity: 0; translate: 0 14px; }
 html.js [data-reveal].in{
@@ -1174,14 +1401,25 @@ html.js.is-ready .hero__prose{
   .feat__name{ font-size: 15px; line-height: 1.4; }
   .feat__desc{ font-size: 14px; line-height: 1.6; }
 
-  /* the capability region stacks: entries first (the argument), then the
-     console that proves it, then emb-top */
-  .capability{ margin-top: 52px; padding-top: 26px; }
-  .capability__deck{ font-size: 14px; max-width: 54ch; }
-  .capability__body{ grid-template-columns: minmax(0, 1fr); gap: 30px; margin-top: 26px; }
+  /* From here the pipeline stacks into two columns of its own, so the plate
+     centre -- and therefore the whole page's axis -- moves to 25% of the
+     content box. --fold, --fold-hero and --art-w move together or the spine
+     and the route come apart. */
+  :root{ --fold: 25%; --fold-hero: 25%; --art-w: 145vw; --spine-w: calc(200% / 364); }
+
+  /* the blocks keep the lane: content in the right column, line in the left
+     gutter, measure never below ~440px at this range */
+  .block__body{ padding-block: 40px; }
   .cap__label{ font-size: 15px; line-height: 1.4; }
   .cap__claim{ font-size: 15px; line-height: 1.55; max-width: 52ch; }
-  .cap__facts{ font-size: 14px; line-height: 1.6; }
+  .block__main--ledger{ grid-template-columns: minmax(0, 1fr); }
+  .block__deck{ font-size: 15px; max-width: 52ch; }
+  .facts{ font-size: 14px; line-height: 1.6; row-gap: 14px; }
+  .code__body{ font-size: 14px; line-height: 1.7; }
+  .code__cap{ font-size: 14px; }
+  .shift{ font-size: 15px; }
+  .shift__tag{ font-size: 14px; }
+  .uses{ font-size: 14px; }
   .topviz__claim{ font-size: 15px; max-width: 54ch; }
   /* every console control clears the 44px touch floor at these widths */
   .console__mode{ min-height: 44px; font-size: 14px; }
@@ -1202,6 +1440,17 @@ html.js.is-ready .hero__prose{
   .topviz__src{ font-size: 14px; }
 
   .hero__pipeline{ grid-column: 1; margin-top: 48px; }
+  /* Once the pipeline stacks, the notes can outgrow the plate stack, and a
+     spine confined to the wrapper's second row then begins BELOW them --
+     leaving a hole after the last plate (measured: 390px at 390w). Collapse
+     the wrapper to one row and put the spine and the diagram in the same
+     cell: the stack's paper hides the line behind the plates (whose own
+     masked SVG line draws the visible gaps), and the seam below it is the
+     connector into the first block. */
+  .hero__pipeline{ grid-template-rows: auto; }
+  .pipeline{ grid-row: 1; grid-column: 1; position: relative; z-index: 1; }
+  .spine--hero{ grid-row: 1; grid-column: 1; }
+  .pipeline__stack{ background: var(--bg); }
   .pipeline{ margin: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .pipeline__svg{ overflow: hidden; }
   .pipeline__notes{ margin-right: 0; }
@@ -1210,20 +1459,17 @@ html.js.is-ready .hero__prose{
   .note__label{ font-size: 14px; line-height: 1.4; letter-spacing: .03em; }
   .note__num{ font-size: 14px; }
   .note__desc{ font-size: 14px; line-height: 1.5; }
-  .landscape{
-    margin: 28px calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
-    /* 112vw of artwork is 39.72vw of band, plus the room the annotations
-       need above the massif */
-    height: clamp(240px, calc(39.72vw + 96px), 470px);
+  /* the massif: 145vw of artwork is 51.4vw of band, and --band never falls
+     below the art, so the spine always reaches the route's first point */
+  .terrain{
+    height: max(var(--art-h), clamp(240px, calc(39.72vw + 96px), 470px));
   }
-  .landscape__art{ right: -6vw; width: 112vw; }
   .anno{ top: 20px; font-size: 14px; }
   /* The three data annotations carry the README's reply-format, protocol and
      batching facts. They need the paper beside the massif, which a phone
      does not have: below 1000px the band keeps the two slogans only, and
      their spurs go with them rather than crossing the peak unlabelled. The
      same facts stay findable in the feature list and `DESIGN.md`. */
-  .anno--b, .anno--c, .anno--d, .route--branch{ display: none; }
   .anno--left{ left: var(--pad-l); }
   .anno--right{ right: var(--pad-r); }
   .reg{ display: none; }
@@ -1249,7 +1495,31 @@ html.js.is-ready .hero__prose{
   .ghlink{ justify-self: center; }
   .features__list{ grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .feat{ padding-block: 14px; }
-  .capability__deck{ font-size: 14px; }
+  /* The rail moves to the RIGHT margin on phones, and everything is held to
+     its left. At the plate centre a 390px content box gives 175px per side,
+     which left the stage notes about 16 characters -- readable in theory and
+     not in the hand. In the right margin the text keeps its measure and the
+     line is still one line.
+     The diagram's own internal spine is hidden here because there is only
+     room for one: two orange lines 40% apart, both visible in the gaps
+     between the plates, is not a composition. The rail passes behind the
+     plates instead, which is the language the desktop hero already uses. */
+  :root{ --fold: 90%; --fold-hero: 90%; --art-w: 156vw; --spine-w: calc(400% / 364); }
+  .pipeline__svg .sig{ display: none; }
+  /* ...and the stack's paper stops being a knockout, so the rail threads the
+     plates on the right instead of being hidden for their whole box: at 90% of
+     the SVG each diamond covers only ~48 of the 123 units between plate
+     centres, so the rail reads exactly as it does on desktop -- visible in the
+     gaps, passing behind the plate. */
+  .pipeline__stack{ background: none; }
+  /* everything stops short of the rail, so it runs clean from the hero to the
+     massif and nothing is ever knocked out of it */
+  .block__grid,
+  .block__body > .block__head,
+  .block .topviz{ width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap)); }
+  .block__grid{ grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+  .block__body{ padding-block: 46px; }
+  .block__aside{ margin-top: 26px; }
   .console__bar{ padding-block: 6px; }
 
   /* Phones keep the isometric stack: the four slabs are the page's whole
@@ -1265,12 +1535,25 @@ html.js.is-ready .hero__prose{
      ends at the last plate instead of dangling: the 47 empty units below
      SERVE are 12.9% of the artwork's width. */
   .pipeline__svg{ margin-bottom: -12.9%; }
-  .pipeline__notes{ grid-column: 1 / -1; padding-left: 0; margin-top: 28px; }
+  /* The stage notes sit LEFT of the line rather than across it. Full width
+     they crossed the plate centre, so they had to be knocked out of the line
+     to stay legible -- which is why the line dead-ended under the last plate
+     and only picked up again a section later. Held to the lane's edge, the
+     line runs clean down their right side and their rules stop short of it.
+     The measure is ~16 characters at the 14px floor; these are captions to
+     the plates beside them, not body copy, so the trade is the right one. */
+  .pipeline__notes{
+    grid-column: 1;
+    justify-self: start;
+    width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap));
+    padding-left: 0;
+    margin-top: 28px;
+  }
   .note{
     position: relative;
     inset: auto;
     transform: none;
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: 30px minmax(0, 1fr);
     padding-block: 16px;
     border-top: 1px solid var(--rule-soft);
   }
@@ -1279,10 +1562,11 @@ html.js.is-ready .hero__prose{
   .note::before{ display: none; }
   .note__label{ font-size: 15px; }
   .note__desc{ font-size: 14px; line-height: 1.5; }
-  .landscape{
-    height: clamp(250px, calc(43.97vw + 100px), 470px);
+  /* 124vw of artwork is 43.97vw of band; the clamp is the sky the two
+     slogans need above the massif, and the spine spends it */
+  .terrain{
+    height: max(var(--art-h), clamp(250px, calc(43.97vw + 100px), 470px));
   }
-  .landscape__art{ right: -12vw; width: 124vw; }
   .footer__inner{ display: grid; }
 }
 
@@ -1322,5 +1606,5 @@ html.js.is-ready .hero__prose{
   html.js .sig,
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   .masthead{ position: static; }
-  .landscape, .features, .pipeline, .note, .feat{ break-inside: avoid; }
+  .terrain, .features, .pipeline, .note, .feat{ break-inside: avoid; }
 }

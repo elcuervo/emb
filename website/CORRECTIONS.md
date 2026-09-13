@@ -1031,3 +1031,287 @@ unknown command             → -ERR unknown command 'FLUSHALL' + hint
 JavaScript disabled         → form hidden, 12-line <noscript> transcript stands in
 320–834px controls          → mode 44px, input 47px, RUN 44px
 ```
+
+---
+
+## Pass 8 — the spine becomes structure, and the massif closes the page
+
+The capability region was one paper block with a dark panel in it, and the
+spine existed only inside the hero's SVG and on the terrain route — so the
+page's own organising idea stopped two-thirds of the way down and never
+arrived anywhere. This pass makes the line the page's axis from the wordmark to
+the massif, moves the terrain to the end where the signal lands, and gives the
+capability material three grounds. Measurements are Chromium 153 / DPR 1 over
+`python3 -m http.server`.
+
+**1. One axis, derived instead of defended.** `--fold: 65.31%` is
+`--col-prose + 40.7% × (1 − --col-prose)` — the hero's own geometry, with the
+`--plate` terms cancelling. Measured at six widths, every spine on the page and
+the route's fork agree:
+
+| Width | SVG spine | hero spine | block spines | terrain spine | route fork |
+|---|---|---|---|---|---|
+| 1440 | 924.13 | 924.13 | 924.14 | 924.14 | 924.13 |
+| 1086 | 696.95 | 696.95 | 696.95 | 696.95 | 696.96 |
+| 1000 | 270.00 | 269.99 | 269.99 | 269.99 | 270.01 |
+| 900 | 243.00 | 242.98 | 242.98 | 242.98 | 243.01 |
+| 700 | 189.00 | 188.98 | 188.98 | 188.98 | 189.01 |
+| 390 | 195.00 | 194.98 | 194.98 | 194.98 | 195.01 |
+| 320 | 160.00 | 159.98 | 159.98 | 159.98 | 160.00 |
+
+Worst error **0.03px**, against a spec of 1px.
+
+The line's **weight** needed its own fix. `--spine-w` cannot simply be
+`calc(var(--plate) * 4 / 364)`, because the SVG's rendered width stops being
+`--plate` the moment the pipeline stacks — the stack column is 50% of the
+content box below 1001px and the whole of it below 641px. Measured at 600px,
+the plate-derived line was **2.406px against a 6.066px SVG stroke**: a 2.5x
+weight step exactly where the two hand over. Each breakpoint now redeclares it
+against the stack's real share (`calc(200% / 364)`, then `calc(400% / 364)`):
+
+| Width | SVG stroke | CSS spine | Delta |
+|---|---|---|---|
+| 1440 | 5.165 | 5.156 | 0.009 |
+| 900 | 4.549 | 4.547 | 0.003 |
+| 600 | 6.066 | 6.063 | 0.003 |
+
+**2. The segments abut, at every boundary.** Sections carry padding and never
+vertical margins, and each spine segment is a grid track that spans its
+section. Measured section gaps (hero→block1→block2→block3→terrain) are **0px at
+1440, 1086, 1000, 900, 700, 390 and 320**. The hero's own handover is exact
+too: `.pipeline__svg`'s box bottom and the hero spine's top are the same
+number (1116/1116 at 1086, 1316.64/1316.64 at 1280) because the wrapper is a
+two-row grid whose first track is the diagram.
+
+**3. The terrain's fork is now on the axis by construction.** The art box moved
+from a right-anchored `--art-right` to
+`left: calc(var(--fold) - (1124.3 / 2172) * var(--art-w))`, so `1124.3` — the
+fork's own x in the artwork — lands on `--fold` at any width. That also closes
+a defect the pass-6 critique found and this pass did not have to re-defend: the
+old right-anchoring left the spine and the fork **−208.28px apart at 834px**.
+The block above ends exactly where the art box begins at 1440
+(block3 bottom 4012, art top 4012, route trunk top 4012).
+
+**4. The blocks genuinely differ, and no text sits on the line.** Protocol and
+operations are paper; scripts is a full-bleed `#111110` inversion using the
+SERVE plate's own faces. `.block__grid` splits on the lane
+(`calc(var(--fold) - var(--spine-w)/2 - var(--fold-gap))` then the lane as the
+gap), so copy can never reach the line. Opaque plates (`.console`,
+`.topviz__screen`) sit at `z-index: 1` and cover it, which is the rule the
+hero's plates already follow.
+
+**5. The full type ladder holds on the new dark ground.** Smallest computed
+text in the dark block: **14.0px at 390 and 320**, and the whole region is
+**12.0px at 1086**. Controls clear the target floor at 320–834px (mode 44px,
+input 47px, RUN 44px) with zero elements below it.
+
+**6. Code is highlighted, on both grounds, and every token clears AA.**
+
+| Class | Paper | Ratio | Dark | Ratio |
+|---|---|---|---|---|
+| plain / `.t-cmd` | `--fg` | 17.28:1 | `--bg` | 16.59:1 |
+| `.t-str` | `--accent-ink` | 4.66:1 | `--accent` | 6.06:1 |
+| `.t-num` | `--fg` tabular | 17.28:1 | `--bg` tabular | 16.59:1 |
+| `.t-dim` | `--muted` | 4.82:1 | `--rule` | 9.22:1 |
+
+The console's plain-string transcripts get the same four classes from a
+four-rule pattern highlighter in `main.js`. Its first version was wrong and is
+worth recording: `-?\d+` matched the `2` inside `sst2` and split the script
+name. The numeric rule is now word-bounded, and `EMB.SCRIPT` no longer stops at
+the dot.
+
+**7. Four defects the build introduced, and what they cost.**
+
+- **The block spines were on the wrong box.** `left: <percentage>` resolves
+  against the containing block's *padding* box, so a spine inside `.block`
+  measured 65.31% of the **viewport** (835.96) while the hero's measured 65.31%
+  of the **content box** (821.45) — a 14.5px step at every boundary. Fixed with
+  a positioned `.block__body` / `.terrain__inner`: the wrapper *is* the content
+  box, which is also what makes one percentage mean the same thing in both.
+- **The library rule was missing.** `.cap`, `.cap__label` and `.cap__claim`
+  lived in the region this pass replaced, so the claims ran the full content
+  width and the mono ladder had no steps. Caught by diffing the class names the
+  markup uses against the class names the stylesheet defines.
+- **Phones lost the line after the plates.** With the spine in its own grid row
+  it began below the stage notes: `svgBottom 1952` against `spineTop 2340`, a
+  **388px hole**. The wrapper is now one row and the spine shares the diagram's
+  cell below 1001px, so the stack's paper hides it behind the plates and the
+  seam below is the connector.
+- **The annotations collided with each other and with the rock.** Moving them
+  from the landscape's old sub-column to the whole content box put the
+  `HELLO 3` label **47px inside** the right slogan. The branch labels' `left`
+  and `top` are now derived from the spur's own coordinates, `B` is
+  right-aligned on its spur and `D` left-aligned on its (two left-aligned
+  labels collide by 27px at these art widths), and all five carry the paper as
+  a knockout — the massif's silhouette passes under a label at some width in
+  the 320–1440 range, and a knockout is both the fix and the honest one, since
+  no contrast check can certify text over a photograph.
+
+  `C` needed the same right-alignment, and it is the one that shows why a
+  single reference frame is not enough: left-aligned it was clean at 1440
+  (12px of clearance) and ran **21px into the right slogan at 1086**. Final
+  state: **0 annotation collisions at 1440, 1086, 700 and 390**, with only the
+  two slogans rendered below 1001px, and no knockout over the route.
+
+**8. The detector, run once after the build.** Baseline 10 findings → after 19.
+The nine new ones are all `cramped-padding` and all reviewed: three name
+`.block`, one `.terrain`, two `.console`/`.console__bar`, and three name the
+same-colour knockout patches (`.pipeline__stack`, `.pipeline__notes`, `.shift`,
+`.uses`). The rule targets a card-like container with text flush to a *visible*
+boundary; these are full-bleed page bands whose shell carries the gutters, plus
+patches painted in the page's own paper — measured insets are 16.29px on the
+console bar and 20px inside `.shift`. `flat-type-hierarchy` is unchanged in
+substance (it was present at baseline); the page's hierarchy is deliberately
+carried by scale, rules and the mono/sans split rather than by heading steps.
+Recorded rather than "fixed", as with the previously accepted
+`clipped-overflow-container`, `overused-font` and `wide-tracking` findings.
+
+---
+
+## Pass 9 — brutalist block headers, no branches, dark footer
+
+Three refinements to pass 8's composition. Measurements at Chromium 153 / DPR 1.
+
+**1. Block headers are headers, not labels.** `rule-head` is the page's
+*annotation* voice — a 12–13px mono label with a hairline. Using it for three
+section headings made the page's three biggest structural breaks look like
+footnotes. `.block__head` replaces it on the blocks only (the hero keeps
+`rule-head` for `BUILT FOR REAL SYSTEMS`): a solid bar, full content width,
+Archivo at 750 in uppercase at `clamp(19px, 2.5vw, 34px)`, reversed out of
+`--fg` on the paper blocks and out of `--bg` on the dark one.
+
+| Block | Bar | Ink | Measured |
+|---|---|---|---|
+| Protocol | `#0B0B0B` | `#F3F0E8` | **17.28:1** |
+| Scripts | `#F3F0E8` | `#0B0B0B` | **17.28:1** |
+| Operations | `#0B0B0B` | `#F3F0E8` | **17.28:1** |
+
+The inversion is the point: on the dark block a paper bar makes the block read
+as the page turned over rather than as a paper page with a dark patch in it.
+The bar is opaque, so it covers the spine where it crosses — the same rule the
+console plate and the hero's slabs already follow. It is also the only element
+on the page that carries a section without a rule, which is what the
+`rule-head__rule` hairline was doing before.
+
+**2. The three data branches are gone.** They were added in pass 6 to carry
+three README facts into the artwork, and they were the right idea at the time —
+but three spurs forking off the trunk and crossing the peak turned the massif
+into a diagram of itself, and the fact they carried (`BLOB OR VALUES`) is now
+sitting in the protocol block beside the command it describes. Removed with
+their annotations:
+
+```text
+route--branch paths   3 -> 0
+.anno elements        5 -> 2   (the two slogans remain)
+data-seq attributes   2 -> 0
+```
+
+The route is now the trunk alone, and the two trunk halves both run the full
+scroll travel — so the per-path staging offset in `main.js` (which existed only
+to sequence the branches 14% apart) is gone with them rather than left as dead
+logic. Seven `[data-reveal]` elements and three `wide-tracking` findings went
+with the labels.
+
+**3. The footer is dark**, on the SERVE plate's own `#111110`, so the page
+closes under the massif instead of putting a paper strip back after the
+photograph. `--muted` is remapped to `--rule` there for the same reason it is
+in the dark block. Measured: copy **9.22:1**, the `TEXT IN. FLOATS OUT. / EMB`
+mark **16.59:1**, the top rule `--rule` against the dark ground **9.22:1**.
+
+**4. Nothing measured in pass 8 moved.** Re-checked at 1086 after all three
+changes: spine alignment still agrees to **0.01px** across the SVG, hero,
+three blocks, terrain and the route's fork (696.95 / 696.95 / 696.95 ×3 /
+696.95 / 696.96); section gaps still **0**; `documentElement.scrollWidth`
+still equals `clientWidth`; reveals complete at 14/14 after a scroll-through at
+1440 and at 390.
+
+**5. The detector improved.** 19 → 16, with no new finding categories: the
+three removed branch labels took three `wide-tracking` findings with them, and
+`section.hero clips a positioned child` is gone too — the terrain, which was
+the positioned child the hero used to clip, is no longer inside it. The
+`cramped-padding` set is the same reviewed list recorded in pass 8 §8; the one
+new instance the header bar could have added (a full-width bar with text flush
+to it) does not appear, because the bar's inline padding keeps its heading off
+the boundary.
+
+**6. On phones the stage notes moved left of the line.** This closes the last
+place where the spine visibly stopped for no reason. The notes were full width,
+so they crossed the plate centre and had to be knocked out of the line to stay
+legible — which left the line dead-ending under SERVE and picking up again at
+the first block. They are now held to the lane's edge
+(`width: calc(var(--fold) - var(--spine-w)/2 - var(--fold-gap))`), the knockout
+is gone, and the line runs their full height beside them. Measured at 390px:
+
+```text
+notes width                      159px
+notes right edge to spine         14px   (one --fold-gap)
+note boxes crossing the spine        0
+spine span                  1421..2466   (the notes end at 2466)
+horizontal scroll                    0
+```
+
+The measure is ~16 characters at the 14px floor and the notes grew from ~100px
+to 122–144px tall. That is the cost, and it is the right trade here because
+these are captions to the plates beside them rather than body copy — unlike the
+blocks below, which keep the knockout precisely because a lane *would* leave
+them no readable measure.
+
+**7. A caching trap worth recording.** The first measurement of this change
+showed the notes still 350px wide, and the cause was not CSS: `reload` served
+the stylesheet from cache, so the probe measured the previous build. The
+`<link>` has no cache-busting query, and `python3 -m http.server` answers 304
+from `Last-Modified` when a reload races the file write. Every measurement in
+this pass was re-taken against `index.html?cb=N` and re-confirmed; the numbers
+above and in §1–§5 are from the cache-busted load.
+
+---
+
+## Pass 10 — the phone rail moves to the right margin
+
+Pass 9's phone change left the text unreadable, and the measurement said so
+plainly: holding the stage notes to the lane's edge gave them **159px**, about
+16 characters at the 14px floor. Readable in theory, not in the hand. The cause
+was not the notes — it was the axis. At the plate centre a 390px content box
+gives 175px per side, and no arrangement of the notes fixes that.
+
+So the rail moved to the right margin.
+
+```text
+                    before (--fold: 50%)      after (--fold: 90%)
+rail x                      195                        335
+notes width                 159px                      299px
+notes, characters             ~16                        ~38
+text on a visible rail         0                          0
+horizontal scroll              0                          0
+```
+
+Everything is held to the left of the rail with one expression —
+`width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap))` — applied to
+the stage notes, the block grids, the header bars and the emb-top panel. At
+320px the rail is at 272 and the notes are 236px. The handover to the massif is
+still exact: **rail 334.98, fork 334.99**.
+
+**Two consequences, both deliberate.**
+
+1. **The diagram's own spine is hidden on phones** (`.pipeline__svg .sig`).
+   There is room for one line only: with both, the gaps between plates would
+   show two orange lines 40% apart. And the stack's paper knockout is dropped at
+   this width, so the rail now *threads* the plates — verified with
+   `elementFromPoint` at the rail's x through the stack: the topmost element is
+   a plate `path` in some bands and the transparent `svg` in others, which is
+   the desktop behaviour exactly.
+2. **The massif is cropped, and it has to be.** The route's fork is fixed at
+   51.76% of the artwork, so putting the fork on a right rail forces the art's
+   right slope off-frame — `--art-w` grows to `156vw` so the art's left edge
+   stays at the content edge. We see 58% of the massif, with the summit under
+   the rail. That is where the line arrives, so it reads as the signal reaching
+   the peak rather than as a crop.
+
+**Scoped to ≤640px, verified.** At 900px nothing moved: fold 25%, `.sig`
+visible, SVG spine 243.00 against a hero spine of 242.99, notes in their own
+column at 450. At 1440px: fold 65.31%, all five spines and the fork agree to
+**0.01px**, section gaps 0, no horizontal scroll.
+
+**Detector: 16 → 14**, no new categories. Dropping the two phone knockouts
+removed the `cramped-padding` findings on `.pipeline__stack` and
+`.pipeline__notes`; the remaining eight are the reviewed list from pass 8 §8.
