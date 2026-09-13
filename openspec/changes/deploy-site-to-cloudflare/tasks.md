@@ -42,11 +42,17 @@
 
 ## 7. Deploy, then verify against the real origin
 
-- [ ] 7.1 Deploy once to the `workers.dev` address with the custom domain still commented out. Then audit: fetch every path in `published-tree.py`'s expected set and assert 200.
-- [ ] 7.2 On that same address, assert the leaks are closed — `/README.md`, `/PRODUCT.md`, `/.impeccable/surfaces/website-index-html.md`, `/.assetsignore`, `/tools/ink-probe.html`, `/tools/stamp-version.py`, `/tools/published-tree.py`, `/assets/img/terrain-v2.png`, `/assets/img/terrain-v2.md` must each return 404 (or a redirect to the 404 page). Do not attach the domain until 7.1 and 7.2 both pass.
-- [ ] 7.3 Attach `emb.is`, then verify the apex serves the landing over `https`, that a plaintext request to the apex redirects rather than serving content, and that `https://emb.is/` and `https://emb.is/docs/` each return their page without a further redirect.
-- [ ] 7.4 Verify the not-found behavior against the origin: an unknown path returns a not-found status carrying `404.html`, its `/_headers`-declared caching matches task 4.1, and its two routes resolve.
-- [ ] 7.5 Verify the deployed bytes are the audited revision: the version string rendered on the landing equals the repository's `VERSION`, and a browser that had loaded the previous `styles.css` receives a corrected one without clearing cache.
+- [x] 7.1 Deploy once to the `workers.dev` address with the custom domain still commented out. Then audit: fetch every path in `published-tree.py`'s expected set and assert 200.
+  - Audited at `https://emb-site.elcuervo.workers.dev`: all twelve served paths reach 200. `/index.html`, `/404.html`, and `/docs/index.html` answer 307 first, which is the declared `auto-trailing-slash` handling, and each resolves to 200 (`/`, `/404`, `/docs/`).
+- [x] 7.2 On that same address, assert the leaks are closed — `/README.md`, `/PRODUCT.md`, `/.impeccable/surfaces/website-index-html.md`, `/.assetsignore`, `/tools/ink-probe.html`, `/tools/stamp-version.py`, `/tools/published-tree.py`, `/assets/img/terrain-v2.png`, `/assets/img/terrain-v2.md` must each return 404 (or a redirect to the 404 page). Do not attach the domain until 7.1 and 7.2 both pass.
+  - All ten probes return 404 on the `workers.dev` address, and `_headers` as an eleventh. Re-checked at the apex after the cutover, same result.
+- [x] 7.3 Attach `emb.is`, then verify the apex serves the landing over `https`, that a plaintext request to the apex redirects rather than serving content, and that `https://emb.is/` and `https://emb.is/docs/` each return their page without a further redirect.
+  - The domain was held by a stopgap `emb-placeholder` Worker with a `*.emb.is/*` zone route; the cutover moved the custom domain to `emb-site`, deleted that route, and declared `routes` in `wrangler.jsonc` so a deploy from `main` keeps the domain attached.
+  - The plaintext redirect is the zone's `always_use_https` setting, not repo config — it was `off` and was enabled during the cutover. `http://emb.is/` and `http://emb.is/docs/` now answer 301 to their `https` addresses, and both `https` pages return 200 with no further redirect.
+- [x] 7.4 Verify the not-found behavior against the origin: an unknown path returns a not-found status carrying `404.html`, its `/_headers`-declared caching matches task 4.1, and its two routes resolve.
+  - `https://emb.is/does/not/exist` returns 404 `text/html` carrying `404.html`, and `cache-control: public, max-age=0, must-revalidate` — the revalidate policy task 4.1 assigns to HTML, not an `immutable` rule. Both of the page's routes (`/`, `/docs/`) resolve to 200.
+- [x] 7.5 Verify the deployed bytes are the audited revision: the version string rendered on the landing equals the repository's `VERSION`, and a browser that had loaded the previous `styles.css` receives a corrected one without clearing cache.
+  - The landing and the docs both render `0.4.0.pre4`, equal to `VERSION`; `styles.css` answers `public, max-age=0, must-revalidate`, so a stale copy is revalidated rather than pinned by an `immutable` rule.
 
 ## 8. Prove the delivery contract
 

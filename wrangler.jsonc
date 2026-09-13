@@ -23,12 +23,15 @@
   // Preview URLs must stay on so `wrangler versions upload --preview-alias`
   // can hand a pull request a stable address before it merges.
   "preview_urls": true,
-  "workers_dev": true
+  "workers_dev": true,
 
-  // `emb.is` is attached separately, and deliberately not in this file yet:
-  // the Worker is deployed to its workers.dev address first and the served tree
-  // audited there, so a mistake in `.assetsignore` is never public. Uncomment
-  // once that audit passes.
+  // The production origin. Declared here — rather than attached once by hand —
+  // so every deploy from `main` keeps it attached and a rollback restores it.
   //
-  // "routes": [{ "pattern": "emb.is", "custom_domain": true }]
+  // It was first attached only after the served tree was audited on the
+  // workers.dev address, so a mistake in `.assetsignore` was never public;
+  // that audit is tasks 7.1–7.2 of `deploy-site-to-cloudflare`, and this
+  // declaration is 7.3. Attaching at the apex replaces the `emb-placeholder`
+  // Worker that held `emb.is` while the site was being built.
+  "routes": [{ "pattern": "emb.is", "custom_domain": true }]
 }
