@@ -1745,19 +1745,28 @@ html.js.is-ready .hero__prose{
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   .masthead{ position: static; }
   .terrain, .features, .pipeline, .note, .feat{ break-inside: avoid; }
-  /* The page inverts once, and five surfaces are light-on-dark: the scripts
-     block, the console, the emb-top capture, the footer and the masthead's
-     dark button. Chrome strips background graphics by default, which printed
-     `color: var(--bg)` (#F3F0E8) on white -- legible on screen, invisible on
-     paper. `print-color-adjust: exact` keeps the ground the design chose
-     rather than re-colouring a whole type ladder for print. */
+  /* The page inverts once, and these are the surfaces that carry light text on a
+     dark ground: the scripts block, the console, the emb-top capture, the footer,
+     the masthead's dark button, the block header bars, and the skip link. Chrome
+     strips background graphics by default, which printed `color: var(--bg)`
+     (#F3F0E8) on white -- legible on screen, invisible on paper.
+     `print-color-adjust: exact` keeps the ground the design chose rather than
+     re-colouring a whole type ladder for print.
+     The header bars and the skip link were MISSED by the first version of this
+     rule, which listed only five surfaces; the three section titles and the skip
+     link printed near-white on white until an audit of every dark-ground,
+     light-ink element in the live DOM found them. Decorative dark hairlines
+     (`.meta-rule`, `.anno__dash`) are deliberately not listed: they carry no
+     text, so losing them on paper costs nothing. */
   .block--dark,
   .console,
   .console__bar,
   .console__screen,
   .topviz__screen,
   .footer,
-  .btn--dark{
+  .btn--dark,
+  .block__head,
+  .skip{
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

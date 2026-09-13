@@ -1713,3 +1713,50 @@ exactly, so the line always ends where the plate's front edge is.
 still **PASS at 24 of 24 widths on both surfaces**, so no text moved. The mask
 stays inside `<defs>` in an `aria-hidden` SVG, so nothing here is exposed to
 assistive technology.
+
+---
+
+## Pass 14 — the print rule was incomplete
+
+Pass 12 §9 listed five light-on-dark surfaces for `print-color-adjust: exact`
+and reported them as covering the page. Auditing every text-bearing element
+whose effective ground is dark and whose ink is light found **74 such elements on
+the landing and 0 of them uncovered — but only after two were fixed**:
+
+| surface | before | after |
+|---|---|---|
+| `h2.block__head` | near-white on white — **three section titles invisible on paper** | dark-on-light bar preserved in the paper blocks, light-on-dark bar preserved in the inverted one |
+| `a.skip` | near-white on white when focus-revealed | preserved |
+
+The three section titles are the real loss: `.block__head` is
+`background: var(--fg); color: var(--bg)`, so with background graphics off —
+Chrome's default — "THE PROTOCOL IS THE INTEGRATION", "THE MODEL, AS A FUNCTION"
+and "OPERATIONS, NO NEW DASHBOARD" printed as near-white text on white. The pass
+12 rule was written from a list of surfaces someone remembered rather than from a
+query of the document, which is why it was short by two.
+
+Decorative dark hairlines (`.meta-rule`, `.anno__dash`) are deliberately **not**
+listed: they carry no text, so losing them on paper costs nothing.
+
+**The audit that should have been the first one.** For every element with a text
+node child, compute its effective background by walking ancestors, then flag it
+when the ground's relative luminance is ≤ 0.2 and the ink's is ≥ 0.5, and assert
+each flagged element is matched by one of the print rule's selectors. It is five
+lines and it is exhaustive, which a hand-written surface list is not.
+
+**Verified.** Landing: 74 text-bearing light-on-dark elements, **0 uncovered**.
+`/docs`: 2 (the skip link and the footer), **0 uncovered**. Rendered under a
+simulated backgrounds-off pass — every background stripped except the marked
+surfaces — the section bars keep their grounds with legible reversed text, the
+inverted block keeps its black ground and all four code token colours, and
+everything else prints as dark ink on white. The one artefact of that simulation
+is the sticky masthead overlapping content it would normally sit above; the print
+block sets `.masthead{ position: static }`, so it does not occur when printing.
+
+The browser's own print pipeline still is not exercised here — the harness prints
+with backgrounds enabled regardless of `print-color-adjust`, so this remains a
+simulation of the mechanism plus a check of which elements the rule reaches, not
+a capture from Chrome's printer. What it does prove is the part a person gets
+wrong: the rule now reaches every surface that needs it.
+
+`impeccable detect` over the five changed files: **18 → 18**, unchanged.
