@@ -91,8 +91,8 @@ Constraints and facts future work must preserve:
 ## Brand Commitments
 
 - **Name:** `emb` — always lowercase, including in the wordmark and headings.
-- **Tagline:** `TEXT IN. FLOATS OUT.` — used as the masthead tagline, the hero
-  annotation, and the footer mark (`TEXT IN. FLOATS OUT.  /  EMB`).
+- **Tagline:** `BYTES IN. VECTORS OUT.` — used as the masthead tagline, the hero
+  annotation, and the footer mark (`BYTES IN. VECTORS OUT.  /  EMB`).
 - **Footer sign-off:** `© 2026 emb. Open source, forever.` (2026 confirmed by the
   maintainer; the poster reference still reads 2024 and must not be copied back.)
 - **Positioning line the maintainer has committed to:** "A fast embedding server

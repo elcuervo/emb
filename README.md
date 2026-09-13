@@ -2,25 +2,12 @@
 
 A simple yet powerful text embeddings generator.
 
-> This README is the source of truth for every command, reply shape,
-> configuration key and number below, and it is the form the docs reference is
-> built from. If you are reading this on the website rather than in the
-> repository, the same material is at [`website/docs/index.html`](website/docs/index.html)
-> — the two are kept in step by hand, so this file wins any disagreement.
->
-> The website is published to <https://emb.is>. It is a plain static directory
-> ([`website/`](website/README.md)) with no build step, so the same files render
-> from `python3 -m http.server 8080 --directory website` or straight off disk
-> over `file://`; what reaches the origin is declared in
-> [`wrangler.jsonc`](wrangler.jsonc) and published by
-> [`.github/workflows/site.yml`](.github/workflows/site.yml).
-
 [![GitHub Release](https://img.shields.io/github/v/release/elcuervo/emb?logo=github&color=blue)](https://github.com/elcuervo/emb/releases)
 [![Docker Hub](https://img.shields.io/docker/v/elcuervo/emb?logo=docker&color=blue&label=docker)](https://hub.docker.com/r/elcuervo/emb)
 [![emb gem](https://img.shields.io/gem/v/emb?logo=rubygems&color=red&label=emb)](https://rubygems.org/gems/emb)
 [![emb-server gem](https://img.shields.io/gem/v/emb-server?logo=rubygems&color=red&label=emb-server)](https://rubygems.org/gems/emb-server)
 
-[![emb — text in. floats out.](assets/emb-wordmark.svg)](https://emb.is)
+[![emb - bytes in. vectors out.](assets/emb-wordmark.svg)](https://emb.is)
 
 `emb` is a text-embeddings server speaking the Redis protocol. Every Redis
 client: `redis-cli`, `redis-py`, `redis-rb`, … — can call it without special

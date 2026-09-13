@@ -647,7 +647,7 @@ capture and the scripts block, so the page closes on the plate's own material
 rather than putting a paper strip back after the photograph. `--muted` is
 remapped to `--rule` there for the same reason it is in the dark block
 (`#6B6963` is only 3.40:1 on `#111110`); measured, the copy is **9.22:1** and
-the `TEXT IN. FLOATS OUT. / EMB` mark is **16.59:1**.
+the `BYTES IN. VECTORS OUT. / EMB` mark is **16.59:1**.
 
 **Accessibility** — real `<header>`, `<nav>`, `<main>`, `<section>`, `<h1>`,
 `<h2>`, `<h3>`, `<footer>`; the giant `emb` is `aria-hidden` decoration and
