@@ -24,8 +24,8 @@ github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/ebitengine/purego v0.10.2 h1:W809HbnvzAxgdm+aOvlSekrM16wGCdT/e76+9tS7gzE=
 github.com/ebitengine/purego v0.10.2/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
-github.com/elcuervo/redcon v0.0.0-20260913203110-6eb245d52e39 h1:zK60tgZADc+WXOhAPKn6wDKK1wHbneGr9DKT6HmW23o=
-github.com/elcuervo/redcon v0.0.0-20260913203110-6eb245d52e39/go.mod h1:rKGKSGkNdBKCjAjC2jDwvCnT+NYCpNqy0aGq4YKJSKQ=
+github.com/elcuervo/redcon v0.0.0-20260913215716-6625c199ee46 h1:VET4mVKMO5ufJN13rSWFM4xoZTmZelB9EpwvV0rPlSc=
+github.com/elcuervo/redcon v0.0.0-20260913215716-6625c199ee46/go.mod h1:rKGKSGkNdBKCjAjC2jDwvCnT+NYCpNqy0aGq4YKJSKQ=
 github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f h1:Y/CXytFA4m6baUTXGLOoWe4PQhGxaX0KpnayAqC48p4=
 github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f/go.mod h1:vw97MGsxSvLiUE2X8qFplwetxpGLQrlU1Q9AUEIzCaM=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=

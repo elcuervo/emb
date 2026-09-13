@@ -49,4 +49,4 @@ require (
 	golang.org/x/text v0.23.0 // indirect
 )
 
-replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260913203110-6eb245d52e39
+replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260913215716-6625c199ee46

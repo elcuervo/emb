@@ -426,15 +426,17 @@ func TestMaxCommandBytesRefusesDeclaredBulkBeforeBuffering(t *testing.T) {
 }
 
 func TestMaxCommandBytesTotalCommand(t *testing.T) {
-	addr, _, _ := serveImage(t, "", WithMaxCommandBytes(64))
-	// Each 40-byte bulk is under the bulk cap, but the buffered command as a
-	// whole exceeds max_command_bytes.
+	addr, _, _ := serveImage(t, "", WithMaxCommandBytes(80))
+	// Two 40-byte bulks are each under the 80-byte per-bulk cap, but the
+	// command's cumulative RESP bytes (4 header + 13 + 10 + 46 + 46 = 119) are
+	// not. Only up to the second bulk's header is sent, so a rejection can only
+	// come from the reader's aggregate guard, before that payload is buffered.
 	arg := strings.Repeat("x", 40)
 	c := dial(t, addr)
-	c.Write(respCommand("EMB.IMG", "imgA", arg, arg))
+	c.Write([]byte("*4\r\n$7\r\nEMB.IMG\r\n$4\r\nimgA\r\n$40\r\n" + arg + "\r\n$40\r\n"))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "-ERR") || !strings.Contains(resp, "max_command_bytes") {
-		t.Fatalf("oversized command = %q, want max_command_bytes error", resp)
+	if !strings.HasPrefix(resp, "-ERR") || !strings.Contains(resp, "maximum") {
+		t.Fatalf("oversized command = %q, want an error mentioning the maximum", resp)
 	}
 }
 

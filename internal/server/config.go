@@ -330,8 +330,9 @@ func (s *Server) setConfigMaxImagePixels(v string) error {
 	return nil
 }
 
-// setConfigMaxCommandBytes updates the command-size cap and the connection
-// reader's pre-buffer bulk guard. Values are applied live to new commands.
+// setConfigMaxCommandBytes updates the command-size cap and both pre-buffer
+// reader guards (per-bulk and aggregate). Values are propagated to connections
+// accepted after the change.
 func (s *Server) setConfigMaxCommandBytes(v string) error {
 	n, err := maxByteCap("max_command_bytes", v)
 	if err != nil {
@@ -340,6 +341,7 @@ func (s *Server) setConfigMaxCommandBytes(v string) error {
 	s.maxCommandBytes = n
 	if s.srv != nil {
 		s.srv.SetMaxBulkSize(n)
+		s.srv.SetMaxCommandSize(n)
 	}
 	return nil
 }
