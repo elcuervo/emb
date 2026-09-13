@@ -4,7 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>emb — documentation</title>
+<link rel="canonical" href="https://emb.is/docs/">
 <meta name="description" content="Reference for emb, a self-hosted text-embeddings server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — documentation">
+<meta property="og:description" content="Reference for emb, a self-hosted text-embeddings server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta property="og:url" content="https://emb.is/docs/">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — documentation">
+<meta name="twitter:description" content="The hosted reference for emb: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 
 <link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -18,19 +31,38 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
-<header class="masthead docs-masthead">
-  <div class="shell docs-masthead__inner">
+<!-- The landing's masthead, unchanged: same brand scale, tagline, nav items
+     and "Get Started" control, so the two surfaces open the same way. Only
+     the destinations differ -- "Docs" is this page and the CTA lands on the
+     install section below. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
     <div class="masthead__brand">
       <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
       <span class="vrule" aria-hidden="true"></span>
-      <p class="masthead__tagline" aria-hidden="true">REFERENCE</p>
+      <p class="masthead__tagline" aria-hidden="true">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
     </div>
 
     <nav class="nav" aria-label="Primary">
-      <a href="../index.html">Home</a>
+      <a href="index.html">Docs</a>
       <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+      <a href="#configuration">Models</a>
       <a href="https://github.com/elcuervo/emb/issues" rel="noopener">Community</a>
     </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+        <a href="#configuration">Models <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb/issues">Community <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
   </div>
 </header>
 

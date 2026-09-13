@@ -66,6 +66,39 @@ jobs:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
 
+  # The product site's gates. No Go, no ONNX, no browser, no network: three
+  # static assertions over `website/` that were previously never run by CI at
+  # all, which is how an `emb-top` capture shipped `v0.4.0` against a
+  # `0.4.0.pre4` VERSION without anything going red.
+  #
+  # The ink check is deliberately NOT here. It measures 24 widths in Chrome
+  # against a served site, so it belongs on a machine with a dev shell and a
+  # browser — a green `site` job must never be read as "the ink check passed".
+  # Run it by hand after a layout change:
+  #
+  #     just website                                        # in one shell
+  #     just website-ink                                    # the landing
+  #     just website-ink http://localhost:8080 docs         # the docs surface
+  #     just website-ink http://localhost:8080 404          # the not-found page
+  #
+  # The scripts are invoked directly rather than through `just`, because the
+  # runner has python3 and installing `just` to wrap two one-line recipes would
+  # add a toolchain to this job for no check it does not already do.
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version stamps match VERSION
+        run: python3 website/tools/stamp-version.py --check
+
+      - name: Served tree, canonical origin, and cache rules
+        run: python3 website/tools/published-tree.py
+
   # Real-Rails Railtie boot suite for the emb gem. `rake spec:rails` boots a
   # minimal Rails app and asserts middleware behavior against the real
   # ActionDispatch::MiddlewareStack, so it needs no emb server and no Go

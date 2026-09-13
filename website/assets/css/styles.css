@@ -101,7 +101,14 @@
      which is what guarantees the route's trunk starts exactly where the spine
      ends; the clamp only adds sky above the massif on small screens. */
   --art-ratio: .3546;
-  --art-w: min(78vw, calc(.78 * var(--maxw)));
+  /* Desktop (>1000px) runs the massif the full width of the shell, so the
+     cut-out is complete and its base sits flush on the footer. The artwork
+     still carries its own ridge, whose fork is at 1124.3/2172 = 51.76% of
+     the box; the spine is at 64.18% of the shell, so the route is shifted
+     inside the SVG by the 12.42% between them (see the >=1001px block at
+     the end of the terrain section) and the fork still lands on the line.
+     Below 1000px the terrain overrides this and goes full-bleed. */
+  --art-w: min(100vw, var(--maxw));
   --art-h: calc(var(--art-w) * var(--art-ratio));
   --band: max(var(--art-h), clamp(210px, 27.66vw, calc(.2766 * var(--maxw))));
 
@@ -794,6 +801,11 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
    Archivo at 750 is the page's own display voice (the claim's face), so this
    is the existing system used louder, not a new one. */
 .block__head{
+  /* the bar is opaque and it must cover the spine where it crosses: the
+     spine is a positioned z-index 0 child of .block__body, so a static
+     heading would sit UNDER it. Same lift the console plate carries. */
+  position: relative;
+  z-index: 1;
   background: var(--fg);
   color: var(--bg);
   padding: clamp(11px, 1.15vw, 16px) clamp(14px, 1.5vw, 22px);
@@ -1079,6 +1091,17 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 }
 .reg::before{ left: 50%; top: 0; width: 1px; height: 100%; }
 .reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
+
+/* Desktop runs the massif edge to edge (the <=1000px blocks above still
+   crop it). The route is nudged right inside its own box by the 12.42% that
+   takes the fork from its authored 51.76% of the image to the 64.18% where
+   the spine lands: 1124.3 + 269.6 = 1393.9 = 0.6417 x 2172. Without it the
+   spine would come down and stop in mid-air, because the artwork only rides
+   the ridge at its own fork. */
+@media (min-width: 1001px){
+  .terrain__art{ left: calc(-1 * var(--pad-l)); }
+  .terrain__route path{ transform: translateX(269.6px); }
+}
 
 
 /* ── 09 console ─────────────────────────────────────────────────────
@@ -1706,6 +1729,13 @@ html.js.is-ready .hero__prose{
   .block .topviz{
     margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap));
   }
+  /* The massif runs the full shell here too, so it is complete and sits on
+     the footer, with the ridge shifted left inside its box onto the 25%
+     lane: 1124.3 - 537.9 = 586.4 = 0.27 x 2172 (the tablet gutter is 4vw,
+     so the lane is 25% + half of 4% = 27% of the shell). */
+  :root{ --art-w: min(100vw, var(--maxw)); }
+  .terrain__art{ left: calc(-1 * var(--pad-l)); }
+  .terrain__route path{ transform: translateX(-537.9px); }
 }
 
 /* Short landscape screens should not lose space to a persistent header, and

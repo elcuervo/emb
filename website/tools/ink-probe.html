@@ -84,9 +84,13 @@
   const TOLERANCE = 0.5; // sub-pixel rounding only
 
   // Which surface to sweep. Defaults to the landing; pass ?target=docs to
-  // check the documentation surface too, e.g. ink-probe.html?target=docs
+  // check the documentation surface, or ?target=404 for the not-found page.
+  // The 404 is a real surface with real text, so it is measured like the
+  // others rather than assumed to be safe because it is short.
   const PARAM = new URLSearchParams(location.search).get('target');
-  const TARGET = PARAM === 'docs' ? '../docs/index.html' : '../index.html';
+  const TARGET = PARAM === 'docs' ? '../docs/index.html'
+    : PARAM === '404' ? '../404.html'
+    : '../index.html';
 
   const verdictEl = document.getElementById('verdict');
   const resultsEl = document.getElementById('results');
@@ -171,7 +175,7 @@
     for (const width of WIDTHS) {
       const frame = document.createElement('iframe');
       frame.style.cssText = 'width:' + width + 'px;height:1400px;border:0';
-      frame.src = TARGET + '?cb=ink-probe';
+      frame.src = TARGET + '?cb=' + Date.now();
       frameHost.appendChild(frame);
       await new Promise((resolve) => {
         let done = false;
@@ -237,6 +241,20 @@
     }
 
     window.__inkProbe = { target: TARGET, widths: WIDTHS, results: all, failed: failed.map((r) => r.width) };
+
+    /* `just website-ink` calls this. It lives here rather than in the justfile so
+       the verdict and the assertion that gates on it cannot disagree, and it
+       THROWS on failure because a printed FAIL that exits 0 is not a check: the
+       recipe used to evaluate before the 24 widths had been measured and report
+       "RUNNING…" as success. */
+    window.__inkProbe.assert = () => {
+      const failures = window.__inkProbe.failed;
+      if (failures.length) {
+        throw new Error('FAIL — text ink outside the viewport at ' + failures.length
+          + ' of ' + WIDTHS.length + ' widths: ' + failures.join(', '));
+      }
+      return 'PASS — no text ink outside the viewport at any of ' + WIDTHS.length + ' widths';
+    };
   }
 
   run().catch((err) => {

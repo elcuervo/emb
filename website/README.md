@@ -11,10 +11,13 @@ website/
 ├── index.html              the landing page: masthead → hero (prose + pipeline)
 │                           → protocol → scripts → operations → terrain
 │                           → footer
+├── 404.html                the not-found page, root-absolute by necessity
 ├── docs/
 │   └── index.html          the reference surface: install → commands → replies
 │                           → configuration → scripting → operations
 │                           → benchmarks → clients → status
+├── _headers                caching policy; read by the platform, never served
+├── .assetsignore           what must never be served. The only boundary
 ├── assets/
 │   ├── css/styles.css      the shared world: tokens → primitives → sections
 │   │                       → responsive (both surfaces link it)
@@ -26,7 +29,6 @@ website/
 │       ├── terrain-matte.png  the cut-out the page ships (2172×724, alpha)
 │       ├── terrain-v2.png  generated rock formation, the matte's source
 │       ├── terrain-v2.md   generation prompts and provenance
-│       ├── mountain.jpg    original unused terrain photograph
 │       ├── speckle.svg     original photocopy speckle asset
 │       └── og.png          1200×630 social card
 ├── tools/
@@ -34,9 +36,15 @@ website/
 │   ├── gen-terrain-matte.py derives the terrain cut-out from terrain-v2.png
 │   ├── png_lib.py          dependency-free PNG reader/writer for the above
 │   ├── ink-probe.html      asserts no text ink crosses the viewport, 24 widths
+│   ├── published-tree.py   what ships, the canonical origin, the cache rules
 │   └── stamp-version.py    writes VERSION into every `data-emb-version` element
 └── README.md
 ```
+
+This list is two populations, and the difference is not visible in `ls`. The
+pages and `assets/` ship; `tools/`, this README, `PRODUCT.md`, the
+generation sources, and `.impeccable/` do not. [What ships](#what-ships) is
+the contract and `tools/published-tree.py` is the check.
 
 ## Two surfaces, two modes
 
@@ -93,15 +101,35 @@ just website-browser                  # once: fetch Chrome for Testing
 just website-shot                     # full-page screenshot of :8080
 just website-shot http://localhost:8080 /tmp/phone.png 390x844
 just website-version-check            # stamped versions still match VERSION
+just website-published                # what ships, the origin, the cache rules
 just website-ink                      # no text ink crosses the viewport
+just website-ink http://localhost:8080 docs   # …on the docs surface
+just website-ink http://localhost:8080 404    # …on the not-found page
 ```
 
 ### The ink check
 
-`just website-ink` opens `tools/ink-probe.html`, which loads the landing in a
+`just website-ink` opens `tools/ink-probe.html`, which loads a surface in a
 same-origin iframe at 24 widths — every supported width plus the measured
 defect bands, the 1086px reference frame, the breakpoints, and the shell-cap
 handoff — and fails if any text run's ink straddles a viewport edge.
+
+The landing is the default. `?target=docs` and `?target=404` sweep the other two
+surfaces, and the recipe takes the target positionally:
+
+```bash
+just website-ink                              # the landing
+just website-ink http://localhost:8080 docs   # the docs surface
+just website-ink http://localhost:8080 404    # the not-found page
+```
+
+Both surfaces are measured, not assumed safe because they are short. The recipe
+waits for `window.__inkProbe` before asserting and calls
+`window.__inkProbe.assert()`, which **throws** on failure; it used to evaluate
+the instant the page opened and to print a verdict without checking it, so a
+broken page reported `RUNNING…` and exited 0. The probe and its iframe are also
+cache-busted per run, because a constant bust once measured the previous landing
+and reported failures at 390px and 320px against HTML that had already changed.
 
 The check exists because the obvious one cannot work. The page frame applies
 `overflow-x: clip`, which creates no scroll container and removes the clipped
@@ -133,6 +161,85 @@ Two other measurement traps worth knowing before trusting a number:
 `data-emb-version`; `just website-version-check` fails when one has drifted. The
 `emb-top` capture shipped a hand-typed `v0.4.0` against a `0.4.0.pre4` VERSION,
 which is the drift this exists to stop. Run the stamper after bumping `VERSION`.
+
+## What ships
+
+The site is served at **https://emb.is** from a Cloudflare Worker with static
+assets — `emb-site`, declared in [`../wrangler.jsonc`](../wrangler.jsonc). There
+is no build step here and there is none there: the Worker's asset directory is
+this folder, so what is published is these files.
+
+That makes `.assetsignore` the only thing between a working file and a public
+URL, which is a deliberate trade. One folder is easier to work in — `just website`
+serves it at `/`, `tools/ink-probe.html` stays same-origin with `index.html`, and
+nobody repoints a path — but the split it replaces prevented leaks structurally,
+by putting authoring files in a directory that was never published. One folder
+cannot. So the boundary is checked rather than trusted:
+
+```bash
+just website-published
+```
+
+`tools/published-tree.py` asserts three things, and `ci.yml`'s `site` job runs
+the same two commands on every pull request:
+
+| Set | Members |
+|---|---|
+| **Served** | `index.html`, `404.html`, `docs/index.html`, `styles.css`, `docs.css`, `main.js`, three WOFF2 subsets, `terrain-matte.png`, `og.png`, `speckle.svg` |
+| **Ignored** | `tools/`, `.impeccable/`, `PRODUCT.md`, `README.md`, `terrain-v2.png`, `terrain-v2.md` |
+| **Platform config** | `.assetsignore`, `_headers` — read, never served |
+
+The check fails both ways: a file that would ship without being expected, and an
+expected file that is missing or wrongly excluded. It also asserts that every
+canonical, `og:url`, and social-image value is **absolute** and that every page
+agrees on **one** origin, and that `_headers` never pins a `.html`, `.css`, or
+`.js` path `immutable` — the one way the cache policy could serve a reader a
+stale page. **Do not delete this check while tidying up:** without it the
+boundary is a comment.
+
+The origin is checked for shape but never pinned to `emb.is`. This one tree is
+served from `localhost:8080`, from the Worker's `workers.dev` address, from
+per-branch preview aliases and from production, so a check demanding the
+production hostname would fail everywhere but production — and a check that
+fails during the working loop is one somebody eventually disables. The origin
+found is reported, and compared to `wrangler.jsonc`'s route when one is set; a
+disagreement there is a warning, not a failure.
+
+`404.html` is the one surface that uses root-absolute URLs (`/assets/...`), and
+it has to: the platform serves its content with the requested path still in the
+address bar, so a relative `assets/...` would resolve against `/foo/` and the
+page would arrive unstyled.
+
+### Publishing
+
+`.github/workflows/site.yml` publishes, path-filtered to this folder:
+
+| Event | What happens |
+|---|---|
+| push to `main` | `wrangler deploy` → https://emb.is |
+| pull request | `wrangler versions upload --preview-alias pr-<number>` → a comment on the PR |
+
+Both are gated on the checks above, which run in that workflow rather than being
+depended on from `ci.yml`, so no publication can happen because another workflow
+was skipped. `versions upload` creates a version and its preview URLs **without**
+touching the production deployment, so a preview cannot disturb `emb.is`.
+
+The alias is what makes a reviewer's link survive: each upload repoints
+`pr-<number>-emb-site.<subdomain>.workers.dev`, so it always serves the newest
+commit on that branch, while the versioned URL is unique per upload and dies on
+the next one. `wrangler-action` exposes only the versioned URL, so the workflow
+derives the alias from it.
+
+Pull requests **from forks** get no preview: fork runs receive no secrets, and a
+`pull_request` run from a fork also gets a read-only `GITHUB_TOKEN`, so the job
+cannot even comment to say so — it writes the explanation to the run's summary
+instead. Review those locally with `just website`.
+
+**Rollback.** Every deploy is one commit. Re-run the `Site` workflow on the
+commit to return to (`workflow_dispatch` exists for exactly this), or redeploy
+that commit with `wrangler deploy` by hand. Cloudflare also keeps previous
+versions, so `wrangler rollback` restores the apex in seconds. Nothing here is
+stateful, so no rollback can lose anything but a minute.
 
 The site's dependency list is `websiteDeps` in [`../flake.nix`](../flake.nix) —
 separate from the server's, and browser tooling lives there rather than in the
@@ -270,30 +377,26 @@ python3 website/tools/gen-terrain-matte.py --write
 ```
 
 The cut-out and the ridge route share one box (`.terrain__art`), whose aspect
-ratio is the artwork's, so neither can stretch relative to the other. The box
-is anchored by its **left** edge:
+ratio is the artwork's, so neither can stretch relative to the other.
 
-```text
-left: calc(var(--fold) - (1124.3 / 2172) * var(--art-w))
-```
+At **641px and up the box runs the full width of the shell**, so the massif is
+complete and its base sits flush on the footer. The route's fork is authored at
+`1124.3 / 2172 = 51.76%` of the image, while the spine sits at that
+breakpoint's `--fold`, so the ridge is shifted inside its own SVG by the
+distance between the two: `+269.6` units at `64.18%` on desktop, `-537.9` at
+`27%` on tablets. Without the shift the spine would come down the page and
+stop in mid-air, because the artwork only rides the ridge at its own fork.
 
-`1124.3` is the fork's own x in the artwork, so the route's fork lands on the
-spine **by construction** rather than by an offset that has to be re-defended
-at every width — it replaced a right-anchored `--art-right` that left the spine
-and the fork 208px apart at 834px. The right edge is free to bleed past the
-shell; `html{overflow-x:clip}` holds it, and `documentElement.scrollWidth`
-still equals `clientWidth` at every width measured.
+On phones the box is `156vw` and anchored by its **left** edge
+(`left: calc(var(--fold) - (1124.3 / 2172) * var(--art-w))`) so the fork lands
+on the 90% rail by construction, with the massif's right slope deliberately
+off-frame. `html{overflow-x:clip}` still holds any overflow, and
+`documentElement.scrollWidth` equals `clientWidth` at every width measured.
 
 `--band` is `max(--art-h, clamp(...))` where `--art-h` is
 `--art-w x 770.2/2172`. The floor matters: it is what guarantees the art box's
 top edge — where the route's trunk begins — is never above the band's top,
 which is where the spine ends.
-
-On phones and tablets the terrain goes full-bleed (`--art-w` becomes 145vw and
-then 124vw, with `--fold` moving to 25% and then 50% to stay on the plates'
-centre) and the two slogans sit in the sky above the massif. The route rides
-the rock there too, because it lives in the artwork's own pixel space rather
-than in a viewport-relative one.
 
 The route is the trunk only. It used to fork three **data branches** across
 the sky over the massif — `BLOB OR VALUES`, `HELLO 3` and `1 MS WINDOW` — each
@@ -417,7 +520,7 @@ a `<figure>`: `figure{ margin: 0 }` is in the base reset, because the UA's
 1086 × 480 viewBox. At the reference width, the `b` tower starts at y87,
 the x-height at y218, and the bowls finish at y567. The `e` terminal, `m`
 arches and `b` counter follow the supplied poster. A restrained SVG noise
-filter and a diagonal crease provide the ink texture. The counter caption
+filter provides the ink texture. The counter caption
 is decorative and is omitted below 1000px when it becomes too small.
 
 **Motion** — things move because data is moving. The hero entrance is one
@@ -480,7 +583,7 @@ line and the route come apart:
 | Range | `--fold` | What the spine does |
 |---|---|---|
 | ≥1001px | 65.31% | an explicit lane: `.block__grid`'s split *is* the lane, so copy clears it; the console and emb-top plates cover it |
-| 641–1000px | 25% | the lane is the **left** gutter — the stacked pipeline's plate centre — so the blocks and the emb-top band take the column right of it; the massif goes full-bleed at 145vw |
+| 641–1000px | 25% | the lane is the **left** gutter — the stacked pipeline's plate centre — so the blocks and the emb-top band take the column right of it; the massif runs the full shell with the ridge shifted `-537.9` units onto that lane |
 | ≤640px | 90% | the rail moves to the right margin, because a 390px box cannot give both a centre line and a readable measure; everything is held to its left, the plates' own spine is hidden, and the rail threads the plates |
 
 Four measured corrections are baked in. The hero's CSS spine and the diagram
@@ -549,5 +652,6 @@ left out. Every rendered control is at least 44px tall at 320–834px.
   supplied poster as a visual reference. Prompts and provenance are recorded
   in [`assets/img/terrain-v2.md`](assets/img/terrain-v2.md). It is kept as the
   source for `terrain-matte.png`, which is what the page loads.
-- `mountain.jpg` is the original Unsplash placeholder, retained but unused
-  by the page. Its original licensing review caveat still applies to reuse.
+- `terrain-v2.png` and `terrain-v2.md` are authoring sources, not assets: they
+  are excluded from the deployed tree by `.assetsignore`. See
+  [What ships](#what-ships).

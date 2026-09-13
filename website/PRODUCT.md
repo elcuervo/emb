@@ -121,9 +121,10 @@ commitments, hosted cloud, or benchmark numbers not present in `BENCHMARK.md`.
 The page now loads generated `website/assets/img/terrain-matte.png`, an alpha
 cut-out derived from the generated `website/assets/img/terrain-v2.png`; prompts
 and provenance for the source are recorded in
-`website/assets/img/terrain-v2.md`. The original
-`mountain.jpg` remains in the repository but is unused by the page; its
-**placeholder pending licensing review** caveat still applies to any reuse.
+`website/assets/img/terrain-v2.md`. The original `mountain.jpg` Unsplash
+placeholder has been removed from the repository, so no licensing-review caveat
+remains attached to any shipped asset. `terrain-v2.png` and `terrain-v2.md` stay
+in the folder as the matte's source and are excluded from the deployed tree.
 
 ## Product Principles
 

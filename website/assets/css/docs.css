@@ -12,18 +12,13 @@
    `.rule-head`, `.facts`, `.code`, `.footer` and the print block.
    ══════════════════════════════════════════════════════════════════════ */
 
-/* ── masthead: the landing's, with a rule it can actually see ────────── */
-.docs-masthead{ border-bottom-color: var(--rule); }
-.docs-masthead .brand{ font-size: clamp(20px, 1.9vw, 24px); }
-/* the landing's `.masthead__inner` is a four-column grid sized for its own
-   children; this page has two, so it lays them out as a row. */
-.docs-masthead__inner{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: clamp(14px, 2vw, 32px);
-  min-height: clamp(56px, 5.2vw, 76px);
-}
+/* ── masthead ───────────────────────────────────────────────────────── */
+/* The masthead is the landing's, unchanged: same class names, same four
+   children (brand+tagline, nav, mobile disclosure, CTA), so `styles.css`
+   alone lays it out on both surfaces. There are no page-local overrides
+   left here -- the two headers used to diverge in brand scale, tagline,
+   nav items and the missing CTA, which made the reference surface open
+   differently from the page it belongs to. */
 
 /* ── page head ───────────────────────────────────────────────────────── */
 .doc-head{ margin-top: clamp(36px, 4.4vw, 72px); }

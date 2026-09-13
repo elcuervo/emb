@@ -1,0 +1,33 @@
+# Files that are present in this folder but must never be served.
+#
+# `website/` is edited and `website/` is published, so this list is the only
+# boundary between a working file and a public URL. Cloudflare's asset uploader
+# reads it (gitignore syntax); the local dev server does not, which is why
+# `just website` can still serve everything here at `/` — including
+# `tools/ink-probe.html`, which needs to be same-origin with `index.html` to
+# measure it in a frame.
+#
+# Exact paths and directory entries only, deliberately: a glob like
+# `/assets/img/*` would also drop `terrain-matte.png`, `og.png`, and
+# `speckle.svg`, which DO ship. `website/tools/published-tree.py` asserts the
+# resulting tree against an expected set and is what makes this list safe to
+# trust — run `just website-published` after changing it.
+#
+# Two files in this folder are deliberately NOT listed here: this file itself and
+# `_headers`. The uploader reads both as configuration and reports "Ignoring
+# asset" for each on its own, so listing them would be redundant — and listing
+# `_headers` would additionally be a claim this repo has not verified, that the
+# platform reads config after applying the ignore list rather than before.
+#
+# Note what is NOT here: `404.html` and `_headers` are configuration that ships,
+# and `index.html`, `docs/index.html`, `assets/css/*`, `assets/js/main.js`,
+# `assets/fonts/*`, `assets/img/terrain-matte.png`, `assets/img/og.png`, and
+# `assets/img/speckle.svg` are the site itself.
+
+# Authoring material
+/.impeccable/
+/tools/
+/PRODUCT.md
+/README.md
+/assets/img/terrain-v2.png
+/assets/img/terrain-v2.md

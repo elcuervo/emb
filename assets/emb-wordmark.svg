@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1086 480" width="1086" height="480" role="img" aria-labelledby="emb-wordmark-title">
+  <title id="emb-wordmark-title">emb</title>
+  <defs>
+    <filter id="emb-wordmark-grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" seed="8"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".025"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in2="SourceGraphic" mode="screen"/>
+    </filter>
+  </defs>
+  <!-- Paper plate, so the black lockup stays legible on GitHub's dark theme. -->
+  <rect width="1086" height="480" fill="#F3F0E8"/>
+  <!-- Optical outlines follow the reference lockup, independently of fonts. -->
+  <g fill="#0B0B0B" fill-rule="evenodd" filter="url(#emb-wordmark-grain)">
+    <path d="M319 334H121C120 375 132 393 162 393C184 393 199 384 207 365H316C297 436 243 479 165 479C58 479-5 416-5 310C-5 203 63 131 168 131C269 131 319 197 319 296ZM123 269H203C203 236 191 219 166 219C142 219 127 235 123 269Z"/>
+    <path d="M321 467V140H433V162C450 140 470 131 495 131C531 131 552 147 564 177C581 147 608 131 645 131C705 131 737 164 737 225V461H619V263C619 244 614 237 603 237C589 237 580 250 580 274V461H463V266C463 245 459 237 448 237C435 237 430 250 430 274V467Z"/>
+    <path d="M747 463V0H865V164C887 142 914 131 947 131C1035 131 1091 198 1091 305C1091 415 1035 480 947 480C906 480 876 470 851 447V463ZM852 315C852 369 870 393 907 393C944 393 962 369 962 315C962 261 945 236 909 236C872 236 852 263 852 315Z"/>
+  </g>
+</svg>
