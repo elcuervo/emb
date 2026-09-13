@@ -40,6 +40,10 @@
   --bg:        #F3F0E8;
   --fg:        #0B0B0B;
   --accent:    #FF5A1F;
+  /* accent as ink: 4.66:1 on the paper, so it can carry text and ring a
+     control. #FF5A1F itself is 2.74:1 and is a surface colour only -- it
+     must never be the only thing distinguishing a focus ring or a label. */
+  --accent-ink:#C23D00;
   --muted:     #6B6963;
   --rule:      #B8B5AC;
   --rule-soft: #D5D1C6;
@@ -121,7 +125,7 @@ a{ color: inherit; text-decoration: none; }
 button{ font: inherit; color: inherit; }
 
 ::selection{ background: var(--accent); color: var(--fg); }
-:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible{ outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 /* the accent button's own fill is the accent, so its ring has to invert */
 .btn--accent:focus-visible,
 .btn--dark:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
@@ -156,7 +160,7 @@ button{ font: inherit; color: inherit; }
   align-items: center;
   gap: clamp(14px, 1.6vw, 22px);
   font-family: var(--mono);
-  font-size: clamp(10.5px, .95vw, 13px);
+  font-size: clamp(12px, .95vw, 13px);
   font-weight: 700;
   letter-spacing: .1em;
   white-space: nowrap;
@@ -210,14 +214,14 @@ button{ font: inherit; color: inherit; }
   padding-bottom: 3px;
   border-bottom: 0;
   font-family: var(--mono);
-  font-size: clamp(11px, 1.04vw, 14px);
+  font-size: clamp(12px, 1.04vw, 14px);
   font-weight: 500;
   letter-spacing: .01em;
   transition: border-color .15s ease, color .15s ease;
 }
 .ghlink > span{ text-decoration: underline; text-underline-offset: 4px; }
 .ghlink__ico{ width: 21px; height: 21px; flex: none; }
-.ghlink:hover{ color: var(--accent); border-color: var(--accent); }
+.ghlink:hover{ color: var(--accent-ink); border-color: var(--accent-ink); }
 
 /* ── 03 masthead ───────────────────────────────────────────────────── */
 .masthead{
@@ -225,7 +229,9 @@ button{ font: inherit; color: inherit; }
   top: 0;
   z-index: 80;
   background: var(--bg);
-  border-bottom: 1px solid transparent;
+  /* the poster's masthead rule: it also stops content vanishing under an
+     opaque sticky edge while scrolling */
+  border-bottom: 1px solid var(--rule-soft);
   /* a standalone window puts the status bar over the top of the sheet */
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -254,7 +260,7 @@ button{ font: inherit; color: inherit; }
 .vrule{ width: 1px; height: clamp(24px, 2.2vw, 34px); background: var(--rule); flex: none; }
 .masthead__tagline{
   font-family: var(--mono);
-  font-size: clamp(9.5px, 1.02vw, 12.5px);
+  font-size: clamp(12px, 1.02vw, 12.5px);
   font-weight: 500;
   letter-spacing: .2em;
   line-height: 1.28;
@@ -274,7 +280,7 @@ button{ font: inherit; color: inherit; }
   position: relative;
   padding-block: 6px;
   font-family: var(--mono);
-  font-size: clamp(11px, .92vw, 13px);
+  font-size: clamp(12px, .92vw, 13px);
   font-weight: 600;
   letter-spacing: .13em;
   text-transform: uppercase;
@@ -328,7 +334,7 @@ button{ font: inherit; color: inherit; }
   /* the poster hangs this block 21px above the left one */
   margin-top: clamp(-26px, -1.95vw, -12px);
   font-family: var(--mono);
-  font-size: clamp(10.5px, .96vw, 13px);
+  font-size: clamp(12px, .96vw, 13px);
   font-weight: 500;
   letter-spacing: .13em;
   line-height: 1.45;
@@ -389,7 +395,7 @@ button{ font: inherit; color: inherit; }
   top: 25.9vw;
   bottom: auto;
   font-family: var(--mono);
-  font-size: clamp(10.5px, 1.06vw, 13px);
+  font-size: clamp(12px, 1.06vw, 13px);
   font-weight: 500;
   letter-spacing: .06em;
   /* the counter is an oval: keep the block short enough to stay inside it */
@@ -467,7 +473,7 @@ button{ font: inherit; color: inherit; }
   grid-column: 2;
   margin-top: 3px;
   font-family: var(--mono);
-  font-size: clamp(10px, 1.02vw, 12px);
+  font-size: clamp(12px, 1.02vw, 12.5px);
   line-height: 1.55;
   color: var(--muted);
 }
@@ -584,7 +590,7 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
 .note__num{
   grid-column: 1;
   font-family: var(--mono);
-  font-size: clamp(10.5px, 1.1vw, 13px);
+  font-size: clamp(12px, 1.1vw, 13px);
   font-weight: 500;
   letter-spacing: .06em;
   color: var(--muted);
@@ -603,14 +609,14 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
   grid-column: 2;
   margin-top: 5px;
   font-family: var(--mono);
-  font-size: clamp(10px, .97vw, 12px);
-  line-height: 1.3;
+  font-size: clamp(12px, .97vw, 12.5px);
+  line-height: 1.35;
   color: var(--muted);
   transition: color .25s ease;
 }
 
 .note:hover .note__num,
-.note.is-hot .note__num{ color: var(--accent); }
+.note.is-hot .note__num{ color: var(--accent-ink); }
 .note:hover .note__desc,
 .note.is-hot .note__desc{ color: var(--fg); }
 
@@ -679,7 +685,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   z-index: 2;
   top: clamp(20px, 3.7vw, 52px);
   font-family: var(--mono);
-  font-size: clamp(11px, 1.02vw, 14px);
+  font-size: clamp(12px, 1.02vw, 14px);
   font-weight: 500;
   letter-spacing: .12em;
   line-height: 1.58;
@@ -695,6 +701,18 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   background: var(--fg);
 }
 .anno--right .anno__dash{ margin-left: 0; background: var(--muted); }
+
+/* The branch annotations are margin labels, not callouts: they sit in the
+   paper beside the massif, in `--right`'s lighter voice. Their spurs stay in
+   the sky above the peak (x 46-81%, y 31-83 of the band), so linework and
+   label can never collide at any width. */
+.anno--b{ left: 16%; }
+.anno--c{ right: 22%; }
+.anno--d{ left: 0; top: clamp(150px, 10.4vw, 172px); }
+.anno--b, .anno--c, .anno--d{ font-weight: 400; line-height: 1.35; }
+.anno--b .anno__dash,
+.anno--c .anno__dash,
+.anno--d .anno__dash{ background: var(--muted); }
 
 /* registration mark */
 .reg{
@@ -727,7 +745,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 }
 .footer__copy,
 .footer__mark{
-  font-size: clamp(10px, .92vw, 13px);
+  font-size: clamp(12px, .92vw, 13px);
   font-weight: 500;
   letter-spacing: .04em;
   color: var(--muted);
@@ -753,6 +771,37 @@ html.js [data-reveal].in{
   transition-delay: calc(var(--i, 0) * 55ms);
 }
 
+/* ── hero entrance ───────────────────────────────────────────────────
+   The masthead lands, then the technical annotations, the wordmark and
+   the prose+actions: `--e` is the element's place in that order, 90ms
+   apart, so the last of it settles at ~780ms and the spine finishes at
+   1000ms -- both inside the brief's 800-1200ms window. Gated on `html.js`
+   so the no-JS render is complete, and collapsed to the end state under
+   reduced motion (see that block). */
+html.js .masthead__inner,
+html.js .hero__meta-a,
+html.js .hero__meta-b,
+html.js .hero__tech,
+html.js .hero__wordmark,
+html.js .hero__prose{ opacity: 0; translate: 0 10px; }
+html.js.is-ready .masthead__inner,
+html.js.is-ready .hero__meta-a,
+html.js.is-ready .hero__meta-b,
+html.js.is-ready .hero__tech,
+html.js.is-ready .hero__wordmark,
+html.js.is-ready .hero__prose{
+  opacity: 1;
+  translate: none;
+  transition: opacity .28s ease, translate .42s cubic-bezier(.2, .8, .3, 1);
+  transition-delay: calc(var(--e, 0) * 90ms);
+}
+.masthead__inner{ --e: 0; }
+.hero__meta-a{ --e: 1; }
+.hero__meta-b{ --e: 2; }
+.hero__tech{ --e: 2; }
+.hero__wordmark{ --e: 3; }
+.hero__prose{ --e: 4; }
+
 @media (prefers-reduced-motion: reduce){
   html{ scroll-behavior: auto; }
   html.js [data-reveal]{ opacity: 1; translate: none; }
@@ -760,9 +809,20 @@ html.js [data-reveal].in{
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   html.js .slab{ opacity: 1; transform: none; translate: none; }
   .btn{ translate: none; }
+  html.js .masthead__inner,
+  html.js .hero__meta-a,
+  html.js .hero__meta-b,
+  html.js .hero__tech,
+  html.js .hero__wordmark,
+  html.js .hero__prose{ opacity: 1; translate: none; }
   *, *::before, *::after{
     animation-duration: .001ms !important;
     transition-duration: .001ms !important;
+    /* the duration override alone leaves the stagger delays in place: an
+       element would still wait out its 0.51s before snapping to the end
+       state. Both have to go, or a future rule that relies on the
+       transition to arrive would simply arrive late. */
+    transition-delay: 0s !important;
   }
 }
 
@@ -836,14 +896,14 @@ html.js [data-reveal].in{
     padding-block: 28px 20px;
   }
   .hero__meta-a{ grid-column: 1; font-size: 18px; letter-spacing: .14em; }
-  .hero__meta-b{ grid-column: 2; margin: 0; font-size: 12px; letter-spacing: .03em; }
+  .hero__meta-b{ grid-column: 2; margin: 0; font-size: 14px; letter-spacing: .03em; }
   .hero__tech{
     grid-column: 1 / -1;
     display: flex;
     gap: 24px;
     margin: 0;
     text-align: left;
-    font-size: 13px;
+    font-size: 14px;
   }
   .hero__tech br, .hero__tech .meta-rule{ display: none; }
   .hero__wordmark{ height: 44.2vw; margin-top: 0; }
@@ -856,7 +916,7 @@ html.js [data-reveal].in{
   .btn--accent{ min-height: 52px; font-size: 16px; padding: 16px 24px; }
   .ghlink{ min-height: 48px; padding: 12px 4px; font-size: 14px; }
   .features{ margin-top: 40px; }
-  .rule-head{ font-size: 12px; letter-spacing: .05em; white-space: normal; }
+  .rule-head{ font-size: 14px; letter-spacing: .05em; white-space: normal; }
   .rule-head__rule{ flex: 1; max-width: 100px; min-width: 24px; }
   .features__list{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; padding: 0; margin-top: 20px; }
   .feat{ column-gap: 16px; padding-block: 12px; }
@@ -871,7 +931,7 @@ html.js [data-reveal].in{
   .note{ left: 32px; right: 0; grid-template-columns: 32px minmax(0, 1fr); }
   .note::before{ width: 24px; right: calc(100% + 8px); }
   .note__label{ font-size: 14px; line-height: 1.4; letter-spacing: .03em; }
-  .note__num{ font-size: 13px; }
+  .note__num{ font-size: 14px; }
   .note__desc{ font-size: 14px; line-height: 1.5; }
   .landscape{
     margin: 28px calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
@@ -880,23 +940,32 @@ html.js [data-reveal].in{
     height: clamp(240px, calc(39.72vw + 96px), 470px);
   }
   .landscape__art{ right: -6vw; width: 112vw; }
-  .anno{ top: 20px; font-size: 12px; }
+  .anno{ top: 20px; font-size: 14px; }
+  /* The three data annotations carry the README's reply-format, protocol and
+     batching facts. They need the paper beside the massif, which a phone
+     does not have: below 1000px the band keeps the two slogans only, and
+     their spurs go with them rather than crossing the peak unlabelled. The
+     same facts stay findable in the feature list and `DESIGN.md`. */
+  .anno--b, .anno--c, .anno--d, .route--branch{ display: none; }
   .anno--left{ left: var(--pad-l); }
   .anno--right{ right: var(--pad-r); }
   .reg{ display: none; }
   .footer__inner{ padding-block: 20px max(24px, env(safe-area-inset-bottom)); gap: 12px; }
-  .footer__copy, .footer__mark{ font-size: 12px; line-height: 1.6; letter-spacing: 0; }
+  .footer__copy, .footer__mark{ font-size: 14px; line-height: 1.6; letter-spacing: 0; }
 }
 
 @media (max-width: 640px){
   .masthead__inner{ gap: 8px; }
   .brand{ font-size: 25px; }
   .hero__meta-a{ font-size: 15px; letter-spacing: .1em; }
-  .hero__meta-b{ font-size: 11px; letter-spacing: 0; }
+  .hero__meta-b{ font-size: 14px; letter-spacing: 0; }
   .hero__meta{ padding-top: 24px; }
   .hero__body{ padding-top: 24px; }
-  .claim{ font-size: clamp(32px, 8.7vw, 48px); }
-  .claim span{ display: inline; }
+  .claim{ font-size: clamp(30px, 8.4vw, 44px); }
+  /* the authored four-line break is the poster's editorial copy and holds on
+     a phone: "embedding server" measures 285px at 33.9px in a 350px measure,
+     so the breaks stay rather than collapsing into one wrapped heading. */
+  .claim span{ display: block; }
   .hero__sub{ font-size: 15px; }
   .hero__actions{ display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .btn--accent{ justify-content: space-between; margin-right: 5px; }
@@ -953,4 +1022,26 @@ html.js [data-reveal].in{
     height: 100%;
     translate: -50% 0;
   }
+}
+
+/* A poster is worth printing. The reveal system holds content at opacity 0
+   until something scrolls it into view, and a print pass never scrolls, so
+   the whole cascade is collapsed here -- the same end state the
+   reduced-motion block sets -- and the fixed grain layer, which would tile
+   once per page, is dropped. */
+@media print{
+  html, body{ background: #fff; }
+  body::after{ display: none; }
+  html.js [data-reveal],
+  html.js .masthead__inner,
+  html.js .hero__meta-a,
+  html.js .hero__meta-b,
+  html.js .hero__tech,
+  html.js .hero__wordmark,
+  html.js .hero__prose{ opacity: 1; translate: none; }
+  html.js .slab{ opacity: 1; transform: none; translate: none; }
+  html.js .sig,
+  html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
+  .masthead{ position: static; }
+  .landscape, .features, .pipeline, .note, .feat{ break-inside: avoid; }
 }

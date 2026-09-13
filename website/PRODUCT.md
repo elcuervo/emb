@@ -118,8 +118,10 @@ Absences that must **not** be fabricated: customers, logo walls, testimonials,
 case studies, press mentions, funding, adoption metrics, pricing, service-level
 commitments, hosted cloud, or benchmark numbers not present in `BENCHMARK.md`.
 
-The page now uses generated `website/assets/img/terrain-v2.png`; prompts and
-provenance are recorded in `website/assets/img/terrain-v2.md`. The original
+The page now loads generated `website/assets/img/terrain-matte.png`, an alpha
+cut-out derived from the generated `website/assets/img/terrain-v2.png`; prompts
+and provenance for the source are recorded in
+`website/assets/img/terrain-v2.md`. The original
 `mountain.jpg` remains in the repository but is unused by the page; its
 **placeholder pending licensing review** caveat still applies to any reuse.
 
@@ -144,7 +146,12 @@ Committed for the web surface (`DESIGN.md`, `website/`):
   `<h1>`/`<h2>`/`<h3>`, `<footer>`; the oversized `emb` wordmark is decorative
   and the semantic `<h1>` carries the value proposition.
 - Animations honour `prefers-reduced-motion`; no information depends on motion.
-- Technical mono annotations stay readable — a ~12–13px desktop / 14px mobile
-  floor.
-- Text must meet contrast requirements; the muted grey is a known, recurring
-  risk and should be checked against WCAG AA (4.5:1) whenever it is used.
+- Technical mono annotations stay readable — a **12px desktop / 14px mobile**
+  floor, clamped in the stylesheet so no breakpoint can compute below it; the
+  smallest text on the 1086px frame and on a 390px phone was measured against
+  it.
+- Text must meet contrast requirements; the muted grey (`#6B6963`, 4.82:1 on
+  the paper) is a known, recurring risk and should be checked against WCAG AA
+  (4.5:1) whenever it is used. `#FF5A1F` is 2.74:1 and is a surface colour
+  only: text, hover states and focus rings use `--accent-ink` (`#C23D00`,
+  4.66:1) instead.

@@ -20,10 +20,18 @@ A reasonable palette would be:
 ```text
 --background: #F3F0E8;
 --foreground: #0B0B0B;
---accent:     #FF5A1F;
---muted:      #77756F;
+--accent:     #FF5A1F;   /* surfaces: the button fill, the signal line */
+--accent-ink: #C23D00;   /* the accent as text or as a ring: 4.66:1 on the paper */
+--muted:      #6B6963;   /* 4.82:1 on the paper; #77756F is only 4.05:1 */
 --rule:       #B8B5AC;
+--rule-soft:  #D5D1C6;
+--leader-c:   #A9A69D;
 ```
+
+`#FF5A1F` is 2.74:1 against the paper. It is a surface colour: it may fill a
+button or draw the signal, and it may never be the only thing that
+distinguishes a focus ring, a hover state or a label. Those use
+`--accent-ink`.
 
 The page should avoid gradients, soft shadows, glass effects, rounded SaaS cards, and glossy illustration.
 
@@ -658,6 +666,24 @@ Without the line, the diagram becomes a generic exploded view.
 
 With the line, it looks like a signal moving through a system.
 
+## Stacking order
+
+The four plates are painted back to front: SERVE first, INPUT last. The camera
+sits about 19 degrees above the horizon, so the highest plate is the nearest
+one and has to occlude the plate below it. Painted the other way round, each
+lower plate's top face eats the front skirt of the one above it in a 73 x 24
+unit wedge around the spine — a seam that only stays invisible because the
+signal line covers its centre. `data-depth` records the level (1 farthest,
+4 nearest) and `tools/gen-isometric.py` emits the plates in that order, so a
+regeneration cannot silently revert it.
+
+The activation stagger is keyed by plate name, never by position, so document
+order and animation order stay independent.
+
+Note that the plate and its note name the same stage differently on purpose:
+the plate carries the protocol (`REDIS`), the note carries the stage
+(`04 SERVE`). That split is the brief's, not an inconsistency.
+
 ---
 
 # Feature list
@@ -831,6 +857,33 @@ execution path
 topographic route
 ```
 
+## Data branches
+
+The route is also where the README reaches the page. Above the fork, three
+branches leave the trunk and run through the sky over the massif, each with a
+margin annotation carrying one fact the pipeline diagram cannot show:
+
+```text
+BLOB OR VALUES      the reply formats: raw float32 bytes by default,
+BYTES STAY          or a self-describing decimal envelope
+BYTES
+
+HELLO 3             protocol negotiation: RESP2 by default, RESP3 opt-in
+RESP2 RISES         on the same connection
+TO RESP3
+
+1 MS WINDOW         the batcher: one window coalesces concurrent requests
+SHARED              into shared ONNX runs
+ONNX RUNS
+```
+
+The trunk draws across the whole scroll travel; each branch then draws over
+the following 58% of it, 14% apart, so the extra facts arrive in sequence
+rather than all at once. Below 1000px the branches and their annotations are
+dropped together — a phone has no paper beside the massif to hold them, and an
+unlabelled spur crossing the peak reads as an artefact. The same facts stay
+reachable in the feature list.
+
 ---
 
 # Supporting mountain annotation
@@ -848,6 +901,11 @@ APPLICATIONS
 Again, small mono typography.
 
 Do not turn this into a headline.
+
+`BLOB OR VALUES`, `HELLO 3` and `1 MS WINDOW` are the three branch
+annotations; `EMBED EVERYTHING FURTHER` and `HIGHER DIMENSIONS` stay as they
+are. All five are margin labels, not callouts: they sit in the paper beside
+the massif and never point at anything.
 
 ---
 
@@ -928,6 +986,25 @@ total hero entrance:
 ```
 
 Avoid slow luxury-site fades.
+
+## As built
+
+The sequence is driven by one `--e` ordinal per element (90ms apart), gated on
+the `is-ready` flag the page sets once the display face is in place:
+
+```text
+masthead          --e 0   delay 0ms
+hero annotations  --e 1   delay 90ms
+hero tech block   --e 2   delay 180ms
+giant emb         --e 3   delay 270ms
+prose + CTAs      --e 4   delay 360ms   (settles at 780ms)
+spine draw        150ms delay, 850ms   (settles at 1000ms)
+```
+
+Each element moves 10px and fades over 280/420ms on an exponential ease-out,
+from an already-visible default. The slab stagger is not part of the load
+sequence: it runs when the pipeline crosses 0.85 viewport heights, which on a
+desktop is immediately and on a phone is after the reader has scrolled to it.
 
 ---
 
@@ -1255,9 +1332,19 @@ EMBEDDINGS
 REDIS
 ```
 
-The orange line remains visible throughout.
+The orange line remains visible throughout: it runs through the isometric
+stack, and on phones it appears again in the gap between the last plate and
+the annotation list, which it then ends behind.
 
-Technical annotations should move underneath each layer.
+Technical annotations sit beside their layer, not in a list at the end of the
+page. From 641px up the four notes share a row with the plate they describe
+(their tops are 11.8%, 32.1%, 56% and 78.6% of the stack's own height, so each
+one is centred on its own top face). Below 640px four annotated layers cannot
+share a 350px measure at the 14px floor — the bands are 22% of a stack that is
+only 249px tall — so the annotations become a ruled list directly under the
+stack, bound to the diagram by the `01–04` numbers the plates also carry. That
+is the one place the phone layout diverges from this section, and it is a
+measured constraint rather than an unexamined reflow.
 
 ---
 
@@ -1434,12 +1521,19 @@ Maintain proper contrast.
 
 Small mono annotations must remain readable.
 
-Do not push them below roughly:
+Do not push them below:
 
 ```text
-12–13px desktop
+12px desktop
 14px mobile
 ```
+
+These are floors, not averages: every technical label — the hero annotations,
+the plate labels, the stage numbers and descriptions, the feature descriptions,
+the landscape annotations, the section rules and the footer — is clamped so it
+can never compute below the floor for its breakpoint. Below 1000px they are
+set explicitly. A poster scaling with `vw` must not drag its smallest text
+under the floor on the way.
 
 ---
 

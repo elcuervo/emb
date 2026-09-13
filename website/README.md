@@ -62,20 +62,31 @@ Go shell. `firefox` is deliberately not on it: nixpkgs builds it from source on
 ## Design notes
 
 **Palette** — a warm off-white ground (`#F3F0E8`), near-black ink
-(`#0B0B0B`), one vivid orange (`#FF5A1F`), a muted grey (`#6B6963`) and a
-leader grey for the annotation steps. No gradients, no rounded corners, no
-shadows except the 5px printed offset under the hero button.
+(`#0B0B0B`), one vivid orange (`#FF5A1F`) for surfaces, a deeper
+`--accent-ink` (`#C23D00`) for the accent used as text or as a focus ring, a
+muted grey (`#6B6963`) and a leader grey for the annotation steps. No
+gradients, no rounded corners, no shadows except the 5px printed offset under
+the hero button. `#FF5A1F` is 2.74:1 against the paper and `--accent-ink` is
+4.66:1, which is why the accent never carries text or a ring at its surface
+value.
 
 **Type** — self-hosted Archivo for the claim, JetBrains Mono for technical
 copy, buttons and labels, and Inter 900 for the masthead brand. The giant
 wordmark uses native SVG outlines matched to the reference, so its silhouette
 does not depend on font metrics. Fonts are preloaded; no CDN is needed.
 
+Every technical label is clamped so it cannot compute below **12px on
+`vw`-driven layouts**, and below 1000px the same labels are set at **14px**
+explicitly. Both are floors in the stylesheet rather than wishes: the
+smallest text on the 1086px frame is 12px and the smallest text on a phone is
+14px, measured.
+
 **Composition** — the page is *one* two-column spread, not a stack of
 full-width bands: the left column carries the claim, the sub, the actions
 and the feature list; the right column carries the pipeline and then the
-terrain, which the feature list overlaps vertically. That is what keeps the
-whole page inside a 1 : 1.33 frame at 1086px wide.
+terrain, which the feature list overlaps vertically. At 1086px wide that
+measures 1464px tall — a 1 : 1.348 frame against the poster's 1 : 1.333, so
+the sheet runs 16px long at the reference width.
 
 The composition's backbone is the orange signal axis: `.sig{x=182}` inside
 the plate SVG, the plate centres from `.pipeline{margin-left}` , the ridge's
@@ -89,7 +100,17 @@ small extruded blocks. The INFERENCE plate transitions to a dark lattice;
 SERVE has black top and side faces. SVG grain adds a light print texture.
 Lifted wire grids, faint surface grids, cube shadows and ruled slab edges
 provide depth. The orange signal uses a mask so it enters each plate and
-passes behind the front edge. To regenerate the SVG directly in the page:
+passes behind the front edge.
+
+The plates are painted **back to front** — SERVE first, INPUT last — because
+the camera sits about 19 degrees above the horizon and the highest plate is
+therefore the nearest one. The other order leaves each lower plate's top face
+cutting into the front skirt of the plate above it: a 73 x 24 unit wedge
+around the spine, hidden today only because the signal line covers its centre.
+`data-depth` on each `.slab` records the level (1 farthest, 4 nearest), and
+the generator emits them in that order. The activation stagger is keyed by
+plate name, so document order and animation order are independent. To
+regenerate the SVG directly in the page:
 
 ```bash
 nix develop --command python3 website/tools/gen-isometric.py --write
@@ -121,36 +142,64 @@ On phones and tablets the terrain goes full-bleed and the two annotations sit
 in the sky above the massif; the route rides the rock there too, because it
 lives in the artwork's own pixel space rather than in a viewport-relative one.
 
+Three **data branches** leave the trunk above the fork and run through the sky
+over the massif, each with a margin annotation carrying a fact the pipeline
+diagram cannot show: `BLOB OR VALUES` (the reply formats), `HELLO 3` (RESP2
+to RESP3 on the same connection) and `1 MS WINDOW` (the batcher). The trunk
+draws across the whole scroll travel and each branch then runs over the
+following 58% of it, 14% apart, so the facts arrive in sequence. Below 1000px
+the branches and their annotations are dropped together: a phone has no paper
+beside the massif, and an unlabelled spur crossing the peak reads as an
+artefact.
+
 **The wordmark** is an inline SVG with three optical outlines in a
 1086 × 480 viewBox. At the reference width, the `b` tower starts at y87,
 the x-height at y218, and the bowls finish at y567. The `e` terminal, `m`
 arches and `b` counter follow the supplied poster. A restrained SVG noise
 filter and a diagonal crease provide the ink texture. The counter caption
-is decorative and is omitted below 980px when it becomes too small.
+is decorative and is omitted below 1000px when it becomes too small.
 
-**Motion** — things move because data is moving. The spine draws downward,
-the four slabs (INPUT → INFERENCE → EMBEDDINGS → SERVE) activate in
-sequence, and the ridge route is drawn from `stroke-dashoffset` as the
-terrain rises through the viewport. Reveals are driven by element position
-rather than `IntersectionObserver` intersection, so an anchor jump, a fast
-flick or a full-page capture can never leave content invisible. Groups ripple
-instead of flipping as a block: each feature and stage carries its list
-position in `--i`, and the slab stagger is keyed by plate name, so a shared
-property can never make a hover wait out another element's delay.
+**Motion** — things move because data is moving. The hero entrance is one
+authored sequence: the masthead, the annotations, the wordmark and then the
+prose and actions land 90ms apart, settling at 780ms while the spine finishes
+its 850ms draw at 1000ms. The four slabs (INPUT → INFERENCE → EMBEDDINGS →
+SERVE) then activate in name-keyed order when the pipeline crosses 0.85
+viewport heights, and the ridge route plus its three data branches are drawn
+from `stroke-dashoffset` as the terrain rises through the viewport. Reveals
+are driven by element position rather than `IntersectionObserver`
+intersection, so an anchor jump or a fast flick can never leave content
+invisible; a `ResizeObserver` on the root covers the rest of what can move the
+trigger line under an element — zoom, rotation, a late font or image — and a
+`@media print` block collapses the whole cascade to its end state, because a
+print pass never scrolls. Groups ripple instead of flipping as a block: each
+feature and stage carries its list position in `--i`, and the slab stagger is
+keyed by plate name, so a shared property can never make a hover wait out
+another element's delay.
 `prefers-reduced-motion` is honoured throughout.
 
 **Responsive** — the two-column spread holds down to 1000px; below that the
-prose, the pipeline and the terrain stack. Phones keep the isometric stack
-(it is the page's whole argument) and read the four stages as a ruled list.
-Gutters survive a notch: `--pad-l` / `--pad-r` fold in
+prose, the pipeline and the terrain stack. From 641px to 1000px the four stage
+notes stay beside the plates they describe (each note's top is a percentage of
+the stack's own height, so it is centred on its plate at every width). Below
+640px they become a ruled list directly under the stack, bound to the diagram
+by the same `01–04` numbers the plates carry: four annotated layers cannot
+share a 350px measure at the 14px floor, so the list is the honest shape for
+that width. Phones keep the isometric stack — it is the page's whole
+argument. Gutters survive a notch: `--pad-l` / `--pad-r` fold in
 `env(safe-area-inset-*)`, and everything that cancels a gutter to reach the
 sheet's edge cancels those instead.
 
 **Accessibility** — real `<header>`, `<nav>`, `<main>`, `<section>`, `<h1>`,
 `<h2>`, `<h3>`, `<footer>`; the giant `emb` is `aria-hidden` decoration and
 the semantic `<h1>` is the value proposition. The pipeline is announced by a
-visually hidden `<h2>` that the four stage `<h3>`s hang off, and the terrain
-is decorative.
+visually hidden `<h2>` that the four stage `<h3>`s hang off (the notes carry
+`role="list"` so VoiceOver and Safari keep the list semantics that
+`list-style: none` removes), and the terrain is decorative. Focus is a 2px
+`--accent-ink` ring at 2px offset — 4.66:1 against the paper, where the
+surface accent is only 2.74:1. The note ⇄ plate emphasis is decoration that
+no information depends on: the stage number and label are always visible, and
+it answers to hover, to tap and to a second tap elsewhere, so touch is not
+left out. Every rendered control is at least 44px tall at 320–834px.
 
 ## Assets
 

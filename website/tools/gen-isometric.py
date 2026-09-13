@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Generate the four-plate SVG. Use --write to update index.html in place.
 
+The plates are emitted back-to-front (SERVE first, INPUT last) so the nearest
+plate paints last; see the note above the reorder at the end of the build.
+
+
 The terrain is a separate generated image: assets/img/terrain-v2.png is the
 source artwork, and assets/img/terrain-matte.png is the alpha cut-out the page
 actually loads. Both are owned by tools/gen-terrain-matte.py.
@@ -40,7 +44,7 @@ def slab(i, name, label):
     out = []
     out.append('')
     out.append('      <!-- ── %02d %s -->' % (i + 1, name.upper()))
-    out.append('      <g class="slab" data-slab="%s" filter="url(#plate-grain)">' % name)
+    out.append('      <g class="slab" data-slab="%s" data-depth="%d" filter="url(#plate-grain)">' % (name, len(labels) - i))
     out.append('        <path d="%s" fill="%s"/>' % (face_r, "#292823" if name == "serve" else "#C9C6BD"))
     out.append('        <path d="%s" fill="%s"/>' % (face_l, "#171714" if name == "serve" else "#BDBAB1"))
     for face in (face_l, face_r):
@@ -115,7 +119,10 @@ labels = [
     ("embedding", "VECTORS", {"plate": "#E9E6DC"}),
     ("serve",     "REDIS",   {"plate": "#111110"}),
 ]
+spans = {}
+prefix_len = len(parts)
 for i, (name, label, cfg) in enumerate(labels):
+    start = len(parts)
     body, face_t, ox, oy, bottom = slab(i, name, cfg)
     parts.append(body)
     if name == "input":
@@ -154,6 +161,29 @@ for i, (name, label, cfg) in enumerate(labels):
     parts.append('        <text class="plate-label%s" transform="matrix(1 -%s 1 %s 48 %d)">%s</text>'
                  % (" plate-label--light" if name == "serve" else "", KS, KS, oy + 68, label))
     parts.append('      </g>')
+    spans[name] = (start, len(parts))
+
+# Paint order is back-to-front. The camera sits ~19 degrees above the horizon,
+# so the highest plate is the nearest one: it has to be painted last, or the
+# plate below bites into its front skirt in a 73 x 24 unit wedge around the
+# spine. Activation is keyed by name in the stylesheet, so document order never
+# drives the stagger, and this reorder has to live here, or the next
+# `--write` silently reverts the drawing to front-to-back.
+ORDER_NOTE = [
+    '      <!-- The four plates are painted back-to-front: SERVE (farthest from the',
+    '           camera) first, INPUT (nearest) last. The camera sits ~19 degrees above',
+    '           the horizon, so the higher plate is the nearer one and must occlude the',
+    "           plate below it -- without this order the lower plate's top face eats the",
+    '           upper plate\'s front skirt in a 73 x 24 unit wedge around the spine.',
+    '           Activation is keyed by name, so document order never drives the',
+    '           stagger. `data-depth` records the level: 1 farthest ... 4 nearest. -->',
+    '',
+]
+parts = parts[:prefix_len] + ORDER_NOTE + [
+    line
+    for name in ("serve", "embedding", "inference", "input")
+    for line in parts[spans[name][0]:spans[name][1]]
+]
 
 parts.append('')
 parts.append('      <!-- The signal enters each surface and passes behind its front edge. -->')

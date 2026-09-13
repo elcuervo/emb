@@ -223,103 +223,49 @@
       <path d="M0 -11 L13 -6.125 L0 -1.25 L-13 -6.125Z" fill="var(--ct)"/>
     </g>
   </defs>
+      <!-- The four plates are painted back-to-front: SERVE (farthest from the
+           camera) first, INPUT (nearest) last. The camera sits ~19 degrees above
+           the horizon, so the higher plate is the nearer one and must occlude the
+           plate below it -- without this order the lower plate's top face eats the
+           upper plate's front skirt in a 73 x 24 unit wedge around the spine.
+           Activation is keyed by name, so document order never drives the
+           stagger. `data-depth` records the level: 1 farthest ... 4 nearest. -->
 
-      <!-- ── 01 INPUT -->
-      <g class="slab" data-slab="input" filter="url(#plate-grain)">
-        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="#C9C6BD"/>
-        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="#BDBAB1"/>
-        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="#EFECE3"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="url(#p-grid)" opacity=".065"/>
-        <ellipse cx="188.0" cy="18.4" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="204.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="220.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="96.0" cy="49.0" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="228.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="244.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="120.0" cy="41.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="136.0" cy="67.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="268.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="144.0" cy="34.7" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="160.0" cy="60.1" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="176.0" cy="85.5" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="168.0" cy="27.5" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="184.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="200.0" cy="78.4" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="192.0" cy="20.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="208.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="224.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="100.0" cy="51.0" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="232.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="248.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="124.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="140.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="272.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="148.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="164.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="180.0" cy="87.5" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="172.0" cy="29.5" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="188.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="204.0" cy="80.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="196.0" cy="22.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="212.0" cy="47.7" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="228.0" cy="73.2" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="104.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="236.0" cy="40.6" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="252.0" cy="66.0" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="128.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="144.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="276.0" cy="58.8" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="152.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="168.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="184.0" cy="89.5" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="176.0" cy="31.4" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="192.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="208.0" cy="82.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <ellipse cx="200.0" cy="24.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
-        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 74)">TEXT</text>
-      </g>
 
-      <!-- ── 02 INFERENCE -->
-      <g class="slab" data-slab="inference" filter="url(#plate-grain)">
-        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="#C9C6BD"/>
-        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="#BDBAB1"/>
-        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#E9E6DC"/>
-        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-grid)" opacity=".5"/>
-        <g mask="url(#ramp-mask)">
-          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#0B0B0B"/>
-          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-fine)" opacity=".45"/>
-        </g>
-        <path d="M206.0 148.5L206.0 138.5L70.0 182.8M70.0 182.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 146.3L297.0 183.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 156.0L229.0 146.0L93.0 190.3M93.0 190.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 153.8L274.0 191.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 163.5L252.0 153.5L116.0 197.8M116.0 197.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 161.3L251.0 198.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 171.0L275.0 161.0L139.0 205.3M139.0 205.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 168.8L228.0 206.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 178.5L298.0 168.5L162.0 212.8M162.0 212.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 176.3L205.0 213.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M206.0 148.5L206.0 126.5L70.0 170.8M70.0 170.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 134.3L297.0 171.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 156.0L229.0 134.0L93.0 178.3M93.0 178.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 141.8L274.0 179.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 163.5L252.0 141.5L116.0 185.8M116.0 185.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 149.3L251.0 186.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 171.0L275.0 149.0L139.0 193.3M139.0 193.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 156.8L228.0 194.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 178.5L298.0 156.5L162.0 200.8M162.0 200.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 164.3L205.0 201.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
-        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 193)">MODEL</text>
+      <!-- ── 04 SERVE -->
+      <g class="slab" data-slab="serve" data-depth="1" filter="url(#plate-grain)">
+        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="#292823"/>
+        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="#171714"/>
+        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="#111110"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="url(#p-fine)" opacity=".45"/>
+        <path d="M206.0 386.5L206.0 376.5L70.0 420.8M70.0 420.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 384.3L297.0 421.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 384.0L93.0 428.3M93.0 428.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 391.8L274.0 429.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 391.5L116.0 435.8M116.0 435.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 399.3L251.0 436.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 399.0L139.0 443.3M139.0 443.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 406.8L228.0 444.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 406.5L162.0 450.8M162.0 450.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 414.3L205.0 451.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 386.5L206.0 364.5L70.0 408.8M70.0 408.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 372.3L297.0 409.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 372.0L93.0 416.3M93.0 416.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 379.8L274.0 417.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 379.5L116.0 423.8M116.0 423.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 387.3L251.0 424.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 387.0L139.0 431.3M139.0 431.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 394.8L228.0 432.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 394.5L162.0 438.8M162.0 438.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 402.3L205.0 439.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
+        <text class="plate-label plate-label--light" transform="matrix(1 -0.326 1 0.326 48 431)">REDIS</text>
       </g>
 
       <!-- ── 03 EMBEDDING -->
-      <g class="slab" data-slab="embedding" filter="url(#plate-grain)">
+      <g class="slab" data-slab="embedding" data-depth="2" filter="url(#plate-grain)">
         <path d="M364 303 L182 363 L182 387 L364 327Z" fill="#C9C6BD"/>
         <path d="M0 303 L182 363 L182 387 L0 327Z" fill="#BDBAB1"/>
         <path d="M0 303 L182 363 L182 387 L0 327Z" fill="url(#edge-lines)" opacity=".3"/>
@@ -380,36 +326,98 @@
         <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 312)">VECTORS</text>
       </g>
 
-      <!-- ── 04 SERVE -->
-      <g class="slab" data-slab="serve" filter="url(#plate-grain)">
-        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="#292823"/>
-        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="#171714"/>
-        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="#111110"/>
-        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="url(#p-fine)" opacity=".45"/>
-        <path d="M206.0 386.5L206.0 376.5L70.0 420.8M70.0 420.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 384.3L297.0 421.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 394.0L229.0 384.0L93.0 428.3M93.0 428.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 391.8L274.0 429.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 401.5L252.0 391.5L116.0 435.8M116.0 435.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 399.3L251.0 436.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 409.0L275.0 399.0L139.0 443.3M139.0 443.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 406.8L228.0 444.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 416.5L298.0 406.5L162.0 450.8M162.0 450.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 414.3L205.0 451.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M206.0 386.5L206.0 364.5L70.0 408.8M70.0 408.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 372.3L297.0 409.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 394.0L229.0 372.0L93.0 416.3M93.0 416.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 379.8L274.0 417.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 401.5L252.0 379.5L116.0 423.8M116.0 423.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 387.3L251.0 424.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 409.0L275.0 387.0L139.0 431.3M139.0 431.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 394.8L228.0 432.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 416.5L298.0 394.5L162.0 438.8M162.0 438.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 402.3L205.0 439.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
-        <text class="plate-label plate-label--light" transform="matrix(1 -0.326 1 0.326 48 431)">REDIS</text>
+      <!-- ── 02 INFERENCE -->
+      <g class="slab" data-slab="inference" data-depth="3" filter="url(#plate-grain)">
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="#C9C6BD"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="#BDBAB1"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#E9E6DC"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-grid)" opacity=".5"/>
+        <g mask="url(#ramp-mask)">
+          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#0B0B0B"/>
+          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-fine)" opacity=".45"/>
+        </g>
+        <path d="M206.0 148.5L206.0 138.5L70.0 182.8M70.0 182.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 146.3L297.0 183.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 146.0L93.0 190.3M93.0 190.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 153.8L274.0 191.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 153.5L116.0 197.8M116.0 197.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 161.3L251.0 198.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 161.0L139.0 205.3M139.0 205.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 168.8L228.0 206.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 168.5L162.0 212.8M162.0 212.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 176.3L205.0 213.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 148.5L206.0 126.5L70.0 170.8M70.0 170.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 134.3L297.0 171.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 134.0L93.0 178.3M93.0 178.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 141.8L274.0 179.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 141.5L116.0 185.8M116.0 185.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 149.3L251.0 186.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 149.0L139.0 193.3M139.0 193.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 156.8L228.0 194.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 156.5L162.0 200.8M162.0 200.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 164.3L205.0 201.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 193)">MODEL</text>
+      </g>
+
+      <!-- ── 01 INPUT -->
+      <g class="slab" data-slab="input" data-depth="4" filter="url(#plate-grain)">
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="#C9C6BD"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="#BDBAB1"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="#EFECE3"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="url(#p-grid)" opacity=".065"/>
+        <ellipse cx="188.0" cy="18.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="204.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="220.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="96.0" cy="49.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="228.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="244.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="120.0" cy="41.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="136.0" cy="67.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="268.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="144.0" cy="34.7" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="160.0" cy="60.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="176.0" cy="85.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="168.0" cy="27.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="184.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="200.0" cy="78.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="192.0" cy="20.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="208.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="224.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="100.0" cy="51.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="232.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="248.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="124.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="140.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="272.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="148.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="164.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="180.0" cy="87.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="172.0" cy="29.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="188.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="204.0" cy="80.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="196.0" cy="22.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="212.0" cy="47.7" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="228.0" cy="73.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="104.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="236.0" cy="40.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="252.0" cy="66.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="128.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="144.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="276.0" cy="58.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="152.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="168.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="184.0" cy="89.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="176.0" cy="31.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="192.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="208.0" cy="82.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="200.0" cy="24.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 74)">TEXT</text>
       </g>
 
       <!-- The signal enters each surface and passes behind its front edge. -->
@@ -417,7 +425,7 @@
 </svg>
           </div>
 
-          <ol class="pipeline__notes" aria-labelledby="arch-h">
+          <ol class="pipeline__notes" role="list" aria-labelledby="arch-h">
             <!-- `data-reveal` ripples: --i on .note--n / .feat spaces the
                  entrances so the list reads as a sequence, not a block -->
             <li class="note note--1" data-note="input" data-reveal>
@@ -449,6 +457,13 @@
 
           <p class="anno anno--left" data-reveal>EMBED<br>EVERYTHING<br>FURTHER<span class="anno__dash" aria-hidden="true"></span></p>
           <p class="anno anno--right" data-reveal>HIGHER<br>DIMENSIONS<br>BRIGHTER<br>APPLICATIONS<span class="anno__dash" aria-hidden="true"></span></p>
+          <!-- Three branches of the same signal, carrying facts out of
+               README.md: the reply formats, RESP3 negotiation, and the
+               batching window. They fork off the trunk above the massif and
+               are drawn in sequence, after the ridge route. -->
+          <p class="anno anno--b" data-reveal>BLOB OR VALUES<br>BYTES STAY<br>BYTES<span class="anno__dash" aria-hidden="true"></span></p>
+          <p class="anno anno--c" data-reveal>HELLO 3<br>RESP2 RISES<br>TO RESP3<span class="anno__dash" aria-hidden="true"></span></p>
+          <p class="anno anno--d" data-reveal>1 MS WINDOW<br>SHARED<br>ONNX RUNS<span class="anno__dash" aria-hidden="true"></span></p>
           <span class="reg" aria-hidden="true"></span>
 
           <!-- The cut-out and the route share one box, so the orange line is
@@ -460,10 +475,16 @@
           <div class="landscape__art">
             <img class="landscape__photo" src="assets/img/terrain-matte.png" width="2172" height="724" alt="" decoding="async" fetchpriority="low">
             <svg class="landscape__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <path class="route--signal" pathLength="1"
+              <path class="route--signal" pathLength="1" data-seq="0"
                     d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
-              <path class="route--signal" pathLength="1"
+              <path class="route--signal" pathLength="1" data-seq="0"
                     d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
+              <path class="route--signal route--branch" pathLength="1" data-seq="1"
+                    d="M1124.3 62 L700 62 L700 84"/>
+              <path class="route--signal route--branch" pathLength="1" data-seq="2"
+                    d="M1124.3 100 L1560 100 L1560 122"/>
+              <path class="route--signal route--branch" pathLength="1" data-seq="3"
+                    d="M1124.3 138 L920 138 L920 160"/>
             </svg>
           </div>
         </section>

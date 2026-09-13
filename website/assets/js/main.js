@@ -48,11 +48,13 @@
        `is-ready` flag draws the orange spine once the display face is
        in place, so the type never measures itself against a fallback. */
     function enter() {
+      if (enterTimer) { window.clearTimeout(enterTimer); enterTimer = 0; }
       requestAnimationFrame(function () { doc.classList.add('is-ready'); });
     }
+    var enterTimer = 0;
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(enter, enter);
-      window.setTimeout(enter, 1200); /* never wait on a stalled font */
+      enterTimer = window.setTimeout(enter, 1200); /* never wait on a stalled font */
     } else {
       enter();
     }
@@ -120,16 +122,37 @@
       window.requestAnimationFrame(sweep);
     }
 
-    /* ── 4. hover: note ⇄ slab ──────────────────────────────────── */
+    /* Scroll and resize cover a reader. They do not cover everything that can
+       change the document's height under the trigger line: zoom, an
+       orientation change, a late font or image that reflows the page, and
+       anything printing or capturing the page in one pass. A ResizeObserver
+       on the root catches all of those, so the sweep can never be left
+       un-run with content still held at opacity 0. */
+    if (window.ResizeObserver) {
+      new window.ResizeObserver(queueSweep).observe(doc);
+    }
+
+    /* ── 4. hover: note ⇄ slab, both ways ─────────────────────────
+       The emphasis is decoration: the stage number and its label are always
+       visible, so nothing depends on it. It is wired in both directions
+       because the brief asks the layer to answer as well, and on
+       `pointerdown` because a touch device never fires mouseenter. There are
+       no focus handlers: nothing inside a note is focusable, so a
+       focusin/focusout pair could never run. */
     [].slice.call(document.querySelectorAll('.note[data-note]')).forEach(function (note) {
-      var slab = document.querySelector('.slab[data-slab="' + note.getAttribute('data-note') + '"]');
+      var name = note.getAttribute('data-note');
+      var slab = document.querySelector('.slab[data-slab="' + name + '"]');
       if (!slab) return;
       var on = function () { note.classList.add('is-hot'); slab.classList.add('is-hot'); };
       var off = function () { note.classList.remove('is-hot'); slab.classList.remove('is-hot'); };
-      note.addEventListener('mouseenter', on);
-      note.addEventListener('mouseleave', off);
-      note.addEventListener('focusin', on);
-      note.addEventListener('focusout', off);
+      [note, slab].forEach(function (el) {
+        el.addEventListener('mouseenter', on);
+        el.addEventListener('mouseleave', off);
+        el.addEventListener('pointerdown', on);
+      });
+      document.addEventListener('pointerdown', function (event) {
+        if (!note.contains(event.target) && !slab.contains(event.target)) off();
+      }, { passive: true });
     });
 
     /* ── 5. the signal becomes a route across the terrain ─────────
@@ -151,7 +174,15 @@
         var vh = window.innerHeight || doc.clientHeight;
         /* 0 when the band is about to enter, 1 once the massif is in view */
         var progress = clamp((vh - rect.top) / (rect.height * 0.86), 0, 1);
-        routes.forEach(function (r) { r.style.strokeDashoffset = String(1 - progress); });
+        routes.forEach(function (r) {
+          var seq = Number(r.getAttribute('data-seq')) || 0;
+          /* The trunk (seq 0) is the ridge route and draws across the whole
+             travel. Each data branch then runs over the following 58% of it,
+             14% apart, so the extra facts arrive in sequence rather than all
+             at once. */
+          var p = seq ? clamp((progress - seq * 0.14) / 0.58, 0, 1) : progress;
+          r.style.strokeDashoffset = String(1 - p);
+        });
       };
 
       var onRouteScroll = function () {
@@ -163,6 +194,16 @@
       window.addEventListener('scroll', onRouteScroll, { passive: true });
       window.addEventListener('resize', onRouteScroll, { passive: true });
       drawRoute();
+
+      /* A reader who turns the OS motion switch on mid-session should not be
+         left with a line that is still being scrubbed by script: stop the
+         listener and hand the finished state back to the stylesheet. */
+      reduceMotion.addEventListener('change', function () {
+        if (!reduceMotion.matches) return;
+        window.removeEventListener('scroll', onRouteScroll);
+        window.removeEventListener('resize', onRouteScroll);
+        routes.forEach(function (r) { r.style.strokeDashoffset = ''; });
+      });
     }
 
   });

@@ -862,3 +862,85 @@ where the media queries evaluate against the iframe's own viewport. And
 `just website-shot` passes `--viewport` to the CLI directly, for shells where
 the wrapper is not in the way — that flag is upstream's, not the wrapper's, so
 it is exercised by the maintainer rather than by this pass.
+
+---
+
+## Pass 6 — depth order, the type floor, and three data branches
+
+This pass came out of a critique of the built page (`critique` over
+`website/index.html`), and it is the first one driven by measurements taken
+against the *page* rather than against the poster. New reference numbers, all
+at Chromium 1187 / DPR 1 over `python3 -m http.server`:
+
+**1. The plates were painted back-to-front-wrong.** With the camera ~19° above
+the horizon the *highest* plate is the nearest one, so INPUT has to paint
+last. Painted INPUT-first, each lower plate's top face cuts into the front
+skirt of the plate above it over a **73 × 24 unit wedge** centred on the
+spine; it is only invisible because the signal line covers the middle of the
+seam. The four `<g class="slab">` groups are now emitted SERVE →
+EMBEDDING → INFERENCE → INPUT, each carries `data-depth` (1 farthest,
+4 nearest), and `gen-isometric.py` reorders them so `--write` cannot revert
+it. Verified at 2.3× zoom: the upper plate's skirt now hangs over the plate
+below at every seam. The activation stagger was already keyed by name, so the
+sequence read out of the document unchanged.
+
+**2. The committed type floor was false.** Measured computed sizes at the
+1086px reference frame had the footer at **10.0px**, `hero__meta-b` and
+`rule-head` at **10.5**, `note__desc` at **10.53**, `feat__desc` and the
+landscape annotations at **11.08** — every annotation `clamp()` had a 10–11px
+minimum, so from 1001px to ~1240px the *minimum* governed. On phones the
+smallest was `hero__meta-b` at **11px**. Every annotation clamp minimum is now
+12px and the ≤1000px block sets 14px explicitly, which is the floor the brief
+and `PRODUCT.md` both committed to. Re-measured: desktop 1086 → 12.0px
+minimum, phone 390 → 14.0px minimum.
+
+**3. The accent failed contrast wherever it became ink.** `#FF5A1F` on the
+paper is **2.74:1**. It was carrying the `:focus-visible` ring (needs 3:1,
+WCAG 1.4.11) and the hover state of the GitHub link and the stage number at
+13px (needs 4.5:1, WCAG 1.4.3). A `--accent-ink` token at `#C23D00`
+(**4.66:1**) now carries both; `#FF5A1F` stays for surfaces.
+
+**4. The hero entrance was one step of six.** `document.getAnimations()`
+returned exactly one animation on load — the spine at 150 + 850ms. The
+masthead, both annotation blocks, the wordmark and the prose had none. They
+now land 90ms apart on `--e` ordinals (settling at 780ms) with the spine
+finishing at 1000ms, inside the brief's 800–1200ms window and collapsed to
+the end state under `prefers-reduced-motion`.
+
+**5. The mobile claim lost its authored line breaks.** `.claim span{display:
+inline}` below 640px collapsed the poster's four lines into three wrapped
+ones. `display: block` is restored and the size retuned to
+`clamp(30px, 8.4vw, 44px)`; measured 4 lines at 390px and at 320px.
+
+**6. Reveals could still be left invisible.** The sweep ran on scroll, resize
+and one initial frame, so a print pass or a headless full-page capture that
+never scrolls rendered the features, the plates and the annotations at
+`opacity: 0` — reproduced, not theorised. A `ResizeObserver` on the root now
+catches everything else that can move the trigger line (zoom, rotation, a late
+font or image), and a `@media print` block collapses the cascade to its end
+state. `README.md`'s claim that a full-page capture can never hide content was
+corrected rather than left standing.
+
+**7. Three data branches carry the README into the artwork.** Above the fork,
+`BLOB OR VALUES`, `HELLO 3` and `1 MS WINDOW` fork off the trunk with margin
+annotations; the trunk draws across the whole travel and each branch over the
+following 58% of it, 14% apart. Below 1000px the branches and their labels are
+dropped together — a phone has no paper beside the massif.
+
+Smaller items in the same pass: the masthead gained its hairline rule on
+desktop (it was `transparent` above 1000px, so content vanished under an
+opaque sticky edge); the mobile menu's hover colour moved off `--muted` so a
+tapped row is not left *lighter* than its rest state; `.pipeline__notes`
+carries `role="list"`; the reduced-motion block zeroes `transition-delay` as
+well as duration (the durations alone left the 0.17/0.34/0.51s waits in
+place); the `main.js` font fallback timer is cleared once `fonts.ready`
+resolves instead of re-firing at 1236ms; the note ⇄ plate emphasis is wired in
+both directions and answers `pointerdown`; and `main.js` stops scrubbing the
+route when a reader turns reduced motion on mid-session.
+
+`DESIGN.md` was corrected where it disagreed with the implementation rather
+than the other way round: `--muted` is documented as `#6B6963` (4.82:1, AA)
+instead of `#77756F` (4.05:1, which would have failed), the `REDIS` plate
+label against the `04 SERVE` note is documented as the brief's own split, and
+the phone annotation-list decision is recorded with the arithmetic that forces
+it.
