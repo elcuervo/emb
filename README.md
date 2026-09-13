@@ -7,7 +7,13 @@ A simple yet powerful text embeddings generator.
 [![emb gem](https://img.shields.io/gem/v/emb?logo=rubygems&color=red&label=emb)](https://rubygems.org/gems/emb)
 [![emb-server gem](https://img.shields.io/gem/v/emb-server?logo=rubygems&color=red&label=emb-server)](https://rubygems.org/gems/emb-server)
 
-[![emb - bytes in. vectors out.](assets/emb-wordmark.svg)](https://emb.is)
+<a href="https://emb.is">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/emb-wordmark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/emb-wordmark-light.svg">
+    <img alt="emb — bytes in. vectors out." src="assets/emb-wordmark-light.svg" width="260" height="115">
+  </picture>
+</a>
 
 `emb` is a text-embeddings server speaking the Redis protocol. Every Redis
 client: `redis-cli`, `redis-py`, `redis-rb`, … — can call it without special
