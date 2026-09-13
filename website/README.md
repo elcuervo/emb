@@ -458,6 +458,15 @@ at **6.06:1**. `--accent-ink` is the one token that does *not* travel: it is
 tuned for the paper (4.66:1) and measures only **3.52:1** here, so the console
 overrides the global focus ring back to `--accent`.
 
+**It is hidden for the first ship, and one attribute brings it back.** The
+live runtime is not wired yet, so `<section class="console" … hidden>` keeps
+the markup, the styles and the transcript client in the tree while taking the
+panel out of the rendered page and the accessibility tree; `main.js` only
+boots a console that is not `hidden`. Removing that single attribute restores
+the placeholder exactly, and the `window.embConsole.exec` seam below is what a
+live RESP client replaces. Everything the panel does is described here as the
+artifact it is, not as what a reader sees today.
+
 **It is a placeholder, and it says so.** The bar reads `DEMO · NOT A LIVE
 SERVER`, the note under the panel says the live client is not wired, and there
 is no endpoint anywhere. The controls are real — a `<form>`, a labelled input

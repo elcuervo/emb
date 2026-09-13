@@ -1108,6 +1108,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
    The fourth plate, laid flat. It is a placeholder: the executor below is
    a transcript map on the page and a documented seam for a real RESP
    client (see website/README.md). No endpoint is implied anywhere. */
+.console[hidden]{ display: none; }
 .console{
   min-width: 0;
   /* above the spine: the line passes behind this plate and re-emerges below

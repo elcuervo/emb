@@ -228,8 +228,13 @@
                                    server's scriptSHA() returns
 
        The executor is the seam. Replace `window.embConsole.exec` with a
-       RESP client and the same markup, modes and states drive it. */
-    var root = document.querySelector('[data-console="transcript"]');
+       RESP client and the same markup, modes and states drive it.
+
+       The panel ships hidden while that client is unwired: the section
+       carries `hidden` and this selector skips it, so none of the below
+       boots and the transcript is never reachable. Drop the attribute to
+       bring the placeholder back, byte-for-byte. */
+    var root = document.querySelector('[data-console="transcript"]:not([hidden])');
     if (root) {
       var out = root.querySelector('#console-out');
       var form = root.querySelector('#console-form');

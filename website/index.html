@@ -545,7 +545,14 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           </div>
         </div>
 
-                <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal>
+                <!-- HIDDEN for the first ship. The live runtime is not wired
+                     yet, so the panel is kept here, inert and out of the
+                     accessibility tree, rather than deleted. Removing the one
+                     `hidden` attribute below restores the placeholder
+                     transcript client exactly; pointing `window.embConsole.exec`
+                     at a RESP client then makes it live. See
+                     `website/README.md` § the console. -->
+                <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal hidden>
           <h3 class="sr-only" id="console-h">Console</h3>
 
           <div class="console__bar">

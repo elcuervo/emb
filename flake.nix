@@ -3,13 +3,24 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # `wrangler`, the Cloudflare CLI the site deploys and configures its Worker
+    # with, gets its own pin. The main `nixpkgs` rev's `wrangler` is not in the
+    # binary cache: adding it would build two derivations from source and fetch
+    # ~2 GB of pnpm dependencies, which `websiteDeps` must not do (AGENTS.md).
+    # This revision caches the whole wrangler closure. It is pinned to a commit
+    # rather than to `nixos-unstable` so that the two inputs stay independent —
+    # a `nix flake update nixpkgs` cannot drag the server's ONNX runtime and
+    # toolchain forward just to keep wrangler cached.
+    nixpkgs-wrangler.url = "github:NixOS/nixpkgs/eaad089433ca2bb662274377d33df3d0e51ef28b";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, nixpkgs-wrangler, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
+        # Only `wrangler` is taken from this second pin; nothing else.
+        pkgsWrangler = import nixpkgs-wrangler { inherit system; };
         onnxruntime = pkgs.onnxruntime;
 
         archMap = {
@@ -69,13 +80,18 @@
         #                  Testing, or point it at a Chromium you already have
         #                  with AGENT_BROWSER_EXECUTABLE_PATH.
         #   pillow/numpy   image measurement for the generated assets
+        #   wrangler       the Cloudflare CLI for configuring and deploying
+        #                  the site's Worker. It comes from the separate
+        #                  `nixpkgs-wrangler` pin, because the main pin's copy
+        #                  is not in the binary cache and would build from
+        #                  source. See that input's comment.
         #
         # `firefox` is deliberately absent: on aarch64-darwin the nixpkgs we
         # pin builds it from source, which is hours, not minutes. Check any
         # addition with:
         #   nix-store -qR $(nix eval --raw .#devShells.aarch64-darwin.website.drvPath) \
         #     | grep '\.source.*\.drv$'
-        websiteDeps = with pkgs; [
+        websiteDeps = (with pkgs; [
           python3
           python3Packages.pillow
           python3Packages.numpy
@@ -87,7 +103,7 @@
           jpegoptim
           libwebp
           html-tidy
-        ];
+        ]) ++ [ pkgsWrangler.wrangler ];
 
         # The CGo/runtime environment the server binary needs. Everything
         # that runs `bin/emb` outside this shell fails to find the ONNX
@@ -131,6 +147,10 @@
         # harnesses that run outside `nix develop`:
         #   nix profile install .#agent-browser
         packages.agent-browser = pkgs.agent-browser;
+
+        # The Cloudflare CLI on its own, from the dedicated pin above:
+        #   nix profile install .#wrangler
+        packages.wrangler = pkgsWrangler.wrangler;
 
         devShells = {
           # Both halves. This is the shell AGENTS.md points at, so it keeps

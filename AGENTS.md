@@ -12,10 +12,12 @@ The host shell has **no `go`** (`go: command not found`). The Nix dev shell prov
 
 - Tools: `go`, `gopls`, `golangci-lint`, `just`, `python3`, `redis`, `ruby_3_4`, `bundler`, `act`, `xan`
 - Website tools (same shell, plus `nix develop .#website` on its own): `agent-browser`,
-  `nodejs_22`, `imagemagick`, `pngquant`, `optipng`, `jpegoptim`, `cwebp`, `tidy`,
-  and `python3Packages.pillow`/`numpy` for image measurement. `just website-browser`
-  fetches Chrome for Testing once; `nix profile install .#agent-browser` puts the CLI
-  on the host `PATH` for editors and agent harnesses.
+  `nodejs_22`, `wrangler` (the Cloudflare CLI, from its own `nixpkgs-wrangler`
+  pin so it stays substitutable), `imagemagick`, `pngquant`, `optipng`, `jpegoptim`,
+  `cwebp`, `tidy`, and `python3Packages.pillow`/`numpy` for image measurement.
+  `just website-browser` fetches Chrome for Testing once; `nix profile install
+  .#agent-browser` puts the CLI on the host `PATH` for editors and agent harnesses,
+  and `nix profile install .#wrangler` does the same for `wrangler`.
 - The dependency lists are split in `flake.nix`: `serverDeps` (Go, ONNX, Redis, Ruby)
   and `websiteDeps` (browsers, image tools), behind `devShells.{default,server,website}`.
   `nix develop` = both, so every command documented here keeps working. Anything added
