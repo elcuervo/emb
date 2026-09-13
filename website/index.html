@@ -493,6 +493,133 @@
   </div>
 </section>
 
+<!-- ═══════════════════════════════════════════════════ CAPABILITY ═════ -->
+<!-- One merged region, placed after the terrain so the pipeline → ridge
+     handover stays unbroken. Everything here is the poster's own atoms: a
+     rule-head, ruled entries, and dark panels built from the SERVE plate's
+     faces so the console reads as the fourth plate turned to face the
+     reader rather than a widget bolted onto the page. The console is a
+     placeholder: real controls, deterministic transcripts, no network. -->
+<section class="capability" id="capability" aria-labelledby="capability-h">
+  <div class="shell">
+
+    <h2 class="rule-head" id="capability-h">
+      THE PROTOCOL IS THE INTEGRATION
+      <span class="rule-head__rule" aria-hidden="true"></span>
+    </h2>
+    <p class="capability__deck">
+      One connection. No SDK to adopt, no sidecar to run,
+      no second service to operate.
+    </p>
+
+    <div class="capability__body">
+
+      <div class="capability__entries">
+        <article class="cap" data-reveal>
+          <h3 class="cap__label">ANY REDIS CLIENT</h3>
+          <p class="cap__claim">
+            redis-cli, redis-py, redis-rb — the client you already have
+            is the SDK. Embeddings come back as raw float32 bytes.
+          </p>
+          <p class="cap__facts">
+            RESP2 default · HELLO 3 for RESP3 · BLOB bytes or a VALUES envelope
+          </p>
+        </article>
+
+        <article class="cap" data-reveal>
+          <h3 class="cap__label">THE MODEL, AS A FUNCTION</h3>
+          <p class="cap__claim">
+            Sandboxed Lua wraps the same model call — your preprocessing,
+            your postprocessing, your reply.
+          </p>
+          <p class="cap__facts">
+            EMB.EVAL · EMB.EVSHA · cached by SHA1 per model · pure compute
+          </p>
+        </article>
+
+        <article class="cap" data-reveal>
+          <h3 class="cap__label">OPERATIONS, NO NEW DASHBOARD</h3>
+          <p class="cap__claim">
+            Redis-shaped INFO and CONFIG, a readiness probe, and
+            backpressure instead of unbounded queues.
+          </p>
+          <p class="cap__facts">
+            INFO · CONFIG GET/SET · EMB.READY · ERR busy
+          </p>
+        </article>
+      </div>
+
+      <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal>
+        <h3 class="sr-only" id="console-h">Console</h3>
+
+        <div class="console__bar">
+          <div class="console__modes" role="tablist" aria-label="Console mode">
+            <button class="console__mode" type="button" role="tab" id="tab-redis"
+                    aria-controls="console-screen" aria-selected="true" data-mode="redis"
+                    data-tab="0">REDIS</button>
+            <button class="console__mode" type="button" role="tab" id="tab-scripts"
+                    aria-controls="console-screen" aria-selected="false" data-mode="scripts"
+                    data-tab="1" tabindex="-1">SCRIPTS</button>
+          </div>
+          <p class="console__badge">DEMO · NOT A LIVE SERVER</p>
+        </div>
+
+        <div class="console__screen" id="console-screen" role="tabpanel"
+             aria-labelledby="tab-redis" tabindex="-1">
+          <pre class="console__out" id="console-out" aria-live="off"></pre>
+          <noscript>
+            <pre class="console__out console__out--static">EMB minilm "hello world"
+\x7c\x8e\x80\xbd…   (384 float32s × 4 bytes)
+
+EMB minilm VALUES "hello world"
+dtype  FLOAT
+shape  [1 384]
+values [-0.19744610786437988, 0.17766517400741577, …]
+
+EMB.SCRIPT LOAD sst2 "…sst2.lua…"
+"77c1e0c01d3c43e8f07b262869d13c21b93b28f9"
+
+EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
+label       POSITIVE
+confidence  0.99
+scores      […]</pre>
+          </noscript>
+        </div>
+
+        <form class="console__form" id="console-form" autocomplete="off">
+          <label class="console__prompt" for="console-in">EMB ›</label>
+          <input class="console__input" id="console-in" name="command" type="text"
+                 autocomplete="off" autocapitalize="off" autocorrect="off"
+                 spellcheck="false" enterkeyhint="go"
+                 placeholder='EMB minilm "hello world"'>
+          <button class="console__run" type="submit">RUN</button>
+        </form>
+        <p class="console__note">
+          Placeholder transcript from the reference server. The live client
+          is not wired yet.
+        </p>
+      </section>
+    </div>
+
+    <section class="topviz" aria-labelledby="topviz-h" data-reveal>
+      <h3 class="cap__label" id="topviz-h">EMB-TOP</h3>
+      <p class="topviz__claim">
+        Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one
+        round trip, over the same protocol.
+      </p>
+      <pre class="topviz__screen"> emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
+minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████  280 r/s  11.8k t/s  p50 6.5ms  p95 68.0ms  err 0
+   dim 384 · mean · int8 · batch 32/16384 workers 2
+bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████  151 r/s   5.7k t/s  p50 8.8ms  p95 77.0ms  err 18 ↑
+   dim 384 · cls · fp32 · batch 32/16384 workers 2
+cache 93.6% ██████████  cpu 50.3% ██████  mem 552MB ████████████
+conns 7 · active 1 · goroutines 22 · truncated 0/0</pre>
+      <p class="topviz__src">Sample run · rows omitted</p>
+    </section>
+
+  </div>
+</section>
+
 </main>
 
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->

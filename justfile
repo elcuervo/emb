@@ -361,8 +361,14 @@ website-browser:
 # Full-page screenshot of the served site (`just website` first). Pass
 # viewport="390x844" for a phone-width check; agent-browser takes the viewport
 # as a launch flag, so it belongs on the open.
+#
+# The scroll to the end and back is load-bearing, not decoration: reveals are
+# driven by element position, and a full-page capture otherwise lays the
+# document out without ever moving the trigger line, so everything below the
+# fold is captured at opacity 0. Scrolling once fires the sweep, then the
+# capture is true. See website/CORRECTIONS.md pass 7.
 website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
-    agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser screenshot --full {{out}}
+    agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
     @echo "wrote {{out}}"
 
 # Clean build artifacts

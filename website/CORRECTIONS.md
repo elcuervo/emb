@@ -921,6 +921,16 @@ font or image), and a `@media print` block collapses the cascade to its end
 state. `README.md`'s claim that a full-page capture can never hide content was
 corrected rather than left standing.
 
+> **Correction, pass 7.** The `ResizeObserver` closed the *resize* cases, not
+the capture case, and the claim above was still too broad. A
+`captureBeyondViewport` screenshot neither scrolls nor resizes, so the trigger
+line never moves and every reveal below the fold stays at `opacity: 0`.
+Reproduced at 390px on a fresh load: **10 of 20 `[data-reveal]` elements**
+hidden, including the whole new capability region and the `02–04` stage notes.
+Print is genuinely safe (`@media print` collapses the cascade); a screenshot is
+not. `just website-shot` now scrolls to the end and back before capturing, and
+`README.md` states the limitation instead of denying it.
+
 **7. Three data branches carry the README into the artwork.** Above the fork,
 `BLOB OR VALUES`, `HELLO 3` and `1 MS WINDOW` fork off the trunk with margin
 annotations; the trunk draws across the whole travel and each branch over the
@@ -944,3 +954,80 @@ instead of `#77756F` (4.05:1, which would have failed), the `REDIS` plate
 label against the `04 SERVE` note is documented as the brief's own split, and
 the phone annotation-list decision is recorded with the arithmetic that forces
 it.
+
+---
+
+## Pass 7 — the capability region, and a capture claim that was still false
+
+This pass adds a second spread below the terrain (the capability region: three
+ruled entries, the console placeholder, the `emb-top` band) and re-measures the
+page around it. Everything below is taken from the built page at Chromium 153 /
+DPR 1 over `python3 -m http.server`.
+
+**1. The poster ratio now governs the hero, not the document.** The hero spread
+still measures 1464px at 1086 — unchanged, 1 : 1.348 against the poster's
+1 : 1.333. With the new region the document measures **1086 × 2486** (1 : 2.289).
+The ratio was explicitly released for this work: the addition is a second
+spread, not a longer sheet.
+
+**2. Nothing above the capability region moved.** `git diff --numstat` on the
+three site files reports **127 / 0** (HTML), **230 / 0** (JS) and **284 / 4**
+(CSS). The four CSS deletions are the section index comment and two section
+banners being renumbered to make room for `08 capability`; **no rule outside
+the new section changed**, so the hero, wordmark, pipeline, terrain and footer
+render byte-identically.
+
+**3. The console introduces no new colour, and every value is measured.** It
+reuses the SERVE plate's `#111110` top face and `#292823` side face, the plates'
+1px `--bg` stroke, and the page's existing tokens as ink. Measured against the
+panel's own background:
+
+| Element | Colour | Ratio | Needs |
+|---|---|---|---|
+| ink (`--bg`) on `#111110` | `#F3F0E8` | **16.59:1** | 4.5:1 |
+| dim voice / badge / input border (`--rule`) | `#B8B5AC` | **9.22:1** | 4.5:1 (3:1 non-text) |
+| prompt, error prefix, focus ring (`--accent`) | `#FF5A1F` | **6.06:1** | 4.5:1 (3:1 ring) |
+| active tab, `--rule` on `#292823` | `#B8B5AC` | **7.20:1** | 4.5:1 |
+| `--accent-ink` — *not used here* | `#C23D00` | 3.52:1 | would fail 4.5:1 |
+
+`--accent-ink` is the one token that does not travel to the dark surface: it is
+tuned for the paper (4.66:1) and fails as text on `#111110`, so the console
+overrides the global focus ring back to `--accent`. This is a scoped,
+measured exception, not a change to the accent's role.
+
+**4. The dark surface clears the committed type floor at both references.** The
+smallest computed text in the whole region is **12.0px at 1086** and **14.0px at
+390** — the same floor `CORRECTIONS.md` pass 6 established. Three labels were
+initially below it at 390 (badge 12px, note 13px, `Sample run` 13px) and were
+raised. A second pass caught two `wide-tracking` findings the detector attributed
+to body copy and removed them by dropping one incidental `.06em` and lowering the
+other to the documented `.05em` threshold.
+
+**5. The panel overflowed the shell, and the detector found the padding.** The
+first build of the region set `body.scrollWidth` to **1452 against a 1280
+viewport** — the emb-top `<pre>` was sizing its grid track to max-content
+because the panels container had no explicit shrinkable column. Fixed with
+`grid-template-columns: minmax(0, 1fr)`; re-measured at 1280, then at 1440, 1086
+and 390: `body.scrollWidth === clientWidth` at every width, and the emb-top
+capture fits the shell at 1086 without scrolling (1004 / 1004). The detector's
+final run adds **2 `cramped-padding` warnings** and removes **1
+`flat-type-hierarchy`** (the new type ladder gave the page the step it lacked).
+Both padding warnings were checked and are **false positives**: the flagged bar
+has 16.29px horizontal padding, and its children measure **16px** inset from it.
+
+**6. The full-page capture claim was still false — corrected, and the tool
+fixed.** See the correction under pass 6. `just website-shot` now scrolls the
+page to the end and back before capturing, because a `captureBeyondViewport`
+screenshot reproduces only what has already been revealed.
+
+**7. Keyboard, motion and no-JS were verified, not assumed.**
+
+```text
+ArrowRight on the tablist   → focus tab-scripts, aria-selected flips,
+                              roving tabindex 0/-1, panel labelledby updates
+Type + Enter                → echo, then staggered result lines (~250ms)
+prefers-reduced-motion      → full transcript in ONE frame, no stagger
+unknown command             → -ERR unknown command 'FLUSHALL' + hint
+JavaScript disabled         → form hidden, 12-line <noscript> transcript stands in
+320–834px controls          → mode 44px, input 47px, RUN 44px
+```

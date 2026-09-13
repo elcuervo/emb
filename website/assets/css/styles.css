@@ -4,8 +4,9 @@
    00 tokens          05 features
    01 base            06 pipeline
    02 primitives      07 landscape
-   03 masthead        08 footer
-   04 hero            09 motion / responsive
+   03 masthead        08 capability
+   04 hero            09 footer
+                      10 motion / responsive
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── 00a fonts ───────────────────────────────────────────────────────
@@ -732,7 +733,252 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .reg::before{ left: 50%; top: 0; width: 1px; height: 100%; }
 .reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
 
-/* ── 08 footer ─────────────────────────────────────────────────────── */
+/* ── 08 capability ───────────────────────────────────────────────────
+   The poster's second spread: the same prose column and the same signal
+   axis as the hero, entered from the terrain's foot.
+
+   It introduces no new colour. The dark panels are the SERVE plate's own
+   faces -- #111110 top, #292823 side -- stroked with the same 1px paper
+   edge every other plate carries, and the type lifts the page's existing
+   tokens onto them: --bg (15-17:1 there) for ink, --rule (9.1:1) for the
+   dim voice and for control boundaries, --accent (5.98:1) as the one
+   accent. On this surface --accent clears AA as text, which is why the
+   prompt and the error prefix use it and --accent-ink (3.52:1 here) is not
+   used at all. Every figure is measured in website/README.md. */
+.capability{
+  border-top: 1px solid var(--rule);
+  margin-top: clamp(52px, 6.4vw, 104px);
+  padding-top: clamp(26px, 3vw, 44px);
+}
+.capability__deck{
+  margin-top: clamp(12px, 1.3vw, 20px);
+  max-width: 50ch;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.1vw, 14px);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.capability__body{
+  display: grid;
+  grid-template-columns: var(--col-prose) minmax(0, 1fr);
+  gap: clamp(28px, 4.4vw, 84px);
+  margin-top: clamp(26px, 3.2vw, 52px);
+}
+.capability__entries{ min-width: 0; }
+
+/* ruled entries, not cards: a hairline and a mono ladder */
+.cap{
+  padding-block: clamp(16px, 1.7vw, 24px);
+  border-top: 1px solid var(--rule-soft);
+}
+.cap:first-child{ border-top-color: var(--rule); }
+.cap__label{
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.215vw, 15.5px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  line-height: 1.25;
+}
+.cap__claim{
+  margin-top: 7px;
+  max-width: 42ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.45;
+}
+.cap__facts{
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* the console is the spread's second column. It is the only interactive
+   thing on the page and the only element that could ever become live. */
+
+/* ── the console ─────────────────────────────────────────────────────
+   The fourth plate, laid flat. It is a placeholder: the executor below is
+   a transcript map on the page and a documented seam for a real RESP
+   client (see website/README.md). No endpoint is implied anywhere. */
+.console{
+  min-width: 0;
+  background: #111110;
+  border: 1px solid var(--bg);
+  color: var(--bg);
+  font-family: var(--mono);
+}
+.console__bar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 4px clamp(12px, 1.5vw, 18px);
+  background: #292823;
+  border-bottom: 1px solid var(--rule);
+}
+.console__modes{ display: flex; gap: clamp(12px, 1.4vw, 22px); }
+.console__mode{
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 1px;
+  min-height: 36px;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  line-height: 1;
+  color: var(--rule);
+  cursor: pointer;
+  transition: color .12s ease, border-color .12s ease;
+}
+.console__mode:hover{ color: var(--bg); }
+.console__mode[aria-selected="true"]{
+  color: var(--bg);
+  border-bottom-color: var(--accent);
+}
+.console__badge{
+  font-size: clamp(12px, .95vw, 12.5px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  color: var(--rule);
+}
+.console__screen{
+  min-height: clamp(206px, 17vw, 262px);
+  padding: clamp(14px, 1.6vw, 22px) clamp(12px, 1.5vw, 18px);
+}
+.console__out{
+  margin: 0;
+  font-family: inherit;
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.console__out + .console__out{ margin-top: 18px; }
+.console__line{ display: block; }
+.console__line--dim{ color: var(--rule); }
+.console__line--key{ color: var(--bg); }
+.console__line--err{ color: var(--accent); }
+.console__line--echo{ color: var(--bg); }
+.console__caret{ color: var(--accent); }
+
+.console__form{
+  display: none; /* without JavaScript the static transcript stands in */
+  align-items: center;
+  gap: 10px;
+  padding: 8px clamp(12px, 1.5vw, 18px) 12px;
+  border-top: 1px solid var(--rule);
+}
+html.js .console__form{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.console__prompt{
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  color: var(--accent);
+}
+.console__input{
+  width: 100%;
+  min-width: 0;
+  padding: 12px 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  line-height: 1.4;
+  caret-color: var(--accent);
+}
+.console__input::placeholder{ color: var(--rule); opacity: 1; }
+.console__input[disabled]{ color: var(--rule); cursor: progress; }
+.console__run{
+  appearance: none;
+  padding: 10px 14px;
+  min-height: 38px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.console__run:hover{ background: var(--accent); border-color: var(--accent); color: var(--fg); }
+.console__run[disabled]{
+  background: #292823;
+  border-color: var(--rule);
+  color: var(--rule);
+  cursor: progress;
+}
+.console__note{
+  padding: 10px clamp(12px, 1.5vw, 18px) 12px;
+  border-top: 1px solid #292823;
+  font-size: clamp(12px, .95vw, 12.5px);
+  line-height: 1.55;
+  color: var(--rule);
+}
+
+/* the accent is the focus ring on this surface: 5.98:1 there vs 3.52:1 for
+   --accent-ink, which is tuned for the paper and would fail here */
+.console :focus-visible,
+.topviz :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── the emb-top panel ───────────────────────────────────────────────
+   A full-width band rather than a second column: the capture's longest
+   line is ~100 characters, which no 640px column can hold without either
+   cutting it or wrapping the bars mid-run. The direction contract put it
+   under the console; that amendment is recorded in the surface brief. */
+.topviz{
+  min-width: 0;
+  margin-top: clamp(30px, 3.6vw, 60px);
+  padding-top: clamp(16px, 1.7vw, 24px);
+  border-top: 1px solid var(--rule-soft);
+}
+.topviz__claim{
+  margin-top: 7px;
+  max-width: 68ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.45;
+}
+.topviz__screen{
+  margin-top: 12px;
+  padding: clamp(12px, 1.4vw, 18px);
+  background: #111110;
+  border: 1px solid var(--bg);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* the scrollbar is part of the panel, so it is painted from the panel */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) #111110;
+}
+.topviz__screen::-webkit-scrollbar{ height: 8px; }
+.topviz__screen::-webkit-scrollbar-track{ background: #111110; }
+.topviz__screen::-webkit-scrollbar-thumb{ background: var(--rule); }
+.topviz__src{
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: clamp(12px, .92vw, 12.5px);
+  color: var(--muted);
+}
+
+/* ── 09 footer ─────────────────────────────────────────────────────── */
 .footer{ border-top: 1px solid var(--rule-soft); background: var(--bg); }
 .footer__inner{
   display: flex;
@@ -752,7 +998,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 }
 .footer__mark{ color: var(--fg); }
 
-/* ── 09 motion + responsive ───────────────────────────────────────── */
+/* ── 10 motion + responsive ───────────────────────────────────────── */
 /* The reveals ripple through a group instead of flipping as one block. --i is
    the element's place in its list; there is no wall clock involved, and with
    prefers-reduced-motion the whole cascade collapses to a single frame. */
@@ -762,6 +1008,10 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .features__list > .feat:nth-child(4){ --i: 3; }
 .features__list > .feat:nth-child(5){ --i: 4; }
 .features__list > .feat:nth-child(6){ --i: 5; }
+.capability__entries > .cap:nth-child(1){ --i: 0; }
+.capability__entries > .cap:nth-child(2){ --i: 1; }
+.capability__entries > .cap:nth-child(3){ --i: 2; }
+.capability__body > .console{ --i: 3; }
 
 html.js [data-reveal]{ opacity: 0; translate: 0 14px; }
 html.js [data-reveal].in{
@@ -924,6 +1174,33 @@ html.js.is-ready .hero__prose{
   .feat__name{ font-size: 15px; line-height: 1.4; }
   .feat__desc{ font-size: 14px; line-height: 1.6; }
 
+  /* the capability region stacks: entries first (the argument), then the
+     console that proves it, then emb-top */
+  .capability{ margin-top: 52px; padding-top: 26px; }
+  .capability__deck{ font-size: 14px; max-width: 54ch; }
+  .capability__body{ grid-template-columns: minmax(0, 1fr); gap: 30px; margin-top: 26px; }
+  .cap__label{ font-size: 15px; line-height: 1.4; }
+  .cap__claim{ font-size: 15px; line-height: 1.55; max-width: 52ch; }
+  .cap__facts{ font-size: 14px; line-height: 1.6; }
+  .topviz__claim{ font-size: 15px; max-width: 54ch; }
+  /* every console control clears the 44px touch floor at these widths */
+  .console__mode{ min-height: 44px; font-size: 14px; }
+  .console__badge{ font-size: 14px; letter-spacing: .05em; }
+  .console__out{ font-size: 14px; line-height: 1.7; }
+  .console__prompt{ font-size: 14px; }
+  .console__input{ font-size: 14px; padding-block: 14px 12px; }
+  .console__run{ min-height: 44px; padding: 12px 16px; font-size: 14px; }
+  .console__note{ font-size: 14px; line-height: 1.6; }
+  /* program output wraps here rather than scrolling sideways: the region
+     must never scroll horizontally on a phone */
+  .topviz__screen{
+    font-size: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: hidden;
+  }
+  .topviz__src{ font-size: 14px; }
+
   .hero__pipeline{ grid-column: 1; margin-top: 48px; }
   .pipeline{ margin: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .pipeline__svg{ overflow: hidden; }
@@ -972,6 +1249,8 @@ html.js.is-ready .hero__prose{
   .ghlink{ justify-self: center; }
   .features__list{ grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .feat{ padding-block: 14px; }
+  .capability__deck{ font-size: 14px; }
+  .console__bar{ padding-block: 6px; }
 
   /* Phones keep the isometric stack: the four slabs are the page's whole
      argument, and a phone is exactly where a reader has the attention for

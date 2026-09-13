@@ -9,7 +9,8 @@ corrections that took the page to the reference poster live in
 ```
 website/
 ├── index.html              single page: masthead → hero (prose + pipeline
-│                           + terrain) → footer
+│                           + terrain) → capability (entries + console +
+│                           emb-top) → footer
 ├── assets/
 │   ├── css/styles.css      tokens → primitives → sections → responsive
 │   ├── js/main.js          entrance sequencing, reveals, pipeline, route
@@ -85,8 +86,16 @@ smallest text on the 1086px frame is 12px and the smallest text on a phone is
 full-width bands: the left column carries the claim, the sub, the actions
 and the feature list; the right column carries the pipeline and then the
 terrain, which the feature list overlaps vertically. At 1086px wide that
-measures 1464px tall — a 1 : 1.348 frame against the poster's 1 : 1.333, so
-the sheet runs 16px long at the reference width.
+hero spread measures 1464px tall — a 1 : 1.348 frame against the poster's
+1 : 1.333, so the sheet ran 16px long at the reference width.
+
+Below it sits a **second spread** — the capability region — which is
+deliberately outside the poster's ratio. The document is no longer one
+sheet, and the ratio is not a constraint on it: at 1086px the page now
+measures **2486px** tall (1 : 2.289), and the poster's 1 : 1.333 governs the
+hero alone. What keeps the addition from reading as a second product is that
+it reuses the hero's own grid (`--col-prose`), the same signal axis, and the
+poster's atoms rather than introducing a new component language.
 
 The composition's backbone is the orange signal axis: `.sig{x=182}` inside
 the plate SVG, the plate centres from `.pipeline{margin-left}` , the ridge's
@@ -152,6 +161,58 @@ the branches and their annotations are dropped together: a phone has no paper
 beside the massif, and an unlabelled spur crossing the peak reads as an
 artefact.
 
+**The capability region** — the poster argues; this region proves. It sits
+after the terrain so the pipeline → ridge handover stays unbroken, and it is
+built only from the poster's atoms: one `rule-head`, ruled entries (a hairline
+and a mono ladder, never cards), and dark panels. The three entries cover the
+protocol, script inference and operations, in that order, and it is a single
+merged region rather than a block per feature — four blocks would be a feature
+grid wearing the poster's clothes.
+
+**The console is the SERVE plate, laid flat.** It reuses that plate's own
+faces — `#111110` top, `#292823` side — plus the same 1px `--bg` stroke every
+other plate carries, so the page's first large dark surface is made of
+material already on the page rather than a new chrome language. There are no
+title bars and no traffic lights: that would be a costume note from another
+world.
+
+It introduces **no new colour**. The type lifts existing tokens onto the dark
+field, and every value is measured (`:focus-visible` included): `--bg` ink at
+**16.59:1**, `--rule` for the dim voice, the badge and the control boundaries
+at **9.22:1**, `--accent` for the prompt, the error prefix and the focus ring
+at **6.06:1**. `--accent-ink` is the one token that does *not* travel: it is
+tuned for the paper (4.66:1) and measures only **3.52:1** here, so the console
+overrides the global focus ring back to `--accent`. Text clears 4.5:1 and
+non-text indicators clear 3:1 on every element measured.
+
+**It is a placeholder, and it says so.** The bar reads `DEMO · NOT A LIVE
+SERVER`, the note under the panel says the live client is not wired, and there
+is no endpoint anywhere. The controls are real — a `<form>`, a labelled input
+and a `<pre aria-live>` — so the live version is not a rewrite: replacing
+`window.embConsole.exec` with a RESP client drives the same markup, modes and
+states. Two modes are the two special functions: `REDIS` shows the bytes and
+the `VALUES` envelope, `SCRIPTS` shows a script loaded once and called by SHA
+to answer as a classifier. Every line is copied from `README.md` or
+`examples/scripts/`, and the SHA1 in the scripts transcript is a real
+`sha1()` of `examples/scripts/sst2.lua` — the same value the server's
+`scriptSHA()` returns. The executor never touches the network, playback is
+line-by-line rather than per character, and `prefers-reduced-motion` collapses
+it to one frame. Without JavaScript the form is hidden and a `<noscript>`
+transcript stands in.
+
+The panel is a real `role="tablist"` with roving `tabindex` and arrow-key
+navigation, and the live region is armed *after* the idle line is painted, so
+loading the page does not announce a console hint. Every control clears the
+44px target floor at 320–834px. The smallest text in the whole region is
+**12px at 1086** and **14px at 390**, which is the committed floor.
+
+**`emb-top` is a full-width band, not a second column.** Its capture's longest
+line is ~100 characters; no 640px column holds that without either cutting the
+output or wrapping the heatmap bars mid-run. The panel is the dashboard's real
+render from `README.md` with rows omitted, and it is labelled `Sample run`.
+On phones the capture wraps (`pre-wrap`) rather than scrolling sideways, so
+the region never introduces horizontal scroll.
+
 **The wordmark** is an inline SVG with three optical outlines in a
 1086 × 480 viewBox. At the reference width, the `b` tower starts at y87,
 the x-height at y218, and the bowls finish at y567. The `e` terminal, `m`
@@ -171,7 +232,17 @@ intersection, so an anchor jump or a fast flick can never leave content
 invisible; a `ResizeObserver` on the root covers the rest of what can move the
 trigger line under an element — zoom, rotation, a late font or image — and a
 `@media print` block collapses the whole cascade to its end state, because a
-print pass never scrolls. Groups ripple instead of flipping as a block: each
+print pass never scrolls.
+
+**The one case that is not covered is a capture that neither scrolls nor
+resizes.** A `captureBeyondViewport` full-page screenshot lays the document
+out without moving the trigger line, so every reveal below the fold is still
+at `opacity: 0` and the capture silently omits it — measured: 10 of 20
+`[data-reveal]` elements hidden on a fresh load at 390px. A print pass is
+safe (`@media print` collapses the cascade); a screenshot is not. `just
+website-shot` therefore scrolls the page to the end and back before it
+captures, and any hand-rolled capture must do the same. This is the accurate
+version of the claim the earlier passes made too broadly. Groups ripple instead of flipping as a block: each
 feature and stage carries its list position in `--i`, and the slab stagger is
 keyed by plate name, so a shared property can never make a hover wait out
 another element's delay.

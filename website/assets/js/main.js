@@ -206,5 +206,235 @@
       });
     }
 
+    /* ── 6. the console (placeholder) ───────────────────────────────
+       Deterministic transcripts, no network, no endpoint. Every line is
+       copied from the repository, and each entry names its source so a
+       server change has a defined update path:
+
+         README.md §intro          EMB, and EMB ... VALUES
+         README.md §Reply formats  the VALUES envelope fields
+         README.md §EMB.MULTI      the multi-model reply
+         README.md §Example 2      the sst2 classifier reply
+         README.md §Operations     EMB.READY
+         examples/scripts/sst2.lua the SHA1 below, which is sha1() of that
+                                   file's exact bytes -- the same value the
+                                   server's scriptSHA() returns
+
+       The executor is the seam. Replace `window.embConsole.exec` with a
+       RESP client and the same markup, modes and states drive it. */
+    var root = document.querySelector('[data-console="transcript"]');
+    if (root) {
+      var out = root.querySelector('#console-out');
+      var form = root.querySelector('#console-form');
+      var input = root.querySelector('#console-input') || root.querySelector('#console-in');
+      var runBtn = root.querySelector('.console__run');
+      var screen = root.querySelector('#console-screen');
+      var tabs = [].slice.call(root.querySelectorAll('.console__mode'));
+
+      var TRANSCRIPTS = {
+        redis: {
+          hint: 'EMB minilm "hello world"',
+          idle: 'Type a command. Try EMB minilm "hello world".',
+          entries: [
+            { match: /^EMB\s+\S+\s+VALUES(\s|$)/i, lines: [
+              { t: '\"dtype\"   FLOAT' },
+              { t: '\"shape\"   [1 384]' },
+              { t: '\"values\"  [-0.19744610786437988, 0.17766517400741577, …]', k: 'dim' },
+              { t: 'self-describing envelope · 384 decimals', k: 'dim' }
+            ] },
+            { match: /^EMB\s+\S+(\s|$)/i, lines: [
+              { t: '\\x7c\\x8e\\x80\\xbd…' },
+              { t: '384 float32s × 4 bytes · 1.5 KB bulk string', k: 'dim' }
+            ] },
+            { match: /^EMB\.MULTI(\s|$)/i, lines: [
+              { t: '1) \\x7c\\x8e\\x80\\xbd…   minilm · 384 floats' },
+              { t: '2) \\x4a\\x9f\\x31\\xc2…   siglip2 · 768 floats' },
+              { t: 'one round trip · MGET-style partial failures', k: 'dim' }
+            ] },
+            { match: /^EMB\.READY(\s|$)/i, lines: [ { t: 'OK' } ] },
+            { match: /^PING(\s|$)/i, lines: [ { t: 'PONG' } ] },
+            { match: /^EMB\.HELP(\s|$)|^HELP(\s|$)/i, lines: [
+              { t: 'EMB  EMB.MULTI  EMB.MODELS  EMB.INFO  EMB.STATS  MONITOR' },
+              { t: 'EMB.READY  EMB.EVAL  EMB.EVSHA  EMB.SCRIPT  EMB.CACHE.FLUSH', k: 'dim' }
+            ] }
+          ]
+        },
+        scripts: {
+          hint: 'EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE',
+          idle: 'Load a script once, then call it by SHA. Try EMB.SCRIPT LOAD sst2.',
+          entries: [
+            { match: /^EMB\.SCRIPT\s+LOAD(\s|$)/i, lines: [
+              { t: '"77c1e0c01d3c43e8f07b262869d13c21b93b28f9"' },
+              { t: 'compiled, cached per model', k: 'dim' }
+            ] },
+            { match: /^EMB\.EVSHA(\s|$)/i, lines: [
+              { t: 'label       POSITIVE' },
+              { t: 'confidence  0.99' },
+              { t: 'scores      […]', k: 'dim' },
+              { t: 'model(fn(input)) → model output', k: 'dim' }
+            ] },
+            { match: /^EMB\.SCRIPT\s+EXISTS(\s|$)/i, lines: [ { t: '1' } ] }
+          ]
+        }
+      };
+
+      var state = { mode: 'redis' };
+      var timers = [];
+
+      function lineEl(line) {
+        var el = document.createElement('span');
+        el.className = 'console__line' + (line.k ? ' console__line--' + line.k : '');
+        if (line.k === 'echo') {
+          var caret = document.createElement('span');
+          caret.className = 'console__caret';
+          caret.textContent = 'EMB ›';
+          el.appendChild(caret);
+          el.appendChild(document.createTextNode(' ' + line.t));
+        } else {
+          el.textContent = line.t;
+        }
+        return el;
+      }
+
+      function clearTimers() {
+        timers.forEach(window.clearTimeout);
+        timers = [];
+      }
+
+      /* Playback is line-by-line, not per character: the panel is a console,
+         and a 40-character line typing itself out is noise, not information.
+         Reduced motion collapses it to one frame. */
+      function play(lines) {
+        clearTimers();
+        out.textContent = '';
+        if (reduceMotion.matches) {
+          lines.forEach(function (l) { out.appendChild(lineEl(l)); });
+          setBusy(false);
+          return;
+        }
+        lines.forEach(function (l, i) {
+          if (i === 0) { out.appendChild(lineEl(l)); return; }
+          timers.push(window.setTimeout(function () {
+            out.appendChild(lineEl(l));
+            if (i === lines.length - 1) setBusy(false);
+          }, i * 110));
+        });
+      }
+
+      function setBusy(busy) {
+        if (input) input.disabled = busy;
+        if (runBtn) runBtn.disabled = busy;
+        screen.setAttribute('aria-busy', busy ? 'true' : 'false');
+      }
+
+      function respond(mode, command) {
+        var spec = TRANSCRIPTS[mode] || TRANSCRIPTS.redis;
+        var cmd = String(command).trim().replace(/\s+/g, ' ');
+        var head = cmd.split(' ')[0] || '';
+        var lines = [{ k: 'echo', t: cmd }];
+        for (var i = 0; i < spec.entries.length; i++) {
+          if (spec.entries[i].match.test(cmd)) {
+            return lines.concat(spec.entries[i].lines);
+          }
+        }
+        return lines.concat([
+          { t: "-ERR unknown command '" + head + "'", k: 'err' },
+          { t: 'Try: ' + spec.hint, k: 'dim' }
+        ]);
+      }
+
+      function idle(mode) {
+        var spec = TRANSCRIPTS[mode] || TRANSCRIPTS.redis;
+        clearTimers();
+        out.textContent = '';
+        out.appendChild(lineEl({ t: spec.idle, k: 'dim' }));
+        setBusy(false);
+        if (input) {
+          input.placeholder = spec.hint;
+          input.value = '';
+        }
+      }
+
+      function submit(command) {
+        setBusy(true);
+        out.textContent = '';
+        out.appendChild(lineEl({ k: 'echo', t: command }));
+        var result;
+        try {
+          result = window.embConsole.exec(command, state.mode);
+        } catch (err) {
+          play([{ t: '-ERR executor failed', k: 'err' }]);
+          return;
+        }
+        Promise.resolve(result).then(function (lines) {
+          play(Array.isArray(lines) ? lines : []);
+        }, function () {
+          play([{ t: '-ERR executor failed', k: 'err' }]);
+        });
+      }
+
+      /* The default executor. It never touches the network: the transcripts
+         above are the whole server. Called as exec(command, mode) so a live
+         client knows which command surface it is answering. */
+      window.embConsole = window.embConsole || {
+        exec: function (command, mode) {
+          return new Promise(function (resolve) {
+            window.setTimeout(function () {
+              resolve(respond(mode || state.mode, command));
+            }, reduceMotion.matches ? 0 : 140);
+          });
+        }
+      };
+
+      if (form && input && out) {
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var command = input.value.trim();
+          if (!command) return;
+          input.value = '';
+          submit(command);
+        });
+
+        tabs.forEach(function (tab, i) {
+          tab.addEventListener('click', function () { select(i, false); });
+        });
+
+        var tablist = root.querySelector('.console__modes');
+        function select(i, focus) {
+          var mode = tabs[i].getAttribute('data-mode');
+          tabs.forEach(function (tab, j) {
+            var on = j === i;
+            tab.setAttribute('aria-selected', on ? 'true' : 'false');
+            tab.tabIndex = on ? 0 : -1;
+          });
+          state.mode = mode;
+          screen.setAttribute('aria-labelledby', tabs[i].id);
+          idle(mode);
+          if (focus) tabs[i].focus();
+        }
+
+        if (tablist) {
+          tablist.addEventListener('keydown', function (event) {
+            var current = tabs.indexOf(document.activeElement);
+            if (current < 0) current = tabs.indexOf(root.querySelector('[aria-selected="true"]'));
+            var next = null;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
+            else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
+            else if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = tabs.length - 1;
+            if (next === null) return;
+            event.preventDefault();
+            select(next, true);
+          });
+        }
+
+        /* Idle is painted before the live region is armed, so loading the page
+           does not announce a console hint. Results and mode hints after that
+           are announced. */
+        idle('redis');
+        out.setAttribute('aria-live', 'polite');
+      }
+    }
+
   });
 })();
