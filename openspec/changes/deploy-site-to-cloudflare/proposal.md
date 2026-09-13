@@ -52,7 +52,9 @@ was built to prevent.
   path-filtered to the site, gated on the version check, and the PR job comments
   the preview URL back on the pull request.
 - **A site job joins `ci.yml`** so the stamp drift guard and a served-page smoke
-  check run on every pull request, not only on the path to production.
+  check run on every pull request, not only on the path to production — and a
+  change confined to the site skips the server's and the gems' jobs instead of
+  running them for nothing.
 - **Header policy written for unhashed names.** The site has no build step and
   therefore no content hashes; the HTML, CSS, and JS take the platform's
   revalidate default while the fonts and images — which are genuinely

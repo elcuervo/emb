@@ -212,3 +212,36 @@ unstyled page.
 
 - **WHEN** the not-found page is rendered
 - **THEN** it offers a working route to the landing page and to the documentation surface
+
+### Requirement: The gate runs only the suites a change can affect
+
+Continuous integration SHALL classify a change before running the repository's
+suites. A change confined to the site directory MUST NOT run the server's or the
+gems' jobs; a change touching anything outside the site directory MUST run them.
+The site's own checks MUST run for both kinds of change, because the version
+file reaches the pages as well as the binary.
+
+When the changed files cannot be determined, the suites MUST run rather than be
+skipped, and a skipped suite MUST be reported as a result of the change rather
+than by the change never triggering a workflow, so a required check is never
+left waiting on a status that will not report.
+
+#### Scenario: A site-only change skips the suites
+
+- **WHEN** a change touches only files under the site directory
+- **THEN** the site's own checks run, and the server's and the gems' jobs are skipped
+
+#### Scenario: A change outside the site runs the suites
+
+- **WHEN** a change touches any file outside the site directory
+- **THEN** the server's and the gems' jobs run, whatever else the change touches
+
+#### Scenario: An undeterminable diff is not treated as site-only
+
+- **WHEN** the previous revision is absent — a new branch, a forced push, a dispatch — or the diff cannot be computed
+- **THEN** the suites run, because skipping on an unknown diff is the failure mode that hides a defect
+
+#### Scenario: The skip blocks nothing
+
+- **WHEN** the suites are skipped for a change and those jobs are required by branch protection
+- **THEN** the change is not left waiting on a status that will not report

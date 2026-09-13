@@ -259,6 +259,30 @@ composition rule — and it links back to the landing and to `/docs`.
 unstyled default is exactly the "broken page" state the site's own specs refuse
 elsewhere, and it would be the only page on the origin outside the site's world.
 
+### D9 — The site-only skip is a job condition, not a workflow path filter
+
+A change confined to `website/` should not spend the server's and the gems' CI
+minutes. The tempting form is a workflow-level `paths-ignore: [website/**]` on
+`ci.yml`, and it is wrong: GitHub reports a path-filtered workflow as never
+having run, so its checks sit in `Pending` and any branch protection rule that
+requires them blocks the merge. A job skipped by a condition instead reports
+success. The gate therefore classifies the diff in a small `changes` job —
+three-dot against a pull request's own head, `github.event.before..github.sha`
+on a push — and `lint`, `test`, and `gem-rails` carry `needs: changes` plus
+`if: needs.changes.outputs.code == 'true'`.
+
+The classifier fails open rather than closed. An all-zero `before` (new branch,
+forced push), a missing base, or a `git diff` that errors all resolve to "run
+everything": a false `true` costs minutes, a false `false` costs a defect. The
+`site` job stays unconditional — it is seconds of work, and `VERSION` reaches
+the pages as well as the binary.
+
+*Alternatives:* `dorny/paths-filter`, rejected as one more action to trust for a
+`git diff --name-only` and a `grep`. Filtering `ci.yml` to non-site paths and
+letting `site.yml`'s `checks` job be the site's only gate, rejected for the
+`Pending` reason above — and the duplicated `site` job already exists so that no
+publication rests on another workflow having run.
+
 ## Risks / Trade-offs
 
 - **The ignore list is now the only boundary, so a forgotten entry publishes.**
