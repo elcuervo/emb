@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emb — text in. floats out.</title>
+<link rel="canonical" href="https://emb.is/">
+<meta name="description" content="emb is a fast text-embeddings server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache, multi-model queries.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — text in. floats out.">
+<meta property="og:description" content="A fast embedding server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache.">
+<meta property="og:url" content="https://emb.is/">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — text in. floats out.">
+<meta name="twitter:description" content="A fast embedding server that speaks the Redis protocol.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<link rel="preload" href="assets/fonts/inter-900-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>document.documentElement.classList.add('js');
+/* The class above hides the hero for its entrance, and only main.js can bring
+   it back. If that file never runs -- blocked, 404, or thrown during
+   evaluation -- the page would ship as a blank poster with no way to recover,
+   so any uncaught error before the page reports itself ready removes the class
+   and the page falls back to its complete no-JS state. */
+window.addEventListener('error',function(){if(!document.documentElement.classList.contains('is-ready'))document.documentElement.classList.remove('js');},true);</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- shared engraving hatch for the feature plates -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <defs>
+    <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <path d="M0 0V5" stroke="currentColor" stroke-width="1.1"/>
+    </pattern>
+  </defs>
+</svg>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="#top" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="docs/index.html" rel="noopener">Docs</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+      <a href="docs/index.html#configuration" rel="noopener">Models</a>
+      <a href="https://github.com/elcuervo/emb/issues" rel="noopener">Community</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+        <a href="docs/index.html#configuration">Models <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb/issues">Community <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ══════════════════════════════════════════════════════════════ HERO -->
+<section class="hero" id="top" aria-labelledby="claim">
+  <div class="shell">
+
+    <div class="hero__meta">
+      <p class="hero__meta-a">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
+      <p class="hero__meta-b">OPEN SOURCE<br>EMBEDDING SERVER<br>FOR A MORE<br>VECTOR-NATIVE WORLD.<span class="meta-rule" aria-hidden="true"></span></p>
+      <p class="hero__tech"><span>RESP/3</span><br><span>384D</span><br><span>ONNX</span><span class="meta-rule meta-rule--end" aria-hidden="true"></span></p>
+    </div>
+
+    <!-- the giant word is the layout; the semantic h1 is the claim below -->
+    <div class="hero__wordmark" aria-hidden="true">
+      <svg class="wordmark" viewBox="0 0 1086 480" focusable="false">
+        <defs>
+          <filter id="ink-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" seed="8"/>
+            <feColorMatrix type="saturate" values="0"/>
+            <feComponentTransfer><feFuncA type="linear" slope=".025"/></feComponentTransfer>
+            <feComposite in2="SourceGraphic" operator="in"/>
+            <feBlend in2="SourceGraphic" mode="screen"/>
+          </filter>
+        </defs>
+        <!-- Optical outlines follow the reference lockup, independently of fonts. -->
+        <g fill="currentColor" fill-rule="evenodd" filter="url(#ink-grain)">
+          <path d="M319 334H121C120 375 132 393 162 393C184 393 199 384 207 365H316C297 436 243 479 165 479C58 479-5 416-5 310C-5 203 63 131 168 131C269 131 319 197 319 296ZM123 269H203C203 236 191 219 166 219C142 219 127 235 123 269Z"/>
+          <path d="M321 467V140H433V162C450 140 470 131 495 131C531 131 552 147 564 177C581 147 608 131 645 131C705 131 737 164 737 225V461H619V263C619 244 614 237 603 237C589 237 580 250 580 274V461H463V266C463 245 459 237 448 237C435 237 430 250 430 274V467Z"/>
+          <path d="M747 463V0H865V164C887 142 914 131 947 131C1035 131 1091 198 1091 305C1091 415 1035 480 947 480C906 480 876 470 851 447V463ZM852 315C852 369 870 393 907 393C944 393 962 369 962 315C962 261 945 236 909 236C872 236 852 263 852 315Z"/>
+        </g>
+      </svg>
+      <p class="wordmark-note">SAME<br>PROTOCOL.<br>A&nbsp;MORE<br>SEMANTIC<br>WORLD.</p>
+    </div>
+
+    <div class="hero__body">
+
+      <div class="hero__prose">
+        <h1 class="claim" id="claim">
+          <span>A fast</span>
+          <span>embedding server</span>
+          <span>that speaks the</span>
+          <span>Redis protocol.</span>
+        </h1>
+
+        <p class="hero__sub">
+          Drop-in compatible. Pre-1.0, MIT licensed.
+          Turn text, and any tensor a script builds,
+          into vectors.
+        </p>
+
+        <div class="hero__actions">
+          <a class="btn btn--accent" href="docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+          <a class="ghlink" href="https://github.com/elcuervo/emb" rel="noopener">
+            <span>View on GitHub</span>
+            <svg class="ghlink__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.1 3.29 9.42 7.86 10.95.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.11-.76.41-1.27.74-1.56-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.42.36.79 1.08.79 2.18 0 1.57-.01 2.84-.01 3.23 0 .31.21.68.8.56A11.52 11.52 0 0 0 23.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
+          </a>
+        </div>
+
+        <!-- The four facts the landing keeps. Everything else lives in docs/:
+             the command tables, the config block, the reply-format prose, the
+             emb-top figures, and the version strings. The release line states
+             the status the poster used to overstate; the measured line is the
+             single number, with its reproduction one click away. -->
+        <div class="hero__start">
+          <p class="hero__install">
+            <span class="hero__install-key">INSTALL</span><code class="hero__install-cmd">curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | sh</code>
+          </p>
+          <dl class="facts hero__facts">
+            <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0.pre4</span> · MIT</dd>
+            <dt>BUILDS</dt><dd>macOS arm64 · Linux amd64/arm64</dd>
+            <dt>MEASURED</dt><dd><span class="t-num">2010.05 req/s</span> · minilm, 16 clients, Apple M4 · <a class="hero__link" href="https://github.com/elcuervo/emb/blob/main/BENCHMARK.md#multi-threaded">reproduce</a></dd>
+          </dl>
+        </div>
+
+        <section class="features" aria-labelledby="features-h">
+          <h2 class="rule-head" id="features-h">
+            BUILT FOR REAL SYSTEMS
+            <span class="rule-head__rule" aria-hidden="true"></span>
+          </h2>
+
+          <ol class="features__list">
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M16 2 20 10 29 13 24 21 25 29 16 26 7 29 8 20 3 13 12 10Z"/><path d="m16 2-4 8 8 0 4 11-8 5-8-6 4-10 4 16 4-16 9 3-13 3-13-3 5 7 16 1M7 29l9-13 9 13"/><path d="m12 10 4 6 4-6M8 20l8-4 8 5"/><g fill="currentColor"><circle cx="16" cy="2" r="1.5"/><circle cx="3" cy="13" r="1.5"/><circle cx="29" cy="13" r="1.5"/><circle cx="7" cy="29" r="1.5"/><circle cx="25" cy="29" r="1.5"/></g></svg>
+              </span>
+              <h3 class="feat__name">ONNX Runtime</h3>
+              <p class="feat__desc">Fast, portable inference.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"><path d="M6 13C6 6 10 2 16 2s10 4 10 11l3 12c1 4-4 6-7 3-4 2-8 2-12 0-4 3-8 1-7-3Z"/><ellipse cx="12" cy="13" rx="1.3" ry="2"/><ellipse cx="20" cy="13" rx="1.3" ry="2"/><path d="M12 19q4 4 8 0M9 18l-2 1m16-1 2 1M7 23l2 2m16-2-2 2" stroke-linecap="round"/></svg>
+              </span>
+              <h3 class="feat__name">Hugging Face</h3>
+              <p class="feat__desc">Thousands of models, instantly.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3.4 25 9.4 14 15.4 3 9.4Z" fill="none"/><path d="M3 14.4 14 20.4 25 14.4"/><path d="M3 19.4 14 25.4 25 19.4"/></svg>
+              </span>
+              <h3 class="feat__name">Smart Batching</h3>
+              <p class="feat__desc">High throughput, low latency.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4Z" fill="none" stroke="none"/><ellipse cx="14" cy="7.4" rx="9.6" ry="3.6"/><path d="M4.4 7.4v13.2c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6V7.4"/><path d="M4.4 13.6c0 2 4.3 3.6 9.6 3.6s9.6-1.6 9.6-3.6"/></svg>
+              </span>
+              <h3 class="feat__name">LRU Cache</h3>
+              <p class="feat__desc">Serve hot embeddings fast.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.6" y="3.6" width="9" height="9" fill="none"/><rect x="15.4" y="3.6" width="9" height="9"/><rect x="3.6" y="15.4" width="9" height="9"/><rect x="15.4" y="15.4" width="9" height="9" fill="none"/></svg>
+              </span>
+              <h3 class="feat__name">Multi-Model</h3>
+              <p class="feat__desc">Load and switch models on the fly.</p>
+            </li>
+
+            <li class="feat" data-reveal>
+              <span class="feat__ico" aria-hidden="true">
+                <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6.4 3.4h9.2l6 6v15.2h-15.2Z" fill="none"/><path d="M15.4 3.4v6h6"/><path d="M10 15.4h8M10 19.4h5.5" stroke-linecap="round"/></svg>
+              </span>
+              <h3 class="feat__name">Lua Scripting</h3>
+              <p class="feat__desc">Extend, compose, automate.</p>
+            </li>
+          </ol>
+        </section>
+      </div>
+
+      <div class="hero__pipeline">
+        <h2 class="sr-only" id="arch-h">Architecture</h2>
+        <div class="pipeline" id="pipeline">
+
+          <div class="pipeline__stack">
+            <svg class="pipeline__svg" viewBox="0 0 364 553" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="plate-grain" x="-5%" y="-10%" width="110%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency=".65" numOctaves="3" seed="12"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".23"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in2="SourceGraphic" mode="multiply"/>
+    </filter>
+    <pattern id="edge-lines" width="23" height="24" patternUnits="userSpaceOnUse">
+      <path d="M0 0V24M2 0V24M0 7H23" fill="none" stroke="#F3F0E8" stroke-width=".6"/>
+    </pattern>
+    <pattern id="p-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
+      <path d="M0 0H20M0 0V20" fill="none" stroke="#0B0B0B" stroke-width="1.1"/>
+    </pattern>
+    <pattern id="p-fine" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
+      <path d="M0 0H24M0 0V24" fill="none" stroke="#F3F0E8" stroke-width=".65"/>
+    </pattern>
+    <linearGradient id="ramp" x1="0" y1=".62" x2="1" y2=".06">
+      <stop offset="0" stop-color="#000"/><stop offset=".28" stop-color="#000"/>
+      <stop offset=".64" stop-color="#fff"/><stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <mask id="ramp-mask"><rect x="0" y="0" width="364" height="553" fill="url(#ramp)"/></mask>
+    <mask id="signal-depth" maskUnits="userSpaceOnUse" x="0" y="-500" width="364" height="1100">
+      <rect x="0" y="-500" width="364" height="1100" fill="white"/>
+      <!-- One band per plate, keyed by stage name. These are what make the line
+           read as passing BEHIND a plate, so each band is a separate path
+           rather than one combined `d`: when a plate lifts on hover its band
+           has to lift with it, or the line is left sheared off in mid-air
+           below the plate -- a cut with nothing behind it. `data-hole` matches
+           the plate's `data-slab`. Each band ends at its plate's front edge. -->
+      <path class="sig-hole" data-hole="input"     d="M182 42V149"  stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="inference" d="M182 200V268" stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="embedding" d="M182 289V387" stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="serve"     d="M182 460V506" stroke="black" stroke-width="10"/>
+    </mask>
+    <g id="cube">
+      <ellipse cx="3" cy="20" rx="17" ry="5" fill="#0B0B0B" opacity=".16"/>
+      <path d="M-13 -6.125 L0 -1.25 L0 21 L-13 16.125Z" fill="var(--cl)"/>
+      <path d="M13 -6.125 L0 -1.25 L0 21 L13 16.125Z" fill="var(--cr)"/>
+      <path d="M0 -11 L13 -6.125 L0 -1.25 L-13 -6.125Z" fill="var(--ct)"/>
+    </g>
+  </defs>
+      <!-- The four plates are painted back-to-front: SERVE (farthest from the
+           camera) first, INPUT (nearest) last. The camera sits ~19 degrees above
+           the horizon, so the higher plate is the nearer one and must occlude the
+           plate below it -- without this order the lower plate's top face eats the
+           upper plate's front skirt in a 73 x 24 unit wedge around the spine.
+           Activation is keyed by name, so document order never drives the
+           stagger. `data-depth` records the level: 1 farthest ... 4 nearest. -->
+
+
+      <!-- ── 04 SERVE -->
+      <g class="slab" data-slab="serve" data-depth="1" filter="url(#plate-grain)">
+        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="#292823"/>
+        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="#171714"/>
+        <path d="M0 422 L182 482 L182 506 L0 446Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 422 L182 482 L182 506 L364 446Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="#111110"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="url(#p-fine)" opacity=".45"/>
+        <path d="M206.0 386.5L206.0 376.5L70.0 420.8M70.0 420.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 384.3L297.0 421.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 384.0L93.0 428.3M93.0 428.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 391.8L274.0 429.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 391.5L116.0 435.8M116.0 435.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 399.3L251.0 436.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 399.0L139.0 443.3M139.0 443.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 406.8L228.0 444.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 406.5L162.0 450.8M162.0 450.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 414.3L205.0 451.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 386.5L206.0 364.5L70.0 408.8M70.0 408.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 372.3L297.0 409.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 372.0L93.0 416.3M93.0 416.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 379.8L274.0 417.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 379.5L116.0 423.8M116.0 423.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 387.3L251.0 424.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 387.0L139.0 431.3M139.0 431.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 394.8L228.0 432.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 394.5L162.0 438.8M162.0 438.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 402.3L205.0 439.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
+        <text class="plate-label plate-label--light" transform="matrix(1 -0.326 1 0.326 48 431)">REDIS</text>
+      </g>
+
+      <!-- ── 03 EMBEDDING -->
+      <g class="slab" data-slab="embedding" data-depth="2" filter="url(#plate-grain)">
+        <path d="M364 303 L182 363 L182 387 L364 327Z" fill="#C9C6BD"/>
+        <path d="M0 303 L182 363 L182 387 L0 327Z" fill="#BDBAB1"/>
+        <path d="M0 303 L182 363 L182 387 L0 327Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 303 L182 363 L182 387 L364 327Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="#E9E6DC"/>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="url(#p-grid)" opacity=".09"/>
+        <g class="cube-field">
+          <use href="#cube" class="cb cb--d" transform="translate(190.5 261.2) scale(0.30)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(209.3 266.7) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(169.1 269.0) scale(0.30)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(231.5 272.4) scale(0.27)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(190.8 274.3) scale(0.28)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(141.6 275.6) scale(0.40)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(243.3 279.5) scale(0.35)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(204.9 281.0) scale(0.33)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(125.3 282.3) scale(0.23)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(165.6 283.2) scale(0.31)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(261.8 284.4) scale(0.41)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(221.4 285.0) scale(0.26)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(181.7 288.6) scale(0.40)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(140.5 289.8) scale(0.26)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(240.8 290.3) scale(0.42)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(280.4 291.2) scale(0.26)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(100.7 292.0) scale(0.42)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(197.7 293.3) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(156.5 295.9) scale(0.28)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(115.4 296.0) scale(0.32)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(302.3 296.2) scale(0.32)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(259.6 296.9) scale(0.29)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(217.2 298.2) scale(0.38)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(77.5 299.4) scale(0.24)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(135.0 301.1) scale(0.40)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(177.3 302.5) scale(0.29)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(317.5 303.6) scale(0.35)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(279.2 303.8) scale(0.36)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(237.8 305.4) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(95.3 305.4) scale(0.34)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(198.8 307.2) scale(0.24)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(158.4 308.6) scale(0.34)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(294.4 309.9) scale(0.30)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(116.3 310.2) scale(0.39)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(254.6 312.8) scale(0.28)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(212.4 313.8) scale(0.31)"/>
+          <use href="#cube" class="cb cb--g" transform="translate(168.9 314.1) scale(0.35)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(271.4 316.9) scale(0.40)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(132.4 317.1) scale(0.41)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(231.6 317.7) scale(0.29)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(191.8 319.0) scale(0.42)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(145.7 321.1) scale(0.26)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(250.2 323.7) scale(0.32)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(212.9 326.5) scale(0.23)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(165.8 327.2) scale(0.43)"/>
+          <use href="#cube" class="cb cb--w" transform="translate(225.4 330.8) scale(0.23)"/>
+          <use href="#cube" class="cb cb--o" transform="translate(187.9 333.0) scale(0.35)"/>
+          <use href="#cube" class="cb cb--d" transform="translate(203.4 338.7) scale(0.24)"/>
+        </g>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 312)">VECTORS</text>
+      </g>
+
+      <!-- ── 02 INFERENCE -->
+      <g class="slab" data-slab="inference" data-depth="3" filter="url(#plate-grain)">
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="#C9C6BD"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="#BDBAB1"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#E9E6DC"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-grid)" opacity=".5"/>
+        <g mask="url(#ramp-mask)">
+          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#0B0B0B"/>
+          <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-fine)" opacity=".45"/>
+        </g>
+        <path d="M206.0 148.5L206.0 138.5L70.0 182.8M70.0 182.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 146.3L297.0 183.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 146.0L93.0 190.3M93.0 190.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 153.8L274.0 191.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 153.5L116.0 197.8M116.0 197.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 161.3L251.0 198.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 161.0L139.0 205.3M139.0 205.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 168.8L228.0 206.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 168.5L162.0 212.8M162.0 212.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 176.3L205.0 213.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 148.5L206.0 126.5L70.0 170.8M70.0 170.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 134.3L297.0 171.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 134.0L93.0 178.3M93.0 178.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 141.8L274.0 179.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 141.5L116.0 185.8M116.0 185.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 149.3L251.0 186.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 149.0L139.0 193.3M139.0 193.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 156.8L228.0 194.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 156.5L162.0 200.8M162.0 200.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 164.3L205.0 201.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 193)">MODEL</text>
+      </g>
+
+      <!-- ── 01 INPUT -->
+      <g class="slab" data-slab="input" data-depth="4" filter="url(#plate-grain)">
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="#C9C6BD"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="#BDBAB1"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="url(#edge-lines)" opacity=".3"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="#EFECE3"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="url(#p-grid)" opacity=".065"/>
+        <ellipse cx="188.0" cy="18.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="204.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="220.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="96.0" cy="49.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="228.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="244.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="120.0" cy="41.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="136.0" cy="67.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="268.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="144.0" cy="34.7" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="160.0" cy="60.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="176.0" cy="85.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="168.0" cy="27.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="184.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="200.0" cy="78.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="192.0" cy="20.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="208.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="224.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="100.0" cy="51.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="232.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="248.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="124.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="140.0" cy="69.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="272.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="148.0" cy="36.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="164.0" cy="62.1" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="180.0" cy="87.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="172.0" cy="29.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="188.0" cy="54.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="204.0" cy="80.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="196.0" cy="22.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="212.0" cy="47.7" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="228.0" cy="73.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="104.0" cy="52.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="236.0" cy="40.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="252.0" cy="66.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="128.0" cy="45.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="144.0" cy="71.2" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="276.0" cy="58.8" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="152.0" cy="38.6" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="168.0" cy="64.0" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="184.0" cy="89.5" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="176.0" cy="31.4" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="192.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="208.0" cy="82.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <ellipse cx="200.0" cy="24.3" rx="1.8" ry=".8" fill="#34332F"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 74)">TEXT</text>
+      </g>
+
+      <!-- The signal enters each surface and passes behind its front edge. -->
+      <line class="sig" x1="182" y1="-490" x2="182" y2="553" pathLength="1" mask="url(#signal-depth)"/>
+</svg>
+          </div>
+
+          <ol class="pipeline__notes" role="list" aria-labelledby="arch-h">
+            <!-- `data-reveal` ripples: --i on .note--n / .feat spaces the
+                 entrances so the list reads as a sequence, not a block -->
+            <li class="note note--1" data-note="input" data-reveal>
+              <span class="note__num">01</span>
+              <h3 class="note__label">INPUT</h3>
+              <p class="note__desc">Raw text, or any tensor <br>a script builds.</p>
+            </li>
+            <li class="note note--2" data-note="inference" data-reveal>
+              <span class="note__num">02</span>
+              <h3 class="note__label">INFERENCE</h3>
+              <p class="note__desc">ONNX Runtime, <br>optimized execution.</p>
+            </li>
+            <li class="note note--3" data-note="embedding" data-reveal>
+              <span class="note__num">03</span>
+              <h3 class="note__label">EMBEDDINGS</h3>
+              <p class="note__desc">High-dimensional <br>vectors (e.g. 384D).</p>
+            </li>
+            <li class="note note--4" data-note="serve" data-reveal>
+              <span class="note__num">04</span>
+              <h3 class="note__label">SERVE</h3>
+              <p class="note__desc">Speak Redis (RESP/3). <br>Fast. Familiar. Powerful.</p>
+            </li>
+          </ol>
+        </div>
+
+        <span class="spine spine--hero" aria-hidden="true"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- ════════════════════════════════════════════════════ BLOCK · PROTOCOL -->
+    <!-- Block 1 of 3. Paper ground, the spine in an explicit lane, and the
+         console plate covering the lane where it crosses: the same rule the
+         hero's plates follow. Facts sit right of the fold in the annotation
+         strip; body text never touches the line. -->
+    <section class="block block--paper" id="protocol" aria-labelledby="protocol-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="protocol-h">THE PROTOCOL IS THE INTEGRATION</h2>
+
+        <div class="block__grid">
+          <div class="block__main">
+
+            <article class="cap">
+              <h3 class="cap__label">ANY REDIS CLIENT</h3>
+              <p class="cap__claim">
+                redis-cli, redis-py, redis-rb — the client you already have is
+                the SDK. Nothing to install but the server.
+              </p>
+            </article>
+
+            <figure class="code">
+<pre class="code__body"><span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB</span> minilm <span class="t-str">"hello world"</span>
+<span class="t-dim"># → \x7c\x8e\x80\xbd…           384 float32s × 4 bytes</span>
+
+<span class="t-cmd">redis-cli</span> -3 <span class="t-cmd">EMB</span> minilm <span class="t-cmd">VALUES</span> <span class="t-str">"hello world"</span>
+<span class="t-dim"># →</span> dtype <span class="t-num">FLOAT</span>  shape <span class="t-num">[1 384]</span>  values <span class="t-num">[-0.1974, 0.1776, …]</span></pre>
+              <figcaption class="code__cap">
+                bytes by default; <span class="t-cmd">VALUES</span> for clients
+                that cannot unpack float32
+              </figcaption>
+            </figure>
+
+            <article class="cap">
+              <h3 class="cap__label">MANY MODELS, ONE ROUND TRIP</h3>
+              <p class="cap__claim">
+                <span class="t-cmd">EMB.MULTI</span> asks different models in a
+                single command and answers MGET-style: a failed pair fails in
+                its slot, not the call.
+              </p>
+            </article>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>WIRE</dt><dd>RESP2 · <span class="t-cmd">HELLO 3</span> for RESP3</dd>
+              <dt>REPLY</dt><dd>BLOB bytes · VALUES envelope</dd>
+              <dt>ACCESS</dt><dd><span class="t-cmd">AUTH</span> · TLS</dd>
+              <dt>CLIENTS</dt><dd>any Redis client, unchanged</dd>
+            </dl>
+          </div>
+        </div>
+
+                <!-- HIDDEN for the first ship. The live runtime is not wired
+                     yet, so the panel is kept here, inert and out of the
+                     accessibility tree, rather than deleted. Removing the one
+                     `hidden` attribute below restores the placeholder
+                     transcript client exactly; pointing `window.embConsole.exec`
+                     at a RESP client then makes it live. See
+                     `website/README.md` § the console. -->
+                <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal hidden>
+          <h3 class="sr-only" id="console-h">Console</h3>
+
+          <div class="console__bar">
+            <div class="console__modes" role="tablist" aria-label="Console mode">
+              <button class="console__mode" type="button" role="tab" id="tab-redis"
+                      aria-controls="console-screen" aria-selected="true" data-mode="redis"
+                      data-tab="0">REDIS</button>
+              <button class="console__mode" type="button" role="tab" id="tab-scripts"
+                      aria-controls="console-screen" aria-selected="false" data-mode="scripts"
+                      data-tab="1" tabindex="-1">SCRIPTS</button>
+            </div>
+            <p class="console__badge">DEMO · NOT A LIVE SERVER</p>
+          </div>
+
+          <div class="console__screen" id="console-screen" role="tabpanel"
+               aria-labelledby="tab-redis" tabindex="-1">
+            <pre class="console__out" id="console-out" aria-live="off"></pre>
+            <noscript>
+              <pre class="console__out console__out--static">EMB minilm "hello world"
+  \x7c\x8e\x80\xbd…   (384 float32s × 4 bytes)
+
+  EMB minilm VALUES "hello world"
+  dtype  FLOAT
+  shape  [1 384]
+  values [-0.19744610786437988, 0.17766517400741577, …]
+
+  EMB.SCRIPT LOAD sst2 "…sst2.lua…"
+  "77c1e0c01d3c43e8f07b262869d13c21b93b28f9"
+
+  EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
+  label       POSITIVE
+  confidence  0.99
+  scores      […]</pre>
+            </noscript>
+          </div>
+
+          <form class="console__form" id="console-form" autocomplete="off">
+            <label class="console__prompt" for="console-in">EMB ›</label>
+            <input class="console__input" id="console-in" name="command" type="text"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   spellcheck="false" enterkeyhint="go"
+                   placeholder='EMB minilm "hello world"'>
+            <button class="console__run" type="submit">RUN</button>
+          </form>
+          <p class="console__note">
+            Placeholder transcript from the reference server. The live client
+            is not wired yet.
+          </p>
+        </section>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ BLOCK · SCRIPTS -->
+    <!-- Block 2 of 3. The page's single inversion: full-bleed #111110, the
+         plates' own material, and the one place the spine crosses a dark
+         ground in plain sight. Code is the content here, not an illustration
+         of it. -->
+    <section class="block block--dark" id="scripts" aria-labelledby="scripts-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="scripts-h">THE MODEL, AS A FUNCTION</h2>
+
+        <div class="block__grid">
+          <div class="block__main">
+
+            <p class="block__deck">
+              The plain embed command is a fixed pipeline:
+              <span class="t-cmd">model(input) → output</span>. A script
+              replaces the edges around that same call with your own code —
+              preprocessing, postprocessing, and the reply itself.
+            </p>
+
+            <div class="shift">
+              <p class="shift__row">
+                <span class="shift__args">model(<span class="shift__fn">input</span>)</span>
+                <span class="shift__arrow" aria-hidden="true">→</span>
+                <span class="shift__out">output</span>
+                <span class="shift__tag">EMB</span>
+              </p>
+              <p class="shift__row shift__row--script">
+                <span class="shift__args">model(<span class="shift__fn">fn(input)</span>)</span>
+                <span class="shift__arrow" aria-hidden="true">→</span>
+                <span class="shift__out">output</span>
+                <span class="shift__tag">EMB.EVAL</span>
+              </p>
+            </div>
+
+            <figure class="code code--dark">
+<pre class="code__body"><span class="t-cmd">local</span> enc <span class="t-dim">=</span> emb.tokenize.<span class="t-cmd">encode</span>(<span class="t-str">KEYS[1]</span>, <span class="t-num">512</span>)
+<span class="t-cmd">local</span> out <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({
+  input_ids      <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids}, data <span class="t-dim">=</span> enc.ids },
+  attention_mask <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids}, data <span class="t-dim">=</span> enc.mask },
+})
+<span class="t-cmd">local</span> probs <span class="t-dim">=</span> emb.math.<span class="t-cmd">softmax</span>(out.logits.data)
+<span class="t-cmd">local</span> idx, score <span class="t-dim">=</span> emb.math.<span class="t-cmd">argmax</span>(probs)
+<span class="t-dim">-- labels arrive in the model's training order</span>
+<span class="t-cmd">return</span> { label <span class="t-dim">=</span> labels[idx], confidence <span class="t-dim">=</span> score }</pre>
+              <figcaption class="code__cap">
+                <span class="t-cmd">examples/scripts/sst2.lua</span> — a raw-logits
+                text model becomes a labelled classifier
+              </figcaption>
+            </figure>
+
+            <ol class="uses" role="list">
+              <li class="uses__i"><span class="uses__n">sst2</span> classify</li>
+              <li class="uses__i"><span class="uses__n">qa</span> extractive QA</li>
+              <li class="uses__i"><span class="uses__n">rerank</span> sigmoid scores</li>
+              <li class="uses__i"><span class="uses__n">gliner2</span> span extraction</li>
+              <li class="uses__i"><span class="uses__n">siglip2</span> image + text</li>
+            </ol>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>CALLS</dt><dd><span class="t-cmd">EMB.EVAL</span> · <span class="t-cmd">EMB.EVSHA</span></dd>
+              <dt>CACHE</dt><dd>by SHA1, per model</dd>
+              <dt>BOOT</dt><dd>preload from config</dd>
+              <dt>SAFETY</dt><dd>pure compute · no os, io, require</dd>
+            </dl>
+          </div>
+        </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════ BLOCK · OPERATIONS -->
+    <!-- Block 3 of 3. Back to paper, and the densest measure on the page: a
+         ledger of the commands an operator already knows, with the emb-top
+         capture as the dark plate that proves it. -->
+    <section class="block block--paper" id="operations" aria-labelledby="operations-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="operations-h">OPERATIONS, NO NEW DASHBOARD</h2>
+
+        <div class="block__grid">
+          <div class="block__main block__main--ledger">
+
+            <article class="cap">
+              <h3 class="cap__label">READ AND TUNE, LIVE</h3>
+              <p class="cap__claim">
+                Redis-shaped <span class="t-cmd">INFO</span> and
+                <span class="t-cmd">CONFIG</span>, including live cache
+                resizing — no restart, no new config format.
+              </p>
+            </article>
+
+            <article class="cap">
+              <h3 class="cap__label">A REAL READINESS PROBE</h3>
+              <p class="cap__claim">
+                <span class="t-cmd">EMB.READY</span> answers <span
+                class="t-num">+OK</span> or says why not — loading, draining,
+                no models.
+              </p>
+            </article>
+
+            <article class="cap">
+              <h3 class="cap__label">BACKPRESSURE, NOT QUEUING</h3>
+              <p class="cap__claim">
+                At the concurrency cap the server answers
+                <span class="t-num">ERR busy</span> instead of stacking
+                unbounded work. Control commands still answer.
+              </p>
+            </article>
+
+            <article class="cap">
+              <h3 class="cap__label">WHAT IT DOES TO THE MACHINE</h3>
+              <p class="cap__claim">
+                RSS, CPU, goroutines, connections and per-model latency, in the
+                same <span class="t-cmd">EMB.STATS</span> reply.
+              </p>
+            </article>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>INFO</dt><dd>server · cache · stats · memory · cpu</dd>
+              <dt>CONFIG</dt><dd>GET / SET, live</dd>
+              <dt>MONITOR</dt><dd>recent requests, no text payloads</dd>
+              <dt>EMB.READY</dt><dd>health probe</dd>
+            </dl>
+          </div>
+        </div>
+
+        <section class="topviz" aria-labelledby="topviz-h" data-reveal>
+          <h3 class="cap__label" id="topviz-h">EMB-TOP</h3>
+          <p class="topviz__claim">
+            Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
+            trip, over the same protocol you already speak.
+          </p>
+          <!-- Field spans, not decoration: a line may break between these
+               but never inside one, so at the widths where the render cannot
+               hold a line no value is split from its unit. Every character
+               of the capture is unchanged. -->
+          <pre class="topviz__screen"> <span class="tf">emb-top v<span data-emb-version>0.4.0.pre4</span> ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
+<span class="tf">minilm</span>        <span class="tf tf--bar">████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████</span>  <span class="tf">280 r/s</span>  <span class="tf">11.8k t/s</span>  <span class="tf">p50 6.5ms</span>  <span class="tf">p95 68.0ms</span>  <span class="tf">err 0</span>
+   <span class="tf">dim 384 ·</span> <span class="tf">mean ·</span> <span class="tf">int8 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
+<span class="tf">bge-small-en…</span> <span class="tf tf--bar">▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████</span>  <span class="tf">151 r/s</span>   <span class="tf">5.7k t/s</span>  <span class="tf">p50 8.8ms</span>  <span class="tf">p95 77.0ms</span>  <span class="tf">err 18 ↑</span>
+   <span class="tf">dim 384 ·</span> <span class="tf">cls ·</span> <span class="tf">fp32 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
+<span class="tf">cache 93.6% <span class="tf--bar">██████████</span></span>  <span class="tf">cpu 50.3% <span class="tf--bar">██████</span></span>  <span class="tf">mem 552MB <span class="tf--bar">████████████</span></span>
+<span class="tf">conns 7 ·</span> <span class="tf">active 1 ·</span> <span class="tf">goroutines 22 ·</span> <span class="tf">truncated 0/0</span></pre>
+          <p class="topviz__src">Illustrative render · not a measured run</p>
+        </section>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════ TERRAIN -->
+    <!-- Last, where the signal lands. The spine reaches the art box's top edge
+         and the route takes over from there. -->
+    <section class="terrain" aria-labelledby="scale-h">
+      <h2 class="sr-only" id="scale-h">Scale</h2>
+
+      <div class="shell">
+        <div class="terrain__inner">
+        <span class="spine spine--terrain" aria-hidden="true"></span>
+        <p class="anno anno--left" data-reveal>EMBED<br>EVERYTHING<br>FURTHER<span class="anno__dash" aria-hidden="true"></span></p>
+        <p class="anno anno--right" data-reveal>HIGHER<br>DIMENSIONS<br>BRIGHTER<br>APPLICATIONS<span class="anno__dash" aria-hidden="true"></span></p>
+        <span class="reg" aria-hidden="true"></span>
+
+      <!-- The cut-out and the route share one box, so the orange line is
+           glued to the rock at every viewport width. The box is anchored by
+           its LEFT edge, derived from --fold and the fork's own x, so the
+           route's fork lands on the spine by construction rather than by a
+           tuned offset: left = fold - (1124.3 / 2172) x art-width. -->
+        <div class="terrain__art">
+        <img class="terrain__photo" src="assets/img/terrain-matte.png" width="2172" height="724" alt="" decoding="async" fetchpriority="low">
+        <svg class="terrain__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path class="route--signal" pathLength="1"
+          d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
+          <path class="route--signal" pathLength="1"
+          d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
+        </svg>
+        </div>
+        </div>
+      </div>
+    </section>
+
+
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">TEXT IN. FLOATS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script src="assets/js/main.js" defer onerror="document.documentElement.classList.remove('js')"></script>
+</body>
+</html>

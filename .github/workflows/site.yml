@@ -1,0 +1,222 @@
+name: Site
+
+# The product site's delivery. `main` publishes to https://emb.is; a pull
+# request publishes a preview at a stable per-branch address without touching
+# production.
+#
+# Path-filtered to the site, so a Go, gem, or benchmark commit produces no
+# deployment of it.
+#
+# UNVERIFIED LOCALLY, confirmed on the first real run: the exact preview URL
+# shape and the `workers.dev` subdomain. Everything else here is exercised by
+# the checks in `ci.yml`'s `site` job, which run again in this workflow before
+# anything is published.
+
+on:
+  push:
+    branches: [main]
+    paths: &site_paths
+      - "website/**"
+      - "VERSION"
+      - "wrangler.jsonc"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths: *site_paths
+  # So a deploy can be re-run by hand without pushing an empty commit, which is
+  # also the rollback path: re-run this on the commit to go back to.
+  workflow_dispatch:
+
+# Supersede in-flight runs for the same ref. A superseded deploy is pointless,
+# and a new commit on a pull-request branch repoints the same preview alias
+# anyway — cancelling avoids two uploads racing for one alias.
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only by default. The preview job raises this for itself, because it
+# comments the preview address on the pull request.
+permissions:
+  contents: read
+
+jobs:
+  # Both published revisions must pass the site's own checks. These are the same
+  # two commands `ci.yml`'s `site` job runs; they are repeated here rather than
+  # depended upon so that no publication can happen because another workflow was
+  # skipped, disabled, or edited.
+  checks:
+    name: Site checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version stamps match VERSION
+        run: python3 website/tools/stamp-version.py --check
+
+      - name: Served tree, canonical origin, and cache rules
+        run: python3 website/tools/published-tree.py
+
+  deploy:
+    name: Deploy to emb.is
+    needs: checks
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # `wrangler-action` defaults to wrangler 3.90.0. Pin the release the
+          # dev shell's `nixpkgs-wrangler` pin installs, so what CI publishes is
+          # what a contributor verified locally (`wrangler deploy --dry-run` in
+          # the change's task 6.1 was run against this release).
+          wranglerVersion: "4.129.0"
+          command: deploy
+          # The custom domain is attached in `wrangler.jsonc`, so a first
+          # deployment to the workers.dev address does not need it. See the
+          # change's migration plan for the audit that precedes attaching it.
+          quiet: false
+
+  preview:
+    name: Preview
+    needs: checks
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # Fork pull requests never receive secrets, so there is nothing to upload
+      # with. This is a no-op rather than a failure, and it says so where a
+      # maintainer will look: the run's summary. It cannot comment on the pull
+      # request, because a `pull_request` run from a fork gets a read-only
+      # GITHUB_TOKEN.
+      - name: Explain the fork case
+        if: github.event.pull_request.head.repo.fork
+        run: |
+          {
+            echo "### No preview for this pull request"
+            echo
+            echo "It comes from a fork, and fork runs do not receive the"
+            echo "\`CLOUDFLARE_API_TOKEN\` secret, so there is nothing to upload with."
+            echo
+            echo "Check it out locally instead:"
+            echo
+            echo '```'
+            echo "just website      # then just website-ink, and 404/docs as needed"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # `wrangler-action` is deliberately not used here. Its default release
+      # (3.90.0) predates `versions upload --preview-alias`, which is a wrangler
+      # 4 flag, so the command dies with `Unknown arguments: preview-alias`; and
+      # its `command-output`/`command-stderr` outputs stay unset when wrangler
+      # exits non-zero, which is exactly the failure this job has to recognise:
+      # a Worker that does not exist yet cannot receive a version, and that is
+      # the state of the first site pull request, before `main` has deployed.
+      # Invoking wrangler directly keeps the release pinned and its output
+      # legible.
+      - name: Upload the preview version
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        id: preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The release the dev shell installs (`nixpkgs-wrangler` in
+          # `flake.nix`), so CI uploads with the wrangler a contributor ran.
+          WRANGLER_VERSION: "4.129.0"
+          ALIAS: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # `versions upload` creates a version and its preview URLs without
+          # touching the production deployment, so a preview can never disturb
+          # emb.is. The alias is what makes the address stable: each upload
+          # repoints it, so a reviewer's link survives further commits.
+          if npx --yes "wrangler@${WRANGLER_VERSION}" versions upload \
+               --preview-alias "$ALIAS" >upload.log 2>&1; then
+            cat upload.log
+          else
+            status=$?
+            cat upload.log
+            # A Worker that has not been deployed cannot receive a version:
+            # `versions upload` only adds to one that already exists. Explain
+            # that rather than fail, so the first site pull request — the one
+            # that merges the Worker into existence — is not a red X. Every
+            # other failure is re-raised.
+            if grep -q "does not yet exist" upload.log; then
+              {
+                echo "### No preview yet — the \`emb-site\` Worker does not exist"
+                echo
+                echo "\`wrangler versions upload\` can only add a version to a Worker"
+                echo "that already exists. Deploy once from \`main\` (or run"
+                echo "\`npx wrangler deploy\` by hand), and later pull requests will"
+                echo "get a preview here."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "result=bootstrap" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            exit "$status"
+          fi
+
+          # wrangler 4.x prints both addresses. Prefer the alias: the versioned
+          # URL is unique per upload and dies on the next commit
+          # (cloudflare/wrangler-action#384), the alias is repointed instead.
+          alias=$(grep -E '^Version Preview Alias URL:' upload.log \
+            | grep -oE 'https://[^[:space:]]+' | head -1 || true)
+          versioned=$(grep -E '^Version Preview URL:' upload.log \
+            | grep -oE 'https://[^[:space:]]+' | head -1 || true)
+          # A version can be uploaded with previews disabled, in which case
+          # wrangler prints neither address; that is worth failing on, because
+          # the address is the entire point of this job.
+          if [ -z "$alias" ]; then
+            echo "The upload succeeded but printed no preview URL."
+            echo "Is \`preview_urls\` still enabled in wrangler.jsonc?"
+            exit 1
+          fi
+          echo "result=uploaded" >> "$GITHUB_OUTPUT"
+          echo "alias=$alias" >> "$GITHUB_OUTPUT"
+          echo "versioned=$versioned" >> "$GITHUB_OUTPUT"
+          echo "Preview URL (stable alias): $alias"
+          echo "Versioned URL (this commit only): ${versioned:-not reported}"
+
+      - name: Comment the preview on the pull request
+        if: ${{ steps.preview.outputs.result == 'uploaded' }}
+        uses: actions/github-script@v7
+        env:
+          ALIAS: ${{ steps.preview.outputs.alias }}
+          VERSIONED: ${{ steps.preview.outputs.versioned }}
+        with:
+          script: |
+            const marker = '<!-- emb-site-preview -->';
+            const alias = process.env.ALIAS;
+            const versioned = process.env.VERSIONED;
+            const body = [
+              marker,
+              `**Site preview:** ${alias}`,
+              '',
+              `This address is stable for this pull request — it repoints to each new`,
+              `commit, so it keeps working. This exact revision only: ${versioned}`,
+              '',
+              `The production origin is untouched: https://emb.is still serves \`main\`.`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

@@ -17,3 +17,6 @@ gems/emb/vendor/*
 gems/emb/.bundle/
 dist/
 bench/fargate/out/
+
+# Wrangler's local build/state scratch, created by `wrangler deploy --dry-run`.
+/.wrangler/

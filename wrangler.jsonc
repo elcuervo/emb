@@ -1,0 +1,34 @@
+{
+  // The site's deployment target: an assets-only Worker. There is no `main`,
+  // because nothing here runs — the pages are static and the console is a
+  // transcript client by spec, not a live RESP endpoint.
+  //
+  // `website/` is edited and `website/` is published, so what ships is this
+  // directory minus `website/.assetsignore`. That is the only boundary between
+  // an authoring file and a public URL, which is why
+  // `website/tools/published-tree.py` asserts the expected set and runs before
+  // every deploy. See openspec/changes/deploy-site-to-cloudflare/.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "emb-site",
+  "compatibility_date": "2026-09-13",
+
+  "assets": {
+    "directory": "./website",
+    // Serve /docs and /docs/ alike: the landing deep-links to
+    // `docs/index.html#configuration` and humans type `/docs`.
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+
+  // Preview URLs must stay on so `wrangler versions upload --preview-alias`
+  // can hand a pull request a stable address before it merges.
+  "preview_urls": true,
+  "workers_dev": true
+
+  // `emb.is` is attached separately, and deliberately not in this file yet:
+  // the Worker is deployed to its workers.dev address first and the served tree
+  // audited there, so a mistake in `.assetsignore` is never public. Uncomment
+  // once that audit passes.
+  //
+  // "routes": [{ "pattern": "emb.is", "custom_domain": true }]
+}

@@ -1,0 +1,1804 @@
+/* ══════════════════════════════════════════════════════════════════════
+   emb — neo-brutalist technical poster
+   ─────────────────────────────────────────────────────────────────────
+   00 tokens          05 features
+   01 base            06 pipeline
+   02 primitives      07 blocks
+   03 masthead        08 terrain
+   04 hero            09 console
+                      10 topviz
+                      11 footer
+                      12 motion
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── 00a fonts ───────────────────────────────────────────────────────
+   Self-hosted, preloaded in <head>. Each file is the *only* cut we ship,
+   so the weight ranges are declared wide: any requested weight maps to the
+   real file instead of letting the browser synthesise a thinner/fatter one
+   (`body{font-synthesis-weight:none}` then guarantees no fake bold). */
+@font-face{
+  font-family: "Inter";
+  src: url("../fonts/inter-900-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face{
+  font-family: "Archivo";
+  src: url("../fonts/archivo-var-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face{
+  font-family: "JetBrains Mono";
+  src: url("../fonts/jetbrains-mono-var-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── 00 tokens ─────────────────────────────────────────────────────── */
+:root{
+  --bg:        #F3F0E8;
+  --fg:        #0B0B0B;
+  --accent:    #FF5A1F;
+  /* accent as ink: 4.66:1 on the paper, so it can carry text and ring a
+     control. #FF5A1F itself is 2.74:1 and is a surface colour only -- it
+     must never be the only thing distinguishing a focus ring or a label. */
+  --accent-ink:#C23D00;
+  --muted:     #6B6963;
+  --rule:      #B8B5AC;
+  --rule-soft: #D5D1C6;
+  --leader-c:  #A9A69D;
+  /* the stepped leader: its run, and the notes' inline padding (= the gap
+     between the plate's right edge and the note's own box) */
+  --lead: 31px;
+
+  --maxw: 1720px;
+  --gut: clamp(22px, 3.7vw, 64px);
+  /* gutters that survive a notch: everything that cancels --gut to reach the
+     sheet's edge cancels --pad-* instead, or a landscape phone would show a
+     strip of paper beside the terrain */
+  --pad-l: var(--gut);
+  --pad-l: max(var(--gut), env(safe-area-inset-left, 0px));
+  --pad-r: var(--gut);
+  --pad-r: max(var(--gut), env(safe-area-inset-right, 0px));
+
+  /* the isometric stack: half-width 182 x 2, ratio .326, pitch 130 */
+  --plate: clamp(220px, 33.5vw, 470px);
+  /* the prose column: 5 of 12 shells */
+  --col-prose: 41.5%;
+
+  /* THE FOLD -- the page's signal axis, in shell-content coordinates, and the
+     one value every spine segment and the terrain route are derived from.
+
+     It is the hero's own geometry, not a tuned number: .pipeline sits in
+     column 2 of .hero__body (which has no `gap`), so column 2 is
+     (100% - --col-prose) wide, and the spine is at 40.7% of that column
+     (40.7% - --plate/2 + --plate/2). --plate therefore cancels out and the
+     axis is width-independent:
+         41.5% + 40.7% x (100% - 41.5%) = 65.31%
+     Change any of the three inputs above and this constant must change with
+     them; the render test in CORRECTIONS.md pass 8 measures it. */
+  --fold: 65.31%;
+  /* ...and the same point in .hero__pipeline's own coordinates, which is
+     40.7% of that container at desktop and 25%/50% once the pipeline stacks */
+  --fold-hero: 40.7%;
+  /* the gap between body copy and the line, either side of the lane */
+  --fold-gap: clamp(14px, 1.4vw, 22px);
+  /* The SVG spine is stroke-width 4 in a 364-unit viewBox, so its rendered
+     width scales with whatever the SVG is stretched to -- and that stops
+     being --plate the moment the pipeline stacks. Each breakpoint below
+     redeclares this to match the stack's actual share of the content box
+     (50%, then 100%); measured at 600px, a fixed calc() off --plate gave a
+     2.41px CSS line against a 6.07px SVG stroke. */
+  --spine-w: calc(var(--plate) * 4 / 364);
+
+  /* the terrain. The artwork is 2172 x 770.2 (the extra 46.2 units at the top
+     are sky, which lets the route start level with the band's top edge), so
+     its height is .3546 of its width. --band is never shorter than the art,
+     which is what guarantees the route's trunk starts exactly where the spine
+     ends; the clamp only adds sky above the massif on small screens. */
+  --art-ratio: .3546;
+  /* Desktop (>1000px) runs the massif the full width of the shell, so the
+     cut-out is complete and its base sits flush on the footer. The artwork
+     still carries its own ridge, whose fork is at 1124.3/2172 = 51.76% of
+     the box; the spine is at 64.18% of the shell, so the route is shifted
+     inside the SVG by the 12.42% between them (see the >=1001px block at
+     the end of the terrain section) and the fork still lands on the line.
+     Below 1000px the terrain overrides this and goes full-bleed. */
+  --art-w: min(100vw, var(--maxw));
+  --art-h: calc(var(--art-w) * var(--art-ratio));
+  --band: max(var(--art-h), clamp(210px, 27.66vw, calc(.2766 * var(--maxw))));
+
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --display: "Inter", "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* ── 01 base ───────────────────────────────────────────────────────── */
+*, *::before, *::after{ box-sizing: border-box; }
+
+html{
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  background: var(--bg);
+  overflow-x: clip;
+}
+
+body{
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  font-synthesis-weight: none;
+  /* NOT `antialiased`: the poster's ink is heavier than macOS antialiasing */
+  -webkit-font-smoothing: auto;
+  overflow-x: clip;
+}
+
+/* archival paper grain */
+body::after{
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  opacity: .045;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+h1, h2, h3, p, dl, dd, ol, ul, figure{ margin: 0; }
+ol, ul{ padding: 0; list-style: none; }
+img{ max-width: 100%; display: block; }
+a{ color: inherit; text-decoration: none; }
+button{ font: inherit; color: inherit; }
+
+::selection{ background: var(--accent); color: var(--fg); }
+:focus-visible{ outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+/* the accent button's own fill is the accent, so its ring has to invert */
+.btn--accent:focus-visible,
+.btn--dark:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
+
+.sr-only{
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.skip{
+  position: absolute; left: -9999px; top: 0; z-index: 200;
+  background: var(--fg); color: var(--bg);
+  padding: 10px 16px; font: 600 12px/1 var(--mono); letter-spacing: .1em;
+}
+.skip:focus{ left: 8px; top: 8px; }
+
+.defs{ position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* the page's signal, as a structural element. Each section that carries one
+   is position:relative, and sections have NO vertical margins -- only padding
+   -- so consecutive segments abut exactly. Content is lifted to z-index 1 and
+   opaque plates cover the line, the same rule the hero's masked SVG spine
+   follows between plates. */
+.spine{
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--fold) - var(--spine-w) / 2);
+  width: var(--spine-w);
+  background: var(--accent);
+  z-index: 0;
+  pointer-events: none;
+}
+.reserved-spine-anchor{}
+
+
+[id]{ scroll-margin-top: calc(clamp(70px, 6vw, 96px) + env(safe-area-inset-top, 0px)); }
+
+.shell{
+  width: 100%;
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--pad-l) var(--pad-r);
+}
+.mono{ font-family: var(--mono); }
+
+/* ── 02 primitives ─────────────────────────────────────────────────── */
+.rule-head{
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 1.6vw, 22px);
+  font-family: var(--mono);
+  font-size: clamp(12px, .95vw, 13px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  white-space: nowrap;
+}
+.rule-head__rule{
+  flex: 0 0 clamp(64px, 7.6vw, 100px);
+  height: 1.5px;
+  background: var(--rule);
+}
+
+.btn{
+  --shift: 0px;
+  --shadow-c: var(--fg);
+  --shadow-s: 0px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.1em;
+  padding: .95em 1.5em;
+  border: 1px solid var(--fg);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: clamp(15px, 1.75vw, 21px);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-s) var(--shadow-s) 0 0 var(--shadow-c);
+  translate: var(--shift) var(--shift);
+  transition: translate .12s ease, box-shadow .12s ease, background-color .12s ease, color .12s ease;
+}
+.btn--sm{
+  min-height: 44px;
+  min-width: 158px;
+  padding: .85em 1.05em;
+  font-size: clamp(12px, 1.3vw, 16.5px);
+  letter-spacing: .01em;
+  box-shadow: none;
+}
+.btn--dark{ background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn--dark:hover{ background: var(--accent); color: var(--fg); border-color: var(--accent); }
+.btn--accent{ min-width: 20.7vw; min-height: 5.16vw; background: var(--accent); color: var(--fg); --shadow-s: 5px; padding-block: .83em; }
+.btn--accent:hover{ --shift: 2px; --shadow-s: 3px; }
+.btn--accent:active{ --shift: 5px; --shadow-s: 0px; }
+
+.ghlink{
+  display: inline-flex;
+  align-items: center;
+  gap: 1em;
+  padding-bottom: 3px;
+  border-bottom: 0;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.04vw, 14px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  transition: border-color .15s ease, color .15s ease;
+}
+.ghlink > span{ text-decoration: underline; text-underline-offset: 4px; }
+.ghlink__ico{ width: 21px; height: 21px; flex: none; }
+.ghlink:hover{ color: var(--accent-ink); border-color: var(--accent-ink); }
+
+/* ── 03 masthead ───────────────────────────────────────────────────── */
+.masthead{
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: var(--bg);
+  /* the poster's masthead rule: it also stops content vanishing under an
+     opaque sticky edge while scrolling */
+  border-bottom: 1px solid var(--rule-soft);
+  /* a standalone window puts the status bar over the top of the sheet */
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.masthead__inner{
+  display: grid;
+  /* three clusters: brand+tagline, nav, CTA. The poster's nav block sits on
+     55.6% of the frame — right of centre — and its CTA is flush with the
+     sheet's right gutter, so the nav is anchored to its right end instead of
+     being centred in the leftover space. */
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 26px);
+  min-height: clamp(52px, 5.7vw, 74px);
+  /* the poster centres the masthead's content low in the band: the rule
+     still lands on 62, the type sits 6px under the optical centre */
+  padding-top: 14px;
+  padding-bottom: 2px;
+}
+.masthead__brand{ display: flex; align-items: center; gap: clamp(14px, 2.65vw, 44px); min-width: 0; }
+.brand{
+  font-family: var(--display);
+  font-size: clamp(1.6rem, 3.15vw, 3rem);
+  line-height: .9;
+  letter-spacing: -.04em;
+}
+.vrule{ width: 1px; height: clamp(24px, 2.2vw, 34px); background: var(--rule); flex: none; }
+.masthead__tagline{
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  font-weight: 500;
+  letter-spacing: .2em;
+  line-height: 1.28;
+  white-space: nowrap;
+}
+
+.nav{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(18px, 3.34vw, 56px);
+  /* the poster leaves 10.3vw of air between the nav and the CTA */
+  justify-self: end;
+  margin-right: 10.3vw;
+}
+.nav a{
+  position: relative;
+  padding-block: 6px;
+  font-family: var(--mono);
+  font-size: clamp(12px, .92vw, 13px);
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.nav a::after{
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .18s ease;
+}
+.nav a:hover::after{ transform: scaleX(1); }
+
+.masthead__cta{ justify-self: end; }
+.mobile-nav{ display: none; }
+
+/* ── 04 hero ───────────────────────────────────────────────────────── */
+.hero{
+  position: relative;
+  overflow: clip;
+  /* no trailing gap: the terrain's base IS the footer rule on the poster */
+  padding-block: clamp(16px, 2vw, 30px) 0;
+}
+
+.hero__meta{
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 28px);
+  align-items: start;
+  /* the poster hangs the meta band well below the masthead, leaving the
+     `b` ascender to rise past it; the wordmark's negative margin absorbs it */
+  padding-top: clamp(38px, 4.2vw, 64px);
+  /* the poster has no rule under this band */
+  padding-bottom: clamp(16px, 2vw, 30px);
+}
+.hero__meta-a{
+  grid-column: 1 / 4;
+  font-family: var(--mono);
+  font-size: clamp(15px, 1.89vw, 27px);
+  font-weight: 500;
+  /* the poster's top-left block is set very wide — 0.29em, not 0.07em */
+  letter-spacing: .29em;
+  line-height: 1.27;
+}
+.hero__meta-b{
+  grid-column: 6 / 9;
+  margin-left: -26px;
+  /* the poster hangs this block 21px above the left one */
+  margin-top: clamp(-26px, -1.95vw, -12px);
+  font-family: var(--mono);
+  font-size: clamp(12px, .96vw, 13px);
+  font-weight: 500;
+  letter-spacing: .13em;
+  line-height: 1.45;
+}
+.hero__tech{
+  grid-column: 9 / 13;
+  text-align: right;
+  /* and this one 25px above it */
+  margin-top: clamp(-30px, -2.3vw, -14px);
+  font-family: var(--mono);
+  font-size: clamp(13.5px, 1.6vw, 23px);
+  font-weight: 500;
+  letter-spacing: .08em;
+  line-height: 1.55;
+}
+.meta-rule{
+  display: block;
+  width: 33px;
+  height: 2px;
+  margin-top: 13px;
+  background: var(--fg);
+}
+.meta-rule--end{ margin-left: auto; }
+
+/* ── the giant word ────────────────────────────────────────────────── */
+.hero__wordmark{
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+  /* full bleed: the word runs off both edges of the paper, centred on the
+     viewport rather than on the shell's content box */
+  width: 100vw;
+  height: 38.808vw;
+  margin-top: -12.219vw;
+  margin-inline: calc(50% - 50vw);
+}
+.wordmark{
+  position: absolute;
+  top: -.3vw;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--fg);
+  overflow: visible;
+}
+
+/* annotation riding inside the counter of the `b`: the counter scales with
+   the wordmark, so the block is positioned as a percentage of it and the
+   lines stay left-aligned like the poster's */
+.wordmark-note{
+  position: absolute;
+  /* centred in the counter (measured on the poster: counter 853–961, note
+     867–952); the counter scales with the wordmark, so this is a
+     percentage, not a fixed offset */
+  left: 80.2%;
+  transform: none;
+  top: 25.9vw;
+  bottom: auto;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.06vw, 13px);
+  font-weight: 500;
+  letter-spacing: .06em;
+  /* the counter is an oval: keep the block short enough to stay inside it */
+  line-height: 1.28;
+  white-space: nowrap;
+}
+
+/* ── hero body: prose left, pipeline + terrain right ───────────────── */
+.hero__body{
+  display: grid;
+  grid-template-columns: var(--col-prose) minmax(0, 1fr);
+  padding-top: clamp(46px, 6.81vw, 96px);
+}
+.hero__prose{
+  grid-column: 1;
+  min-width: 0;
+  /* the prose sits 13px below the pipeline's top edge on the poster */
+  padding-top: clamp(0px, 1.2vw, 26px);
+  padding-right: clamp(12px, 1.2vw, 26px);
+}
+
+.claim{
+  font-family: var(--sans);
+  font-weight: 750;
+  font-size: clamp(2rem, 3.95vw, 4.7rem);
+  line-height: .95;
+  letter-spacing: -.005em;
+}
+.claim span{ display: block; }
+
+.hero__sub{
+  margin-top: clamp(14px, 1.57vw, 24px);
+  max-width: 41ch;
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.39vw, 16px);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.hero__actions{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: clamp(18px, 4.15vw, 54px);
+  width: max-content;
+  max-width: calc(100% + 18px);
+  margin-top: clamp(26px, 2.85vw, 47px);
+}
+
+/* ── 04b the four kept facts ──────────────────────────────────────────
+   The landing is a poster, so it carries only what a reader needs before
+   clicking: how to install, what they are installing, and one measured
+   number. The rule above the row is the page's own separator atom, not a
+   bordered callout -- the craft floor refuses a >1px coloured side border
+   as a treatment and this page never uses one. */
+.hero__start{
+  margin-top: clamp(24px, 2.6vw, 42px);
+  padding-top: clamp(14px, 1.5vw, 22px);
+  border-top: 1px solid var(--rule);
+  display: grid;
+  gap: clamp(10px, 1.1vw, 17px);
+}
+.hero__install{
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: clamp(8px, .9vw, 15px);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.55;
+  min-width: 0;
+}
+.hero__install-key{ color: var(--muted); letter-spacing: .05em; flex: none; }
+/* `break-word`, not `anywhere`: the URL is one 60-character token, so it may
+   break when a phone column cannot hold it, but never mid-word by choice. */
+.hero__install-cmd{
+  font: inherit;
+  color: var(--fg);
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.hero__facts{ max-width: 64ch; }
+.hero__link{ color: var(--accent-ink); text-underline-offset: 3px; }
+.hero__link:hover{ text-decoration-thickness: 2px; }
+
+/* ── 05 features ───────────────────────────────────────────────────── */
+.features{ margin-top: clamp(40px, 5vw, 76px); }
+.features__list{ margin-top: clamp(8px, 1.2vw, 18px); padding-left: clamp(4px, .55vw, 10px); }
+.feat{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(16px, 2.03vw, 30px);
+  align-items: start;
+  padding-block: clamp(9px, .85vw, 14px);
+}
+.feat__ico{
+  grid-row: span 2;
+  width: clamp(30px, 3.25vw, 36px);
+  height: clamp(30px, 3.25vw, 36px);
+  margin-top: 1px;
+}
+.feat__ico svg{ width: 100%; height: 100%; display: block; }
+.feat__name{
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.215vw, 15.5px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  line-height: 1.2;
+}
+.feat__desc{
+  grid-column: 2;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── 06 pipeline ───────────────────────────────────────────────────── */
+/* Row 1 is the plate stack; row 2 is the CSS spine. The SVG spine (.sig) ends
+   at the bottom of the SVG box, which is the bottom of row 1, so the two meet
+   exactly -- .pipeline's -22px top margin cancels out of both. Row 2 runs to
+   the bottom of the hero's right column, which is the hero's own bottom. */
+.hero__pipeline{
+  grid-column: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  position: relative;
+}
+.spine--hero{
+  position: relative;
+  inset: auto;
+  grid-row: 2;
+  justify-self: start;
+  /* 40.7% of this container is the same point --fold names in the shell's
+     coordinates, so the two expressions cannot disagree */
+  margin-left: calc(var(--fold-hero) - var(--spine-w) / 2);
+}
+
+.pipeline{
+  display: grid;
+  grid-template-columns: var(--plate) minmax(0, 1fr);
+  align-items: stretch;
+  /* put the plate centre (not the column edge) on the signal axis */
+  margin-left: calc(40.7% - var(--plate) / 2);
+  /* the poster's stack: no port dots, the signal line is the only marker */
+  margin-top: -22px;
+}
+.pipeline__stack{
+  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+}
+.pipeline__svg{ display: block; width: 100%; height: auto; overflow: visible; }
+/* the spine starts just under the masthead, as on the poster */
+.sig{ fill: none; stroke: var(--accent); stroke-width: 4; }
+html.js .sig{
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset .85s cubic-bezier(.22, .8, .28, 1) .15s;
+}
+html.js.is-ready .sig{ stroke-dashoffset: 0; }
+
+/* slabs activate in sequence: INPUT → INFERENCE → EMBEDDINGS → SERVE.
+   The entrance rides `transform`; the hover lift rides `translate`. They are
+   separate properties on purpose: `transition-delay` is per element, not per
+   state, so a shared property would make every hover wait out the slab's
+   stagger delay. `translate` on an SVG group is the progressive part -- where
+   it is unsupported the lift is simply absent, and the note's own hover state
+   still carries the link. */
+.slab{
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transition: opacity .45s ease,
+              transform .55s cubic-bezier(.2, .8, .3, 1),
+              translate .25s cubic-bezier(.2, .8, .3, 1);
+}
+html.js .slab{ opacity: 0; transform: translateY(-14px); }
+html.js .pipeline.is-live .slab{ opacity: 1; transform: translateY(0); }
+/* keyed by name rather than :nth-of-type so reordering the plates cannot
+   silently reshuffle the sequence. The third delay is the hover lift. */
+html.js .pipeline.is-live .slab[data-slab="inference"]{ transition-delay: .17s, .17s, 0s; }
+html.js .pipeline.is-live .slab[data-slab="embedding"]{ transition-delay: .34s, .34s, 0s; }
+html.js .pipeline.is-live .slab[data-slab="serve"]{ transition-delay: .51s, .51s, 0s; }
+html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
+
+/* The band that masks the line behind each plate travels with the plate, at the
+   same 6px and in the same easing slot as the lift. Without this the plate
+   rises and its mask band stays, leaving the line sheared off in mid-air below
+   it -- a cut with nothing in front of it, at every one of the four stages.
+   Same progressive-enhancement caveat as the lift: where SVG `translate` is
+   unsupported the bands simply do not move, so the line is unchanged rather
+   than mis-drawn. */
+html.js .sig-hole{ transition: translate .25s cubic-bezier(.2, .8, .3, 1); }
+html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
+
+/* (the plates carry no port markers: on the poster the signal line itself is
+   the only orange in the stack) */
+
+/* isometric plate labels */
+.plate-label{
+  font-family: var(--mono);
+  /* THE LABEL SCALES WITH THE ARTWORK, SO ITS FLOOR NEEDS BREAKPOINTS.
+     `font-size` inside an SVG is in USER UNITS, and this one is scaled by
+     `svgWidth / 364`: 14 units renders 18.08px at 1440 but only 12.90px at
+     1001, 11.34px at 641, 13.46px at 390 and 10.77px at 320 -- so the plate
+     words fell under the committed 14px mobile floor on every phone and at
+     the bottom of the tablet lane. The floors had only ever been verified for
+     CSS text, never for text a viewBox scales.
+     `calc()` cannot divide by a length, so the value cannot be an expression
+     and has to be stated per regime. Measured scale curves: 641-1000px the
+     stack is ~0.46 x vw (units x 0.001264 x vw), and <=640px it is ~0.9 x vw
+     (units x 0.00247 x vw). The two blocks below cover the ranges where the
+     base 14 units computes under the floor; above 801px it does not. */
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  fill: var(--fg);
+}
+.plate-label--light{ fill: var(--bg); }
+
+/* isometric blocks, tinted through custom properties */
+.cb{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
+.cb--w{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
+.cb--g{ --ct:#B8B4A9; --cl:#8E8B82; --cr:#7C7970; }
+.cb--d{ --ct:#3A3833; --cl:#1E1D19; --cr:#141310; }
+
+/* annotations + stepped leaders */
+.pipeline__notes{
+  grid-column: 2;
+  min-width: 0;
+  position: relative;
+  padding-left: var(--lead);
+  /* the poster's technical labels run out to the edge of the sheet, not to
+     the shell gutter: without this the description column is 116px and
+     "Raw text, documents," wraps onto a third line */
+  margin-right: calc(-1 * var(--pad-r));
+}
+.note{
+  position: absolute;
+  left: var(--lead);
+  /* THE NOTE BOX MUST NOT BLEED. It used to sit at `right: -10px`, on the
+     theory that the poster's labels run to the edge of the sheet -- but the
+     sheet edge is also the viewport edge, and `html{overflow-x: clip}` sliced
+     the ink that reached it. Measured on glyph rects, three of the four
+     descriptions ran 5.84px past at the 1086px reference frame (worst 8.89px
+     at 1070): the comma in "Raw text, documents," and the period in
+     "optimized execution." were being cut. `documentElement.scrollWidth`
+     stayed equal to `clientWidth` the whole time, because `overflow: clip`
+     removes the clipped content from the scrollable region -- which is why
+     twelve passes of measurement could not see it. The assertion that can is
+     `website/tools/ink-probe.html`, on text rects.
+     The number column gives up the 10px the box no longer bleeds (38 -> 28) so
+     the description keeps its measure and its line count exactly. */
+  right: 0;
+  transform: translateY(-50%);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 0;
+  align-items: baseline;
+}
+.note--1{ top: 11.8%; --i: 0; }
+.note--2{ top: 32.1%; --i: 1; }
+.note--3{ top: 56.0%; --i: 2; }
+.note--4{ top: 78.6%; --i: 3; }
+
+/* leader: plate edge → right → down → right (three segments, hairline grey) */
+.note::before{
+  content: "";
+  position: absolute;
+  right: calc(100% + 18px);
+  top: 8px;
+  width: 50px;
+  height: clamp(78px, 8.6vw, 110px);
+  border-block: 1px solid var(--leader-c);
+  border-right: 1px solid var(--leader-c);
+}
+
+.note__num{
+  grid-column: 1;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.1vw, 13px);
+  font-weight: 500;
+  letter-spacing: .06em;
+  color: var(--muted);
+  transition: color .2s ease;
+}
+.note__label{
+  grid-column: 2;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.15vw, 14px);
+  font-weight: 500;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.note__desc{
+  grid-column: 2;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: clamp(12px, .97vw, 12.5px);
+  line-height: 1.35;
+  color: var(--muted);
+  transition: color .25s ease;
+}
+
+.note:hover .note__num,
+.note.is-hot .note__num{ color: var(--accent-ink); }
+.note:hover .note__desc,
+.note.is-hot .note__desc{ color: var(--fg); }
+
+/* ── 07 blocks ─────────────────────────────────────────────────────── */
+/* Three movements between the hero and the massif. Each is built only from
+   the poster's atoms and carries the same spine; what changes is the ground
+   and the measure, because four capabilities at one weight read as a list.
+
+   The dark block is the page's only inversion, and it is made of material
+   already on the page: the SERVE plate's own #111110 and #292823. It is not
+   a new palette, it is this one turned over. Its --muted is remapped to
+   --rule because #6B6963 is only 3.40:1 on #111110.
+
+   Sections carry padding and NEVER vertical margins: that is what lets
+   consecutive spine segments abut with no seam. */
+.block{ position: relative; }
+/* The positioned wrapper IS the shell's content box, which is what makes
+   `left: <percentage>` mean the same thing here as it means for the hero's
+   spine. It also owns the section's vertical padding, so a block's height and
+   its spine segment are the same thing and consecutive segments abut. */
+.block > .shell{ padding-block: 0; }
+.block__body{
+  position: relative;
+  z-index: 1;
+  padding-block: clamp(34px, 4vw, 62px);
+}
+.block--paper{ background: var(--bg); }
+.block--dark{
+  background: #111110;
+  color: var(--bg);
+  --muted: var(--rule);
+}
+/* The block header is a solid bar, not a label with a hairline: the poster's
+   loudest typographic move, and the one thing on the page that can carry a
+   whole section without a rule. It inverts with its ground -- black on the
+   paper blocks, paper on the dark one -- so the sequence has a beat at every
+   block boundary and the dark block reads as the page turned over rather than
+   as a page with a dark patch.
+   Archivo at 750 is the page's own display voice (the claim's face), so this
+   is the existing system used louder, not a new one. */
+.block__head{
+  /* the bar is opaque and it must cover the spine where it crosses: the
+     spine is a positioned z-index 0 child of .block__body, so a static
+     heading would sit UNDER it. Same lift the console plate carries. */
+  position: relative;
+  z-index: 1;
+  background: var(--fg);
+  color: var(--bg);
+  padding: clamp(11px, 1.15vw, 16px) clamp(14px, 1.5vw, 22px);
+  font-family: var(--sans);
+  font-weight: 750;
+  font-size: clamp(19px, 2.5vw, 34px);
+  letter-spacing: -.005em;
+  line-height: 1.04;
+  text-wrap: balance;
+  text-transform: uppercase;
+}
+.block--dark .block__head{ background: var(--bg); color: var(--fg); }
+
+/* The prose column ends before the lane and the facts begin after it, so no
+   body text can ever sit on the line. The gap either side is --fold-gap, and
+   the lane itself is the spine's own width. */
+.block__grid{
+  display: grid;
+  grid-template-columns:
+    calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap))
+    minmax(0, 1fr);
+  column-gap: calc(var(--spine-w) + var(--fold-gap) * 2);
+  margin-top: clamp(22px, 2.6vw, 42px);
+}
+.block__main{ min-width: 0; }
+.block__main--ledger{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(20px, 2.4vw, 44px);
+}
+.block__aside{ min-width: 0; }
+.block__deck{
+  max-width: 58ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.5;
+}
+
+/* the block's unit of argument: a hairline, a mono label, a short claim.
+   Not a card -- the rule is the only container it ever gets. */
+.cap{
+  padding-block: clamp(15px, 1.7vw, 23px);
+  border-top: 1px solid var(--rule-soft);
+}
+.cap:first-child{ border-top-color: var(--rule); }
+/* When the ledger is two columns its top edge is two entries wide, so both
+   rules on the first row carry the strong value. `:first-child` alone gave
+   the left column a darker edge than the right one -- an accident of source
+   order, not a decision. */
+.block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule); }
+.cap__label{
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.215vw, 15.5px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  line-height: 1.25;
+}
+.cap__claim{
+  margin-top: 7px;
+  max-width: 42ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.45;
+}
+.block--dark .cap{ border-top-color: #292823; }
+.block--dark .cap:first-child,
+.block--dark .block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule); }
+
+.facts{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(10px, 1.1vw, 18px);
+  row-gap: clamp(9px, .95vw, 14px);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.5;
+}
+.facts dt{ color: var(--muted); letter-spacing: .05em; }
+.facts dd{ min-width: 0; overflow-wrap: anywhere; }
+
+/* ── 07b code ─────────────────────────────────────────────────────── */
+/* Code is a material, not an illustration of one. It is typeset in the mono
+   face with four token classes, and its container is a rule above and below
+   -- never a coloured side border, which the craft floor refuses and the
+   poster's own language does not use.
+   The specimen is a <figure>, and `figure`'s UA margin is 40px either side:
+   left unreset it silently inset every specimen by 40px and, at 320px, cut
+   the measure to 156px -- which is what pushed the caption past the column
+   and to within 2px of the rail. `figure{ margin: 0 }` is in the base reset
+   above; this rule supplies the top gap the poster wants. */
+.code{
+  margin-top: clamp(18px, 2vw, 30px);
+  border-top: 1px solid var(--rule);
+  padding-top: clamp(12px, 1.3vw, 18px);
+}
+.block--dark .code{ border-top-color: #292823; }
+.code__body{
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.code__cap{
+  margin-top: clamp(10px, 1.1vw, 16px);
+  max-width: 62ch;
+  font-family: var(--mono);
+  font-size: clamp(12px, .95vw, 12.5px);
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* Four token classes. Emphasis is weight and colour-role, never a second hue:
+   the page has exactly one accent and this does not spend it twice.
+   Paper: --fg 17.3:1, --accent-ink 4.66:1, --muted 4.82:1.
+   Dark:  --bg 16.59:1, --accent 6.06:1, --rule 9.22:1. All clear AA. */
+.t-cmd{ font-weight: 700; }
+.t-str{ color: var(--accent-ink); }
+.t-num{ font-variant-numeric: tabular-nums; }
+.t-dim{ color: var(--muted); }
+.block--dark .t-str,
+.console .t-str{ color: var(--accent); }
+.block--dark .t-dim,
+.console .t-dim{ color: var(--rule); }
+
+/* ── 07c the model(fn(input)) shift ───────────────────────────────── */
+.shift{
+  margin-top: clamp(20px, 2.2vw, 32px);
+  border-top: 1px solid #292823;
+  border-bottom: 1px solid #292823;
+  padding-block: clamp(12px, 1.4vw, 20px);
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.25vw, 16px);
+  font-variant-numeric: tabular-nums;
+}
+.shift__row{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: baseline;
+  gap: clamp(10px, 1.4vw, 24px);
+  padding-block: 5px;
+}
+.shift__fn{ color: var(--accent); font-weight: 700; }
+.shift__out{ color: var(--rule); }
+.shift__tag{
+  font-size: clamp(12px, .95vw, 12.5px);
+  letter-spacing: .05em;
+  color: var(--rule);
+}
+
+/* ── 07d what the scripts are for ─────────────────────────────────── */
+.uses{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  margin-top: clamp(20px, 2.2vw, 32px);
+  border-top: 1px solid #292823;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+}
+.uses__i{
+  display: flex;
+  gap: 10px;
+  padding-block: clamp(9px, 1vw, 13px);
+  border-bottom: 1px solid #292823;
+  color: var(--rule);
+}
+.uses__n{ color: var(--bg); font-weight: 500; letter-spacing: .05em; }
+
+/* ── 08 terrain ────────────────────────────────────────────────────── */
+/* LAST, where the signal lands. Stacking is explicit rather than incidental:
+   the cut-out, the route and the annotation band are three layers of one
+   drawing, so the section owns a stacking context and each layer carries its
+   own level -- which also stops the alpha cut-out flashing its own off-white
+   ground while a layer is being promoted.
+
+   The art box is anchored by its LEFT edge, derived from --fold and the
+   fork's own x in the artwork (1124.3 of 2172), so the route's fork lands on
+   the spine by construction instead of by an offset that has to be defended
+   at seven widths. The right edge is free to bleed past the shell;
+   html{overflow-x:clip} holds it. */
+.terrain{
+  position: relative;
+  isolation: isolate;
+  z-index: 1;
+  height: var(--band);
+  background: var(--bg);
+}
+.terrain > .shell{ padding-block: 0; height: 100%; z-index: 3; }
+/* same reason as .block__body: the positioned box must be the content box */
+.terrain__inner{ position: relative; height: 100%; }
+/* the spine ends exactly where the artwork begins: the route's trunk starts
+   at the art box's y=0, and --band is never shorter than --art-h, so this
+   lands on the band's top edge only when there is sky to spare */
+.spine--terrain{ bottom: var(--art-h); }
+
+.terrain__art{
+  position: absolute;
+  bottom: 0;
+  left: calc(var(--fold) - (1124.3 / 2172) * var(--art-w));
+  width: var(--art-w);
+  aspect-ratio: 2172 / 770.2;
+  z-index: 1;
+  pointer-events: none;
+}
+.terrain__photo{
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 94%;
+  object-fit: fill;
+  display: block;
+}
+.terrain__route{
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+}
+
+.route--signal{
+  fill: none;
+  stroke: currentColor;
+  /* viewBox units: 10/2172 of the artwork box is the spine's 4/364, so the
+     two orange strokes meet at the same weight as they hand over */
+  stroke-width: 10;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
+
+.anno{
+  position: absolute;
+  z-index: 2;
+  top: clamp(20px, 3.7vw, 52px);
+  /* The massif's silhouette passes under these labels at some width, and a
+     4-line annotation cannot move every time it does. They carry the paper
+     with them instead -- the same knockout the spine gets from the content
+     above it. Invisible where a label already sits on paper; legible where it
+     does not, and it keeps the text off an unpredictable photograph. */
+  background: var(--bg);
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 14px);
+  font-weight: 500;
+  letter-spacing: .12em;
+  line-height: 1.58;
+  color: var(--fg);
+}
+.anno--left{ left: var(--pad-l); }
+.anno--right{ right: var(--pad-r); text-align: left; font-weight: 400; line-height: 1.35; }
+.anno__dash{
+  display: block;
+  width: 33px;
+  height: 2px;
+  margin-top: 14px;
+  background: var(--fg);
+}
+.anno--right .anno__dash{ margin-left: 0; background: var(--muted); }
+
+/* The two slogans sit in the sky band. The right one bleeds into the gutter
+   as the poster draws it -- 2.1vw past the content edge -- which is what the
+   mockup does and keeps it off the route's right-hand run. */
+.anno--left, .anno--right{ top: clamp(20px, 3.7vw, 52px); }
+.anno--right{ right: calc(-1 * 2.1vw); }
+
+/* registration mark */
+.reg{
+  position: absolute;
+  z-index: 2;
+  top: clamp(-22px, -1.5vw, -6px);
+  right: 7.2vw;
+  width: 38px;
+  height: 38px;
+}
+.reg::before,
+.reg::after{
+  content: "";
+  position: absolute;
+  background: var(--fg);
+}
+.reg::before{ left: 50%; top: 0; width: 1px; height: 100%; }
+.reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
+
+/* Desktop runs the massif edge to edge (the <=1000px blocks above still
+   crop it). The route is nudged right inside its own box by the 12.42% that
+   takes the fork from its authored 51.76% of the image to the 64.18% where
+   the spine lands: 1124.3 + 269.6 = 1393.9 = 0.6417 x 2172. Without it the
+   spine would come down and stop in mid-air, because the artwork only rides
+   the ridge at its own fork. */
+@media (min-width: 1001px){
+  .terrain__art{ left: calc(-1 * var(--pad-l)); }
+  .terrain__route path{ transform: translateX(269.6px); }
+}
+
+
+/* ── 09 console ─────────────────────────────────────────────────────
+   The fourth plate, laid flat. It is a placeholder: the executor below is
+   a transcript map on the page and a documented seam for a real RESP
+   client (see website/README.md). No endpoint is implied anywhere. */
+.console[hidden]{ display: none; }
+.console{
+  min-width: 0;
+  /* above the spine: the line passes behind this plate and re-emerges below
+     it, exactly as it passes behind the hero's slabs */
+  position: relative;
+  z-index: 1;
+  background: #111110;
+  border: 1px solid var(--bg);
+  color: var(--bg);
+  font-family: var(--mono);
+}
+.console__bar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 4px clamp(12px, 1.5vw, 18px);
+  background: #292823;
+  border-bottom: 1px solid var(--rule);
+}
+.console__modes{ display: flex; gap: clamp(12px, 1.4vw, 22px); }
+.console__mode{
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 1px;
+  min-height: 36px;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  line-height: 1;
+  color: var(--rule);
+  cursor: pointer;
+  transition: color .12s ease, border-color .12s ease;
+}
+.console__mode:hover{ color: var(--bg); }
+.console__mode[aria-selected="true"]{
+  color: var(--bg);
+  border-bottom-color: var(--accent);
+}
+.console__badge{
+  font-size: clamp(12px, .95vw, 12.5px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  color: var(--rule);
+}
+.console__screen{
+  min-height: clamp(206px, 17vw, 262px);
+  padding: clamp(14px, 1.6vw, 22px) clamp(12px, 1.5vw, 18px);
+}
+.console__out{
+  margin: 0;
+  font-family: inherit;
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.console__out + .console__out{ margin-top: 18px; }
+.console__line{ display: block; }
+.console__line--dim{ color: var(--rule); }
+.console__line--key{ color: var(--bg); }
+.console__line--err{ color: var(--accent); }
+.console__line--echo{ color: var(--bg); }
+.console__caret{ color: var(--accent); }
+
+.console__form{
+  display: none; /* without JavaScript the static transcript stands in */
+  align-items: center;
+  gap: 10px;
+  padding: 8px clamp(12px, 1.5vw, 18px) 12px;
+  border-top: 1px solid var(--rule);
+}
+html.js .console__form{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.console__prompt{
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  color: var(--accent);
+}
+.console__input{
+  width: 100%;
+  min-width: 0;
+  padding: 12px 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  line-height: 1.4;
+  caret-color: var(--accent);
+}
+.console__input::placeholder{ color: var(--rule); opacity: 1; }
+.console__input[disabled]{ color: var(--rule); cursor: progress; }
+.console__run{
+  appearance: none;
+  padding: 10px 14px;
+  min-height: 38px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.console__run:hover{ background: var(--accent); border-color: var(--accent); color: var(--fg); }
+.console__run[disabled]{
+  background: #292823;
+  border-color: var(--rule);
+  color: var(--rule);
+  cursor: progress;
+}
+.console__note{
+  padding: 10px clamp(12px, 1.5vw, 18px) 12px;
+  border-top: 1px solid #292823;
+  font-size: clamp(12px, .95vw, 12.5px);
+  line-height: 1.55;
+  color: var(--rule);
+}
+
+/* the accent is the focus ring on this surface: 5.98:1 there vs 3.52:1 for
+   --accent-ink, which is tuned for the paper and would fail here */
+.console :focus-visible,
+.topviz :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── 10 the emb-top panel ───────────────────────────────────────────────
+   A full-width band rather than a second column: the capture's longest
+   line is ~100 characters, which no 640px column can hold without either
+   cutting it or wrapping the bars mid-run. The direction contract put it
+   under the console; that amendment is recorded in the surface brief. */
+.topviz{
+  min-width: 0;
+  margin-top: clamp(30px, 3.6vw, 60px);
+  padding-top: clamp(16px, 1.7vw, 24px);
+  border-top: 1px solid var(--rule-soft);
+}
+.topviz__claim{
+  margin-top: 7px;
+  max-width: 68ch;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.25vw, 16px);
+  line-height: 1.45;
+}
+/* One field of the emb-top capture. The capture is a real render and these
+   are the units that must survive a wrap: a line may break between fields,
+   never inside one, so no number is ever split from its unit. */
+.tf{ white-space: nowrap; }
+.topviz__screen{
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  padding: clamp(12px, 1.4vw, 18px);
+  background: #111110;
+  border: 1px solid var(--bg);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* the scrollbar is part of the panel, so it is painted from the panel */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) #111110;
+}
+.topviz__screen::-webkit-scrollbar{ height: 8px; }
+.topviz__screen::-webkit-scrollbar-track{ background: #111110; }
+.topviz__screen::-webkit-scrollbar-thumb{ background: var(--rule); }
+.topviz__src{
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: clamp(12px, .92vw, 12.5px);
+  color: var(--muted);
+}
+
+/* ── 11 footer ─────────────────────────────────────────────────────── */
+/* The footer is dark, and it is the same dark as the console, the emb-top
+   capture and the scripts block: #111110, the SERVE plate's own face. It
+   closes the page under the massif rather than putting a paper strip back
+   after the photograph. --muted is remapped for the same reason it is in the
+   dark block: #6B6963 is only 3.40:1 on #111110. */
+.footer{
+  border-top: 1px solid var(--rule);
+  background: #111110;
+  color: var(--bg);
+  --muted: var(--rule);
+}
+.footer__inner{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  min-height: 0;
+  padding-block: 14px 25px;
+}
+.footer__copy,
+.footer__mark{
+  font-size: clamp(12px, .92vw, 13px);
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.footer__mark{ color: var(--bg); }
+
+/* ── 12 motion + responsive ───────────────────────────────────────── */
+/* The reveals ripple through a group instead of flipping as one block. --i is
+   the element's place in its list; there is no wall clock involved, and with
+   prefers-reduced-motion the whole cascade collapses to a single frame. */
+.features__list > .feat:nth-child(1){ --i: 0; }
+.features__list > .feat:nth-child(2){ --i: 1; }
+.features__list > .feat:nth-child(3){ --i: 2; }
+.features__list > .feat:nth-child(4){ --i: 3; }
+.features__list > .feat:nth-child(5){ --i: 4; }
+.features__list > .feat:nth-child(6){ --i: 5; }
+/* each block ripples on its own: --i is the element's place in its block,
+   so a block's entrance never waits out another block's delay */
+.block__main > .cap:nth-child(1){ --i: 0; }
+.block__main > .cap:nth-child(2){ --i: 1; }
+.block__main > .cap:nth-child(3){ --i: 2; }
+.block__main > .cap:nth-child(4){ --i: 3; }
+.block .code{ --i: 2; }
+.block .shift{ --i: 1; }
+.block .uses{ --i: 3; }
+.block .console{ --i: 4; }
+
+html.js [data-reveal]{ opacity: 0; translate: 0 14px; }
+html.js [data-reveal].in{
+  opacity: 1;
+  translate: none;
+  transition: opacity .5s ease, translate .6s cubic-bezier(.2, .8, .3, 1);
+  transition-delay: calc(var(--i, 0) * 55ms);
+}
+
+/* ── hero entrance ───────────────────────────────────────────────────
+   The masthead lands, then the technical annotations, the wordmark and
+   the prose+actions: `--e` is the element's place in that order, 90ms
+   apart, so the last of it settles at ~780ms and the spine finishes at
+   1000ms -- both inside the brief's 800-1200ms window. Gated on `html.js`
+   so the no-JS render is complete, and collapsed to the end state under
+   reduced motion (see that block). */
+html.js .masthead__inner,
+html.js .hero__meta-a,
+html.js .hero__meta-b,
+html.js .hero__tech,
+html.js .hero__wordmark,
+html.js .hero__prose{ opacity: 0; translate: 0 10px; }
+html.js.is-ready .masthead__inner,
+html.js.is-ready .hero__meta-a,
+html.js.is-ready .hero__meta-b,
+html.js.is-ready .hero__tech,
+html.js.is-ready .hero__wordmark,
+html.js.is-ready .hero__prose{
+  opacity: 1;
+  translate: none;
+  transition: opacity .28s ease, translate .42s cubic-bezier(.2, .8, .3, 1);
+  transition-delay: calc(var(--e, 0) * 90ms);
+}
+.masthead__inner{ --e: 0; }
+.hero__meta-a{ --e: 1; }
+.hero__meta-b{ --e: 2; }
+.hero__tech{ --e: 2; }
+.hero__wordmark{ --e: 3; }
+.hero__prose{ --e: 4; }
+
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior: auto; }
+  html.js [data-reveal]{ opacity: 1; translate: none; }
+  html.js .sig,
+  html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
+  html.js .slab{ opacity: 1; transform: none; translate: none; }
+  .btn{ translate: none; }
+  html.js .masthead__inner,
+  html.js .hero__meta-a,
+  html.js .hero__meta-b,
+  html.js .hero__tech,
+  html.js .hero__wordmark,
+  html.js .hero__prose{ opacity: 1; translate: none; }
+  *, *::before, *::after{
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
+    /* the duration override alone leaves the stagger delays in place: an
+       element would still wait out its 0.51s before snapping to the end
+       state. Both have to go, or a future rule that relies on the
+       transition to arrive would simply arrive late. */
+    transition-delay: 0s !important;
+  }
+}
+
+@media (max-width: 1180px){
+  .nav a{ letter-spacing: .1em; }
+}
+
+/* Tablet and phone layouts prioritize reading and touch interaction. */
+@media (max-width: 1000px){
+  /* --pad-l / --pad-r resolve against --gut, so overriding the gutter is
+     enough to move every full-bleed edge with it */
+  :root{ --gut: clamp(20px, 4vw, 40px); }
+  /* the one control a keyboard reaches before anything else; 12px is the
+     desktop floor, not this one */
+  .skip{ font-size: 14px; }
+  [id]{ scroll-margin-top: calc(100px + env(safe-area-inset-top, 0px)); }
+  .masthead{ border-bottom-color: var(--rule-soft); }
+  .masthead__inner{
+    position: relative;
+    grid-template-columns: minmax(44px, 1fr) auto auto;
+    gap: 12px;
+    min-height: 72px;
+    padding-block: 12px;
+  }
+  .masthead__tagline, .vrule, .nav{ display: none; }
+  .brand{ display: inline-flex; align-items: center; min-height: 44px; font-size: 28px; }
+  .masthead__cta{ grid-column: 3; }
+  .btn--sm{ min-width: 132px; min-height: 44px; font-size: 14px; padding: 12px; gap: 12px; }
+
+  /* Native disclosure remains usable without JavaScript. */
+  .mobile-nav{ display: block; grid-column: 2; grid-row: 1; font-family: var(--mono); }
+  .mobile-nav summary{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 68px;
+    min-height: 44px;
+    cursor: pointer;
+    font-size: 14px;
+    list-style: none;
+  }
+  .mobile-nav summary::-webkit-details-marker{ display: none; }
+  .mobile-nav summary span{ font-size: 22px; line-height: 1; }
+  .mobile-nav[open] summary span{ transform: rotate(45deg); }
+  .mobile-nav nav{
+    position: absolute;
+    top: 100%;
+    left: var(--pad-l);
+    right: var(--pad-r);
+    padding: 8px 16px;
+    border: 1px solid var(--fg);
+    background: var(--bg);
+    box-shadow: 4px 4px 0 var(--fg);
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .mobile-nav a{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 12px 4px;
+    font-size: 15px;
+  }
+  .mobile-nav a + a{ border-top: 1px solid var(--rule-soft); }
+  .mobile-nav a:hover{ color: var(--muted); }
+
+  .hero{ padding-top: 0; }
+  .hero__meta{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 16px;
+    padding-block: 28px 20px;
+  }
+  .hero__meta-a{ grid-column: 1; font-size: 18px; letter-spacing: .14em; }
+  .hero__meta-b{ grid-column: 2; margin: 0; font-size: 14px; letter-spacing: .03em; }
+  .hero__tech{
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 24px;
+    margin: 0;
+    text-align: left;
+    font-size: 14px;
+  }
+  .hero__tech br, .hero__tech .meta-rule{ display: none; }
+  .hero__wordmark{ height: 44.2vw; margin-top: 0; }
+  .wordmark-note{ display: none; }
+  .hero__body{ grid-template-columns: minmax(0, 1fr); padding-top: 32px; }
+  .hero__prose{ grid-column: 1; padding: 0; }
+  .claim{ font-size: clamp(36px, 6vw, 56px); line-height: 1.02; }
+  .hero__sub{ max-width: 46ch; margin-top: 20px; font-size: 16px; line-height: 1.6; }
+  .hero__actions{ width: auto; max-width: 100%; gap: 24px; margin-top: 28px; }
+  .btn--accent{ min-height: 52px; font-size: 16px; padding: 16px 24px; }
+  .ghlink{ min-height: 48px; padding: 12px 4px; font-size: 14px; }
+  .features{ margin-top: 40px; }
+  .rule-head{ font-size: 14px; letter-spacing: .05em; white-space: normal; }
+  .rule-head__rule{ flex: 1; max-width: 100px; min-width: 24px; }
+  .features__list{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; padding: 0; margin-top: 20px; }
+  .feat{ column-gap: 16px; padding-block: 12px; }
+  .feat__ico{ width: 32px; height: 32px; }
+  .feat__name{ font-size: 15px; line-height: 1.4; }
+  .feat__desc{ font-size: 14px; line-height: 1.6; }
+
+  /* From here the pipeline stacks into two columns of its own, so the plate
+     centre -- and therefore the whole page's axis -- moves to 25% of the
+     content box. --fold, --fold-hero and --art-w move together or the spine
+     and the route come apart. */
+  :root{ --fold: 25%; --fold-hero: 25%; --art-w: 145vw; --spine-w: calc(200% / 364); }
+
+  /* the blocks keep the lane: content right of it, line in the left gutter,
+     measure 426.7px at 641 and 673.5px at 1000. The column placement that
+     puts the copy there is in the 641-1000px block below, because at 640px
+     and under the lane moves to the other side. */
+  .block__body{ padding-block: 40px; }
+  .cap__label{ font-size: 15px; line-height: 1.4; }
+  .cap__claim{ font-size: 15px; line-height: 1.55; max-width: 52ch; }
+  .block__main--ledger{ grid-template-columns: minmax(0, 1fr); }
+  /* one column here, so the ledger's top edge is its first entry again */
+  .block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule-soft); }
+  .block__deck{ font-size: 15px; max-width: 52ch; }
+  .facts{ font-size: 14px; line-height: 1.6; row-gap: 14px; }
+  .code__body{ font-size: 14px; line-height: 1.7; }
+  .code__cap{ font-size: 14px; }
+  .shift{ font-size: 15px; }
+  .shift__tag{ font-size: 14px; }
+  .uses{ font-size: 14px; }
+  .topviz__claim{ font-size: 15px; max-width: 54ch; }
+  /* every console control clears the 44px touch floor at these widths */
+  .console__mode{ min-height: 44px; font-size: 14px; }
+  .console__badge{ font-size: 14px; letter-spacing: .05em; }
+  .console__out{ font-size: 14px; line-height: 1.7; }
+  .console__prompt{ font-size: 14px; }
+  .console__input{ font-size: 14px; padding-block: 14px 12px; }
+  .console__run{ min-height: 44px; padding: 12px 16px; font-size: 14px; }
+  .console__note{ font-size: 14px; line-height: 1.6; }
+  /* program output wraps here rather than scrolling sideways: the region
+     must never scroll horizontally on a phone */
+  .topviz__screen{
+    font-size: 14px;
+    white-space: pre-wrap;
+    overflow-x: hidden;
+  }
+  /* The capture's histograms are a second encoding of the r/s number printed
+     beside them, and at this measure they are what forces the wrap: without
+     them every value and every label stays whole. What is left breaks only
+     between fields (`.tf`), which is why no number here is ever split from
+     its unit. */
+  .tf--bar{ display: none; }
+  .topviz__src{ font-size: 14px; }
+
+  .hero__pipeline{ grid-column: 1; margin-top: 48px; }
+  /* Once the pipeline stacks, the notes can outgrow the plate stack, and a
+     spine confined to the wrapper's second row then begins BELOW them --
+     leaving a hole after the last plate (measured: 390px at 390w). Collapse
+     the wrapper to one row and put the spine and the diagram in the same
+     cell: the stack's paper hides the line behind the plates (whose own
+     masked SVG line draws the visible gaps), and the seam below it is the
+     connector into the first block. */
+  .hero__pipeline{ grid-template-rows: auto; }
+  .pipeline{ grid-row: 1; grid-column: 1; position: relative; z-index: 1; }
+  .spine--hero{ grid-row: 1; grid-column: 1; }
+  .pipeline__stack{ background: var(--bg); }
+  .pipeline{ margin: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pipeline__svg{ overflow: hidden; }
+  .pipeline__notes{ margin-right: 0; }
+  .note{ left: 32px; right: 0; grid-template-columns: 32px minmax(0, 1fr); }
+  .note::before{ width: 24px; right: calc(100% + 8px); }
+  .note__label{ font-size: 14px; line-height: 1.4; letter-spacing: .03em; }
+  .note__num{ font-size: 14px; }
+  .note__desc{ font-size: 14px; line-height: 1.5; }
+  /* the plate words, scaled by the viewBox: at <=640 the stack is ~0.9 x vw,
+     so 19 units renders 14.6px at 320 and 18.3px at 390 */
+  .plate-label{ font-size: 19px; }
+  /* the kept-facts block sits on the same mobile floor as every other label */
+  .hero__install, .hero__facts{ font-size: 14px; }
+  /* the massif: 145vw of artwork is 51.4vw of band, and --band never falls
+     below the art, so the spine always reaches the route's first point */
+  .terrain{
+    height: max(var(--art-h), clamp(240px, calc(39.72vw + 96px), 470px));
+  }
+  .anno{ top: 20px; font-size: 14px; }
+  /* The three data annotations carry the README's reply-format, protocol and
+     batching facts. They need the paper beside the massif, which a phone
+     does not have: below 1000px the band keeps the two slogans only, and
+     their spurs go with them rather than crossing the peak unlabelled. The
+     same facts stay findable in the feature list and `DESIGN.md`. */
+  .anno--left{ left: var(--pad-l); }
+  .anno--right{ right: var(--pad-r); }
+  .reg{ display: none; }
+  .footer__inner{ padding-block: 20px max(24px, env(safe-area-inset-bottom)); gap: 12px; }
+  .footer__copy, .footer__mark{ font-size: 14px; line-height: 1.6; letter-spacing: 0; }
+}
+
+@media (max-width: 640px){
+  .masthead__inner{ gap: 8px; }
+  .brand{ font-size: 25px; }
+  .hero__meta-a{ font-size: 15px; letter-spacing: .1em; }
+  .hero__meta-b{ font-size: 14px; letter-spacing: 0; }
+  .hero__meta{ padding-top: 24px; }
+  .hero__body{ padding-top: 24px; }
+  .claim{ font-size: clamp(30px, 8.4vw, 44px); }
+  /* the authored four-line break is the poster's editorial copy and holds on
+     a phone: "embedding server" measures 285px at 33.9px in a 350px measure,
+     so the breaks stay rather than collapsing into one wrapped heading. */
+  .claim span{ display: block; }
+  .hero__sub{ font-size: 15px; }
+  .hero__actions{ display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .btn--accent{ justify-content: space-between; margin-right: 5px; }
+  .ghlink{ justify-self: center; }
+  .features__list{ grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .feat{ padding-block: 14px; }
+  /* `gliner2  span extraction` is 23 characters, and two columns of 150px at
+     the 14px floor are 17: the ledger goes to one entry per row, so the name
+     and its description stay on one line and clear the rail by --fold-gap. */
+  .uses{ grid-template-columns: minmax(0, 1fr); }
+  /* The wide row cannot hold `model(fn(input))` and the arrow in a 236px
+     measure at the 14px floor -- at 320px the args ran into the arrow with no
+     gap at all. The args take the row's first line; the arrow, the output and
+     the tag take the second. */
+  .shift__row{ grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 2px; }
+  .shift__args{ grid-column: 1 / -1; }
+  .shift__arrow{ grid-column: 1; }
+  .shift__out{ grid-column: 2; }
+  .shift__tag{ grid-column: 3; text-align: right; }
+  /* The rail moves to the RIGHT margin on phones, and everything is held to
+     its left. At the plate centre a 390px content box gives 175px per side,
+     which left the stage notes about 16 characters -- readable in theory and
+     not in the hand. In the right margin the text keeps its measure and the
+     line is still one line.
+     The diagram's own internal spine is hidden here because there is only
+     room for one: two orange lines 40% apart, both visible in the gaps
+     between the plates, is not a composition. The rail passes behind the
+     plates instead, which is the language the desktop hero already uses. */
+  :root{ --fold: 90%; --fold-hero: 90%; --art-w: 156vw; --spine-w: calc(400% / 364); }
+  .pipeline__svg .sig{ display: none; }
+  /* ...and the stack's paper stops being a knockout, so the rail threads the
+     plates on the right instead of being hidden for their whole box: at 90% of
+     the SVG each diamond covers only ~48 of the 123 units between plate
+     centres, so the rail reads exactly as it does on desktop -- visible in the
+     gaps, passing behind the plate. */
+  .pipeline__stack{ background: none; }
+  /* everything stops short of the rail, so it runs clean from the hero to the
+     massif and nothing is ever knocked out of it */
+  .block__grid,
+  .block__body > .block__head,
+  .block .topviz{ width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap)); }
+  .block__grid{ grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+  .block__body{ padding-block: 46px; }
+  .block__aside{ margin-top: 26px; }
+  .console__bar{ padding-block: 6px; }
+
+  /* Phones keep the isometric stack: the four slabs are the page's whole
+     argument, and a phone is exactly where a reader has the attention for
+     them. They run full width under the prose, then the notes follow as a
+     ruled list. */
+  .hero__pipeline{ margin-top: 36px; }
+  .pipeline{ grid-template-columns: minmax(0, 1fr); }
+  /* one column, two rows: say so rather than leaning on auto-placement */
+  .pipeline__stack{ grid-column: 1 / -1; align-items: flex-start; overflow: hidden; }
+  /* On a wide screen the spine's tail runs on to the terrain. Here the
+     terrain is a screen and a half below, behind the notes, so the diagram
+     ends at the last plate instead of dangling: the 47 empty units below
+     SERVE are 12.9% of the artwork's width. */
+  .pipeline__svg{ margin-bottom: -12.9%; }
+  /* The stage notes sit LEFT of the line rather than across it. Full width
+     they crossed the plate centre, so they had to be knocked out of the line
+     to stay legible -- which is why the line dead-ended under the last plate
+     and only picked up again a section later. Held to the lane's edge, the
+     line runs clean down their right side and their rules stop short of it.
+     The measure is ~16 characters at the 14px floor; these are captions to
+     the plates beside them, not body copy, so the trade is the right one. */
+  .pipeline__notes{
+    grid-column: 1;
+    justify-self: start;
+    width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap));
+    padding-left: 0;
+    margin-top: 28px;
+  }
+  .note{
+    position: relative;
+    inset: auto;
+    transform: none;
+    grid-template-columns: 30px minmax(0, 1fr);
+    padding-block: 16px;
+    border-top: 1px solid var(--rule-soft);
+  }
+  /* the closing rule carries its own inset, so nothing lands flush on it */
+  .note:last-child{ padding-bottom: 16px; border-bottom: 1px solid var(--rule-soft); }
+  .note::before{ display: none; }
+  .note__label{ font-size: 15px; }
+  .note__desc{ font-size: 14px; line-height: 1.5; }
+  /* 124vw of artwork is 43.97vw of band; the clamp is the sky the two
+     slogans need above the massif, and the spine spends it */
+  .terrain{
+    height: max(var(--art-h), clamp(250px, calc(43.97vw + 100px), 470px));
+  }
+  .footer__inner{ display: grid; }
+}
+
+/* Tablet blocks (641-1000px). At this range --fold is 25%, the stacked
+   pipeline's own plate centre, so the lane is the LEFT gutter and everything
+   the block says has to clear it. `.block__grid` puts its first column in
+   that gutter, which left `.block__main` -- the deck, the specimens, the
+   shift -- 131.8px at 641 and 175.7px at 834, wrapping one word per line,
+   while the four facts got 559.4px. Both of the block's parts belong in the
+   content column here, stacked. */
+@media (min-width: 641px) and (max-width: 800px){
+  /* 18 units renders 14.6px at 641 and 18.2px at 800 */
+  .plate-label{ font-size: 18px; }
+}
+
+@media (min-width: 641px) and (max-width: 1000px){
+  .block__grid > *{ grid-column: 2; }
+  .block__aside{ margin-top: 26px; }
+  /* ...and the emb-top band, which is a sibling of `.block__grid` rather
+     than a child of it, has to start where that column starts or its claim
+     runs across the line. Unlike phones, where the lane is at 90% and the
+     sheet's left edge is the content's, the lane here is at 25%, so this is
+     a left inset rather than a width. */
+  .block .topviz{
+    margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap));
+  }
+  /* The massif runs the full shell here too, so it is complete and sits on
+     the footer, with the ridge shifted left inside its box onto the 25%
+     lane: 1124.3 - 537.9 = 586.4 = 0.27 x 2172 (the tablet gutter is 4vw,
+     so the lane is 25% + half of 4% = 27% of the shell). */
+  :root{ --art-w: min(100vw, var(--maxw)); }
+  .terrain__art{ left: calc(-1 * var(--pad-l)); }
+  .terrain__route path{ transform: translateX(-537.9px); }
+}
+
+/* Short landscape screens should not lose space to a persistent header, and
+   must not crop the wordmark to make room. */
+@media (max-width: 1000px) and (max-height: 520px){
+  .masthead{ position: relative; }
+  /* The wrapper is a layout box, not the artwork's box: the word deliberately
+     overflows it on a normal window. On a short one the height has to win, so
+     the artwork is scaled down to fit instead of being cropped. */
+  .hero__wordmark{ height: min(44.2vw, 56vh); }
+  .wordmark{
+    top: 0;
+    left: 50%;
+    width: auto;
+    height: 100%;
+    translate: -50% 0;
+  }
+}
+
+/* A poster is worth printing. The reveal system holds content at opacity 0
+   until something scrolls it into view, and a print pass never scrolls, so
+   the whole cascade is collapsed here -- the same end state the
+   reduced-motion block sets -- and the fixed grain layer, which would tile
+   once per page, is dropped. */
+@media print{
+  html, body{ background: #fff; }
+  body::after{ display: none; }
+  html.js [data-reveal],
+  html.js .masthead__inner,
+  html.js .hero__meta-a,
+  html.js .hero__meta-b,
+  html.js .hero__tech,
+  html.js .hero__wordmark,
+  html.js .hero__prose{ opacity: 1; translate: none; }
+  html.js .slab{ opacity: 1; transform: none; translate: none; }
+  html.js .sig,
+  html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
+  .masthead{ position: static; }
+  .terrain, .features, .pipeline, .note, .feat{ break-inside: avoid; }
+  /* The page inverts once, and these are the surfaces that carry light text on a
+     dark ground: the scripts block, the console, the emb-top capture, the footer,
+     the masthead's dark button, the block header bars, and the skip link. Chrome
+     strips background graphics by default, which printed `color: var(--bg)`
+     (#F3F0E8) on white -- legible on screen, invisible on paper.
+     `print-color-adjust: exact` keeps the ground the design chose rather than
+     re-colouring a whole type ladder for print.
+     The header bars and the skip link were MISSED by the first version of this
+     rule, which listed only five surfaces; the three section titles and the skip
+     link printed near-white on white until an audit of every dark-ground,
+     light-ink element in the live DOM found them. Decorative dark hairlines
+     (`.meta-rule`, `.anno__dash`) are deliberately not listed: they carry no
+     text, so losing them on paper costs nothing. */
+  .block--dark,
+  .console,
+  .console__bar,
+  .console__screen,
+  .topviz__screen,
+  .footer,
+  .btn--dark,
+  .block__head,
+  .skip{
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

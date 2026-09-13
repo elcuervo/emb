@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emb — documentation</title>
+<link rel="canonical" href="https://emb.is/docs/">
+<meta name="description" content="Reference for emb, a self-hosted text-embeddings server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — documentation">
+<meta property="og:description" content="Reference for emb, a self-hosted text-embeddings server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta property="og:url" content="https://emb.is/docs/">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — documentation">
+<meta name="twitter:description" content="The hosted reference for emb: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/inter-900-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<link rel="stylesheet" href="../assets/css/docs.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand scale, tagline, nav items
+     and "Get Started" control, so the two surfaces open the same way. Only
+     the destinations differ -- "Docs" is this page and the CTA lands on the
+     install section below. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">TEXT&nbsp;IN.<br>FLOATS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html">Docs</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+      <a href="#configuration">Models</a>
+      <a href="https://github.com/elcuervo/emb/issues" rel="noopener">Community</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+        <a href="#configuration">Models <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb/issues">Community <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <div class="shell">
+
+    <div class="doc-head">
+      <h1>Documentation</h1>
+      <p class="doc-lede">
+        <strong>emb</strong> is a self-hosted text-embeddings server that speaks
+        the Redis protocol. It implements the protocol rather than shipping a
+        client, so the Redis client you already have is the SDK. This page is
+        the reference: everything below is the behaviour of the shipped server,
+        and <a href="https://github.com/elcuervo/emb/blob/main/README.md" rel="noopener">the repository README</a>
+        remains the source of truth.
+      </p>
+      <p class="doc-note">
+        <strong>Pre-1.0.</strong> emb is at v<span data-emb-version>0.4.0.pre4</span>
+        and interfaces may still move. Commands, configuration keys and reply
+        shapes on this page describe that version.
+      </p>
+    </div>
+
+    <nav class="doc-toc" aria-labelledby="toc-h">
+      <h2 id="toc-h">CONTENTS</h2>
+      <ol>
+        <li><a href="#install"><span class="doc-toc__n">01</span><span>Install and first vector</span></a></li>
+        <li><a href="#commands"><span class="doc-toc__n">02</span><span>Commands</span></a></li>
+        <li><a href="#replies"><span class="doc-toc__n">03</span><span>Replies and protocol</span></a></li>
+        <li><a href="#configuration"><span class="doc-toc__n">04</span><span>Configuration</span></a></li>
+        <li><a href="#scripts"><span class="doc-toc__n">05</span><span>Lua scripting</span></a></li>
+        <li><a href="#operations"><span class="doc-toc__n">06</span><span>Operations</span></a></li>
+        <li><a href="#benchmarks"><span class="doc-toc__n">07</span><span>Benchmarks</span></a></li>
+        <li><a href="#clients"><span class="doc-toc__n">08</span><span>Clients</span></a></li>
+        <li><a href="#status"><span class="doc-toc__n">09</span><span>Status and version</span></a></li>
+      </ol>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════ 01 · INSTALL -->
+    <section class="doc-sec" id="install" aria-labelledby="install-h">
+      <h2 id="install-h">01 · Install and first vector</h2>
+
+      <p class="doc-prose">
+        Three ways to get the server. All of them install the same single binary
+        with ONNX Runtime embedded — inference, batching, caching, scripting and
+        operations are server-side, so there is nothing to run alongside it.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-dim"># 1 — install script, to /usr/local/bin</span>
+<span class="t-cmd">curl</span> -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | <span class="t-cmd">sh</span>
+
+<span class="t-dim"># 2 — container</span>
+<span class="t-cmd">docker</span> run -p <span class="t-num">6379</span>:6379 elcuervo/emb
+
+<span class="t-dim"># 3 — precompiled server via RubyGems</span>
+<span class="t-cmd">gem</span> install emb-server</pre>
+        <figcaption class="code__cap">
+          Set <span class="t-cmd">EMB_INSTALL_DIR</span> to change the install
+          target of the script.
+        </figcaption>
+      </figure>
+
+      <p class="doc-prose">
+        Start it with a model. The server auto-downloads from HuggingFace when
+        given a repository id, and auto-detects the embedding dimension, maximum
+        length, output tensor and pooling strategy from the ONNX graph and
+        <code>config.json</code>.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-dim"># downloads Xenova/all-MiniLM-L6-v2 and starts on :6379</span>
+<span class="t-cmd">emb</span> -model minilm -model-repo Xenova/all-MiniLM-L6-v2
+
+<span class="t-dim"># in another terminal</span>
+<span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB</span> minilm <span class="t-str">"hello world"</span>
+<span class="t-dim"># → \x7c\x8e\x80\xbd…            384 float32s × 4 bytes = 1.5 KB</span></pre>
+        <figcaption class="code__cap">
+          The default reply is raw little-endian float32 bytes — the fastest,
+          most faithful form of the number.
+        </figcaption>
+      </figure>
+
+      <dl class="doc-cmds">
+        <dt>platforms</dt>
+        <dd>macOS on Apple Silicon; Linux on amd64 and arm64.</dd>
+        <dt>default port</dt>
+        <dd><code>:6379</code> — the Redis port, so existing tooling needs no new mental model.</dd>
+        <dt>config</dt>
+        <dd>a YAML file via <code>-config</code>, or the same settings as inline flags. See <a href="#configuration">Configuration</a>.</dd>
+        <dt>model source</dt>
+        <dd>a local ONNX path, or a HuggingFace repository id that is downloaded and cached.</dd>
+      </dl>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════ 02 · COMMANDS -->
+    <section class="doc-sec" id="commands" aria-labelledby="commands-h">
+      <h2 id="commands-h">02 · Commands</h2>
+
+      <p class="doc-prose">
+        The command surface. Argument shapes are shown in full: where a command
+        takes a reply-format keyword, its position is fixed and is described
+        under <a href="#replies">Replies and protocol</a>.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>EMB &lt;model&gt; [BLOB|VALUES] &lt;text&gt; [text…]</dt>
+        <dd>Embed one or more texts. With <code>BLOB</code> (the default), one text returns a bulk string and several return an array of bulk strings of float32 bytes. With <code>VALUES</code>, a <code>dtype</code>/<code>shape</code>/<code>values</code> envelope with decimal values.</dd>
+
+        <dt>EMB.MULTI [BLOB|VALUES] &lt;model&gt; &lt;text&gt; [&lt;model&gt; &lt;text&gt;…]</dt>
+        <dd>Embed texts across different models in one round trip. Each reply is the vector for its model; a failed pair yields an error in its own slot without failing the call. Under <code>VALUES</code> each envelope also carries its <code>model</code> key, since per-pair dimensions differ.</dd>
+
+        <dt>EMB.MODELS</dt>
+        <dd>List the loaded models with their dimensions and status.</dd>
+
+        <dt>EMB.INFO &lt;model&gt;</dt>
+        <dd>Model details: dimension, workers, requests served, average latency, and live cache statistics.</dd>
+
+        <dt>EMB.STATS</dt>
+        <dd>Server statistics: uptime, total requests, live connections, active requests, a per-model breakdown, and process resources — RSS in MB, CPU user/system microseconds, goroutines.</dd>
+
+        <dt>MONITOR [seq] [limit]</dt>
+        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, texts, latency in µs, error. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
+
+        <dt>EMB.READY</dt>
+        <dd>Health check. <code>+OK</code> when ready, otherwise <code>-ERR</code> with a reason: <code>loading</code>, <code>draining</code>, <code>no models</code>.</dd>
+
+        <dt>EMB.EVAL &lt;model&gt; &lt;script&gt; &lt;numtexts&gt; &lt;text…&gt; &lt;arg…&gt;</dt>
+        <dd>Evaluate a Lua script once against a model, with <code>KEYS</code> = texts and <code>ARGV</code> = args.</dd>
+
+        <dt>EMB.EVSHA &lt;model&gt; &lt;sha&gt; &lt;numtexts&gt; &lt;text…&gt; &lt;arg…&gt;</dt>
+        <dd>Evaluate a cached script by SHA.</dd>
+
+        <dt>EMB.SCRIPT LOAD &lt;model&gt; &lt;script&gt;</dt>
+        <dd>Compile, cache and return the script's SHA1.</dd>
+
+        <dt>EMB.SCRIPT EXISTS &lt;model&gt; &lt;sha…&gt;</dt>
+        <dd>Which of the given scripts are cached: <code>1</code> or <code>0</code> per SHA.</dd>
+
+        <dt>EMB.SCRIPT FLUSH [&lt;model&gt;]</dt>
+        <dd>Clear cached scripts; all models when the model is omitted.</dd>
+
+        <dt>EMB.CACHE.FLUSH [model]</dt>
+        <dd>Remove all cached embeddings, or only the entries for one model. Returns the removed count.</dd>
+
+        <dt>EMB.SAVE</dt>
+        <dd>Accept an asynchronous cache snapshot. Poll <code>EMB.STATS</code> or <code>INFO cache</code> for completion or failure.</dd>
+
+        <dt>EMB.HELP</dt>
+        <dd>The command reference, including the full script surface.</dd>
+
+        <dt>INFO [section…]</dt>
+        <dd>Redis-style <code>INFO</code> with sections <code>server</code>, <code>cache</code>, <code>keyspace</code>, <code>stats</code>, <code>memory</code>, <code>cpu</code>, <code>clients</code>. Stays a bulk string under both protocol versions, as in Redis.</dd>
+
+        <dt>CONFIG GET [glob] / CONFIG SET</dt>
+        <dd>Read or live-tune runtime settings. Both require authentication.</dd>
+
+        <dt>AUTH &lt;password&gt;</dt>
+        <dd>Authenticate the connection. Required when <code>password</code> is set.</dd>
+
+        <dt>HELLO [2|3]</dt>
+        <dd>Negotiate the RESP protocol version for the connection; the default is 2. Bare <code>HELLO</code> reports the current version.</dd>
+
+        <dt>PING</dt>
+        <dd><code>PONG</code>.</dd>
+      </dl>
+
+      <h3 class="doc-h3">EMB.MULTI across models</h3>
+      <p class="doc-prose">
+        One round trip, different models, and a failure that stays in its own
+        slot:
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB.MULTI</span> minilm <span class="t-str">"hello"</span> siglip2 <span class="t-str">"a photo of a cat"</span>
+<span class="t-num">1</span>) \x7c\x8e\x80\xbd…   <span class="t-dim">(minilm, 384 floats)</span>
+<span class="t-num">2</span>) \x4a\x9f\x31\xc2…   <span class="t-dim">(siglip2, 768 floats)</span></pre>
+        <figcaption class="code__cap">
+          <span class="t-cmd">EMB.MULTI</span> is MGET-shaped: an error in one
+          position does not fail the others.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ 03 · REPLIES      -->
+    <section class="doc-sec" id="replies" aria-labelledby="replies-h">
+      <h2 id="replies-h">03 · Replies and protocol</h2>
+
+      <p class="doc-prose">
+        <code>EMB</code> and <code>EMB.MULTI</code> accept an optional leading
+        reply-format keyword. <code>BLOB</code> is the default: raw
+        little-endian float32 bytes as a bulk string. <code>VALUES</code>
+        returns a self-describing envelope for clients, tooling and debugging
+        that cannot decode raw float32 bytes.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB</span> minilm <span class="t-cmd">VALUES</span> <span class="t-str">"hello world"</span>
+<span class="t-num">1</span>) <span class="t-str">"dtype"</span>
+<span class="t-num">2</span>) <span class="t-str">"FLOAT"</span>
+<span class="t-num">3</span>) <span class="t-str">"shape"</span>
+<span class="t-num">4</span>) <span class="t-num">1</span>) (integer) <span class="t-num">1</span>
+   <span class="t-num">2</span>) (integer) <span class="t-num">384</span>
+<span class="t-num">5</span>) <span class="t-str">"values"</span>
+<span class="t-num">6</span>) <span class="t-num">1</span>) <span class="t-str">"-0.19744610786437988"</span>
+   <span class="t-num">2</span>) <span class="t-str">"0.17766517400741577"</span>
+   <span class="t-dim">…</span></pre>
+        <figcaption class="code__cap">
+          <code>dtype</code> <span class="t-num">FLOAT</span>,
+          <code>shape</code> <span class="t-num">[1 384]</span>, then a flat
+          row-major <code>values</code> array.
+        </figcaption>
+      </figure>
+
+      <h3 class="doc-h3">Where the keyword is read</h3>
+      <p class="doc-prose">
+        The keyword is detected only at its fixed position — right after the
+        model name, or before the pairs in <code>EMB.MULTI</code> — and is never
+        scanned from the tail of the text. A trailing word that happens to read
+        <code>BLOB</code> or <code>VALUES</code> embeds normally. The one
+        collision is a <em>first</em> text in a multi-text call:
+        <code>EMB m VALUES hello</code> treats <code>VALUES</code> as the
+        keyword, so write it twice — <code>EMB m VALUES VALUES hello</code> —
+        or reorder the texts. As a safety measure both words are reserved and
+        cannot be used as model names.
+      </p>
+
+      <h3 class="doc-h3">RESP2 by default, RESP3 on request</h3>
+      <p class="doc-prose">
+        Connections speak RESP2. A client upgrades with <code>HELLO 3</code>
+        and can go back with <code>HELLO 2</code>. Under RESP3 the
+        <code>VALUES</code> numbers arrive as typed doubles instead of decimal
+        bulk strings, and <code>EMB.INFO</code>, <code>EMB.STATS</code>,
+        <code>EMB.MODELS</code> and <code>CONFIG GET</code> reply with maps
+        instead of flat key/value arrays. Nulls encode as <code>_</code> rather
+        than <code>$-1</code>. <code>INFO</code> stays a bulk string in both, and
+        errors stay simple errors.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-dim"># RESP2 — unpack the bytes yourself</span>
+<span class="t-cmd">raw</span> = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"</span>, <span class="t-str">"hello world"</span>)
+emb = raw.unpack(<span class="t-str">"e*"</span>)   <span class="t-dim"># → 384 floats</span>
+
+<span class="t-dim"># either protocol — ask for decimals instead</span>
+env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"</span>, <span class="t-str">"VALUES"</span>, <span class="t-str">"hello world"</span>)
+<span class="t-dim"># → ["dtype", "FLOAT", "shape", [1, 384], "values", ["-0.1974…", …]]</span></pre>
+        <figcaption class="code__cap">
+          The Ruby client keeps RESP2 and the binary default; pass
+          <code>format: :values</code> to opt in.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═════════════════════════════════════════ 04 · CONFIGURATION     -->
+    <section class="doc-sec" id="configuration" aria-labelledby="configuration-h">
+      <h2 id="configuration-h">04 · Configuration</h2>
+
+      <p class="doc-prose">
+        Settings live in a YAML file passed with <code>-config</code>, or as the
+        equivalent inline flags. Model names are declared here; a model is loaded
+        lazily on first request unless it is marked to preload.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">listen</span>: <span class="t-str">":6379"</span>
+
+<span class="t-dim"># password: "hunter2"</span>
+<span class="t-dim"># tls_cert: /etc/emb/cert.pem</span>
+<span class="t-dim"># tls_key:  /etc/emb/key.pem</span>
+<span class="t-dim"># cache: "auto"   # or "1GB", "256MB", "25%". Empty = disabled</span>
+<span class="t-dim"># cache_file: /var/lib/emb/cache.embcache</span>
+<span class="t-dim"># cache_load: true</span>
+<span class="t-dim"># cache_save: 5m</span>
+<span class="t-dim"># cache_save_on_shutdown: true</span>
+<span class="t-dim"># cache_restore_limit: auto</span>
+<span class="t-dim"># cache_restore_reserve: 10%</span>
+<span class="t-dim"># cache_save_rate_limit: 100MB/s</span>
+<span class="t-dim"># idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32</span></pre>
+        <figcaption class="code__cap">
+          Every key above is also available as a flag, e.g.
+          <code>-max-connections 100</code>.
+        </figcaption>
+      </figure>
+
+      <h3 class="doc-h3">Model options</h3>
+      <dl class="doc-cmds">
+        <dt>onnx / tokenizer</dt>
+        <dd>A local ONNX path and tokenizer file, or <code>repo</code> to download both from HuggingFace.</dd>
+        <dt>normalize</dt>
+        <dd>Default <code>false</code>. L2-normalizes the output.</dd>
+        <dt>output_tensor</dt>
+        <dd>Auto-detected from the graph when omitted.</dd>
+        <dt>preload</dt>
+        <dd>Default <code>false</code>. Load at startup instead of on first request.</dd>
+        <dt>pad_output</dt>
+        <dd>Default <code>false</code>. Pads sequences to <code>max_length</code> with trailing zeros, for legacy implementations that do not pass an attention mask.</dd>
+        <dt>workers</dt>
+        <dd>Auto-tuned. Number of worker goroutines.</dd>
+        <dt>intra_op_threads</dt>
+        <dd>Defaults to <code>cores−2</code>, reserving cores for request parsing and dispatch. Set it explicitly to override.</dd>
+        <dt>scripts</dt>
+        <dd>Default <code>[]</code>. Lua scripts to preload at boot; relative paths resolve against the config file's directory. An invalid script — bad syntax, missing file, oversized — fails startup.</dd>
+        <dt>batching</dt>
+        <dd>Default <code>{timeout: 1, max_batch: 32, max_batch_tokens: 16384}</code>.</dd>
+      </dl>
+
+      <h3 class="doc-h3">Batching</h3>
+      <p class="doc-prose">
+        Smart batching is <strong>on by default</strong> for every model: a 1 ms
+        window coalesces concurrent requests into shared ONNX runs, bounded by a
+        token budget. With batching on, <code>tokenize_workers</code> defaults to
+        <code>min(4, cores)</code> and tokenization runs concurrently with
+        inference. Set <code>timeout: 0</code> to fall back to the worker pool.
+      </p>
+
+      <h3 class="doc-h3">Caching</h3>
+      <p class="doc-prose">
+        An in-process LRU keyed by <code>model:text</code>, sized in bytes, as a
+        percentage of RAM, or <code>auto</code> (roughly 13% of total RAM).
+        <code>CONFIG SET cache 1GB</code> resizes it live and evicts
+        immediately. Cache statistics appear per model in
+        <code>EMB.INFO</code> and as a section in <code>INFO</code>.
+      </p>
+
+      <h3 class="doc-h3">Persistent cache snapshots</h3>
+      <p class="doc-prose">
+        Snapshots optionally preserve the in-process LRU across restarts, so a
+        cold start warms in seconds instead of re-inferring. They are
+        operationally inspired by Redis RDB but are a small emb-specific
+        streaming format and are <strong>not RDB-compatible</strong>.
+        Persistence is completely dormant while <code>cache_file</code> is
+        empty.
+      </p>
+      <p class="doc-note">
+        <strong>A snapshot contains the original input text and the embedding
+        bytes.</strong> Treat the file as sensitive, and treat it as a warm-start
+        optimisation rather than a durable database — it is disposable, and a
+        restore that does not fit the configured budget is simply skipped.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 05 · SCRIPTS -->
+    <section class="doc-sec" id="scripts" aria-labelledby="scripts-h">
+      <h2 id="scripts-h">05 · Lua scripting</h2>
+
+      <p class="doc-prose">
+        The plain embed command is a fixed pipeline:
+        <code>model(input) → output</code>. A script replaces the edges around
+        that same call with your own code — preprocessing, postprocessing, and
+        the reply itself — so a raw-logits text model can answer as a labelled
+        classifier, or a cross-encoder can answer with a score.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">local</span> model  <span class="t-dim">=</span> <span class="t-str">KEYS[1]</span>          <span class="t-dim">-- texts arrive in KEYS</span>
+<span class="t-cmd">local</span> labels <span class="t-dim">=</span> ARGV             <span class="t-dim">-- arguments arrive in ARGV</span>
+
+<span class="t-cmd">local</span> enc  <span class="t-dim">=</span> emb.tokenize.<span class="t-cmd">encode</span>(model, <span class="t-num">512</span>)
+<span class="t-cmd">local</span> out  <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({
+  input_ids      <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids},  data <span class="t-dim">=</span> enc.ids  },
+  attention_mask <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids},  data <span class="t-dim">=</span> enc.mask },
+})
+<span class="t-cmd">local</span> probs <span class="t-dim">=</span> emb.math.<span class="t-cmd">softmax</span>(out.logits.data)
+<span class="t-cmd">local</span> idx, score <span class="t-dim">=</span> emb.math.<span class="t-cmd">argmax</span>(probs)
+<span class="t-cmd">return</span> { label <span class="t-dim">=</span> labels[idx], confidence <span class="t-dim">=</span> score, scores <span class="t-dim">=</span> probs }</pre>
+        <figcaption class="code__cap">
+          <code>examples/scripts/sst2.lua</code> — a raw-logits text model
+          answering as a classifier.
+        </figcaption>
+      </figure>
+
+      <h3 class="doc-h3">Loading and calling</h3>
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">EMB.SCRIPT LOAD</span> sst2 <span class="t-str">"…sst2.lua…"</span>
+<span class="t-dim"># → "77c1e0c01d3c43e8f07b262869d13c21b93b28f9"</span>
+
+<span class="t-cmd">EMB.EVSHA</span> sst2 <span class="t-str">"77c1e0c0…"</span> <span class="t-num">1</span> <span class="t-str">"this film is great"</span> NEGATIVE POSITIVE
+<span class="t-dim"># → label POSITIVE / confidence 0.99 / scores […]</span></pre>
+        <figcaption class="code__cap">
+          Scripts are cached by SHA1 per model. Load once, call by SHA.
+        </figcaption>
+      </figure>
+
+      <h3 class="doc-h3">The script surface</h3>
+      <p class="doc-prose">
+        Scripts read texts from <code>KEYS</code> and arguments from
+        <code>ARGV</code>. A multi-text call runs <strong>one</strong>
+        evaluation with <code>KEYS</code> holding all texts, and requires one
+        returned value per text.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>emb.run({name = {shape, data|fill, dtype?}, …})</dt>
+        <dd>Named-tensor inference, returning <code>{name = {shape, data}}</code> per output.</dd>
+        <dt>emb.run_batch({item, …})</dt>
+        <dd>One model call for N items, padded into a single session run.</dd>
+        <dt>emb.tokenize.encode(text, max_len)</dt>
+        <dd>The model tokenizer's own pipeline, returning <code>{ids, mask, offsets}</code>.</dd>
+        <dt>emb.tokenize.encode_pair(a, b, max_len)</dt>
+        <dd>BERT-family pair framing, returning <code>{ids, mask, offsets, sep}</code>.</dd>
+        <dt>emb.tokenize.words(text)</dt>
+        <dd>Generic word split following BertPreTokenizer rules, with byte offsets.</dd>
+        <dt>emb.tokenize.pretokenized(words, max_len)</dt>
+        <dd>Encode an already-split word list, returning <code>{ids, word_ids}</code>.</dd>
+        <dt>emb.math.{sigmoid, softmax, argmax}</dt>
+        <dd>Post-processing primitives, vectorized per array.</dd>
+        <dt>emb.math.float32_bytes(vals)</dt>
+        <dd>Pack numbers into one little-endian float32 bulk — <code>unpack('e*')</code> on the client.</dd>
+        <dt>json.{encode, decode}</dt>
+        <dd>Structured replies and parsing.</dd>
+      </dl>
+
+      <p class="doc-prose">
+        An input spec is <code>{shape = {…}, data = {…}, dtype?}</code>, or
+        <code>{shape = {…}, fill = n, dtype?}</code> to build a
+        <strong>constant tensor host-side</strong>: every element equals
+        <code>n</code>, allocated by the server with no Lua data table
+        round-trip. <code>fill</code> and <code>data</code> are mutually
+        exclusive; an explicit <code>dtype</code> (<code>"f32"</code> /
+        <code>"i64"</code>) wins, and a fractional <code>fill</code> infers
+        <code>f32</code>. Replies convert through a fixed grammar: a Lua string
+        becomes a bulk, a list an array, a string-keyed table a flat hash, and
+        <code>{err = "…"}</code> an error reply.
+      </p>
+
+      <p class="doc-note">
+        <strong>Scripts are pure compute.</strong> <code>os</code>,
+        <code>io</code>, <code>require</code> and loaders, coroutines and
+        <code>math.random*</code> are stripped, so identical inputs always
+        produce identical replies.
+      </p>
+
+      <h3 class="doc-h3">The five shipped examples</h3>
+      <dl class="doc-cmds">
+        <dt>sst2.lua</dt>
+        <dd>Text classification with a softmax over logits, returning a label and a confidence.</dd>
+        <dt>qa.lua</dt>
+        <dd>Extractive question answering over a context.</dd>
+        <dt>rerank.lua</dt>
+        <dd>Cross-encoder reranking, returning sigmoid scores.</dd>
+        <dt>gliner2.lua</dt>
+        <dd>Span extraction against supplied labels.</dd>
+        <dt>siglip2.lua</dt>
+        <dd>Text embedding on a fused CLIP export (see the note below).</dd>
+      </dl>
+
+      <p class="doc-note">
+        <strong>siglip2 is the text branch only.</strong> The script runs
+        <code>onnx-community/siglip2-base-patch16-224-ONNX</code>'s fused export,
+        whose image branch is not populated by a text request: it feeds
+        <code>pixel_values</code> as a constant zeroed <code>1×3×224×224</code>
+        tensor and reads <code>text_embeds</code> (768 floats), which depend only
+        on the text tokens. There is therefore <strong>no image input
+        path</strong> in the shipped scripts — building one means supplying the
+        image tensor yourself.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ 06 · OPERATIONS   -->
+    <section class="doc-sec" id="operations" aria-labelledby="operations-h">
+      <h2 id="operations-h">06 · Operations</h2>
+
+      <h3 class="doc-h3">Health checks</h3>
+      <p class="doc-prose">
+        <code>EMB.READY</code> answers <code>+OK</code> when the server can serve
+        traffic, or <code>-ERR</code> with a reason — <code>loading</code>,
+        <code>draining</code>, <code>no models</code>. Point a load balancer's
+        TCP health check at it; the Ruby client exposes the same probe as
+        <code>ready?</code> and <code>ready</code>.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB.READY</span>
+<span class="t-dim"># → OK    (or: -ERR loading / draining / no models)</span></pre>
+        <figcaption class="code__cap">
+          A readiness probe that says why it is not ready, rather than a bare
+          failure.
+        </figcaption>
+      </figure>
+
+      <h3 class="doc-h3">Connection lifecycle</h3>
+      <p class="doc-prose">
+        Three knobs bound the connection and request surface.
+        <code>idle_timeout</code> defaults to <strong>15 minutes</strong> and
+        reaps connections that stop sending commands; pooled clients reconnect
+        transparently, a long-idle interactive session is closed and must
+        reconnect. <code>max_connections</code> refuses connections at the cap,
+        closing the socket immediately without counting it.
+        <code>max_concurrent_requests</code> answers <code>EMB</code> and
+        <code>EMB.MULTI</code> with <code>ERR busy …</code> at the cap, giving
+        consumers backpressure instead of unbounded queueing — while
+        <code>PING</code>, <code>AUTH</code>, <code>EMB.READY</code>,
+        <code>EMB.STATS</code>, <code>EMB.MODELS</code>, <code>EMB.INFO</code>
+        and <code>EMB.HELP</code> still answer, so ops can probe a saturated
+        server. Both caps default to <code>0</code> (unlimited).
+      </p>
+
+      <h3 class="doc-h3">Observability</h3>
+      <p class="doc-prose">
+        <code>EMB.STATS</code> reports uptime, total requests, live
+        <code>connections</code> and the real in-flight
+        <code>active_requests</code> count, a per-model breakdown, process
+        resources (<code>mem</code> as RSS in MB, CPU user and system
+        microseconds, <code>goroutines</code>), the cache counters, and the
+        effective limits — enough to classify an incident as volume,
+        saturation, or churn, and to confirm RSS and goroutines are flat between
+        polls.
+      </p>
+      <p class="doc-prose">
+        <code>INFO [section…]</code> renders Redis-format sections:
+      </p>
+      <dl class="doc-cmds">
+        <dt>server</dt>
+        <dd><code>redis_version</code>, <code>emb_version</code>, <code>uptime_secs</code>, <code>process_id</code>.</dd>
+        <dt>cache</dt>
+        <dd>Hits, misses, hit rate, evictions, entries and byte usage.</dd>
+        <dt>keyspace</dt>
+        <dd>Per-model <code>db0:model=…,keys=…,hits=…,misses=…,hit_rate=…</code>.</dd>
+        <dt>stats</dt>
+        <dd><code>total_requests</code>, <code>total_tokens</code>, <code>total_errors</code>, <code>models_loaded</code>, and network bytes in both directions.</dd>
+        <dt>memory</dt>
+        <dd><code>used_memory_rss_bytes</code> including ONNX and CGo, heap bytes, goroutines, total system memory.</dd>
+        <dt>cpu</dt>
+        <dd>User and system microseconds, <code>gomaxprocs</code>.</dd>
+        <dt>clients</dt>
+        <dd><code>active_requests</code>.</dd>
+      </dl>
+      <p class="doc-prose">
+        <code>CONFIG GET [glob]</code> reads the live registry
+        (<code>CONFIG GET cache*</code>) and <code>CONFIG SET</code> tunes it at
+        runtime, including live cache resizing — <code>CONFIG SET cache 1GB</code>
+        evicts immediately — and swapping the password, which affects new
+        connections only. Read-only parameters such as the listen address, TLS
+        and models are reported by <code>GET</code> and rejected by
+        <code>SET</code>. Both require authentication, matching Redis.
+      </p>
+
+      <h3 class="doc-h3">emb-top</h3>
+      <p class="doc-prose">
+        A live terminal dashboard for a running node. It connects over the Redis
+        protocol and pipelines <code>EMB.MODELS</code>,
+        <code>EMB.INFO &lt;model&gt;</code>, <code>EMB.STATS</code> and
+        <code>MONITOR</code> into a single round trip once per second, and
+        renders aggregate request rate and p95 stream charts, a model-activity
+        heatmap, per-model throughput and p50/p95/p99 latency, cache hit ratio
+        with hit/miss/eviction rates, RSS, CPU, connections and a live event
+        ticker. It supports <code>AUTH</code> and TLS, reconnects automatically,
+        and has a headless <code>-once</code> mode for scripts and CI.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ 07 · BENCHMARKS   -->
+    <section class="doc-sec" id="benchmarks" aria-labelledby="benchmarks-h">
+      <h2 id="benchmarks-h">07 · Benchmarks</h2>
+
+      <p class="doc-prose">
+        Measured with <code>redis-benchmark</code>, which formats positional
+        arguments as RESP commands. Every result uses
+        <code>EMB minilm hello world</code> with
+        <code>Xenova/all-MiniLM-L6-v2</code> (dimension 384) through ONNX
+        Runtime.
+      </p>
+      <dl class="doc-cmds">
+        <dt>hardware</dt>
+        <dd>Apple M4, 24 GB RAM, macOS Sequoia 26.6.2, 10 CPUs (4 performance, 6 efficiency).</dd>
+        <dt>measured</dt>
+        <dd>2026-08-31, re-measured in full on that machine.</dd>
+        <dt>cpu partition</dt>
+        <dd>6 CPUs for the server, 4 for the tooling. The server is bounded by <code>GOMAXPROCS</code> and <code>intra_op_threads</code>, hard-pinned with <code>taskset -c</code> on Linux. The partition is measurement methodology, not a throughput knob.</dd>
+      </dl>
+
+      <h3 class="doc-h3">Multi-threaded — ten ONNX Runtime workers</h3>
+      <dl class="doc-cmds">
+        <dt>1 client, 500 requests</dt>
+        <dd><strong>420.17 req/s</strong>, p50 2.343 ms.</dd>
+        <dt>8 clients, 2000 requests</dt>
+        <dd><strong>1655.63 req/s</strong>, p50 4.807 ms.</dd>
+        <dt>16 clients, 2000 requests</dt>
+        <dd><strong>2010.05 req/s</strong>, p50 7.663 ms.</dd>
+        <dt>64 clients, 2000 requests</dt>
+        <dd><strong>2541.30 req/s</strong>, p50 24.207 ms.</dd>
+      </dl>
+
+      <h3 class="doc-h3">Cache hit — identical texts</h3>
+      <p class="doc-prose">
+        The first request populates the cache; the rest return without ONNX.
+      </p>
+      <dl class="doc-cmds">
+        <dt>1 client, 500 requests</dt>
+        <dd><strong>23,809.52 req/s</strong>, p50 31 µs.</dd>
+        <dt>8 clients, 2000 requests</dt>
+        <dd><strong>133,333.34 req/s</strong>, p50 63 µs.</dd>
+        <dt>16 clients, 2000 requests</dt>
+        <dd><strong>124,999.99 req/s</strong>, p50 119 µs.</dd>
+        <dt>1 client, pipeline 8, 2000 requests</dt>
+        <dd><strong>400,000.00 req/s</strong>, p50 23 µs.</dd>
+      </dl>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-dim"># multi-threaded, 16 clients — the 2,010 req/s figure above</span>
+<span class="t-cmd">redis-benchmark</span> -p 6379 -q -c <span class="t-num">16</span> -P <span class="t-num">1</span> -n <span class="t-num">2000</span> <span class="t-cmd">EMB</span> minilm hello world
+
+<span class="t-dim"># or the harness targets</span>
+<span class="t-cmd">just</span> bench-redis-multi
+<span class="t-cmd">just</span> bench-cache-size size=<span class="t-str">"auto"</span></pre>
+        <figcaption class="code__cap">
+          Every figure above is reproducible from
+          <code>BENCHMARK.md</code>, which also carries the client-side Ruby
+          harness and the Fargate arm64 numbers.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════ 08 · CLIENTS -->
+    <section class="doc-sec" id="clients" aria-labelledby="clients-h">
+      <h2 id="clients-h">08 · Clients</h2>
+
+      <p class="doc-prose">
+        Because the reply is ordinary RESP, any Redis client works unchanged —
+        that is the point of implementing the protocol instead of shipping an
+        SDK. The only decision is whether to decode the bytes yourself or ask for
+        the decimal <code>VALUES</code> envelope.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-dim"># Ruby — RESP2, binary default</span>
+<span class="t-cmd">redis</span> = RedisClient.new(port: <span class="t-num">6379</span>)
+raw = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"</span>, <span class="t-str">"hello world"</span>)
+emb = raw.unpack(<span class="t-str">"e*"</span>)
+
+<span class="t-dim"># Python — RESP3, typed doubles</span>
+<span class="t-cmd">r</span> = redis.Redis(port=<span class="t-num">6379</span>, protocol=<span class="t-num">3</span>)   <span class="t-dim"># sends HELLO 3</span>
+env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"</span>, <span class="t-str">"VALUES"</span>, <span class="t-str">"hello world"</span>)
+<span class="t-dim"># → {b"dtype": b"FLOAT", b"shape": [1, 384], b"values": [-0.1974…]}</span></pre>
+        <figcaption class="code__cap">
+          The same two calls work from <code>redis-cli</code>, Go, or anything
+          else that speaks RESP.
+        </figcaption>
+      </figure>
+
+      <p class="doc-prose">
+        The <code>emb</code> Ruby gem wraps the same protocol with connection
+        pooling, a proxy API, multi-model support and automatic float32
+        decoding, and the <code>emb-server</code> gem ships the precompiled
+        binary. Neither is required — they are conveniences over the wire.
+      </p>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════════ 09 · STATUS -->
+    <section class="doc-sec" id="status" aria-labelledby="status-h">
+      <h2 id="status-h">09 · Status and version</h2>
+
+      <dl class="doc-status">
+        <dt>VERSION</dt>
+        <dd>v<span data-emb-version>0.4.0.pre4</span></dd>
+        <dt>STABILITY</dt>
+        <dd>Pre-1.0. Interfaces may still move between releases; pin the version you deploy.</dd>
+        <dt>LICENCE</dt>
+        <dd>MIT. Copyright © 2026 elcuervo.</dd>
+        <dt>PLATFORMS</dt>
+        <dd>macOS on Apple Silicon; Linux on amd64 and arm64.</dd>
+        <dt>PROTOCOL</dt>
+        <dd>RESP2 by default, RESP3 on request via <code>HELLO 3</code>.</dd>
+        <dt>HOSTED</dt>
+        <dd>There is no hosted or managed offering. emb is self-hosted only.</dd>
+        <dt>SOURCE</dt>
+        <dd><a href="https://github.com/elcuervo/emb" rel="noopener">github.com/elcuervo/emb</a></dd>
+      </dl>
+    </section>
+
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">TEXT IN. FLOATS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+</body>
+</html>

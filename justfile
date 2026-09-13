@@ -360,6 +360,86 @@ version:
 	cd gems/emb && bundle
 	cd gems/emb-server && bundle
 
+# Serve the static product site (website/) at http://localhost:8080
+website port="8080":
+    python3 -m http.server {{port}} --directory website
+
+# One-time browser fetch for the site's checks (needs `nix develop .#website`).
+# agent-browser drives Chrome for Testing; nixpkgs ships the CLI only. Set
+# AGENT_BROWSER_EXECUTABLE_PATH to an existing Chromium to skip the download.
+website-browser:
+    agent-browser install
+    agent-browser doctor --offline --quick
+
+# Full-page screenshot of the served site (`just website` first). Pass
+# viewport="390x844" for a phone-width check; agent-browser takes the viewport
+# as a launch flag, so it belongs on the open.
+#
+# The scroll to the end and back is load-bearing, not decoration: reveals are
+# driven by element position, and a full-page capture otherwise lays the
+# document out without ever moving the trigger line, so everything below the
+# fold is captured at opacity 0. Scrolling once fires the sweep, then the
+# capture is true. See website/CORRECTIONS.md pass 7.
+website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
+    agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
+    @echo "wrote {{out}}"
+
+# Assert that no text ink crosses the viewport at any supported width. Opens
+# website/tools/ink-probe.html, which loads a surface in a same-origin iframe at
+# 24 widths and reports PASS/FAIL. Needs a served site: `just website` first.
+#
+# Sweeps the landing by default. The second argument selects another surface,
+# positionally (just 1.54 reads `<name>=<value>` as the argument itself, so
+# named args do not work here):
+#
+#     just website-ink                          # the landing
+#     just website-ink http://localhost:8080 docs   # the documentation surface
+#     just website-ink http://localhost:8080 404    # the not-found page
+#
+# The wait is not optional: the probe measures all 24 widths asynchronously, and
+# evaluating before `window.__inkProbe` exists reports "RUNNING…". The assertion
+# is `window.__inkProbe.assert()`, defined in the probe, and it throws on FAIL so
+# this recipe exits non-zero — reading the verdict text alone would exit 0 on a
+# failing page.
+#
+# The `?cb=` on the probe and inside the probe's own iframe are both load-bearing:
+# `python3 -m http.server` sends no `Cache-Control`, so Chrome caches heuristically
+# and a second run can measure the previous probe or the previous landing. Both
+# used a constant bust once, which reported failures at 390px and 320px against
+# HTML that had already changed. See the caching trap in `website/README.md`.
+#
+# This is the check that `scrollWidth === clientWidth` cannot replace: the page
+# frame applies `overflow-x: clip`, which removes clipped content from the
+# scrollable region, so the scroll-width comparison reports success even while
+# glyphs are being sliced. Twelve correction passes used it and missed a real
+# defect at the design's own 1086px reference frame.
+website-ink url="http://localhost:8080" target="":
+    agent-browser open "{{url}}/tools/ink-probe.html?cb=$(date +%s){{ if target != "" { "&target=" + target } else { "" } }}"
+    agent-browser wait --fn "window.__inkProbe" --timeout 120000
+    agent-browser eval "window.__inkProbe.assert()"
+
+# Assert that the set of files this folder publishes is the set we mean.
+#
+# `website/` is edited and `website/` is published, so `.assetsignore` is the
+# only thing between an authoring file and a public URL -- which makes this
+# check load-bearing rather than a convenience. It fails both ways: a file that
+# would ship without being expected, and an expected file that is absent or
+# excluded. Do not delete it while tidying up; without it the boundary is a
+# comment. See `website/README.md`.
+website-published:
+    python3 website/tools/published-tree.py
+
+# Write VERSION into every element carrying `data-emb-version` on both surfaces,
+# or (`--check`) fail if any stamped value has drifted. Run after bumping VERSION.
+website-version:
+    python3 website/tools/stamp-version.py
+
+# Verify the stamped versions match VERSION. This is what a CI job or pre-commit
+# hook runs; the emb-top capture once shipped `v0.4.0` against a `0.4.0.pre4`
+# VERSION, which is the drift this exists to stop.
+website-version-check:
+    python3 website/tools/stamp-version.py --check
+
 # Clean build artifacts
 clean:
     rm -rf bin/ dist/
