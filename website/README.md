@@ -8,12 +8,19 @@ corrections that took the page to the reference poster live in
 
 ```
 website/
-├── index.html              single page: masthead → hero (prose + pipeline)
+├── index.html              the landing page: masthead → hero (prose + pipeline)
 │                           → protocol → scripts → operations → terrain
 │                           → footer
+├── docs/
+│   └── index.html          the reference surface: install → commands → replies
+│                           → configuration → scripting → operations
+│                           → benchmarks → clients → status
 ├── assets/
-│   ├── css/styles.css      tokens → primitives → sections → responsive
+│   ├── css/styles.css      the shared world: tokens → primitives → sections
+│   │                       → responsive (both surfaces link it)
+│   ├── css/docs.css        documentation-only rules; declares no token
 │   ├── js/main.js          entrance sequencing, reveals, pipeline, route
+│   │                       (the landing only — docs ships no JavaScript)
 │   ├── fonts/              self-hosted Archivo, Inter and JetBrains Mono
 │   └── img/
 │       ├── terrain-matte.png  the cut-out the page ships (2172×724, alpha)
@@ -25,9 +32,42 @@ website/
 ├── tools/
 │   ├── gen-isometric.py    regenerates the pipeline SVG
 │   ├── gen-terrain-matte.py derives the terrain cut-out from terrain-v2.png
-│   └── png_lib.py          dependency-free PNG reader/writer for the above
+│   ├── png_lib.py          dependency-free PNG reader/writer for the above
+│   ├── ink-probe.html      asserts no text ink crosses the viewport, 24 widths
+│   └── stamp-version.py    writes VERSION into every `data-emb-version` element
 └── README.md
 ```
+
+## Two surfaces, two modes
+
+The landing is **Persuade**: a poster whose job is to earn a click. `/docs` is
+**Read**: the hosted form of the reference that `../README.md` already carries.
+`../README.md` stays the source of truth for both.
+
+The landing therefore keeps exactly four things beyond its composition, each
+one a decision a reader makes before clicking:
+
+| Keeps | Where |
+|---|---|
+| one copy-paste install line | `.hero__start`, under the actions |
+| the release, licence and builds | the same ledger |
+| one measured number and how to reproduce it | the same ledger, from `BENCHMARK.md` |
+| one REPL proof — `redis-cli EMB minilm "hello world"` and its bytes | the protocol block |
+
+Everything else lives on `/docs` only: the command tables, the configuration
+block, the reply-format prose beyond the one line that carries the argument,
+the `emb-top` figures, and every version string. The landing's calls to action
+and its `Docs`/`Models` navigation entries all resolve to `/docs`; the only
+reference link that leaves the site is the benchmark's `reproduce`.
+
+**Why `/docs` links `styles.css` rather than a shared subset.** The landing's
+geometry is selector-scoped, not global — the only element-level rules in the
+sheet are `:root`, the `*` reset, `html`, `body` and `body::after`, and every
+`var(--fold)` use sits inside `.spine`, `.block__body`, `.topviz`,
+`.terrain__art` or `.note`. A page with none of that markup inherits the world
+and none of the composition, so no file had to be split. The cost is that
+`/docs` downloads the hero's unused CSS (about 30 KB, far less gzipped); the
+benefit is that the two surfaces cannot desynchronise.
 
 ## Render it
 
@@ -52,7 +92,47 @@ Opening `index.html` over `file://` works too — nothing here needs a server.
 just website-browser                  # once: fetch Chrome for Testing
 just website-shot                     # full-page screenshot of :8080
 just website-shot http://localhost:8080 /tmp/phone.png 390x844
+just website-version-check            # stamped versions still match VERSION
+just website-ink                      # no text ink crosses the viewport
 ```
+
+### The ink check
+
+`just website-ink` opens `tools/ink-probe.html`, which loads the landing in a
+same-origin iframe at 24 widths — every supported width plus the measured
+defect bands, the 1086px reference frame, the breakpoints, and the shell-cap
+handoff — and fails if any text run's ink straddles a viewport edge.
+
+The check exists because the obvious one cannot work. The page frame applies
+`overflow-x: clip`, which creates no scroll container and removes the clipped
+content from the scrollable overflow region, so
+`documentElement.scrollWidth === clientWidth` stays **true whether or not glyphs
+are being cut**. Twelve correction passes used that comparison and missed a real
+defect: the stage notes sat 10px past the sheet edge, so three of the four
+descriptions lost their last character between 1070px and 1150px, including at
+the design's own 1086px reference frame. Only rects — or pixels — can see it.
+
+The probe tests only ink that **straddles** an edge. A run parked entirely
+off-screen (the focus-revealed skip link) and a run clipped to an inner box (the
+`sr-only` pattern) are not this defect, and the probe skips both.
+
+Two other measurement traps worth knowing before trusting a number:
+
+- **Element-scoped screenshots lie about filtered SVG.** `screenshot .pipeline__stack`
+  at a 900px-tall viewport paints only the first of the four plates and leaves the
+  rest blank, because Chrome's `captureBeyondViewport` does not paint
+  SVG-filtered or masked content outside the viewport. The diagram is correct; the
+  capture is not. Use a tall viewport, or measure the DOM.
+- **Stylesheets cache silently.** `index.html?cb=N` busts the HTML but not the CSS,
+  and a reload may serve the old sheet. Verify CSS changes in a fresh browser
+  session, or the numbers describe the previous build.
+
+### The version check
+
+`just website-version` writes the repo's `VERSION` into every element carrying
+`data-emb-version`; `just website-version-check` fails when one has drifted. The
+`emb-top` capture shipped a hand-typed `v0.4.0` against a `0.4.0.pre4` VERSION,
+which is the drift this exists to stop. Run the stamper after bumping `VERSION`.
 
 The site's dependency list is `websiteDeps` in [`../flake.nix`](../flake.nix) —
 separate from the server's, and browser tooling lives there rather than in the
@@ -89,11 +169,20 @@ the masthead still fits at 320px.
 massif, and it is organised around one line rather than stacked as bands.
 
 The hero is *one* two-column spread: the left column carries the claim, the
-sub, the actions and the feature list; the right column carries the pipeline.
-At 1086px wide that hero spread measures 1464px tall — a 1 : 1.348 frame
-against the poster's 1 : 1.333 — and the poster's ratio governs the hero
-alone. The document is no longer one sheet and its total height is not a
-constraint.
+sub, the actions, the kept-facts block and the feature list; the right column
+carries the pipeline. At 1086px wide that hero spread now measures **1504px
+tall — a 1 : 1.385 frame** against the poster's 1 : 1.333, up from 1464px
+(1 : 1.348) before the kept-facts block added its 187px. The poster's ratio
+governs the hero alone; the document is not one sheet and its total height is
+not a constraint (4445px at 1086).
+
+Because the wordmark is ~500px tall and the poster's ratio governs the spread,
+**nothing in the hero's action area is above the fold on a desktop viewport** —
+the CTA's own bottom edge sits at y 1205 in a 900px-tall 1440 viewport, and at
+y 931 in a 900px-tall 1086 viewport. The kept-facts block is therefore placed
+*adjacent* to the calls to action rather than pretending to a fold it cannot
+reach: install line, release ledger and measured number are one ruled row
+directly below the buttons.
 
 Below the hero sit **three blocks**, each a movement rather than a section:
 

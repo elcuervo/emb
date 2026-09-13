@@ -2,6 +2,12 @@
 
 A simple yet powerful text embeddings generator.
 
+> This README is the source of truth for every command, reply shape,
+> configuration key and number below, and it is the form the docs reference is
+> built from. If you are reading this on the website rather than in the
+> repository, the same material is at [`website/docs/index.html`](website/docs/index.html)
+> — the two are kept in step by hand, so this file wins any disagreement.
+
 [![GitHub Release](https://img.shields.io/github/v/release/elcuervo/emb?logo=github&color=blue)](https://github.com/elcuervo/emb/releases)
 [![Docker Hub](https://img.shields.io/docker/v/elcuervo/emb?logo=docker&color=blue&label=docker)](https://hub.docker.com/r/elcuervo/emb)
 [![emb gem](https://img.shields.io/gem/v/emb?logo=rubygems&color=red&label=emb)](https://rubygems.org/gems/emb)

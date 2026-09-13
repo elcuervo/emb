@@ -1,0 +1,188 @@
+/* ══════════════════════════════════════════════════════════════════════
+   emb — documentation surface
+
+   Page-specific rules only. This file declares NO custom properties: every
+   value it needs already exists in styles.css, and anything both surfaces
+   share belongs there rather than here. It also carries no signal axis and
+   no spine — that geometry is derived from the landing's hero composition,
+   which this page does not have.
+
+   Layered on top of styles.css, which supplies the world: tokens, the base
+   resets, the paper grain, the type floors, the contrast pairs, `.shell`,
+   `.rule-head`, `.facts`, `.code`, `.footer` and the print block.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── masthead: the landing's, with a rule it can actually see ────────── */
+.docs-masthead{ border-bottom-color: var(--rule); }
+.docs-masthead .brand{ font-size: clamp(20px, 1.9vw, 24px); }
+/* the landing's `.masthead__inner` is a four-column grid sized for its own
+   children; this page has two, so it lays them out as a row. */
+.docs-masthead__inner{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(14px, 2vw, 32px);
+  min-height: clamp(56px, 5.2vw, 76px);
+}
+
+/* ── page head ───────────────────────────────────────────────────────── */
+.doc-head{ margin-top: clamp(36px, 4.4vw, 72px); }
+.doc-head h1{
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(30px, 4.6vw, 58px);
+  line-height: 1.04;
+  letter-spacing: -.02em;
+}
+.doc-lede{
+  margin-top: clamp(14px, 1.5vw, 22px);
+  max-width: 62ch;
+  font-size: clamp(15px, 1.15vw, 17px);
+  color: var(--muted);
+}
+.doc-lede a{ color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── contents ────────────────────────────────────────────────────────── */
+.doc-toc{ margin-top: clamp(28px, 3vw, 46px); padding-top: clamp(14px, 1.5vw, 20px); border-top: 1.5px solid var(--fg); }
+.doc-toc h2{
+  font-family: var(--mono);
+  font-size: clamp(12px, .95vw, 13px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--muted);
+}
+.doc-toc ol{
+  margin-top: clamp(12px, 1.4vw, 20px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px clamp(20px, 3vw, 48px);
+}
+.doc-toc a{
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0;
+  padding-top: clamp(6px, .7vw, 9px);
+  padding-bottom: clamp(6px, .7vw, 9px);
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: clamp(14px, 1.05vw, 15px);
+}
+.doc-toc a:hover{ color: var(--accent-ink); }
+.doc-toc__n{ font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+
+/* ── sections ────────────────────────────────────────────────────────── */
+.doc-sec{ margin-top: clamp(52px, 6vw, 104px); scroll-margin-top: clamp(64px, 6vw, 96px); }
+.doc-sec > h2{
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(20px, 2.4vw, 32px);
+  line-height: 1.1;
+  letter-spacing: -.015em;
+  padding-bottom: clamp(10px, 1.1vw, 16px);
+  border-bottom: 1.5px solid var(--fg);
+}
+.doc-sec > * + *{ margin-top: clamp(16px, 1.7vw, 26px); }
+
+.doc-prose{ max-width: 68ch; font-size: clamp(15px, 1.1vw, 16px); }
+.doc-prose + .doc-prose{ margin-top: clamp(12px, 1.2vw, 18px); }
+.doc-prose code, .doc-note code, .doc-cmds code{
+  font-family: var(--mono);
+  /* `.92em` of a parent already sitting on the 12px floor computes 11.04px -- 
+     eight inline keys were under the committed floor before this. The floor is
+     written as a floor, not a ratio. */
+  font-size: max(.92em, 12px);
+  color: var(--fg);
+  /* Key lists and identifiers have no break opportunities, and an ellipsis is
+     not one either: `db0:model=…,keys=…,hits=…` ran 64.5px past a 320px
+     viewport before this. Inline code may break anywhere. */
+  overflow-wrap: anywhere;
+}
+.doc-prose a{ color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+
+.doc-h3{
+  margin-top: clamp(28px, 3vw, 46px);
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(16px, 1.4vw, 19px);
+  letter-spacing: -.005em;
+}
+.doc-h3 + *{ margin-top: clamp(10px, 1.1vw, 16px); }
+
+/* ── command / key reference ─────────────────────────────────────────── */
+.doc-cmds{
+  display: grid;
+  grid-template-columns: minmax(0, 22ch) minmax(0, 1fr);
+  column-gap: clamp(16px, 2.4vw, 44px);
+  row-gap: 0;
+  border-top: 1.5px solid var(--fg);
+}
+.doc-cmds dt{
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  font-weight: 500;
+  letter-spacing: .02em;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  overflow-wrap: anywhere;
+}
+.doc-cmds dd{
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: clamp(14px, 1.05vw, 15px);
+  min-width: 0;
+}
+.doc-cmds dd .mono, .doc-cmds dd code{ font-family: var(--mono); font-size: .9em; }
+
+/* ── a quiet aside: the honesty notes and status lines ───────────────── */
+.doc-note{
+  border-top: 1px solid var(--rule);
+  padding-top: clamp(10px, 1vw, 15px);
+  max-width: 68ch;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.6;
+  color: var(--muted);
+}
+.doc-note strong{ color: var(--fg); font-weight: 700; }
+
+.doc-status{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(14px, 1.6vw, 28px);
+  row-gap: clamp(8px, .9vw, 13px);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.5;
+  max-width: 68ch;
+}
+.doc-status dt{ color: var(--muted); letter-spacing: .05em; }
+.doc-status dd{ min-width: 0; overflow-wrap: anywhere; }
+
+/* code specimens reuse the landing's `.code` atom unchanged; the only
+   page-local need is that a specimen inside a docs column may be wide. */
+.doc-sec .code{ max-width: 96ch; }
+
+/* ── foot ────────────────────────────────────────────────────────────── */
+.doc-foot{ margin-top: clamp(56px, 6vw, 110px); }
+
+/* ── responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 1000px){
+  .doc-cmds{ grid-template-columns: minmax(0, 1fr); }
+  .doc-cmds dt{ border-bottom: none; padding-bottom: 0; }
+  .doc-cmds dd{ padding-top: 4px; }
+  /* the committed mobile floor */
+  .doc-prose, .doc-cmds dd{ font-size: 15px; }
+  .doc-prose code, .doc-note, .doc-status, .doc-cmds dt{ font-size: 14px; }
+  .doc-prose code, .doc-note code, .doc-cmds code{ font-size: max(.92em, 14px); }
+  .doc-cmds dd .mono, .doc-cmds dd code{ font-size: max(.9em, 14px); }
+  .doc-toc__n{ font-size: 14px; }
+  .doc-toc h2{ font-size: 14px; }
+  .doc-lede{ font-size: 16px; }
+}
+
+@media (max-width: 640px){
+  .doc-toc ol{ grid-template-columns: minmax(0, 1fr); }
+  .doc-sec{ scroll-margin-top: 88px; }
+}

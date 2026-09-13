@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emb — text ink probe</title>
+<!--
+  Text-ink probe for the emb site.
+
+  Loads ../index.html in a hidden same-origin iframe at each supported width and
+  asserts the product-site requirement "Text ink stays inside the sheet at every
+  width": the rightmost and leftmost ink rect of every text run must lie inside
+  the viewport.
+
+  Why this exists: the page frame applies `overflow-x: clip`. That creates no
+  scroll container and removes the clipped content from the scrollable overflow
+  region, so `documentElement.scrollWidth === clientWidth` stays true whether or
+  not glyphs are being cut. Passes 8-11 used that comparison and were
+  structurally blind to the defect this probe caught. Only rects (or pixels) can
+  see it.
+
+  Usage: serve the site (`just website`), then open
+        http://localhost:8080/tools/ink-probe.html
+  It needs http:// — Chrome gives `file://` documents opaque origins, so
+  `iframe.contentDocument` is unreachable and the probe cannot run from disk.
+
+  Output: a PASS/FAIL verdict, the failing widths, and the offending text.
+-->
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0 auto; max-width: 60rem; padding: 2rem 1.25rem 4rem;
+         font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+         color: #0b0b0b; background: #f3f0e8; }
+  h1 { font-size: 20px; letter-spacing: .02em; }
+  #verdict { font-size: 16px; font-weight: 700; padding: .6em .8em;
+             border: 2px solid currentColor; display: inline-block; }
+  .PASS { color: #14532d; }
+  .FAIL { color: #8a1c00; }
+  .RUN  { color: #444; }
+  table { border-collapse: collapse; margin-top: 1em; width: 100%; }
+  th, td { border-bottom: 1px solid #c9c6bd; padding: .3em .5em; text-align: left;
+           vertical-align: top; font-size: 13px; }
+  th { border-bottom-color: #0b0b0b; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  pre { white-space: pre-wrap; word-break: break-word; }
+  .muted { color: #5b5952; }
+  #frames { position: fixed; left: -20000px; top: 0; visibility: hidden; }
+</style>
+</head>
+<body>
+
+<h1>emb — text ink probe</h1>
+
+<p>Loads <code>../index.html</code> at each supported width and asserts that no
+   text run's ink crosses the viewport edge. <span class="muted">Sweep also
+   covers the breakpoint edges, the 1086px reference frame, and the shell-cap
+   handoff. Add <code>?target=docs</code> to sweep the documentation surface
+   instead.</span></p>
+
+<p><span id="verdict" class="RUN">RUNNING…</span></p>
+
+<table id="results" hidden>
+  <thead><tr><th>width</th><th>violations</th><th>scrollW</th><th>docH</th><th>verdict</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2 id="detail-h" hidden>Offending text</h2>
+<pre id="detail"></pre>
+
+<div id="frames" aria-hidden="true"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // Every supported width, plus the two measured band edges (1070/1150 and
+  // 1300/1340), the 1086 reference frame, the 1001/640 breakpoints, and the
+  // 1720/1740 shell-cap handoff.
+  const WIDTHS = [
+    1920, 1740, 1721, 1720, 1440, 1340, 1300, 1200, 1151, 1150,
+    1100, 1086, 1071, 1070, 1024, 1001, 1000, 900, 834, 700, 641, 640, 390, 320,
+  ];
+
+  const TOLERANCE = 0.5; // sub-pixel rounding only
+
+  // Which surface to sweep. Defaults to the landing; pass ?target=docs to
+  // check the documentation surface too, e.g. ink-probe.html?target=docs
+  const PARAM = new URLSearchParams(location.search).get('target');
+  const TARGET = PARAM === 'docs' ? '../docs/index.html' : '../index.html';
+
+  const verdictEl = document.getElementById('verdict');
+  const resultsEl = document.getElementById('results');
+  const tbody = resultsEl.querySelector('tbody');
+  const detailEl = document.getElementById('detail');
+  const frameHost = document.getElementById('frames');
+
+  // A text run is exempt when an ancestor can scroll horizontally to reveal it:
+  // that is an affordance the reader can act on, not a clip.
+  function inScrollContainer(node, win) {
+    let el = node.parentElement;
+    while (el && el !== el.ownerDocument.body) {
+      const ox = win.getComputedStyle(el).overflowX;
+      if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 1) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
+
+  // A run clipped to a box that ends inside the viewport is hidden on purpose
+  // (the sr-only pattern, a 1px clip box), not sliced by the page frame. The
+  // frame's own clip resolves to the viewport edge, so it never exempts a run.
+  function clippedToInnerBox(node, rect, vw, win) {
+    let el = node.parentElement;
+    while (el && el !== el.ownerDocument.body) {
+      const cs = win.getComputedStyle(el);
+      if (cs.overflowX === 'hidden' || cs.overflowX === 'clip') {
+        const b = el.getBoundingClientRect();
+        const clipsRight = b.right < rect.right - TOLERANCE;
+        const clipsLeft = b.left > rect.left + TOLERANCE;
+        if (clipsRight && b.right <= vw - 2) return true;
+        if (clipsLeft && b.left >= 2) return true;
+      }
+      el = el.parentElement;
+    }
+    return false;
+  }
+
+  function probe(doc, win) {
+    const vw = doc.documentElement.clientWidth;
+    const violations = [];
+    const scrollers = [];
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue || !node.nodeValue.trim()) continue;
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      const rects = range.getClientRects();
+      for (const r of rects) {
+        if (r.width < 0.5) continue;
+
+        // Only ink that STRADDLES the viewport edge is sliced by the frame.
+        // A run parked entirely off-screen (a focus-revealed skip link) or one
+        // clipped to an inner box (sr-only) is not this defect.
+        const overRight = r.right - vw;
+        const overLeft = -r.left;
+        const straddlesRight = r.left < vw - TOLERANCE && overRight > TOLERANCE;
+        const straddlesLeft = r.right > TOLERANCE && overLeft > TOLERANCE;
+        if (!straddlesRight && !straddlesLeft) continue;
+        if (clippedToInnerBox(node, r, vw, win)) continue;
+        const owner = node.parentElement;
+        const label = (owner.getAttribute && owner.getAttribute('class'))
+          ? owner.tagName.toLowerCase() + '.' + owner.getAttribute('class').split(' ')[0]
+          : owner.tagName.toLowerCase();
+        const row = {
+          where: label,
+          width: vw,
+          text: node.nodeValue.trim().slice(0, 48),
+          right: +r.right.toFixed(2),
+          over: +Math.max(overRight, overLeft).toFixed(2),
+        };
+        (inScrollContainer(node, win) ? scrollers : violations).push(row);
+        break;
+      }
+    }
+    return { violations, scrollers };
+  }
+
+  async function run() {
+    const all = [];
+    for (const width of WIDTHS) {
+      const frame = document.createElement('iframe');
+      frame.style.cssText = 'width:' + width + 'px;height:1400px;border:0';
+      frame.src = TARGET + '?cb=ink-probe';
+      frameHost.appendChild(frame);
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        frame.addEventListener('load', finish);
+        setTimeout(finish, 5000);
+      });
+      const doc = frame.contentDocument;
+      const win = frame.contentWindow;
+      try { await doc.fonts.ready; } catch (e) {}
+      await new Promise((r) => win.requestAnimationFrame(() => win.requestAnimationFrame(r)));
+
+      const { violations, scrollers } = probe(doc, win);
+      const docEl = doc.documentElement;
+      all.push({
+        width,
+        violations,
+        scrollers,
+        scrollW: docEl.scrollWidth,
+        clientW: docEl.clientWidth,
+        docH: docEl.scrollHeight,
+      });
+      frame.remove();
+    }
+
+    const failed = all.filter((r) => r.violations.length > 0);
+    const rows = all.map((r) => {
+      const cell = r.violations.length
+        ? r.violations.map((v) => v.where + ' +' + v.over + 'px').join(', ')
+        : '<span class="muted">none</span>';
+      const scrollNote = r.scrollW === r.clientW ? '' : ' <span class="muted">(scrollW ' + r.scrollW + ')</span>';
+      return '<tr><td class="n">' + r.width + '</td><td>' + cell + '</td><td class="n">'
+        + r.scrollW + scrollNote + '</td><td class="n">' + r.docH + '</td><td>'
+        + (r.violations.length ? '<span class="FAIL">FAIL</span>' : 'pass') + '</td></tr>';
+    }).join('');
+
+    tbody.innerHTML = rows;
+    resultsEl.hidden = false;
+
+    const details = [];
+    for (const r of failed) {
+      for (const v of r.violations) {
+        details.push(r.width + 'px  ' + v.where + '  ink ' + v.right + ' (' + v.over
+          + 'px past)  "' + v.text + '"');
+      }
+    }
+    const scrollerNote = all.some((r) => r.scrollers.length)
+      ? '\n\nIn a horizontally scrollable ancestor (not a clip):\n' + all.flatMap((r) =>
+          r.scrollers.map((s) => r.width + 'px  ' + s.where)).join('\n')
+      : '';
+
+    if (failed.length) {
+      verdictEl.className = 'FAIL';
+      verdictEl.textContent = 'FAIL — text ink outside the viewport at '
+        + failed.length + ' of ' + WIDTHS.length + ' widths';
+      detailEl.textContent = details.join('\n') + scrollerNote;
+      document.getElementById('detail-h').hidden = false;
+    } else {
+      verdictEl.className = 'PASS';
+      verdictEl.textContent = 'PASS — no text ink outside the viewport at any of '
+        + WIDTHS.length + ' widths';
+      detailEl.textContent = scrollerNote.trim();
+    }
+
+    window.__inkProbe = { target: TARGET, widths: WIDTHS, results: all, failed: failed.map((r) => r.width) };
+  }
+
+  run().catch((err) => {
+    verdictEl.className = 'FAIL';
+    verdictEl.textContent = 'ERROR — ' + err.message
+      + ' (the probe needs http://, because file:// documents have opaque origins)';
+  });
+})();
+</script>
+</body>
+</html>

@@ -22,7 +22,7 @@
     return n < min ? min : n > max ? max : n;
   }
 
-  ready(function () {
+  function boot() {
     var pipeline = document.querySelector('.pipeline');
     var menu = document.querySelector('.mobile-nav');
     if (menu) {
@@ -143,8 +143,20 @@
       var name = note.getAttribute('data-note');
       var slab = document.querySelector('.slab[data-slab="' + name + '"]');
       if (!slab) return;
-      var on = function () { note.classList.add('is-hot'); slab.classList.add('is-hot'); };
-      var off = function () { note.classList.remove('is-hot'); slab.classList.remove('is-hot'); };
+      /* The mask band that hides the line behind this plate. It has to travel
+         with the plate: leaving it behind shears the line off below a lifted
+         plate, which reads as a cut rather than as depth. */
+      var hole = document.querySelector('.sig-hole[data-hole="' + name + '"]');
+      var on = function () {
+        note.classList.add('is-hot');
+        slab.classList.add('is-hot');
+        if (hole) hole.classList.add('is-hot');
+      };
+      var off = function () {
+        note.classList.remove('is-hot');
+        slab.classList.remove('is-hot');
+        if (hole) hole.classList.remove('is-hot');
+      };
       [note, slab].forEach(function (el) {
         el.addEventListener('mouseenter', on);
         el.addEventListener('mouseleave', off);
@@ -460,6 +472,21 @@
         out.setAttribute('aria-live', 'polite');
       }
     }
+  }
 
+  /* The enhancement class is set INLINE in the document, before this file
+     loads, and the styles that hold the four plates, the signal spine and
+     every `[data-reveal]` section at `opacity: 0` are all gated on it. That
+     makes this file and `html.js` a matched pair with no failure path: if the
+     script parses but throws before it finishes booting, the hero is
+     permanently blank and nothing on the page can recover it. Hand the page
+     back to its no-JS state instead, which is complete by design. */
+  ready(function () {
+    try {
+      boot();
+    } catch (err) {
+      doc.classList.remove('js');
+      throw err;
+    }
   });
 })();

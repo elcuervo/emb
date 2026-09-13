@@ -371,6 +371,29 @@ website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
     agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
     @echo "wrote {{out}}"
 
+# Assert that no text ink crosses the viewport at any supported width. Opens
+# website/tools/ink-probe.html, which loads the landing in a same-origin iframe
+# at 24 widths and reports PASS/FAIL. Needs a served site: `just website` first.
+#
+# This is the check that `scrollWidth === clientWidth` cannot replace: the page
+# frame applies `overflow-x: clip`, which removes clipped content from the
+# scrollable region, so the scroll-width comparison reports success even while
+# glyphs are being sliced. Twelve correction passes used it and missed a real
+# defect at the design's own 1086px reference frame.
+website-ink url="http://localhost:8080":
+    agent-browser open {{url}}/tools/ink-probe.html && agent-browser eval --stdin
+
+# Write VERSION into every element carrying `data-emb-version` on both surfaces,
+# or (`--check`) fail if any stamped value has drifted. Run after bumping VERSION.
+website-version:
+    python3 website/tools/stamp-version.py
+
+# Verify the stamped versions match VERSION. This is what a CI job or pre-commit
+# hook runs; the emb-top capture once shipped `v0.4.0` against a `0.4.0.pre4`
+# VERSION, which is the drift this exists to stop.
+website-version-check:
+    python3 website/tools/stamp-version.py --check
+
 # Clean build artifacts
 clean:
     rm -rf bin/ dist/

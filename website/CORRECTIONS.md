@@ -1433,3 +1433,283 @@ described them as shipped — including the 58%/14% staging and the below-1000px
 drop. Neither is a visual change; both now state the route is the trunk alone
 and that the two slogans are the only margin labels left. The visual world is
 untouched.
+
+---
+
+## Pass 12 — ink measured on glyphs, a blank-page failure path, and the docs surface
+
+This pass is the first one measured in a browser rather than argued from the
+stylesheet, and the first with a check that can fail. It found a defect that the
+previous twelve passes were **structurally unable to see**, then built the
+surface the poster was always missing.
+
+**1. The stage notes were being sliced, and every earlier check said they were
+fine.** The four notes were held at `right: -10px`, so each note's *box* ended
+10px past the sheet edge — and the sheet edge is the viewport edge. Measured on
+text rects with `Range.getClientRects()`, three of the four descriptions ran past
+the viewport at **1070–1150px** (worst **+8.89px** at 1070) and SERVE at
+**1300–1340px**. At the design's own **1086px reference frame** the column's ink
+ended at x **1091.84 — 5.84px past the edge**: the comma in "Raw text,
+documents,", the period in "optimized execution." and the `)` in "vectors (e.g.
+384D)." were being cut. A 4× crop of the pixels confirms it.
+
+Why twelve passes missed it: every one asserted
+`documentElement.scrollWidth === clientWidth`. The frame applies
+`overflow-x: clip`, which creates no scroll container and removes the clipped
+content from the scrollable overflow region — so that comparison is **true
+whether or not glyphs are being cut**. It is not a weak check; it is blind.
+
+The fix is two declarations. `right: 0` ends the bleed, and the number column
+gives up exactly the 10px the box no longer bleeds (`38px` → `28px`), so the
+description's measure is unchanged at **148.2px** and the unchanged descriptions
+keep their line count (INFERENCE and EMBEDDINGS 2 lines, SERVE 4). The leader is
+anchored to the note's **left** edge, so it did not move at all. INPUT reads
+three lines instead of two only because its copy changed (finding 4).
+
+**2. The assertion, and the two refinements it needed.** The check is now a
+checked-in tool, `website/tools/ink-probe.html`, which loads the page in a
+same-origin iframe at **24 widths** — every supported width plus the measured
+band edges, the 1086 frame, the breakpoints and the shell-cap handoff — and fails
+when any text run's ink **straddles** a viewport edge. Red before, green after:
+**FAIL at 8 of 24 widths → PASS at 24 of 24**, zero offenders, zero scroll-width
+mismatches.
+
+Two refinements were required and both are recorded because the first version was
+wrong. It flagged every width: it counted a focus-revealed skip link parked at
+`left: -9857px` and `sr-only` text. The rule is now (a) only ink that
+**straddles** an edge is this defect — a run parked entirely off-screen is not —
+and (b) ink clipped to a box that ends **inside** the viewport is the deliberate
+`sr-only` pattern, not a frame clip. The frame's own clip resolves to the
+viewport edge, so it never exempts a run.
+
+**3. A `main.js` failure blanked the page, and the first guard did not cover it.**
+`html.js` is set inline in the document, before `main.js` loads, and the styles
+that hide the four plates, the signal spine and every `[data-reveal]` section are
+gated on it. A script failure therefore left the hero permanently empty, with
+nothing on the page able to recover.
+
+The first attempt — an `onerror` attribute on the script tag plus a `try/catch`
+around `boot()` — covered a 404 and a throw *inside* boot, and **not** a throw
+while the file evaluates. A fixture that throws at module scope still produced a
+blank page: 4 slabs at `opacity: 0`, spine `stroke-dashoffset: 1`, **14/14**
+reveals hidden. The guard now lives at the bootstrap, where the class is set: an
+inline capture-phase `error` listener removes `js` unless the page reports
+`is-ready`. Verified against three fixtures (missing file, top-level throw,
+post-load throw), each leaving `htmlClass: ""`, slabs at `1`, spine at `0`, and
+0 hidden reveals.
+
+The red state needed `set media reduced-motion:no-preference` to observe:
+under `prefers-reduced-motion: reduce` the same elements are set to their end
+state, so the blank page is invisible — and the test browser defaults to reduce.
+Normal path re-verified: `js is-ready`, `is-live` when the pipeline scrolls in
+(4 slabs at `1`), and 0/14 hidden reveals with the route fully drawn after a
+scroll-through.
+
+**4. Claims the repository does not support, removed rather than relocated.**
+`images` is gone from the hero sub and from the `01 INPUT` note. The only
+image-named artifact in the repository, `examples/scripts/siglip2.lua`, says in
+its own header that the image branch "is not present in text requests, so
+`pixel_values` is fed as zeros" — so the claim had no input path behind it.
+"Production ready." is now "Pre-1.0, MIT licensed." on a `0.4.0.pre4` product
+whose own `PRODUCT.md` says interfaces may still move.
+
+The `emb-top` capture's `v0.4.0` was a hand-typed copy of `VERSION` that had
+already drifted. It is now stamped from `VERSION` by a new tool,
+`website/tools/stamp-version.py`, whose `--check` mode exits non-zero on drift;
+two elements are stamped and `grep` finds no other version string in `website/`.
+The tool's first regex was **wrong and shipped a mangled line** before it was
+caught: a permissive tag match let an outer `<span class="tf">` be treated as
+the marker's element, so it rewrote the version and deleted the following `·`.
+It is now `[^<>]*` for the open tag with a lookahead after the attribute, with a
+six-case fixture test covering nesting, stale values, a preceding tagged element
+and an attribute after the marker. A version stamper that corrupts markup is
+worse than a stale string, so it is tested rather than trusted.
+
+**5. The landing gained four facts and lost a manual.** One copy-paste install
+line, the release/licence/builds ledger, one measured number with its
+reproduction, and the one REPL proof already on the page. The number is
+`2010.05 req/s · minilm, 16 clients, Apple M4` from `BENCHMARK.md`'s
+multi-threaded table, quoted digit-for-digit rather than rounded so the page
+carries the token the source file does, with `reproduce` linking the section — the page's only performance claim,
+finally carrying its provenance. The `emb-top` figures are relabelled
+"Illustrative render · not a measured run".
+
+**"Above the fold" turned out to be unachievable, and it was already untrue.**
+Measured: the install line's top sits at y **1265** in a 900px viewport at 1440,
+y **977** at 1086×900, and y **876** at 390×844. The **pre-existing CTA** is
+below the fold at every desktop size too (bottom y 1205 at 1440×900, y 931 at
+1086×900) — the paused wordmark is ~500px tall and the poster's ratio governs the
+hero. The requirement was therefore restated as what it actually means and what
+can be tested: the install command sits in the hero **in the same block as the
+calls to action**, directly below them, and the page's calls to action stay on
+the site.
+
+**6. `/docs` is a second page in the same world, with no JavaScript.** Nine
+sections in the order an operator asks the questions — install → first vector,
+commands, replies and protocol, configuration, Lua scripting, operations,
+benchmarks, clients, status — each anchored so the landing can deep-link, all
+sourced from `README.md` and `BENCHMARK.md`. It links `styles.css` plus a
+page-local `docs.css` that **declares no custom property**.
+
+No file was split, and that was a decision made on measurement rather than on
+plan: the landing's geometry is *selector-scoped*, not global. The only
+element-level rules in the sheet are `:root`, the `*` reset, `html`, `body` and
+`body::after`, and none of them references `--fold` or the spine; every
+`var(--fold)` use sits inside `.spine`, `.block__body`, `.topviz`,
+`.terrain__art` or `.note`. A page with none of that markup inherits the world
+and none of the composition. The cost — `/docs` downloads the hero's unused CSS,
+about 30 KB — is smaller than the risk of moving rules in a 1,700-line stylesheet
+that twelve passes were measured against, and it cannot desynchronise.
+
+`/docs` ships **no `<script>` element at all**. The plan was to reuse `main.js`,
+whose every block is guarded, but the page has no pipeline, no terrain, no
+reveal and no console, so it would have been a download whose every branch
+no-ops. There is now nothing to fail and nothing to gate content behind.
+
+**7. The docs surface took the same measurements, and failed one of them first.**
+Two defects were found and fixed on it:
+
+- An inline `<code>` token — `db0:model=…,keys=…,hits=…,misses=…,hit_rate=…` —
+  ran **64.5px past a 320px viewport**. Nothing in that string is a break
+  opportunity, and an ellipsis is not one either. Inline code now breaks
+  anywhere.
+- Inline `<code>` at `0.92em` inside a 12px parent computed **11.04px**, under
+  the committed floor, in **eight** places. The floor is now written as a floor:
+  `max(.92em, 12px)` on desktop and `max(.92em, 14px)` below 1001px. The TOC's
+  `CONTENTS` heading had the same problem at 390 and is 14px there now.
+
+Final state, `/docs`: ink **PASS at 24 of 24 widths**; no horizontal scroll at
+1086, 390 or anywhere in the sweep; smallest computed text **12.0px at 1086** and
+**14.0px at 390** with nothing under either floor; every text pair ≥ 4.5:1
+(lowest **4.66**, the accent-ink prose link; the muted greys at 4.82). Opens from
+`file://` with all three self-hosted fonts loaded and both stylesheets applied —
+the CSSOM read is origin-blocked there, but `--bg` computes and the h1 sets in
+Archivo, which is the proof that matters. Navigating the landing's `Docs` link
+from a `file://` load lands on the page.
+
+**8. The plate words were under the floor, and always had been.** `.plate-label`
+is `font-size: 14px` **in SVG user units**, scaled by `svgWidth / 364`. Measured:
+**18.08px at 1440, 13.99 at 1086, 12.90 at 1001, 17.69 at 1000, 14.76 at 834,
+11.34 at 641, 22.65 at 640, 13.46 at 390, 10.77 at 320.** The labels on the
+diagram fell under the committed 14px mobile floor on every phone and at the
+bottom of the tablet lane. The floors had only ever been verified for CSS text,
+never for text a `viewBox` scales — `getComputedStyle` reports the user-unit
+value, so a CAS-only floor check reads 14px and passes while the pixels are
+10.77.
+
+It cannot be an expression: `calc()` cannot divide by a length, and the required
+units are inversely proportional to the container. It is two stated regimes
+instead — 19 units at ≤640px and 18 at 641–800px, covering exactly the ranges
+where the base 14 computes under the floor. Now **14.62px at 320** and
+**14.58px at 641**, with every width in between ≥ 14. The label still steps at
+the 640/641 boundary, because the artwork does: the stack is ~0.9 × vw below the
+breakpoint and ~0.46 × vw above it, so a proportional label *must* jump there.
+Both sides now meet the floor, which they did not before.
+
+**9. The printed page was light-on-white.** The print block reset the reveal
+cascade but left `.block--dark`, `.console`, `.topviz__screen` and `.footer` as
+`#111110` carrying `color: var(--bg)` — which prints near-white on white with
+background graphics off, Chrome's default. `print-color-adjust: exact` is now set
+on the five light-on-dark surfaces, preserving the one inversion the poster is
+built around rather than re-colouring a type ladder for paper.
+
+**This one is not fully verified and is recorded as such.** The harness's `pdf`
+prints with backgrounds enabled regardless, so the counterfactual — injecting
+`print-color-adjust: auto !important` and re-printing — produced a byte-equivalent
+page (identical counts of `#111110` 5, `#292823` 8, paper 49, ink 48). The rule
+is confirmed present in the `@media print` block in the CSSOM and matching all
+seven selectors; the background-graphics-disabled path needs a manual print
+preview to close.
+
+**10. Four measurement traps, each of which cost time here.**
+
+- **Element-scoped screenshots lie about filtered SVG.** `screenshot
+  .pipeline__stack` at a 900px-tall viewport painted **one of four plates** and
+  left the rest blank. Chrome's `captureBeyondViewport` does not paint
+  SVG-filtered or masked content outside the viewport, and every plate carries
+  `filter="url(#plate-grain)"`. The diagram was correct the whole time — DOM
+  geometry, hit-testing at each plate centre and a tall-viewport capture all
+  agreed. **A future pass must not "fix" this.**
+- **Stylesheets cache silently.** `index.html?cb=N` busts the HTML and not the
+  CSS, and `reload` served the old sheet: computed styles showed the previous
+  build after the fix was on disk. Every number in this pass was taken in a
+  **fresh browser session**.
+- **Measure the fork from the route's `<svg>`, not from the `path`.** The trunk
+  is two paths and a `path`'s bbox spans both halves, which reports a bogus
+  **167px** spine/fork split. From the `<svg>` element's box the fork is
+  **696.96** against the spine's **696.95** — spread **0.01px**.
+- **Reduced motion hides the red state.** The entrance's hiding rules are
+  overridden under `prefers-reduced-motion: reduce`, and the test browser
+  defaults to reduce, so a broken page renders fine.
+
+**11. Re-verified, and the detector.** At 1086: all five `.spine` plus the SVG
+`.sig` plus the terrain fork agree within **0.01px**; section gaps **0**;
+`scrollWidth === clientWidth`; the smallest text is **12.0px** with none below.
+The type floors and 13 contrast pairs hold at 1440, 1086, 1001, 1000, 900, 834,
+801, 800, 700, 641, 640, 390 and 320, with no horizontal scroll at any of them.
+
+`impeccable detect` over the five changed files: **14 → 18**, no new category.
+One is genuinely new — `cramped-padding` on the `.hero__start` rule, which is the
+same false positive already reviewed for `.shift` and `.cap` in pass 8 §8: a
+ruled row whose rule is the separator and whose content sits below it with a
+14–22px inset. The other three are the pre-existing frame (`html`/`body` clip
+positioned children — the deliberate bleeds) and `overused-font` (Inter 900 is
+the masthead brand only). `/docs` and `docs.css` produced **no findings at all**.
+
+---
+
+## Pass 13 — hovering a plate cut the signal line
+
+Found after pass 12 shipped, by hovering each plate: the line was left **sheared
+off in mid-air below every one of the four plates**, with a gap of bare paper
+where the plate had been.
+
+**What was happening.** The line reads as passing *behind* the plates because it
+is painted last and then masked: `#signal-depth` is a white rect with black bands
+that hide it exactly where a plate's front face would occlude it. The bands lived
+in **one `<path>` with four subpaths** (`M182 42V149M182 200V268…`) inside a
+`maskUnits="userSpaceOnUse"` mask, so they were fixed in user space while the
+plate above them travelled: `.slab.is-hot{ translate: 0 -6px }`. The plate rose
+6 units and its band did not, which left **6 units (7.75px at 1440) of hidden
+line below a plate that was no longer there** — read as a cut, not as depth.
+
+**The fix.** One band per plate, so a band can travel with its plate:
+
+- The mask now carries four `<path class="sig-hole" data-hole="input|inference|embedding|serve">`
+  elements, `data-hole` matching the plate's `data-slab`. Same geometry, split.
+- `main.js` resolves the matching band alongside the note and slab it already
+  pairs, and the shared `on`/`off` closures toggle `is-hot` on all three — so
+  hovering a plate *or* its note moves the band, and `pointerdown` does too.
+- `styles.css` gives the hot band the same `translate: 0 -6px`, in the same
+  `.25s cubic-bezier(.2,.8,.3,1)` slot with no delay, so the band and the plate
+  move as one object.
+
+The technique was proven before it was committed: an exaggerated
+`translate: 0 -14px` on the old combined path moved every band by exactly
+14 units × the viewBox scale, confirming that CSS `translate` applies to children
+of an SVG `<mask>`. If a future engine drops that, the fallback is the current
+behaviour — the bands simply do not move and the line is unchanged rather than
+mis-drawn — which is why the lift keeps its existing progressive-enhancement
+comment.
+
+**Measured, all four stages.** The band's bottom edge against the plate's painted
+bottom, at rest and while hovered, with the band's own `d` parsed and its
+computed `translate` applied through the SVG's scale:
+
+| stage | at rest | hovered (plate) | hovered (note) | reduced motion |
+|---|---|---|---|---|
+| INPUT | 0.00px | 0.00px | — | 0.00px |
+| INFERENCE | 0.00px | 0.00px | — | 0.00px |
+| EMBEDDINGS | 0.01px | 0.00px | 0.00px | 0.00px |
+| SERVE | 0.01px | 0.01px | — | 0.01px |
+
+Before the fix the hovered mismatch was the full **+6 units** at every stage.
+Both directions of the hover, and `prefers-reduced-motion: reduce` (where the
+transition runs at 1e-06s), give the same result: the band tracks the plate
+exactly, so the line always ends where the plate's front edge is.
+
+**Unaffected, and re-checked.** `impeccable detect` over the five changed files:
+**18 → 18**, same five categories — the split adds no finding. The ink probe is
+still **PASS at 24 of 24 widths on both surfaces**, so no text moved. The mask
+stays inside `<defs>` in an `aria-hidden` SVG, so nothing here is exposed to
+assistive technology.

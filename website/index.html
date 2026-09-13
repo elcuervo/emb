@@ -21,7 +21,13 @@
 <link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/css/styles.css">
-<script>document.documentElement.classList.add('js');</script>
+<script>document.documentElement.classList.add('js');
+/* The class above hides the hero for its entrance, and only main.js can bring
+   it back. If that file never runs -- blocked, 404, or thrown during
+   evaluation -- the page would ship as a blank poster with no way to recover,
+   so any uncaught error before the page reports itself ready removes the class
+   and the page falls back to its complete no-JS state. */
+window.addEventListener('error',function(){if(!document.documentElement.classList.contains('is-ready'))document.documentElement.classList.remove('js');},true);</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -45,24 +51,24 @@
     </div>
 
     <nav class="nav" aria-label="Primary">
-      <a href="https://github.com/elcuervo/emb#commands" rel="noopener">Docs</a>
+      <a href="docs/index.html" rel="noopener">Docs</a>
       <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
-      <a href="https://github.com/elcuervo/emb#configuration" rel="noopener">Models</a>
+      <a href="docs/index.html#configuration" rel="noopener">Models</a>
       <a href="https://github.com/elcuervo/emb/issues" rel="noopener">Community</a>
     </nav>
 
     <details class="mobile-nav">
       <summary>Menu <span aria-hidden="true">+</span></summary>
       <nav aria-label="Mobile">
-        <a href="https://github.com/elcuervo/emb#commands">Docs <span aria-hidden="true">↗</span></a>
-        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">↗</span></a>
-        <a href="https://github.com/elcuervo/emb#configuration">Models <span aria-hidden="true">↗</span></a>
-        <a href="https://github.com/elcuervo/emb/issues">Community <span aria-hidden="true">↗</span></a>
+        <a href="docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+        <a href="docs/index.html#configuration">Models <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb/issues">Community <span aria-hidden="true">&#8599;</span></a>
       </nav>
     </details>
 
     <div class="masthead__cta">
-      <a class="btn btn--dark btn--sm" href="https://github.com/elcuervo/emb#quick-start">Get Started <span aria-hidden="true">&#8594;</span></a>
+      <a class="btn btn--dark btn--sm" href="docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
     </div>
   </div>
 </header>
@@ -113,17 +119,33 @@
         </h1>
 
         <p class="hero__sub">
-          Drop-in compatible. Production ready.
-          Turn text, images, and more into vectors
-          at massive speed.
+          Drop-in compatible. Pre-1.0, MIT licensed.
+          Turn text, and any tensor a script builds,
+          into vectors.
         </p>
 
         <div class="hero__actions">
-          <a class="btn btn--accent" href="https://github.com/elcuervo/emb#quick-start">Get Started <span aria-hidden="true">&#8594;</span></a>
+          <a class="btn btn--accent" href="docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
           <a class="ghlink" href="https://github.com/elcuervo/emb" rel="noopener">
             <span>View on GitHub</span>
             <svg class="ghlink__ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.1 3.29 9.42 7.86 10.95.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.11-.76.41-1.27.74-1.56-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.42.36.79 1.08.79 2.18 0 1.57-.01 2.84-.01 3.23 0 .31.21.68.8.56A11.52 11.52 0 0 0 23.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
           </a>
+        </div>
+
+        <!-- The four facts the landing keeps. Everything else lives in docs/:
+             the command tables, the config block, the reply-format prose, the
+             emb-top figures, and the version strings. The release line states
+             the status the poster used to overstate; the measured line is the
+             single number, with its reproduction one click away. -->
+        <div class="hero__start">
+          <p class="hero__install">
+            <span class="hero__install-key">INSTALL</span><code class="hero__install-cmd">curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | sh</code>
+          </p>
+          <dl class="facts hero__facts">
+            <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0.pre4</span> · MIT</dd>
+            <dt>BUILDS</dt><dd>macOS arm64 · Linux amd64/arm64</dd>
+            <dt>MEASURED</dt><dd><span class="t-num">2010.05 req/s</span> · minilm, 16 clients, Apple M4 · <a class="hero__link" href="https://github.com/elcuervo/emb/blob/main/BENCHMARK.md#multi-threaded">reproduce</a></dd>
+          </dl>
         </div>
 
         <section class="features" aria-labelledby="features-h">
@@ -214,7 +236,16 @@
     <mask id="ramp-mask"><rect x="0" y="0" width="364" height="553" fill="url(#ramp)"/></mask>
     <mask id="signal-depth" maskUnits="userSpaceOnUse" x="0" y="-500" width="364" height="1100">
       <rect x="0" y="-500" width="364" height="1100" fill="white"/>
-      <path d="M182 42V149M182 200V268M182 289V387M182 460V506" stroke="black" stroke-width="10"/>
+      <!-- One band per plate, keyed by stage name. These are what make the line
+           read as passing BEHIND a plate, so each band is a separate path
+           rather than one combined `d`: when a plate lifts on hover its band
+           has to lift with it, or the line is left sheared off in mid-air
+           below the plate -- a cut with nothing behind it. `data-hole` matches
+           the plate's `data-slab`. Each band ends at its plate's front edge. -->
+      <path class="sig-hole" data-hole="input"     d="M182 42V149"  stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="inference" d="M182 200V268" stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="embedding" d="M182 289V387" stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="serve"     d="M182 460V506" stroke="black" stroke-width="10"/>
     </mask>
     <g id="cube">
       <ellipse cx="3" cy="20" rx="17" ry="5" fill="#0B0B0B" opacity=".16"/>
@@ -431,7 +462,7 @@
             <li class="note note--1" data-note="input" data-reveal>
               <span class="note__num">01</span>
               <h3 class="note__label">INPUT</h3>
-              <p class="note__desc">Raw text, documents, <br>or images.</p>
+              <p class="note__desc">Raw text, or any tensor <br>a script builds.</p>
             </li>
             <li class="note note--2" data-note="inference" data-reveal>
               <span class="note__num">02</span>
@@ -716,14 +747,14 @@
                but never inside one, so at the widths where the render cannot
                hold a line no value is split from its unit. Every character
                of the capture is unchanged. -->
-          <pre class="topviz__screen"> <span class="tf">emb-top v0.4.0 ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
+          <pre class="topviz__screen"> <span class="tf">emb-top v<span data-emb-version>0.4.0.pre4</span> ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
 <span class="tf">minilm</span>        <span class="tf tf--bar">████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████</span>  <span class="tf">280 r/s</span>  <span class="tf">11.8k t/s</span>  <span class="tf">p50 6.5ms</span>  <span class="tf">p95 68.0ms</span>  <span class="tf">err 0</span>
    <span class="tf">dim 384 ·</span> <span class="tf">mean ·</span> <span class="tf">int8 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
 <span class="tf">bge-small-en…</span> <span class="tf tf--bar">▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████</span>  <span class="tf">151 r/s</span>   <span class="tf">5.7k t/s</span>  <span class="tf">p50 8.8ms</span>  <span class="tf">p95 77.0ms</span>  <span class="tf">err 18 ↑</span>
    <span class="tf">dim 384 ·</span> <span class="tf">cls ·</span> <span class="tf">fp32 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
 <span class="tf">cache 93.6% <span class="tf--bar">██████████</span></span>  <span class="tf">cpu 50.3% <span class="tf--bar">██████</span></span>  <span class="tf">mem 552MB <span class="tf--bar">████████████</span></span>
 <span class="tf">conns 7 ·</span> <span class="tf">active 1 ·</span> <span class="tf">goroutines 22 ·</span> <span class="tf">truncated 0/0</span></pre>
-          <p class="topviz__src">Sample run · rows omitted</p>
+          <p class="topviz__src">Illustrative render · not a measured run</p>
         </section>
 
         </div>
@@ -772,6 +803,6 @@
   </div>
 </footer>
 
-<script src="assets/js/main.js" defer></script>
+<script src="assets/js/main.js" defer onerror="document.documentElement.classList.remove('js')"></script>
 </body>
 </html>

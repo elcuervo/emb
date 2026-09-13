@@ -9,11 +9,21 @@ related_targets: []
 
 ## Scope and visitor mode
 
-**Persuade.** The marketing surface for `emb`. This brief now covers the whole
-page's composition: the hero spread, the capability blocks, and the terrain's
+**Persuade.** The marketing surface for `emb`. This brief covers the whole page's
+composition: the hero spread, the capability blocks, and the terrain's
 placement. The masthead, wordmark, claim, sub, actions, six-row feature list and
 pipeline artwork are fixed and must not move; everything from the terrain down
 is being recomposed.
+
+**This surface is now the poster only.** The reference material moved to
+`website/docs/index.html` (see `website-docs-index-html.md`). The landing keeps
+exactly four things beyond its composition, each earning its place as a
+pre-click decision: one copy-paste install line, the one REPL proof
+(`redis-cli EMB minilm "hello world"` and its bytes), the pre-1.0 status with
+the licence and platform list, and one measured `BENCHMARK.md` figure with its
+reproduction command. Everything else — command tables, the YAML block,
+reply-format prose beyond the one line that carries the argument, the `emb-top`
+figures, and every version string — lives on the docs surface only.
 
 ## Audience, job, and action
 
@@ -56,6 +66,14 @@ the middle, and the orange line is the brightest thing on the ground.
 - `prefers-reduced-motion` collapses playback. Every ground must read with
   JavaScript disabled.
 - No hosted endpoint, no live service, no benchmark number without provenance.
+- The landing carries no command table, no configuration block, and no more than
+  four named commands per `facts` list. Its `Docs` link points at `/docs`, and it
+  carries exactly one measured figure and exactly one install line.
+- No claim about an input path the shipped scripts do not implement. `images` is
+  removed from the hero sub and the INPUT note: `examples/scripts/siglip2.lua`
+  documents that its image branch is absent and `pixel_values` is fed as zeros.
+- Every version string is generated from `VERSION`, never typed. The page states
+  `0.4.0.pre4` and that interfaces may still move.
 
 ## Unresolved decisions
 
@@ -91,6 +109,10 @@ segment of the same spine — paper (protocol ledger + console plate), a full-bl
 dark inversion (scripts and code), paper (operations ledger + `emb-top`); then the
 terrain, last before the footer, where the spine becomes the ridge route and
 finishes. The massif is the page's full stop.
+
+The masthead's `Docs` control now points at `/docs` rather than a GitHub anchor.
+
+---
 
 The spine is one line at every boundary: the hero's masked SVG spine, the CSS
 segments in the blocks, and the route are all on one axis (`--fold`, derived from

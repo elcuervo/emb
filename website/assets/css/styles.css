@@ -491,6 +491,42 @@ button{ font: inherit; color: inherit; }
   margin-top: clamp(26px, 2.85vw, 47px);
 }
 
+/* ── 04b the four kept facts ──────────────────────────────────────────
+   The landing is a poster, so it carries only what a reader needs before
+   clicking: how to install, what they are installing, and one measured
+   number. The rule above the row is the page's own separator atom, not a
+   bordered callout -- the craft floor refuses a >1px coloured side border
+   as a treatment and this page never uses one. */
+.hero__start{
+  margin-top: clamp(24px, 2.6vw, 42px);
+  padding-top: clamp(14px, 1.5vw, 22px);
+  border-top: 1px solid var(--rule);
+  display: grid;
+  gap: clamp(10px, 1.1vw, 17px);
+}
+.hero__install{
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: clamp(8px, .9vw, 15px);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.55;
+  min-width: 0;
+}
+.hero__install-key{ color: var(--muted); letter-spacing: .05em; flex: none; }
+/* `break-word`, not `anywhere`: the URL is one 60-character token, so it may
+   break when a phone column cannot hold it, but never mid-word by choice. */
+.hero__install-cmd{
+  font: inherit;
+  color: var(--fg);
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.hero__facts{ max-width: 64ch; }
+.hero__link{ color: var(--accent-ink); text-underline-offset: 3px; }
+.hero__link:hover{ text-decoration-thickness: 2px; }
+
 /* ── 05 features ───────────────────────────────────────────────────── */
 .features{ margin-top: clamp(40px, 5vw, 76px); }
 .features__list{ margin-top: clamp(8px, 1.2vw, 18px); padding-left: clamp(4px, .55vw, 10px); }
@@ -595,12 +631,34 @@ html.js .pipeline.is-live .slab[data-slab="embedding"]{ transition-delay: .34s, 
 html.js .pipeline.is-live .slab[data-slab="serve"]{ transition-delay: .51s, .51s, 0s; }
 html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
 
+/* The band that masks the line behind each plate travels with the plate, at the
+   same 6px and in the same easing slot as the lift. Without this the plate
+   rises and its mask band stays, leaving the line sheared off in mid-air below
+   it -- a cut with nothing in front of it, at every one of the four stages.
+   Same progressive-enhancement caveat as the lift: where SVG `translate` is
+   unsupported the bands simply do not move, so the line is unchanged rather
+   than mis-drawn. */
+html.js .sig-hole{ transition: translate .25s cubic-bezier(.2, .8, .3, 1); }
+html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
+
 /* (the plates carry no port markers: on the poster the signal line itself is
    the only orange in the stack) */
 
 /* isometric plate labels */
 .plate-label{
   font-family: var(--mono);
+  /* THE LABEL SCALES WITH THE ARTWORK, SO ITS FLOOR NEEDS BREAKPOINTS.
+     `font-size` inside an SVG is in USER UNITS, and this one is scaled by
+     `svgWidth / 364`: 14 units renders 18.08px at 1440 but only 12.90px at
+     1001, 11.34px at 641, 13.46px at 390 and 10.77px at 320 -- so the plate
+     words fell under the committed 14px mobile floor on every phone and at
+     the bottom of the tablet lane. The floors had only ever been verified for
+     CSS text, never for text a viewBox scales.
+     `calc()` cannot divide by a length, so the value cannot be an expression
+     and has to be stated per regime. Measured scale curves: 641-1000px the
+     stack is ~0.46 x vw (units x 0.001264 x vw), and <=640px it is ~0.9 x vw
+     (units x 0.00247 x vw). The two blocks below cover the ranges where the
+     base 14 units computes under the floor; above 801px it does not. */
   font-size: 14px;
   font-weight: 500;
   letter-spacing: .02em;
@@ -628,10 +686,23 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
 .note{
   position: absolute;
   left: var(--lead);
-  right: -10px;
+  /* THE NOTE BOX MUST NOT BLEED. It used to sit at `right: -10px`, on the
+     theory that the poster's labels run to the edge of the sheet -- but the
+     sheet edge is also the viewport edge, and `html{overflow-x: clip}` sliced
+     the ink that reached it. Measured on glyph rects, three of the four
+     descriptions ran 5.84px past at the 1086px reference frame (worst 8.89px
+     at 1070): the comma in "Raw text, documents," and the period in
+     "optimized execution." were being cut. `documentElement.scrollWidth`
+     stayed equal to `clientWidth` the whole time, because `overflow: clip`
+     removes the clipped content from the scrollable region -- which is why
+     twelve passes of measurement could not see it. The assertion that can is
+     `website/tools/ink-probe.html`, on text rects.
+     The number column gives up the 10px the box no longer bleeds (38 -> 28) so
+     the description keeps its measure and its line count exactly. */
+  right: 0;
   transform: translateY(-50%);
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   column-gap: 0;
   align-items: baseline;
 }
@@ -1483,6 +1554,11 @@ html.js.is-ready .hero__prose{
   .note__label{ font-size: 14px; line-height: 1.4; letter-spacing: .03em; }
   .note__num{ font-size: 14px; }
   .note__desc{ font-size: 14px; line-height: 1.5; }
+  /* the plate words, scaled by the viewBox: at <=640 the stack is ~0.9 x vw,
+     so 19 units renders 14.6px at 320 and 18.3px at 390 */
+  .plate-label{ font-size: 19px; }
+  /* the kept-facts block sits on the same mobile floor as every other label */
+  .hero__install, .hero__facts{ font-size: 14px; }
   /* the massif: 145vw of artwork is 51.4vw of band, and --band never falls
      below the art, so the spine always reaches the route's first point */
   .terrain{
@@ -1614,6 +1690,11 @@ html.js.is-ready .hero__prose{
    shift -- 131.8px at 641 and 175.7px at 834, wrapping one word per line,
    while the four facts got 559.4px. Both of the block's parts belong in the
    content column here, stacked. */
+@media (min-width: 641px) and (max-width: 800px){
+  /* 18 units renders 14.6px at 641 and 18.2px at 800 */
+  .plate-label{ font-size: 18px; }
+}
+
 @media (min-width: 641px) and (max-width: 1000px){
   .block__grid > *{ grid-column: 2; }
   .block__aside{ margin-top: 26px; }
@@ -1664,4 +1745,20 @@ html.js.is-ready .hero__prose{
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   .masthead{ position: static; }
   .terrain, .features, .pipeline, .note, .feat{ break-inside: avoid; }
+  /* The page inverts once, and five surfaces are light-on-dark: the scripts
+     block, the console, the emb-top capture, the footer and the masthead's
+     dark button. Chrome strips background graphics by default, which printed
+     `color: var(--bg)` (#F3F0E8) on white -- legible on screen, invisible on
+     paper. `print-color-adjust: exact` keeps the ground the design chose
+     rather than re-colouring a whole type ladder for print. */
+  .block--dark,
+  .console,
+  .console__bar,
+  .console__screen,
+  .topviz__screen,
+  .footer,
+  .btn--dark{
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
