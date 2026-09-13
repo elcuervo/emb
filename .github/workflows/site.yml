@@ -72,6 +72,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # `wrangler-action` defaults to wrangler 3.90.0. Pin the release the
+          # dev shell's `nixpkgs-wrangler` pin installs, so what CI publishes is
+          # what a contributor verified locally (`wrangler deploy --dry-run` in
+          # the change's task 6.1 was run against this release).
+          wranglerVersion: "4.129.0"
           command: deploy
           # The custom domain is attached in `wrangler.jsonc`, so a first
           # deployment to the workers.dev address does not need it. See the
@@ -110,60 +115,85 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # `wrangler-action` is deliberately not used here. Its default release
+      # (3.90.0) predates `versions upload --preview-alias`, which is a wrangler
+      # 4 flag, so the command dies with `Unknown arguments: preview-alias`; and
+      # its `command-output`/`command-stderr` outputs stay unset when wrangler
+      # exits non-zero, which is exactly the failure this job has to recognise:
+      # a Worker that does not exist yet cannot receive a version, and that is
+      # the state of the first site pull request, before `main` has deployed.
+      # Invoking wrangler directly keeps the release pinned and its output
+      # legible.
       - name: Upload the preview version
         if: ${{ !github.event.pull_request.head.repo.fork }}
         id: preview
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The release the dev shell installs (`nixpkgs-wrangler` in
+          # `flake.nix`), so CI uploads with the wrangler a contributor ran.
+          WRANGLER_VERSION: "4.129.0"
+          ALIAS: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
           # `versions upload` creates a version and its preview URLs without
           # touching the production deployment, so a preview can never disturb
           # emb.is. The alias is what makes the address stable: each upload
           # repoints it, so a reviewer's link survives further commits.
-          command: versions upload --preview-alias pr-${{ github.event.pull_request.number }}
+          if npx --yes "wrangler@${WRANGLER_VERSION}" versions upload \
+               --preview-alias "$ALIAS" >upload.log 2>&1; then
+            cat upload.log
+          else
+            status=$?
+            cat upload.log
+            # A Worker that has not been deployed cannot receive a version:
+            # `versions upload` only adds to one that already exists. Explain
+            # that rather than fail, so the first site pull request — the one
+            # that merges the Worker into existence — is not a red X. Every
+            # other failure is re-raised.
+            if grep -q "does not yet exist" upload.log; then
+              {
+                echo "### No preview yet — the \`emb-site\` Worker does not exist"
+                echo
+                echo "\`wrangler versions upload\` can only add a version to a Worker"
+                echo "that already exists. Deploy once from \`main\` (or run"
+                echo "\`npx wrangler deploy\` by hand), and later pull requests will"
+                echo "get a preview here."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "result=bootstrap" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            exit "$status"
+          fi
 
-      # `wrangler-action`'s `deployment-url` output is the *versioned* preview
-      # URL, which is unique per upload and therefore dies on the next commit
-      # (cloudflare/wrangler-action#384). The aliased URL is not exposed as an
-      # output, so it is derived: a worker's versioned and aliased preview URLs
-      # share the worker name and the account's workers.dev suffix and differ
-      # only in the leading token, so swapping that token turns whatever came
-      # back into the stable alias.
-      - name: Resolve the stable alias URL
-        if: ${{ !github.event.pull_request.head.repo.fork }}
-        id: alias
-        env:
-          RAW: ${{ steps.preview.outputs.command-output }}${{ steps.preview.outputs.deployment-url }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          urls=$(printf '%s\n' "$RAW" \
-            | grep -oE 'https://[a-z0-9-]+-emb-site\.[a-z0-9-]+\.workers\.dev' \
-            | sort -u || true)
-          if [ -z "$urls" ]; then
-            echo "Could not find a preview URL in the upload output:"
-            printf '%s\n' "$RAW"
+          # wrangler 4.x prints both addresses. Prefer the alias: the versioned
+          # URL is unique per upload and dies on the next commit
+          # (cloudflare/wrangler-action#384), the alias is repointed instead.
+          alias=$(grep -E '^Version Preview Alias URL:' upload.log \
+            | grep -oE 'https://[^[:space:]]+' | head -1 || true)
+          versioned=$(grep -E '^Version Preview URL:' upload.log \
+            | grep -oE 'https://[^[:space:]]+' | head -1 || true)
+          # A version can be uploaded with previews disabled, in which case
+          # wrangler prints neither address; that is worth failing on, because
+          # the address is the entire point of this job.
+          if [ -z "$alias" ]; then
+            echo "The upload succeeded but printed no preview URL."
+            echo "Is \`preview_urls\` still enabled in wrangler.jsonc?"
             exit 1
           fi
-          alias=$(printf '%s\n' "$urls" | grep -E "^https://pr-${PR}-emb-site\\." | head -1 || true)
-          versioned=$(printf '%s\n' "$urls" | grep -vE "^https://pr-${PR}-emb-site\\." | head -1 || true)
-          # The CLI may print only the versioned URL, in which case the alias is
-          # derived from it rather than assumed to have been printed.
-          if [ -z "$alias" ]; then
-            alias=$(printf '%s\n' "$versioned" | sed -E "s|https://[a-z0-9-]+-emb-site\.|https://pr-${PR}-emb-site.|")
-          fi
+          echo "result=uploaded" >> "$GITHUB_OUTPUT"
           echo "alias=$alias" >> "$GITHUB_OUTPUT"
           echo "versioned=$versioned" >> "$GITHUB_OUTPUT"
           echo "Preview URL (stable alias): $alias"
           echo "Versioned URL (this commit only): ${versioned:-not reported}"
 
       - name: Comment the preview on the pull request
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ steps.preview.outputs.result == 'uploaded' }}
         uses: actions/github-script@v7
         env:
-          ALIAS: ${{ steps.alias.outputs.alias }}
-          VERSIONED: ${{ steps.alias.outputs.versioned }}
+          ALIAS: ${{ steps.preview.outputs.alias }}
+          VERSIONED: ${{ steps.preview.outputs.versioned }}
         with:
           script: |
             const marker = '<!-- emb-site-preview -->';

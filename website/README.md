@@ -227,8 +227,15 @@ touching the production deployment, so a preview cannot disturb `emb.is`.
 The alias is what makes a reviewer's link survive: each upload repoints
 `pr-<number>-emb-site.<subdomain>.workers.dev`, so it always serves the newest
 commit on that branch, while the versioned URL is unique per upload and dies on
-the next one. `wrangler-action` exposes only the versioned URL, so the workflow
-derives the alias from it.
+the next one. Wrangler prints both addresses, and the workflow comments the
+alias with the version beside it. The preview job invokes wrangler directly
+pinned to the release the dev shell installs, because `--preview-alias` is a
+wrangler 4 flag and `wrangler-action`'s default is 3.90.0.
+
+A preview needs a Worker to upload a version *to*, so the first site pull
+request — the one that merges the Worker into existence — gets no preview. The
+job says so in the run's summary instead of failing; later pull requests get
+one once `main` has deployed.
 
 Pull requests **from forks** get no preview: fork runs receive no secrets, and a
 `pull_request` run from a fork also gets a read-only `GITHUB_TOKEN`, so the job
