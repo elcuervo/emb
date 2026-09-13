@@ -527,6 +527,121 @@ models:
 	}
 }
 
+func TestLoadImageConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+max_images: 128
+max_command_bytes: 1048576
+max_image_bytes: 524288
+max_image_pixels: 4194304
+models:
+  clip:
+    onnx: ./model.onnx
+    image:
+      input: pixel_values
+      size: 224
+      crop: center
+      resample: bicubic
+      rescale: 0.00392156862745098
+      mean: [0.48145466, 0.4578275, 0.40821073]
+      std: [0.26862954, 0.26130258, 0.27577711]
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := cfg.Models["clip"].Image
+	if img == nil {
+		t.Fatal("image block not parsed")
+	}
+	if img.Input != "pixel_values" || img.Size != 224 || img.Crop != "center" || img.Resample != "bicubic" {
+		t.Fatalf("unexpected image block: %#v", *img)
+	}
+	if img.Rescale == nil || *img.Rescale != 0.00392156862745098 {
+		t.Fatalf("rescale = %v", img.Rescale)
+	}
+	if len(img.Mean) != 3 || len(img.Std) != 3 {
+		t.Fatalf("mean/std = %v/%v", img.Mean, img.Std)
+	}
+	if cfg.MaxImages == nil || *cfg.MaxImages != 128 {
+		t.Fatalf("max_images = %v", cfg.MaxImages)
+	}
+	if cfg.EffectiveMaxCommandBytes() != 1048576 || cfg.EffectiveMaxImageBytes() != 524288 || cfg.EffectiveMaxImagePixels() != 4194304 {
+		t.Fatalf("limits not applied: %d/%d/%d", cfg.EffectiveMaxCommandBytes(), cfg.EffectiveMaxImageBytes(), cfg.EffectiveMaxImagePixels())
+	}
+}
+
+func TestEffectiveImageLimitsDefaults(t *testing.T) {
+	cfg := Config{}
+	if cfg.EffectiveMaxCommandBytes() != DefaultMaxCommandBytes {
+		t.Fatalf("default command cap = %d", cfg.EffectiveMaxCommandBytes())
+	}
+	if cfg.EffectiveMaxImageBytes() != DefaultMaxImageBytes {
+		t.Fatalf("default image byte cap = %d", cfg.EffectiveMaxImageBytes())
+	}
+	if cfg.EffectiveMaxImagePixels() != DefaultMaxImagePixels {
+		t.Fatalf("default pixel cap = %d", cfg.EffectiveMaxImagePixels())
+	}
+	// Explicit 0 disables each bound.
+	zero := int64(0)
+	disabled := Config{MaxCommandBytes: &zero, MaxImageBytes: &zero, MaxImagePixels: &zero}
+	if disabled.EffectiveMaxCommandBytes() != 0 || disabled.EffectiveMaxImageBytes() != 0 || disabled.EffectiveMaxImagePixels() != 0 {
+		t.Fatal("explicit 0 must disable the caps")
+	}
+}
+
+func TestLoadImageConfigValidation(t *testing.T) {
+	cases := []struct {
+		name    string
+		image   string
+		wantErr string
+	}{
+		{"mean without std", "image:\n      mean: [0.5, 0.5, 0.5]\n", "set together"},
+		{"std without mean", "image:\n      std: [0.5, 0.5, 0.5]\n", "set together"},
+		{"mean length", "image:\n      mean: [0.5, 0.5]\n      std: [0.5, 0.5]\n", "3 channels"},
+		{"std length", "image:\n      mean: [0.5, 0.5, 0.5]\n      std: [0.5]\n", "3 channels"},
+		{"bad crop", "image:\n      crop: middle\n", "crop"},
+		{"bad resample", "image:\n      resample: cubic\n", "resample"},
+		{"negative size", "image:\n      size: -1\n", "size"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			os.WriteFile(cfgPath, []byte("models:\n  m:\n    onnx: ./m.onnx\n    "+tc.image), 0644)
+			_, err := Load(cfgPath)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("want error containing %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestLoadImageLimitsNegative(t *testing.T) {
+	for _, key := range []string{"max_images", "max_command_bytes", "max_image_bytes", "max_image_pixels"} {
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		os.WriteFile(cfgPath, []byte(key+": -1\nmodels:\n  m:\n    onnx: ./m.onnx\n"), 0644)
+		if _, err := Load(cfgPath); err == nil || !strings.Contains(err.Error(), "non-negative") {
+			t.Fatalf("%s: want non-negative error, got %v", key, err)
+		}
+	}
+}
+
+func TestRepoExampleConfigLoads(t *testing.T) {
+	// The documented example config must stay parseable (it is shipped and
+	// referenced by the README); registry load-time validation is separate.
+	cfg, err := Load("../../config.yaml")
+	if err != nil {
+		t.Fatalf("repo config.yaml failed to load: %v", err)
+	}
+	if len(cfg.Models) == 0 {
+		t.Fatal("repo config.yaml has no models")
+	}
+}
+
 func TestLoadReservedModelNames(t *testing.T) {
 	for _, name := range []string{"BLOB", "blob", "VALUES", "values"} {
 		dir := t.TempDir()

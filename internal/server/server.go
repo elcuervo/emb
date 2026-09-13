@@ -97,6 +97,20 @@ type Server struct {
 	maxPairs       int
 	truncatedTexts atomic.Int64
 	truncatedPairs atomic.Int64
+	// maxImages bounds images per EMB.IMG/EMB.IMGMULTI command (0 = unlimited;
+	// default 4096). Overflow images are not decoded or inferred and their reply
+	// slots are null.
+	maxImages int
+	// maxImageBytes/maxImagePixels bound one image argument and its decoded pixel
+	// count (0 = unlimited).
+	maxImageBytes  int64
+	maxImagePixels int64
+	// maxCommandBytes bounds the buffered bytes of a single command (0 = unlimited).
+	maxCommandBytes int64
+	// imageRequests counts processed image requests (one per EMB.IMG command, one
+	// per EMB.IMGMULTI pair); truncatedImages counts overflow images.
+	imageRequests   atomic.Int64
+	truncatedImages atomic.Int64
 	// fanOut bounds concurrent EMB.MULTI pair processing for a single command, so a
 	// request storm cannot spawn unbounded goroutines competing for inference cores.
 	// 0 resolves to the machine's GOMAXPROCS. Overridable for tests.
@@ -159,6 +173,30 @@ func WithMaxPairs(n int) Option {
 	return func(s *Server) { s.maxPairs = n }
 }
 
+// WithMaxImages bounds the images processed per EMB.IMG/EMB.IMGMULTI command;
+// overflow images are not decoded or inferred and their reply slots are null.
+// Zero disables the cap (unlimited). The default when unset is 4096.
+func WithMaxImages(n int) Option {
+	return func(s *Server) { s.maxImages = n }
+}
+
+// WithMaxImageBytes bounds one image argument's byte size. Zero disables the cap.
+func WithMaxImageBytes(n int64) Option {
+	return func(s *Server) { s.maxImageBytes = n }
+}
+
+// WithMaxImagePixels bounds one image's decoded pixel count (checked from the
+// header before the full decode). Zero disables the cap.
+func WithMaxImagePixels(n int64) Option {
+	return func(s *Server) { s.maxImagePixels = n }
+}
+
+// WithMaxCommandBytes bounds the buffered bytes of a single command. Zero
+// disables the cap.
+func WithMaxCommandBytes(n int64) Option {
+	return func(s *Server) { s.maxCommandBytes = n }
+}
+
 func WithPersistence(cfg PersistenceConfig) Option {
 	return func(s *Server) {
 		s.persistenceCfg = &cfg
@@ -199,6 +237,10 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		idleTimeout:         config.DefaultIdleTimeout,
 		maxTexts:            4096,
 		maxPairs:            4096,
+		maxImages:           4096,
+		maxImageBytes:       config.DefaultMaxImageBytes,
+		maxImagePixels:      config.DefaultMaxImagePixels,
+		maxCommandBytes:     config.DefaultMaxCommandBytes,
 		monitor:             NewMonitor(8192),
 	}
 	for _, o := range opts {
@@ -224,6 +266,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("monitor", s.handleMonitor)
 	mux.HandleFunc("emb.help", s.handleHELP)
 	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
+	mux.HandleFunc("emb.img", s.handleIMG)
+	mux.HandleFunc("emb.imgmulti", s.handleIMGMULTI)
 	mux.HandleFunc("emb.ready", s.handleREADY)
 	mux.HandleFunc("emb.eval", s.handleEVAL)
 	mux.HandleFunc("emb.evsha", s.handleEVSHA)
@@ -243,6 +287,14 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		// towards total_net_output_bytes.
 		conn = s.wrapConn(conn)
 
+		// Command-size guard: a command whose buffered bytes exceed the cap is
+		// rejected without decode or inference. The per-bulk guard (SetMaxBulkSize
+		// below) refuses an oversized declared bulk before its payload is read.
+		if s.maxCommandBytes > 0 && int64(len(cmd.Raw)) > s.maxCommandBytes {
+			conn.WriteError(fmt.Sprintf("ERR command of %d bytes exceeds max_command_bytes of %d", len(cmd.Raw), s.maxCommandBytes))
+			return
+		}
+
 		if s.password.Load().(string) != "" && !isExempt(cmd) && !isAuthenticated(conn) {
 			conn.WriteError("NOAUTH Authentication required.")
 			return
@@ -253,7 +305,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		// EMB.STATS/INFO report live in-flight counts even when the cap is 0.
 		if len(cmd.Args) > 0 {
 			name := strings.ToLower(string(cmd.Args[0]))
-			if name == "emb" || name == "emb.multi" || name == "emb.eval" || name == "emb.evsha" {
+			if name == "emb" || name == "emb.multi" || name == "emb.img" || name == "emb.imgmulti" || name == "emb.eval" || name == "emb.evsha" {
 				if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
 					conn.WriteError(fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs))
 					return
@@ -284,6 +336,13 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	// handler so `connections` stays accurate.
 	if s.idleTimeout > 0 {
 		s.srv.SetIdleClose(s.idleTimeout)
+	}
+
+	// Refuse a declared bulk larger than the command cap before buffering it, so
+	// a hostile Content-Length-style payload cannot make the reader grow its
+	// buffer without bound.
+	if s.maxCommandBytes > 0 {
+		s.srv.SetMaxBulkSize(s.maxCommandBytes)
 	}
 
 	return s
@@ -1070,7 +1129,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 44)
+	writePairs(conn, 46)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1081,6 +1140,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(s.truncatedTexts.Load()))
 	conn.WriteBulkString("truncated_pairs")
 	conn.WriteInt(int(s.truncatedPairs.Load()))
+	conn.WriteBulkString("image_requests")
+	conn.WriteInt(int(s.imageRequests.Load()))
+	conn.WriteBulkString("truncated_images")
+	conn.WriteInt(int(s.truncatedImages.Load()))
 	conn.WriteBulkString("total_tokens")
 	conn.WriteInt(int(totalToks))
 	conn.WriteBulkString("total_errors")
@@ -1340,6 +1403,8 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 	help := strings.Join([]string{
 		"EMB <model> [BLOB|VALUES] <text> [text...] - Generate embeddings (default BLOB: float32 binary; VALUES: dtype/shape/values envelope with decimal values)",
+		"EMB.IMG <model> [BLOB|VALUES] <image-bytes> [<image-bytes>...] - Embed one or more raw images (JPEG/PNG/GIF/WebP bytes; no URLs — the client fetches)",
+		"EMB.IMGMULTI [BLOB|VALUES] <model> <image-bytes> [<model> <image-bytes>...] - Multi-model image embedding with MGET-style per-pair nulls",
 		"EMB.MODELS - List available models and their dimensions",
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
 		"EMB.MULTI [BLOB|VALUES] <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",
@@ -1360,8 +1425,8 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
-		"Script input specs: {shape, data|fill, dtype} - fill builds a constant tensor host-side (no Lua data table); fill+data error",
-		"Script blocks: emb.run / emb.run_batch(named tensors) emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
+		"Script input specs: {shape, data|fill|bytes, dtype} - fill builds a constant tensor host-side (no Lua data table); bytes packs little-endian elements; data/fill/bytes are mutually exclusive",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.image.{preprocess,info} emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

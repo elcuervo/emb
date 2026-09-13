@@ -78,6 +78,26 @@ func (s *Server) configParams() []configParam {
 			set:  (*Server).setConfigMaxPairs,
 		},
 		{
+			name: "max_images",
+			get:  func(s *Server) string { return strconv.Itoa(s.maxImages) },
+			set:  (*Server).setConfigMaxImages,
+		},
+		{
+			name: "max_image_bytes",
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxImageBytes, 10) },
+			set:  (*Server).setConfigMaxImageBytes,
+		},
+		{
+			name: "max_image_pixels",
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxImagePixels, 10) },
+			set:  (*Server).setConfigMaxImagePixels,
+		},
+		{
+			name: "max_command_bytes",
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxCommandBytes, 10) },
+			set:  (*Server).setConfigMaxCommandBytes,
+		},
+		{
 			name: "password",
 			get:  func(s *Server) string { return s.password.Load().(string) },
 			set: func(s *Server, v string) error {
@@ -270,6 +290,57 @@ func (s *Server) setConfigMaxPairs(v string) error {
 		return fmt.Errorf("max_pairs must be a non-negative integer")
 	}
 	s.maxPairs = n
+	return nil
+}
+
+// setConfigMaxImages bounds images per EMB.IMG/EMB.IMGMULTI command.
+func (s *Server) setConfigMaxImages(v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fmt.Errorf("max_images must be a non-negative integer")
+	}
+	s.maxImages = n
+	return nil
+}
+
+// maxByteCap parses a non-negative byte-cap value for CONFIG SET.
+func maxByteCap(name, v string) (int64, error) {
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("%s must be a non-negative integer", name)
+	}
+	return n, nil
+}
+
+func (s *Server) setConfigMaxImageBytes(v string) error {
+	n, err := maxByteCap("max_image_bytes", v)
+	if err != nil {
+		return err
+	}
+	s.maxImageBytes = n
+	return nil
+}
+
+func (s *Server) setConfigMaxImagePixels(v string) error {
+	n, err := maxByteCap("max_image_pixels", v)
+	if err != nil {
+		return err
+	}
+	s.maxImagePixels = n
+	return nil
+}
+
+// setConfigMaxCommandBytes updates the command-size cap and the connection
+// reader's pre-buffer bulk guard. Values are applied live to new commands.
+func (s *Server) setConfigMaxCommandBytes(v string) error {
+	n, err := maxByteCap("max_command_bytes", v)
+	if err != nil {
+		return err
+	}
+	s.maxCommandBytes = n
+	if s.srv != nil {
+		s.srv.SetMaxBulkSize(n)
+	}
 	return nil
 }
 

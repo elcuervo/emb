@@ -28,8 +28,7 @@ redis-cli -3 EMB minilm VALUES "hello world"
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Commands](#commands)
-- [Custom scripts](#custom-scripts)
-- [Configuration](#configuration)
+- [Custom scripts](#custom-scripts)- [Configuration](#configuration)
 - [Operations](#operations)
 - [Monitoring: emb-top](#monitoring-emb-top)
 - [Clients](#clients)
@@ -51,6 +50,12 @@ redis-cli -3 EMB minilm VALUES "hello world"
   percentages, or `auto`.
 - **Multi-model queries** — `EMB.MULTI` calls different models in one command
   (MGET-style partial failures).
+- **Image embeddings** — `EMB.IMG` / `EMB.IMGMULTI` accept raw JPEG/PNG/GIF/WebP
+  **bytes** over RESP (binary-safe, no base64 or URL), decode and preprocess them
+  server-side to the model's `pixel_values` tensor, and return embeddings in the
+  same `BLOB`/`VALUES` grammar. Content-addressed image caching, command/image
+  size caps, and Lua access via `emb.image.preprocess` are included. The server
+  never fetches URLs.
 - **Ops-ready** — Redis-style `INFO` and `CONFIG`, health checks
   (`EMB.READY`), connection lifecycle knobs, and full server stats.
 
@@ -112,6 +117,8 @@ redis-cli EMB minilm "hello world"
 |---------|-------------|
 | `EMB <model> [BLOB\|VALUES] <text> [text...]` | Embed one or more texts. Default `BLOB`: single text → bulk string, multiple → array of bulk strings (float32 bytes). `VALUES`: `dtype`/`shape`/`values` envelope with decimal values |
 | `EMB.MULTI [BLOB\|VALUES] <model> <text> [<model> <text>...]` | Embed texts across different models in one call; per-pair `VALUES` envelopes (with `model`) or null on failure |
+| `EMB.IMG <model> [BLOB\|VALUES] <bytes> [<bytes>...]` | Embed one or more images from raw JPEG/PNG/GIF/WebP bytes (each a binary-safe bulk). `BLOB`: single image → bulk, multiple → array with nulls for failed/truncated slots; `VALUES`: one `[m, dim]` envelope over processed images. URLs are rejected |
+| `EMB.IMGMULTI [BLOB\|VALUES] <model> <bytes> [<model> <bytes>...]` | Embed images across different models in one call; MGET-style per-pair nulls, per-pair `VALUES` envelopes (with `model`) |
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, live cache stats |
 | `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown, **mem (RSS MB), cpu user/sys usec, goroutines** |
@@ -143,10 +150,47 @@ redis-cli EMB.MULTI minilm "hello" siglip2 "a photo of a cat"
 2) \x4a\x9f\x31\xc2...   (siglip2, 768 floats)
 ```
 
+### Image embeddings: EMB.IMG
+
+`EMB.IMG` embeds images directly from their **encoded file bytes** — no base64,
+no URL, no client-side preprocessing. RESP bulk strings are binary-safe, so a
+client just sends the file:
+
+```bash
+# redis-cli -x reads the last argument from stdin:
+cat cat.jpg | redis-cli -x EMB.IMG siglip2
+
+# multiple images → one embedding slot each (null on a failed/truncated slot):
+redis-cli EMB.IMG siglip2 <cat.jpg bytes> <dog.png bytes>
+
+# cross-model, MGET-style per-pair nulls:
+redis-cli EMB.IMGMULTI clip <cat.jpg bytes> siglip2 <dog.png bytes>
+```
+
+The server decodes the image (PNG/JPEG/GIF/WebP), resizes/crops, rescales, and
+normalizes it to the model's `pixel_values` tensor (`[1, 3, H, W]` float32 RGB),
+then runs **one batched inference** for all images in the command. The reply is
+the same `BLOB`/`VALUES` grammar as text (`EMB.IMG` takes the keyword at
+position 2, `EMB.IMGMULTI` at position 1).
+
+**Bytes only — the server never fetches URLs.** An `http(s):` or `data:` URI
+argument is rejected with an error telling the client to fetch the image and
+send its bytes. This keeps the request path network-free (no SSRF surface) and
+makes image caching optimal: entries are keyed `img:<model>:sha256(bytes)`, so a
+changed image is always a different key and a hit costs no decode or network.
+
+Image limits are configurable and enforced before decode/inference:
+`max_images` (default 4096, `0` = unlimited), `max_image_bytes` (default 32 MiB),
+`max_image_pixels` (default 33.5 MP, checked from the header), and the
+command-wide `max_command_bytes` (default 64 MiB). A single bad or oversized
+image fails only its own slot; overflow images past `max_images` are truncated
+to null slots without being decoded. See [Configuration](#configuration).
+
 ### Reply formats: BLOB and VALUES
 
 `EMB` and `EMB.MULTI` accept an optional leading reply-format keyword,
-mirroring RedisAI's `AI.TENSORGET <key> [META] [BLOB|VALUES]`:
+mirroring RedisAI's `AI.TENSORGET <key> [META] [BLOB|VALUES]` (`EMB.IMG` takes it
+at position 2, right after the model; `EMB.IMGMULTI` at position 1):
 
 - **`BLOB`** (default) — the compact binary wire: raw little-endian float32
   bytes as bulk string(s). Fastest, and byte-identical to prior emb versions.
@@ -234,13 +278,17 @@ value per text. The whitelisted host blocks:
 | `emb.tokenize.pretokenized(words, max_len)` | Encode an already-split word list → `{ids, word_ids}` |
 | `emb.math.{sigmoid, softmax, argmax}` | Post-processing primitives (vectorized per array) |
 | `emb.math.float32_bytes(vals)` | Pack numbers into ONE little-endian float32 bulk (`unpack('e*')`) |
+| `emb.image.preprocess(bytes)` | Decode and preprocess raw image bytes with the model's `image:` plan → `{shape, bytes, dtype, input}` ready for `emb.run` |
+| `emb.image.info()` | The model's configured image preprocessing parameters (`input`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`) |
 | `json.{encode, decode}` | Structured replies / parsing |
 
 Input specs are `{shape = {...}, data = {...}, dtype?}` — or
-`{shape = {...}, fill = n, dtype?}` to build a **constant tensor host-side**:
-every element equals `n`, allocated by the server with no Lua data table
-round-trip. `fill` and `data` are mutually exclusive; an explicit `dtype`
-(`"f32"`/`"i64"`) wins, and a fractional `fill` infers `f32`:
+`{shape = {...}, fill = n, dtype?}` to build a **constant tensor host-side**,
+or `{shape = {...}, bytes = <string>, dtype = "f32"|"i64"}` to feed packed
+little-endian elements with no per-element Lua table (the inverse of
+`emb.math.float32_bytes`; `dtype` is required and the byte length must match the
+shape exactly). `data`, `fill`, and `bytes` are mutually exclusive; an explicit
+`dtype` (`"f32"`/`"i64"`) wins, and a fractional `fill` infers `f32`:
 
 ```lua
 -- fused-CLIP text branch: a zeroed 1×3×224×224 pixel_values built by the
@@ -249,6 +297,15 @@ emb.run({
   input_ids    = { shape = {1, #enc.ids}, data = enc.ids },
   pixel_values = { shape = {1, 3, 224, 224}, fill = 0, dtype = "f32" },
 })
+```
+
+Image bytes become a runnable tensor the same way, without a 150k-element
+conversion: `emb.image.preprocess` returns a packed spec you pass straight to
+`emb.run` (see [`examples/scripts/image_zeroshot.lua`](examples/scripts/image_zeroshot.lua)):
+
+```lua
+local spec = emb.image.preprocess(KEYS[1])   -- KEYS[1] = raw image bytes
+local out  = emb.run({ [spec.input] = { shape = spec.shape, bytes = spec.bytes, dtype = spec.dtype } })
 ```
 
 Replies convert through the standard grammar: Lua string → bulk, list → array,
@@ -367,6 +424,10 @@ listen: ":6379"
 # cache_restore_reserve: 10%
 # cache_save_rate_limit: 100MB/s
 # idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32
+# max_command_bytes: 64MB       # max buffered bytes per command (0 = unlimited)
+# max_images: 4096              # images per EMB.IMG/EMB.IMGMULTI (0 = unlimited)
+# max_image_bytes: 32MB         # per-image byte cap (0 = unlimited)
+# max_image_pixels: 33554432    # decoded pixels per image, header-checked (0 = unlimited)
 
 models:
   minilm:
@@ -400,6 +461,27 @@ models:
   # outputs a 3D last_hidden_state. It must NOT be configured with
   # pooling: none — that would slice a 3D buffer (correct only at batch=1).
   # Use pooling: mean (auto-detected) or a pre-pooled 2D export instead.
+
+  # Dual-encoder vision export (CLIP/SigLIP): text EMB and image EMB.IMG share
+  # one embedding space. The image: block enables EMB.IMG; omitted fields are
+  # auto-detected from the ONNX graph and preprocessor_config.json.
+  clip:
+    onnx: ./models/clip/model.onnx
+    tokenizer: ./models/clip/tokenizer.json
+    output_tensor: text_embeds        # text branch output
+    pooling: none
+    normalize: true
+    dim: 512
+    image:
+      input: pixel_values             # image branch input tensor
+      output: image_embeds            # image branch output (dim must match dim)
+      size: 224
+      crop: center                    # none | center
+      resample: bicubic               # nearest | bilinear | bicubic | lanczos
+      rescale: 0.00392156862745098    # 1/255
+      mean: [0.48145466, 0.4578275, 0.40821073]
+      std:  [0.26862954, 0.26130258, 0.27577711]
+    image_preload: true
 ```
 
 ### Model options
@@ -419,7 +501,35 @@ models:
 | `workers` | auto-tuned | Number of worker goroutines |
 | `intra_op_threads` | `cores−2` | ONNX intra-op threads per session. Defaults to `cores−2` to reserve cores for request parsing/dispatch; set explicitly to override |
 | `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
+| `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
+| `image_preload` | `false` | Warm the image named-session pool at startup instead of on first `EMB.IMG` |
 | `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies |
+
+### Image models and preprocessing parity
+
+A model accepts `EMB.IMG` only when it declares an `image:` block. The block's
+fields (`input`, `output`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`)
+are all optional: explicit configuration always wins, then
+`preprocessor_config.json`, then the ONNX graph (a rank-4 image input's name and
+static spatial dimensions), then documented defaults. An undeterminable `size`
+is a load error naming the field. `crop: center` resizes the shortest edge then
+center-crops (CLIP); `crop: none` resizes directly to `size×size` (SigLIP).
+
+**Dual-encoder pairing.** When one model serves both `EMB` (text) and `EMB.IMG`
+(image), the two branches must land in the same embedding space. The server
+fails model loading when `dim` and the image output tensor's dimension disagree,
+so a text-to-image search can never silently degrade to incomparable vectors.
+Use a fused/paired export (e.g. `onnx-community/siglip2-base-patch16-224-ONNX`)
+rather than mixing an unrelated vision checkpoint with a text model.
+
+**Preprocessing parity caveat.** The Go preprocessing pipeline is within a
+documented tolerance of the Python/Pillow reference, not bit-identical (their
+resize kernels differ). Embeddings computed by `emb` are therefore not expected
+to match a Python pipeline element-for-element. **Do not mix pipelines for one
+index:** if documents were indexed with Python preprocessing, do not query with
+`emb` (or vice versa) — pick one and use it for both sides. Clients that need
+exact reference parity should preprocess with their own pipeline and send the
+tensor through `EMB.EVAL` + `emb.run`.
 
 ### Preloading scripts
 
@@ -702,6 +812,18 @@ require "emb"
 
 Emb[:minilm]["hello world"]
 # => [0.0123, -0.0456, 0.0789, ...]
+```
+
+Images use the same proxy and float32 decode; pass the encoded file bytes
+unchanged (they are sent as an `ASCII-8BIT` RESP bulk):
+
+```ruby
+Emb[:clip].image(File.binread("cat.jpg"))
+# => [0.0123, -0.0456, ...]
+
+# several images: one vector per requested slot, nil for a failed/truncated one
+Emb[:clip].image(File.binread("cat.jpg"), File.binread("dog.png"))
+# => [[0.01, ...], [0.07, ...]]
 ```
 
 **Python:**

@@ -157,9 +157,10 @@ func (c *Client) DownloadModel(repo, destDir string, preferQuantized bool) error
 		return fmt.Errorf("downloading ONNX model: %w", err)
 	}
 
-	// Download tokenizer and config files (best-effort, non-fatal if missing)
-	extraFiles := []string{"tokenizer.json", "config.json", "tokenizer_config.json", "special_tokens_map.json"}
-	for _, f := range extraFiles {
+	// Download tokenizer, config, and image-preprocessor files (best-effort,
+	// non-fatal if missing). preprocessor_config.json carries the image
+	// rescale/mean/std/crop/resample/size the image autoconfiguration reads.
+	for _, f := range ExtraModelFiles {
 		if _, downloadErr := c.Download(repo, f, destDir); downloadErr != nil {
 			// Some models might not have all these files
 			continue
@@ -167,4 +168,14 @@ func (c *Client) DownloadModel(repo, destDir string, preferQuantized bool) error
 	}
 
 	return nil
+}
+
+// ExtraModelFiles are the non-weight files DownloadModel fetches alongside the
+// ONNX graph (best-effort). Exported for tests.
+var ExtraModelFiles = []string{
+	"tokenizer.json",
+	"config.json",
+	"tokenizer_config.json",
+	"special_tokens_map.json",
+	"preprocessor_config.json",
 }

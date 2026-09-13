@@ -83,6 +83,25 @@ func doCmd(t *testing.T, c net.Conn, args ...string) string {
 
 const helloScript = `return KEYS[1] .. "|" .. ARGV[1]`
 
+func TestScriptBinaryKEYSAndNetworkFreeSandbox(t *testing.T) {
+	addr, _ := serveScriptTest(t, "")
+	c := dial(t, addr)
+
+	// Binary KEYS (NUL, high-bit, CR/LF) must round-trip byte-for-byte.
+	payload := "a\x00\xff\r\nb"
+	want := fmt.Sprintf("$%d\r\n%s\r\n", len(payload), payload)
+	if got := doCmd(t, c, "EMB.EVAL", "test", "return KEYS[1]", "1", payload); got != want {
+		t.Fatalf("binary KEYS round-trip = %q, want %q", got, want)
+	}
+
+	// The sandbox has no os/io/require (network-free, pure compute).
+	got := doCmd(t, c, "EMB.EVAL", "test", "return type(os)..type(io)..type(require)", "1", "x")
+	if got != "$9\r\nnilnilnil\r\n" {
+		t.Fatalf("sandbox libs = %q, want nilnilnil", got)
+	}
+	c.Close()
+}
+
 func TestPreloadScriptRejectsUnknownModel(t *testing.T) {
 	addr, srv := serveScriptTest(t, "")
 	_, err := srv.PreloadScript("nope", "return 1")
@@ -450,17 +469,29 @@ func TestEvalMultiTextSingleEval(t *testing.T) {
 	c := dial(t, addr)
 
 	perText := `local out = {} for i = 1, #KEYS do out[i] = KEYS[i] end return out`
-	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", perText)
-	shaVal := sha[5 : len(sha)-2]
-	before := srv.compiler.Compiles.Load()
 
-	resp := doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "c")
+	// A cold EMB.EVAL compiles the script exactly once for the whole request,
+	// not once per text (3 texts, 1 compile).
+	before := srv.compiler.Compiles.Load()
+	resp := doCmd(t, c, "EMB.EVAL", "test", perText, "3", "a", "b", "c")
 	if resp != "*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n" {
 		t.Fatalf("unexpected multi-text reply %q", resp)
 	}
-	// Exactly one compile happened for the whole 3-text request.
 	if got := srv.compiler.Compiles.Load(); got != before+1 {
 		t.Fatalf("expected 1 compile for 3 texts, got %d (before %d)", got, before)
+	}
+
+	// EMB.SCRIPT LOAD precompiles the prototype, so the following EVSHA reuses
+	// it: no additional compile for the whole 3-text request.
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", perText)
+	shaVal := sha[5 : len(sha)-2]
+	before = srv.compiler.Compiles.Load()
+	resp = doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "c")
+	if resp != "*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n" {
+		t.Fatalf("unexpected multi-text reply %q", resp)
+	}
+	if got := srv.compiler.Compiles.Load(); got != before {
+		t.Fatalf("expected EVSHA to reuse the precompiled prototype, got %d compiles (before %d)", got, before)
 	}
 
 	// A single-value script under multi-text must error, not silently drop texts.
