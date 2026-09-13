@@ -19,6 +19,18 @@ import (
 // (never stale) and model-scoped flush still works.
 const imageCachePrefix = "img:"
 
+// Image batch chunk bounds. Peak memory for one command is proportional to a
+// chunk, not to the number of images: an image expands to exactly 3*size*size
+// float32 values regardless of its encoded size, so a command carrying thousands
+// of tiny valid PNGs would otherwise hold gigabytes of decoded tensors (plus one
+// equally large contiguous inference batch) before any inference runs. The
+// element budget bounds large image sizes; the image count bounds per-run latency
+// and session scratch for small ones.
+const (
+	maxImageBatchImages   = 64
+	maxImageBatchElements = 16 << 20 // float32 elements (~64 MiB per tensor set)
+)
+
 func imageCacheKey(model string, data []byte) string {
 	sum := sha256.Sum256(data)
 	return imageCachePrefix + model + ":" + hex.EncodeToString(sum[:])
@@ -158,8 +170,15 @@ func writeIMGResult(conn redcon.Conn, format replyFormat, results [][]byte, n, t
 
 // embedImageBatch resolves raw image bytes to embeddings for one model: cache
 // hits are returned directly, misses are preprocessed (in parallel) and run in
-// exactly one batched inference. results[i] is nil when images[i] failed and
-// errs[i] carries its error. A single bad image never fails the others.
+// bounded batched inferences. results[i] is nil when images[i] failed and errs[i]
+// carries its error. A single bad image never fails the others.
+//
+// Work is chunked by a fixed tensor budget: an image expands to exactly
+// 3*size*size float32 values regardless of its encoded size, so a command
+// carrying thousands of tiny valid PNGs would otherwise hold gigabytes of
+// decoded tensors (plus one equally large contiguous batch) before any inference
+// runs. Chunking keeps peak memory proportional to the budget, not to the number
+// of images.
 func (s *Server) embedImageBatch(modelName string, res *registry.ImageResources, images [][]byte) ([][]byte, []error) {
 	results := make([][]byte, len(images))
 	errs := make([]error, len(images))
@@ -187,58 +206,75 @@ func (s *Server) embedImageBatch(modelName string, res *registry.ImageResources,
 	plan.MaxBytes = s.maxImageBytes
 	plan.MaxPixels = s.maxImagePixels
 
+	// Bound each chunk by the image count and float32-element budget.
+	chunkSize := min(len(misses), maxImageBatchImages)
+	if elem := plan.ElementCount(); elem > 0 && maxImageBatchElements/elem < chunkSize {
+		chunkSize = maxImageBatchElements / elem
+		if chunkSize < 1 {
+			chunkSize = 1
+		}
+	}
+
 	type preprocessed struct {
 		slot   int
 		tensor []float32
 		err    error
 	}
-	out := make([]preprocessed, len(misses))
-	workers := runtime.GOMAXPROCS(0)
-	if workers < 1 {
-		workers = 1
-	}
-	if workers > len(misses) {
-		workers = len(misses)
-	}
-	sem := make(chan struct{}, workers)
-	var wg sync.WaitGroup
-	for j, slot := range misses {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(j, slot int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			t, err := plan.Tensor(images[slot])
-			out[j] = preprocessed{slot: slot, tensor: t, err: err}
-		}(j, slot)
-	}
-	wg.Wait()
+	for start := 0; start < len(misses); start += chunkSize {
+		end := start + chunkSize
+		if end > len(misses) {
+			end = len(misses)
+		}
+		chunk := misses[start:end]
 
-	tensors := make([][]float32, 0, len(out))
-	slots := make([]int, 0, len(out))
-	for _, p := range out {
-		if p.err != nil {
-			errs[p.slot] = p.err
+		out := make([]preprocessed, len(chunk))
+		workers := runtime.GOMAXPROCS(0)
+		if workers < 1 {
+			workers = 1
+		}
+		if workers > len(chunk) {
+			workers = len(chunk)
+		}
+		sem := make(chan struct{}, workers)
+		var wg sync.WaitGroup
+		for j, slot := range chunk {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(j, slot int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				t, err := plan.Tensor(images[slot])
+				out[j] = preprocessed{slot: slot, tensor: t, err: err}
+			}(j, slot)
+		}
+		wg.Wait()
+
+		tensors := make([][]float32, 0, len(out))
+		slots := make([]int, 0, len(out))
+		for _, p := range out {
+			if p.err != nil {
+				errs[p.slot] = p.err
+				continue
+			}
+			tensors = append(tensors, p.tensor)
+			slots = append(slots, p.slot)
+		}
+		if len(tensors) == 0 {
 			continue
 		}
-		tensors = append(tensors, p.tensor)
-		slots = append(slots, p.slot)
-	}
-	if len(tensors) == 0 {
-		return results, errs
-	}
 
-	embeddings, err := res.Embed(tensors)
-	if err != nil {
-		for _, slot := range slots {
-			errs[slot] = err
+		embeddings, err := res.Embed(tensors)
+		if err != nil {
+			for _, slot := range slots {
+				errs[slot] = err
+			}
+			continue
 		}
-		return results, errs
-	}
-	for k, slot := range slots {
-		results[slot] = embeddings[k]
-		if s.cache != nil {
-			s.cache.Set(imageCacheKey(modelName, images[slot]), embeddings[k])
+		for k, slot := range slots {
+			results[slot] = embeddings[k]
+			if s.cache != nil {
+				s.cache.Set(imageCacheKey(modelName, images[slot]), embeddings[k])
+			}
 		}
 	}
 	return results, errs
@@ -274,9 +310,9 @@ func (s *Server) handleIMGMULTI(conn redcon.Conn, cmd redcon.Command) {
 
 	total := len(pairs) / 2
 	n := total
-	if s.maxPairs > 0 && n > s.maxPairs {
-		s.truncatedPairs.Add(int64(n - s.maxPairs))
-		n = s.maxPairs
+	if s.maxImages > 0 && n > s.maxImages {
+		s.truncatedImages.Add(int64(n - s.maxImages))
+		n = s.maxImages
 		pairs = pairs[:n*2]
 	}
 	results := make([][]byte, n)

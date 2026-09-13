@@ -29,6 +29,7 @@ type Point struct {
 	TotalErrors      int64
 	TruncatedTexts   int64
 	TruncatedPairs   int64
+	TruncatedImages  int64
 	RegisteredModels int
 }
 
@@ -135,6 +136,7 @@ func (s *Sampler) Push(res *PollResult) Point {
 		UptimeSecs:       res.UptimeSecs,
 		TruncatedTexts:   res.TruncatedTexts,
 		TruncatedPairs:   res.TruncatedPairs,
+		TruncatedImages:  res.TruncatedImages,
 		RegisteredModels: res.ModelsLoaded,
 	}
 

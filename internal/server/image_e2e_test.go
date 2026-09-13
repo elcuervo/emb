@@ -53,16 +53,9 @@ func TestCrossModalSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loading fused model: %v", err)
 	}
-	t.Cleanup(func() {
-		if entry.ImageRes != nil {
-			for _, sess := range entry.ImageRes.Sessions {
-				_ = sess.Close()
-			}
-		}
-	})
-
 	reg := registry.New()
 	reg.Add("fused", entry)
+	t.Cleanup(func() { _ = reg.Close() })
 	if _, err := reg.GetOrInit("fused"); err != nil {
 		t.Fatalf("warming text pool: %v", err)
 	}

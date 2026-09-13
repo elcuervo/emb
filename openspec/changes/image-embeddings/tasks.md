@@ -21,9 +21,9 @@ All commands run inside `nix develop` (see AGENTS.md).
 - [x] 3.1 Add image resources to `ModelEntry` (a pool of named sessions + an immutable preprocessing plan) analogous to `ScriptResources`, with lazy and preload paths; verify with registry tests.
 - [x] 3.2 Implement `handleIMG` parsing: `<model> [BLOB|VALUES] <bytes>...` with the format keyword only at position 2 when an image argument follows, and reject a URL argument with an error telling the client to fetch it; verify with server tests for keyword position, arity, and the URL-rejection message.
 - [x] 3.3 Verify binary safety end-to-end: an image whose bytes contain NUL, `0xFF`, and CR/LF sequences is received intact and embedded (include a `redis-cli -x EMB.IMG <model>` test); add a server test.
-- [x] 3.4 Implement batching: preprocess N images and run exactly one `RunNamed`; verify with a fake session asserting a single run with batch dimension N.
+- [x] 3.4 Implement bounded batching: preprocess N images and run batched `RunNamed` calls chunked by a fixed tensor budget; verify with a fake session asserting a single run for a batch that fits and multiple bounded runs beyond it.
 - [x] 3.5 Enforce `max_images` truncation (default 4096, `0` = unlimited) with one reply slot per requested image and `null` overflow, plus per-image byte and decoded-pixel caps; verify with tests for truncation and for one bad image not failing the command.
-- [x] 3.6 Enforce the dual-encoder pairing rule at model load: text and image outputs must agree on dimension, output tensor, pooling, and normalization, else fail with an error naming both dimensions; verify with a config test.
+- [x] 3.6 Enforce the dual-encoder pairing rule at model load: text and image outputs must agree on dimension, pooling, and normalization (output tensors may differ per branch), else fail with an error naming both dimensions; verify with a config test.
 - [x] 3.7 Wire `EMB.IMG` into `EMB.HELP`, `EMB.STATS` (image requests, truncated images), and `MONITOR`; verify with server tests.
 
 ## 4. Reply formats

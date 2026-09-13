@@ -339,8 +339,12 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	// Refuse a declared bulk larger than the command cap before buffering it, so
-	// a hostile Content-Length-style payload cannot make the reader grow its
-	// buffer without bound.
+	// a single hostile Content-Length-style payload cannot make the reader grow
+	// its buffer without bound. NOTE: this bounds each individual bulk only; the
+	// aggregate command size is enforced at dispatch. A command made of many
+	// sub-cap bulks is buffered in full before that check runs, so the reader's
+	// peak buffer can exceed max_command_bytes by the number of bulks. Closing
+	// that gap needs a cumulative-bytes limit in the redcon reader.
 	if s.maxCommandBytes > 0 {
 		s.srv.SetMaxBulkSize(s.maxCommandBytes)
 	}

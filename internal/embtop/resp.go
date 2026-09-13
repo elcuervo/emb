@@ -296,22 +296,23 @@ type Event struct {
 
 // PollResult is one typed snapshot of EMB.MODELS + EMB.INFO + EMB.STATS.
 type PollResult struct {
-	UptimeSecs     int64
-	TotalRequests  int64
-	TotalTokens    int64
-	TotalErrors    int64
-	ActiveRequests int64
-	Connections    int64
-	TruncatedTexts int64
-	TruncatedPairs int64
-	ModelsLoaded   int
-	MemMB          int64
-	CPUUserUsec    int64
-	CPUSysUsec     int64
-	Goroutines     int64
-	CacheHits      int64
-	CacheMisses    int64
-	CacheEvictions int64
+	UptimeSecs      int64
+	TotalRequests   int64
+	TotalTokens     int64
+	TotalErrors     int64
+	ActiveRequests  int64
+	Connections     int64
+	TruncatedTexts  int64
+	TruncatedPairs  int64
+	TruncatedImages int64
+	ModelsLoaded    int
+	MemMB           int64
+	CPUUserUsec     int64
+	CPUSysUsec      int64
+	Goroutines      int64
+	CacheHits       int64
+	CacheMisses     int64
+	CacheEvictions  int64
 
 	Models   []ModelListEntry // EMB.MODELS reply
 	PerModel map[string]*ModelStats
@@ -530,22 +531,23 @@ func strField(m map[string]Reply, key string) string {
 func parseStats(r Reply) *PollResult {
 	m := pairMap(r)
 	res := &PollResult{
-		UptimeSecs:     intField(m, "uptime_secs"),
-		TotalRequests:  intField(m, "total_requests"),
-		TotalTokens:    intField(m, "total_tokens"),
-		TotalErrors:    intField(m, "total_errors"),
-		ActiveRequests: intField(m, "active_requests"),
-		Connections:    intField(m, "connections"),
-		TruncatedTexts: intField(m, "truncated_texts"),
-		TruncatedPairs: intField(m, "truncated_pairs"),
-		ModelsLoaded:   int(intField(m, "models_loaded")),
-		MemMB:          intField(m, "mem"),
-		CPUUserUsec:    intField(m, "cpu_user_usec"),
-		CPUSysUsec:     intField(m, "cpu_sys_usec"),
-		Goroutines:     intField(m, "goroutines"),
-		CacheHits:      intField(m, "cache_hits"),
-		CacheMisses:    intField(m, "cache_misses"),
-		CacheEvictions: intField(m, "cache_evictions"),
+		UptimeSecs:      intField(m, "uptime_secs"),
+		TotalRequests:   intField(m, "total_requests"),
+		TotalTokens:     intField(m, "total_tokens"),
+		TotalErrors:     intField(m, "total_errors"),
+		ActiveRequests:  intField(m, "active_requests"),
+		Connections:     intField(m, "connections"),
+		TruncatedTexts:  intField(m, "truncated_texts"),
+		TruncatedPairs:  intField(m, "truncated_pairs"),
+		TruncatedImages: intField(m, "truncated_images"),
+		ModelsLoaded:    int(intField(m, "models_loaded")),
+		MemMB:           intField(m, "mem"),
+		CPUUserUsec:     intField(m, "cpu_user_usec"),
+		CPUSysUsec:      intField(m, "cpu_sys_usec"),
+		Goroutines:      intField(m, "goroutines"),
+		CacheHits:       intField(m, "cache_hits"),
+		CacheMisses:     intField(m, "cache_misses"),
+		CacheEvictions:  intField(m, "cache_evictions"),
 	}
 	return res
 }

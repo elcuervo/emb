@@ -5,8 +5,8 @@
 -- prompt in the same space, and returns the label with the highest cosine
 -- similarity. Everything is pure compute: no network, deterministic, cacheable.
 --
---   EMB.EVSHA siglip2 <sha> 1 <cat.jpg bytes> "a photo of a cat" "a photo of a dog"
---   -> { label = "a photo of a cat", score = 0.87, scores = {0.87, 0.12} }
+--   EMB.EVSHA siglip2 <sha> 1 <cat.jpg bytes> cat dog
+--   -> { label = "cat", score = 0.87, scores = {0.87, 0.12} }
 --
 -- KEYS[1] = raw image bytes; ARGV[1..n] = candidate labels.
 

@@ -73,16 +73,16 @@ The server SHALL accept `EMB.IMG <model> [BLOB|VALUES] <bytes> [<bytes>...]`, wh
 
 ### Requirement: Batched image inference
 
-All images of a single `EMB.IMG` (or `EMB.IMGMULTI` pair group) SHALL be preprocessed to the model's fixed tensor shape and inferred in one session run, so inference overhead does not grow linearly with the number of images. Preprocessing MAY be parallel; the inference SHALL be a single batched call.
+All images of a single `EMB.IMG` (or `EMB.IMGMULTI` pair group) SHALL be preprocessed to the model's fixed tensor shape and inferred in batched session runs bounded by a fixed per-chunk tensor budget, so inference overhead does not grow linearly with the number of images while peak memory stays bounded. Preprocessing MAY be parallel; each chunk SHALL be a single batched call.
 
-#### Scenario: N images, one inference
+#### Scenario: N images, bounded batched inference
 
 - **WHEN** a client sends `EMB.IMG` with N images for one model
-- **THEN** the server SHALL execute exactly one session run whose batch dimension is N
+- **THEN** the server SHALL execute session runs whose combined batch dimensions are N, using a single run when N fits the per-chunk budget and multiple bounded runs beyond it
 
 ### Requirement: Cross-modal dual-encoder pairing
 
-When the same model serves both text and image embedding, `EMB <model> <text>` and `EMB.IMG <model> <image>` SHALL emit vectors in the same dimensional space, using the same output tensor, pooling, and normalization settings, so that text-to-image similarity is meaningful. The server SHALL fail model loading with a descriptive error when the text and image output dimensions disagree.
+When the same model serves both text and image embedding, `EMB <model> <text>` and `EMB.IMG <model> <image>` SHALL emit vectors in the same dimensional space, using compatible dimensions plus the model's pooling and normalization settings, so that text-to-image similarity is meaningful. The image branch MAY read its own output tensor via `image.output` (split `text_embeds`/`image_embeds` exports are supported), so output-tensor names need not match. The server SHALL fail model loading with a descriptive error when the text and image output dimensions disagree.
 
 #### Scenario: Shared space for text and image
 

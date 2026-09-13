@@ -165,7 +165,7 @@ func statsReply(fields map[string]int64) []byte {
 		"active_requests", "connections", "models_loaded", "mem",
 		"cpu_user_usec", "cpu_sys_usec", "goroutines",
 		"cache_hits", "cache_misses", "cache_evictions",
-		"truncated_texts", "truncated_pairs",
+		"truncated_texts", "truncated_pairs", "truncated_images",
 	}
 	for _, k := range keys {
 		parts = append(parts, encodeBulk(k), encodeInt(fields[k]))

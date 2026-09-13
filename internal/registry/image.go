@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,11 +112,10 @@ func (r *ImageResources) pool(out onnx.NamedTensor, batch int) ([][]byte, error)
 // preprocessing plan. It returns (nil, nil) for a model without an image
 // block, so callers use a nil result to mean "this model is text-only".
 func (e *ModelEntry) ImageResources() (*ImageResources, error) {
-	if e.ImageRes != nil {
-		return e.ImageRes, nil
-	}
 	if e.cfg.Image == nil {
-		return nil, nil
+		// Text-only model; ImageRes is only ever set by test injection, before
+		// the server starts serving.
+		return e.ImageRes, nil
 	}
 	e.imageOnce.Do(func() {
 		if e.ImageRes == nil {
@@ -465,7 +465,32 @@ func resolveImagePlan(cfg config.ModelConfig, name string) (imageproc.Plan, erro
 	if plan.Size <= 0 {
 		return imageproc.Plan{}, fmt.Errorf("model %q: image.size could not be determined from config, preprocessor_config.json, or the ONNX graph; set image.size explicitly", name)
 	}
+	if err := validateImagePlan(name, plan); err != nil {
+		return imageproc.Plan{}, err
+	}
 	return plan, nil
+}
+
+// validateImagePlan rejects a fully resolved plan whose numeric fields would
+// produce non-finite tensors. Explicit configuration is checked in
+// config.validateImageConfig, but rescale/mean/std copied from
+// preprocessor_config.json (or the built-in defaults) reach imageproc.Plan
+// directly, so the resolved values are re-checked at this boundary.
+func validateImagePlan(name string, plan imageproc.Plan) error {
+	if math.IsNaN(plan.Rescale) || math.IsInf(plan.Rescale, 0) || plan.Rescale < 0 {
+		return fmt.Errorf("model %q: image rescale must be finite and non-negative, got %v", name, plan.Rescale)
+	}
+	for i, m := range plan.Mean {
+		if math.IsNaN(m) || math.IsInf(m, 0) {
+			return fmt.Errorf("model %q: image mean channel %d must be finite, got %v", name, i, m)
+		}
+	}
+	for i, s := range plan.Std {
+		if math.IsNaN(s) || math.IsInf(s, 0) || s <= 0 {
+			return fmt.Errorf("model %q: image std channel %d must be finite and positive, got %v", name, i, s)
+		}
+	}
+	return nil
 }
 
 // LogImagePlan reports the resolved plan at load for operator visibility.

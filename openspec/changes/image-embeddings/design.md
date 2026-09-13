@@ -111,7 +111,7 @@ key carries the model name.
 
 ### D5. `EMB.IMGMULTI` mirrors `EMB.MULTI`
 
-Cross-model, MGET-style per-pair nulls, `max_pairs` truncation, each pair counted as
+Cross-model, MGET-style per-pair nulls, `max_images` truncation, each pair counted as
 a request. Note this is a **transport** convenience: embeddings from different models
 are not comparable, so `IMGMULTI` serves fleet routing and heterogeneous corpora, not
 cross-model similarity. It is cheap because `EMB.MULTI` already exists.
@@ -208,8 +208,10 @@ text+image model; the current `siglip2` emb config is text-only, and a vision en
 loaded separately may differ from the text checkpoint in weights, dim, output tensor,
 pooling, **and normalization**. If they disagree, text→image retrieval silently
 degrades with no error. This is the highest-severity correctness risk, so it is a
-spec requirement: `EMB` and `EMB.IMG` on one model must share dimension, output
-tensor, pooling, and normalization, and a mismatch fails load.
+spec requirement: `EMB` and `EMB.IMG` on one model must share dimensions, pooling,
+and normalization (the output tensor may differ per branch — split
+`text_embeds`/`image_embeds` exports are the norm), and a dimension mismatch fails
+load.
 
 Related asymmetry: retrieval quality usually depends on a **prompt template** on the
 text side ("a photo of a {label}") and sometimes query-vs-document prompts. Voyage

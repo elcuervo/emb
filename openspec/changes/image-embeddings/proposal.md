@@ -39,8 +39,8 @@ text encoding: the client sends the file's bytes and the server does the rest.
   byte cap and decoded-pixel cap) so large binary payloads cannot make the server
   allocate unbounded memory for a single command.
 - **Dual-encoder pairing enforcement**: a model serving both `EMB` and `EMB.IMG`
-  must use one dimension, output tensor, pooling, and normalization, so text-to-image
-  retrieval is meaningful.
+  must use compatible dimensions, pooling, and normalization (separate per-branch
+  output tensors are supported), so text-to-image retrieval is meaningful.
 - **Scripting works with images**: the Lua sandbox gains `emb.image.preprocess(bytes)`
   (and `emb.image.info()`) so scripts can decode/preprocess image bytes and feed the
   resulting tensor to `emb.run`, enabling zero-shot classification and cross-modal

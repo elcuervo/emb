@@ -210,6 +210,58 @@ func TestResolveImagePlanMissingSizeErrors(t *testing.T) {
 	}
 }
 
+// TestResolveImagePlanRejectsInvalidResolvedValues covers values that bypass
+// config.validateImageConfig: preprocessor_config.json metadata (std <= 0,
+// negative rescale) and explicit std, which the resolved-plan boundary must
+// reject rather than silently coercing or emitting non-finite tensors.
+func TestResolveImagePlanRejectsInvalidResolvedValues(t *testing.T) {
+	cases := []struct {
+		name string
+		pp   string
+		img  *config.ImageConfig
+		want string
+	}{
+		{
+			name: "preprocessor zero std",
+			pp:   `{"size": 224, "image_mean": [0.5, 0.5, 0.5], "image_std": [0, 0.5, 0.5]}`,
+			img:  &config.ImageConfig{Input: "pixel_values"},
+			want: "std",
+		},
+		{
+			name: "preprocessor negative rescale",
+			pp:   `{"size": 224, "rescale_factor": -1}`,
+			img:  &config.ImageConfig{Input: "pixel_values"},
+			want: "rescale",
+		},
+		{
+			name: "explicit zero std",
+			pp:   `{"size": 224}`,
+			img: &config.ImageConfig{
+				Input: "pixel_values",
+				Mean:  []float64{0.5, 0.5, 0.5},
+				Std:   []float64{0, 0, 0},
+			},
+			want: "std",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			onnxPath := filepath.Join(dir, "model.onnx")
+			if err := os.WriteFile(onnxPath, []byte("dummy"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "preprocessor_config.json"), []byte(tc.pp), 0644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := resolveImagePlan(config.ModelConfig{ONNX: onnxPath, Image: tc.img}, tc.name)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error mentioning %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestResolveImagePlanPreprocessorConfigSizeObject(t *testing.T) {
 	dir := t.TempDir()
 	onnxPath := filepath.Join(dir, "model.onnx")

@@ -22,6 +22,7 @@ type fakeImageSession struct {
 	mu        sync.Mutex
 	calls     int
 	lastShape []int64
+	shapes    [][]int64
 	dim       int
 	err       error
 }
@@ -39,6 +40,7 @@ func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.
 	shape := make([]int64, len(inputs[0].Shape))
 	copy(shape, inputs[0].Shape)
 	f.lastShape = shape
+	f.shapes = append(f.shapes, shape)
 	n := 1
 	for _, d := range shape {
 		n *= int(d)
@@ -71,6 +73,16 @@ func (f *fakeImageSession) shape() []int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]int64(nil), f.lastShape...)
+}
+
+func (f *fakeImageSession) runShapes() [][]int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([][]int64, len(f.shapes))
+	for i, s := range f.shapes {
+		out[i] = append([]int64(nil), s...)
+	}
+	return out
 }
 
 const testImageDim = 4
@@ -252,6 +264,37 @@ func TestEMBIMGBatchedSingleRun(t *testing.T) {
 	}
 }
 
+// TestEMBIMGBoundedBatchedRuns proves a command larger than one chunk is still
+// fully processed, using multiple bounded runs instead of one unbounded batch.
+func TestEMBIMGBoundedBatchedRuns(t *testing.T) {
+	addr, _, sessions := serveImage(t, "")
+	imgs := make([]string, maxImageBatchImages+1)
+	for i := range imgs {
+		imgs[i] = solidImagePNG(t, color.NRGBA{R: uint8(i % 256), G: 7, A: 255})
+	}
+
+	tok := redisCmd(t, addr, append([]string{"EMB.IMG", "imgA"}, imgs...)...)
+	elems := arrayOf(t, tok)
+	if len(elems) != len(imgs) {
+		t.Fatalf("reply slots = %d, want %d", len(elems), len(imgs))
+	}
+	for i, e := range elems {
+		if e.kind != "bulk" || e.val == nil {
+			t.Fatalf("slot %d = %#v, want a bulk embedding", i, e)
+		}
+	}
+
+	fake := sessions["imgA"]
+	if got, want := fake.callCount(), 2; got != want {
+		t.Fatalf("session runs = %d, want %d bounded runs", got, want)
+	}
+	for i, shape := range fake.runShapes() {
+		if len(shape) != 4 || shape[0] < 1 || shape[0] > maxImageBatchImages {
+			t.Fatalf("run %d shape = %v, want batch within [1 %d]", i, shape, maxImageBatchImages)
+		}
+	}
+}
+
 func TestEMBIMGTruncation(t *testing.T) {
 	addr, _, sessions := serveImage(t, "", WithMaxImages(2))
 	a := solidImagePNG(t, color.NRGBA{R: 1, A: 255})
@@ -333,7 +376,7 @@ func TestEMBIMGMULTITwoModelsAndPartialFailure(t *testing.T) {
 }
 
 func TestEMBIMGMULTITruncationAndFormat(t *testing.T) {
-	addr, _, _ := serveImage(t, "", WithMaxPairs(1))
+	addr, _, _ := serveImage(t, "", WithMaxImages(1))
 	a := solidImagePNG(t, color.NRGBA{R: 1, A: 255})
 	b := solidImagePNG(t, color.NRGBA{G: 2, A: 255})
 
@@ -341,6 +384,9 @@ func TestEMBIMGMULTITruncationAndFormat(t *testing.T) {
 	elems := arrayOf(t, tok)
 	if len(elems) != 2 || elems[0].kind != "bulk" || elems[1].val != nil {
 		t.Fatalf("truncated IMGMULTI = %#v", elems)
+	}
+	if got := statsIntField(t, dial(t, addr), "truncated_images"); got != 1 {
+		t.Fatalf("truncated_images = %d, want 1 (IMGMULTI overflow counts as images)", got)
 	}
 
 	// VALUES at position 1 is the reply format; each pair is a model-tagged envelope.

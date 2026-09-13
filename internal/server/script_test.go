@@ -483,8 +483,13 @@ func TestEvalMultiTextSingleEval(t *testing.T) {
 
 	// EMB.SCRIPT LOAD precompiles the prototype, so the following EVSHA reuses
 	// it: no additional compile for the whole 3-text request.
-	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", perText)
+	loadedPerText := perText + "\n-- loaded via EMB.SCRIPT LOAD"
+	before = srv.compiler.Compiles.Load()
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "test", loadedPerText)
 	shaVal := sha[5 : len(sha)-2]
+	if got := srv.compiler.Compiles.Load(); got != before+1 {
+		t.Fatalf("expected LOAD to precompile once, got %d compiles (before %d)", got, before)
+	}
 	before = srv.compiler.Compiles.Load()
 	resp = doCmd(t, c, "EMB.EVSHA", "test", shaVal, "3", "a", "b", "c")
 	if resp != "*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n" {
