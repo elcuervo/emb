@@ -712,13 +712,17 @@
             Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
             trip, over the same protocol you already speak.
           </p>
-          <pre class="topviz__screen"> emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
-minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████  280 r/s  11.8k t/s  p50 6.5ms  p95 68.0ms  err 0
-   dim 384 · mean · int8 · batch 32/16384 workers 2
-bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████  151 r/s   5.7k t/s  p50 8.8ms  p95 77.0ms  err 18 ↑
-   dim 384 · cls · fp32 · batch 32/16384 workers 2
-cache 93.6% ██████████  cpu 50.3% ██████  mem 552MB ████████████
-conns 7 · active 1 · goroutines 22 · truncated 0/0</pre>
+          <!-- Field spans, not decoration: a line may break between these
+               but never inside one, so at the widths where the render cannot
+               hold a line no value is split from its unit. Every character
+               of the capture is unchanged. -->
+          <pre class="topviz__screen"> <span class="tf">emb-top v0.4.0 ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
+<span class="tf">minilm</span>        <span class="tf tf--bar">████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████</span>  <span class="tf">280 r/s</span>  <span class="tf">11.8k t/s</span>  <span class="tf">p50 6.5ms</span>  <span class="tf">p95 68.0ms</span>  <span class="tf">err 0</span>
+   <span class="tf">dim 384 ·</span> <span class="tf">mean ·</span> <span class="tf">int8 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
+<span class="tf">bge-small-en…</span> <span class="tf tf--bar">▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████</span>  <span class="tf">151 r/s</span>   <span class="tf">5.7k t/s</span>  <span class="tf">p50 8.8ms</span>  <span class="tf">p95 77.0ms</span>  <span class="tf">err 18 ↑</span>
+   <span class="tf">dim 384 ·</span> <span class="tf">cls ·</span> <span class="tf">fp32 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
+<span class="tf">cache 93.6% <span class="tf--bar">██████████</span></span>  <span class="tf">cpu 50.3% <span class="tf--bar">██████</span></span>  <span class="tf">mem 552MB <span class="tf--bar">████████████</span></span>
+<span class="tf">conns 7 ·</span> <span class="tf">active 1 ·</span> <span class="tf">goroutines 22 ·</span> <span class="tf">truncated 0/0</span></pre>
           <p class="topviz__src">Sample run · rows omitted</p>
         </section>
 

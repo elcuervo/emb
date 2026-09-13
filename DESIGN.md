@@ -857,32 +857,17 @@ execution path
 topographic route
 ```
 
-## Data branches
+## Data branches — removed
 
-The route is also where the README reaches the page. Above the fork, three
-branches leave the trunk and run through the sky over the massif, each with a
-margin annotation carrying one fact the pipeline diagram cannot show:
-
-```text
-BLOB OR VALUES      the reply formats: raw float32 bytes by default,
-BYTES STAY          or a self-describing decimal envelope
-BYTES
-
-HELLO 3             protocol negotiation: RESP2 by default, RESP3 opt-in
-RESP2 RISES         on the same connection
-TO RESP3
-
-1 MS WINDOW         the batcher: one window coalesces concurrent requests
-SHARED              into shared ONNX runs
-ONNX RUNS
-```
-
-The trunk draws across the whole scroll travel; each branch then draws over
-the following 58% of it, 14% apart, so the extra facts arrive in sequence
-rather than all at once. Below 1000px the branches and their annotations are
-dropped together — a phone has no paper beside the massif to hold them, and an
-unlabelled spur crossing the peak reads as an artefact. The same facts stay
-reachable in the feature list.
+The route used to fork three branches above the fork point, each carrying a
+README fact the pipeline diagram cannot show (`BLOB OR VALUES` / `BYTES STAY`
+`BYTES`, `HELLO 3` / `RESP2 RISES TO RESP3`, `1 MS WINDOW` / `SHARED ONNX
+RUNS`), staged 14% apart so the facts arrived in sequence. They are gone: three
+spurs crossing the peak turned the massif into a diagram of itself. The route
+is the trunk alone — one line arriving somewhere — and the three facts now sit
+in the blocks beside the command they describe. The two slogans,
+`EMBED EVERYTHING FURTHER` and `HIGHER DIMENSIONS`, stay as the only margin
+labels on the terrain.
 
 ---
 
@@ -902,10 +887,10 @@ Again, small mono typography.
 
 Do not turn this into a headline.
 
-`BLOB OR VALUES`, `HELLO 3` and `1 MS WINDOW` are the three branch
-annotations; `EMBED EVERYTHING FURTHER` and `HIGHER DIMENSIONS` stay as they
-are. All five are margin labels, not callouts: they sit in the paper beside
-the massif and never point at anything.
+`BLOB OR VALUES`, `HELLO 3` and `1 MS WINDOW` were the three branch
+annotations (see **Data branches — removed** above); `EMBED EVERYTHING
+FURTHER` and `HIGHER DIMENSIONS` stay as they are. Both are margin labels, not
+callouts: they sit in the paper beside the massif and never point at anything.
 
 ---
 

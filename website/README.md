@@ -80,7 +80,10 @@ Every technical label is clamped so it cannot compute below **12px on
 `vw`-driven layouts**, and below 1000px the same labels are set at **14px**
 explicitly. Both are floors in the stylesheet rather than wishes: the
 smallest text on the 1086px frame is 12px and the smallest text on a phone is
-14px, measured.
+14px, measured. That last claim was wrong until pass 11 — the masthead's
+`Get Started` control and its mobile `Menu` disclosure were 13px below 1001px,
+which is the two controls a phone reader touches first. They are 14px now, and
+the masthead still fits at 320px.
 
 **Composition** — the page is a signal travelling from the wordmark to the
 massif, and it is organised around one line rather than stacked as bands.
@@ -232,9 +235,16 @@ element carry a section without a rule. It is the existing display voice used
 louder, not a new one.
 
 The bar is opaque, so it covers the spine where it crosses — the same rule the
-console plate and the hero's slabs follow. `.block__grid` is two columns whose
-split *is* the spine's lane — body copy ends before the line and the mono
-facts begin after it, so no text can ever sit on it.
+console plate and the hero's slabs follow. Above 1000px `.block__grid` is two
+columns whose split *is* the spine's lane — body copy ends before the line and
+the mono facts begin after it, so no text can ever sit on it. Below 1000px the
+lane is no longer between two columns: at 641–1000px `--fold` is 25%, the
+stacked pipeline's own plate centre, so it is the **left** gutter and both of
+the block's parts take the content column, stacked (`426.7px` at 641,
+`673.5px` at 1000, clearing the rail by `--fold-gap`). The emb-top band is a
+sibling of `.block__grid` rather than a child of it, so it carries the same
+left inset as a `margin-left` instead of a column placement — the lane is on
+the opposite side of the content on a phone, which is the mirror-image rule.
 
 **The dark block is the page's one inversion, made of material already on the
 page** — the SERVE plate's own `#111110` and `#292823`, lit by the spine
@@ -302,9 +312,17 @@ language does not use.
 **`emb-top` is a full-width band.** Its capture's longest line is ~100
 characters; no 640px column holds that without either cutting the output or
 wrapping the heatmap bars mid-run. The panel is the dashboard's real render
-from `README.md` with rows omitted, and it is labelled `Sample run`. On phones
-the capture wraps (`pre-wrap`) rather than scrolling sideways, so the region
-never introduces horizontal scroll.
+from `README.md` with rows omitted, and it is labelled `Sample run`. Below
+1001px the capture wraps (`pre-wrap`) rather than scrolling sideways, so the
+region never introduces horizontal scroll — but it wraps **only between
+fields**: each field is a `.tf` span, `white-space: nowrap`, so `280 r/s` can
+never arrive as `280` / `r/s`, and the ASCII histograms — a second encoding of
+the `r/s` number printed beside them — are dropped where they are what forces
+the wrap. Every character of the render is unchanged at every width.
+
+A specimen's only container is a rule above and below it, and the specimen is
+a `<figure>`: `figure{ margin: 0 }` is in the base reset, because the UA's
+40px side margin silently inset every code block on the page (see pass 11).
 
 **The wordmark** is an inline SVG with three optical outlines in a
 1086 × 480 viewBox. At the reference width, the `b` tower starts at y87,
@@ -318,8 +336,8 @@ authored sequence: the masthead, the annotations, the wordmark and then the
 prose and actions land 90ms apart, settling at 780ms while the spine finishes
 its 850ms draw at 1000ms. The four slabs (INPUT → INFERENCE → EMBEDDINGS →
 SERVE) then activate in name-keyed order when the pipeline crosses 0.85
-viewport heights, and the ridge route plus its three data branches are drawn
-from `stroke-dashoffset` as the terrain rises through the viewport. The
+viewport heights, and the ridge route is drawn from `stroke-dashoffset` as the
+terrain rises through the viewport. The
 terrain is now the last section before the footer, so the route's progress
 denominator (`rect.height * 0.86`) is reached by the page's own end rather
 than mid-scroll: at maximum scroll `vh - rect.top` is the band's height plus
@@ -351,12 +369,20 @@ waits out another's.
 **Responsive** — the two-column spread holds down to 1000px; below that the
 prose, the pipeline and the terrain stack. From 641px to 1000px the four stage
 notes stay beside the plates they describe (each note's top is a percentage of
-the stack's own height, so it is centred on its plate at every width). Below
-640px they become a ruled list directly under the stack, bound to the diagram
-by the same `01–04` numbers the plates carry: four annotated layers cannot
-share a 350px measure at the 14px floor, so the list is the honest shape for
-that width. Phones keep the isometric stack — it is the page's whole
+the stack's own height, so it is centred on its plate at every width), and the
+blocks put their copy in the content column with the lane as the left gutter.
+Below 640px they become a ruled list directly under the stack, bound to the
+diagram by the same `01–04` numbers the plates carry: four annotated layers
+cannot share a 350px measure at the 14px floor, so the list is the honest shape
+for that width. Phones keep the isometric stack — it is the page's whole
 argument.
+
+Two rows are re-shaped at the same breakpoint, because at 236–299px their
+wide form does not fit at the 14px floor: `.shift__row` puts
+`model(fn(input))` on its own line with the arrow, output and tag below it
+(the arrow used to sit 0px off the closing paren at 390px), and the `.uses`
+ledger — `gliner2  span extraction` needs 23 characters where two 150px
+columns hold 17 — goes to one entry per row.
 
 **The spine is responsive in three states, and `--fold`, `--fold-hero` and
 `--art-w` move together in each one** — change one without the others and the
@@ -365,7 +391,7 @@ line and the route come apart:
 | Range | `--fold` | What the spine does |
 |---|---|---|
 | ≥1001px | 65.31% | an explicit lane: `.block__grid`'s split *is* the lane, so copy clears it; the console and emb-top plates cover it |
-| 641–1000px | 25% | the same lane at the stacked pipeline's plate centre; the massif goes full-bleed at 145vw |
+| 641–1000px | 25% | the lane is the **left** gutter — the stacked pipeline's plate centre — so the blocks and the emb-top band take the column right of it; the massif goes full-bleed at 145vw |
 | ≤640px | 90% | the rail moves to the right margin, because a 390px box cannot give both a centre line and a readable measure; everything is held to its left, the plates' own spine is hidden, and the rail threads the plates |
 
 Four measured corrections are baked in. The hero's CSS spine and the diagram

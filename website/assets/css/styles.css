@@ -146,7 +146,7 @@ body::after{
   background-size: 200px 200px;
 }
 
-h1, h2, h3, p, dl, dd, ol, ul{ margin: 0; }
+h1, h2, h3, p, dl, dd, ol, ul, figure{ margin: 0; }
 ol, ul{ padding: 0; list-style: none; }
 img{ max-width: 100%; display: block; }
 a{ color: inherit; text-decoration: none; }
@@ -768,6 +768,11 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
   border-top: 1px solid var(--rule-soft);
 }
 .cap:first-child{ border-top-color: var(--rule); }
+/* When the ledger is two columns its top edge is two entries wide, so both
+   rules on the first row carry the strong value. `:first-child` alone gave
+   the left column a darker edge than the right one -- an accident of source
+   order, not a decision. */
+.block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule); }
 .cap__label{
   font-family: var(--mono);
   font-size: clamp(12.5px, 1.215vw, 15.5px);
@@ -783,7 +788,8 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
   line-height: 1.45;
 }
 .block--dark .cap{ border-top-color: #292823; }
-.block--dark .cap:first-child{ border-top-color: var(--rule); }
+.block--dark .cap:first-child,
+.block--dark .block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule); }
 
 .facts{
   display: grid;
@@ -801,7 +807,12 @@ html.js .pipeline.is-live .slab.is-hot{ translate: 0 -6px; }
 /* Code is a material, not an illustration of one. It is typeset in the mono
    face with four token classes, and its container is a rule above and below
    -- never a coloured side border, which the craft floor refuses and the
-   poster's own language does not use. */
+   poster's own language does not use.
+   The specimen is a <figure>, and `figure`'s UA margin is 40px either side:
+   left unreset it silently inset every specimen by 40px and, at 320px, cut
+   the measure to 156px -- which is what pushed the caption past the column
+   and to within 2px of the rail. `figure{ margin: 0 }` is in the base reset
+   above; this rule supplies the top gap the poster wants. */
 .code{
   margin-top: clamp(18px, 2vw, 30px);
   border-top: 1px solid var(--rule);
@@ -974,9 +985,6 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 }
 .anno--right .anno__dash{ margin-left: 0; background: var(--muted); }
 
-   paper beside the massif, in `--right`'s lighter voice. Their spurs stay in
-   the sky above the peak (x 46-81%, y 31-83 of the band), so linework and
-   label can never collide at any width. */
 /* The two slogans sit in the sky band. The right one bleeds into the gutter
    as the poster draws it -- 2.1vw past the content edge -- which is what the
    mockup does and keeps it off the route's right-hand run. */
@@ -1161,6 +1169,10 @@ html.js .console__form{
   font-size: clamp(13px, 1.25vw, 16px);
   line-height: 1.45;
 }
+/* One field of the emb-top capture. The capture is a real render and these
+   are the units that must survive a wrap: a line may break between fields,
+   never inside one, so no number is ever split from its unit. */
+.tf{ white-space: nowrap; }
 .topviz__screen{
   position: relative;
   z-index: 1;
@@ -1312,6 +1324,9 @@ html.js.is-ready .hero__prose{
   /* --pad-l / --pad-r resolve against --gut, so overriding the gutter is
      enough to move every full-bleed edge with it */
   :root{ --gut: clamp(20px, 4vw, 40px); }
+  /* the one control a keyboard reaches before anything else; 12px is the
+     desktop floor, not this one */
+  .skip{ font-size: 14px; }
   [id]{ scroll-margin-top: calc(100px + env(safe-area-inset-top, 0px)); }
   .masthead{ border-bottom-color: var(--rule-soft); }
   .masthead__inner{
@@ -1324,7 +1339,7 @@ html.js.is-ready .hero__prose{
   .masthead__tagline, .vrule, .nav{ display: none; }
   .brand{ display: inline-flex; align-items: center; min-height: 44px; font-size: 28px; }
   .masthead__cta{ grid-column: 3; }
-  .btn--sm{ min-width: 132px; min-height: 44px; font-size: 13px; padding: 12px; gap: 12px; }
+  .btn--sm{ min-width: 132px; min-height: 44px; font-size: 14px; padding: 12px; gap: 12px; }
 
   /* Native disclosure remains usable without JavaScript. */
   .mobile-nav{ display: block; grid-column: 2; grid-row: 1; font-family: var(--mono); }
@@ -1336,7 +1351,7 @@ html.js.is-ready .hero__prose{
     min-width: 68px;
     min-height: 44px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     list-style: none;
   }
   .mobile-nav summary::-webkit-details-marker{ display: none; }
@@ -1407,12 +1422,16 @@ html.js.is-ready .hero__prose{
      and the route come apart. */
   :root{ --fold: 25%; --fold-hero: 25%; --art-w: 145vw; --spine-w: calc(200% / 364); }
 
-  /* the blocks keep the lane: content in the right column, line in the left
-     gutter, measure never below ~440px at this range */
+  /* the blocks keep the lane: content right of it, line in the left gutter,
+     measure 426.7px at 641 and 673.5px at 1000. The column placement that
+     puts the copy there is in the 641-1000px block below, because at 640px
+     and under the lane moves to the other side. */
   .block__body{ padding-block: 40px; }
   .cap__label{ font-size: 15px; line-height: 1.4; }
   .cap__claim{ font-size: 15px; line-height: 1.55; max-width: 52ch; }
   .block__main--ledger{ grid-template-columns: minmax(0, 1fr); }
+  /* one column here, so the ledger's top edge is its first entry again */
+  .block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule-soft); }
   .block__deck{ font-size: 15px; max-width: 52ch; }
   .facts{ font-size: 14px; line-height: 1.6; row-gap: 14px; }
   .code__body{ font-size: 14px; line-height: 1.7; }
@@ -1434,9 +1453,14 @@ html.js.is-ready .hero__prose{
   .topviz__screen{
     font-size: 14px;
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
     overflow-x: hidden;
   }
+  /* The capture's histograms are a second encoding of the r/s number printed
+     beside them, and at this measure they are what forces the wrap: without
+     them every value and every label stays whole. What is left breaks only
+     between fields (`.tf`), which is why no number here is ever split from
+     its unit. */
+  .tf--bar{ display: none; }
   .topviz__src{ font-size: 14px; }
 
   .hero__pipeline{ grid-column: 1; margin-top: 48px; }
@@ -1495,6 +1519,19 @@ html.js.is-ready .hero__prose{
   .ghlink{ justify-self: center; }
   .features__list{ grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .feat{ padding-block: 14px; }
+  /* `gliner2  span extraction` is 23 characters, and two columns of 150px at
+     the 14px floor are 17: the ledger goes to one entry per row, so the name
+     and its description stay on one line and clear the rail by --fold-gap. */
+  .uses{ grid-template-columns: minmax(0, 1fr); }
+  /* The wide row cannot hold `model(fn(input))` and the arrow in a 236px
+     measure at the 14px floor -- at 320px the args ran into the arrow with no
+     gap at all. The args take the row's first line; the arrow, the output and
+     the tag take the second. */
+  .shift__row{ grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 2px; }
+  .shift__args{ grid-column: 1 / -1; }
+  .shift__arrow{ grid-column: 1; }
+  .shift__out{ grid-column: 2; }
+  .shift__tag{ grid-column: 3; text-align: right; }
   /* The rail moves to the RIGHT margin on phones, and everything is held to
      its left. At the plate centre a 390px content box gives 175px per side,
      which left the stage notes about 16 characters -- readable in theory and
@@ -1568,6 +1605,26 @@ html.js.is-ready .hero__prose{
     height: max(var(--art-h), clamp(250px, calc(43.97vw + 100px), 470px));
   }
   .footer__inner{ display: grid; }
+}
+
+/* Tablet blocks (641-1000px). At this range --fold is 25%, the stacked
+   pipeline's own plate centre, so the lane is the LEFT gutter and everything
+   the block says has to clear it. `.block__grid` puts its first column in
+   that gutter, which left `.block__main` -- the deck, the specimens, the
+   shift -- 131.8px at 641 and 175.7px at 834, wrapping one word per line,
+   while the four facts got 559.4px. Both of the block's parts belong in the
+   content column here, stacked. */
+@media (min-width: 641px) and (max-width: 1000px){
+  .block__grid > *{ grid-column: 2; }
+  .block__aside{ margin-top: 26px; }
+  /* ...and the emb-top band, which is a sibling of `.block__grid` rather
+     than a child of it, has to start where that column starts or its claim
+     runs across the line. Unlike phones, where the lane is at 90% and the
+     sheet's left edge is the content's, the lane here is at 25%, so this is
+     a left inset rather than a width. */
+  .block .topviz{
+    margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap));
+  }
 }
 
 /* Short landscape screens should not lose space to a persistent header, and

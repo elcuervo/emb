@@ -1315,3 +1315,121 @@ column at 450. At 1440px: fold 65.31%, all five spines and the fork agree to
 **Detector: 16 → 14**, no new categories. Dropping the two phone knockouts
 removed the `cramped-padding` findings on `.pipeline__stack` and
 `.pipeline__notes`; the remaining eight are the reviewed list from pass 8 §8.
+
+---
+
+## Pass 11 — the tablet lane, a UA margin, and two rows that did not fit
+
+Found by measuring at widths the earlier passes only looked at once. The page at
+1440 was never the problem: every defect here lives at 320–1000px, and three of
+them had been shipped for several passes because a single-width screenshot
+cannot see them. Measurements are Chromium 153 / DPR 1 over
+`python3 -m http.server`.
+
+**1. The tablet blocks were unreadable, and had been since pass 8.**
+At 641–1000px `--fold` is 25% — the stacked pipeline's own plate centre — so the
+lane sits in the *left* gutter. `.block__grid`'s first column is the lane, and
+`.block__main` was placed in it: measured at 834px, the deck, the specimens and
+the shift had **175.7px** to live in while the four facts got **559.4px**, and
+the Lua specimen wrapped to roughly one word per line. At 641px it was
+**131.8px**. Both of the block's parts now sit in the content column, stacked —
+`.block__grid > *{ grid-column: 2 }` inside a `641–1000px` block — which
+measures **426.7px at 641** and **673.5px at 1000**, each clearing the rail by
+exactly `--fold-gap`. Pass 8's comment ("measure never below ~440px at this
+range") was never true, in either direction: the intent was right and the
+placement was not, and the real floor is 427px.
+
+**2. The emb-top band crossed the line at those same widths.** `.topviz` is a
+sibling of `.block__grid`, not a child of it, so the grid fix did not reach it,
+and its claim ran straight through the rail — at 834px, the words `cache` and
+`over` were bisected. It now takes the content column's own left inset,
+`margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap))`: the
+same 14px the grid gets. A phone needs the mirror-image rule, because there the
+lane is at 90% and the content grows rightwards from the sheet's edge — which is
+why this is scoped to 641–1000px rather than added to the ≤1000px query.
+Measured at 834px before: claim left 33.4, rail 223.1–227.3, overlap. After:
+claim left 241.3, rail untouched.
+
+**3. A UA `figure` margin was insetting every code specimen.** `.code` is a
+`<figure>`, and the page's reset covers `h1, h2, h3, p, dl, dd, ol, ul` — not
+`figure`, whose UA margin is 40px either side. Every specimen on the page had
+been inset by 40px since it was written. At desktop that read as a deliberate
+indent; at the narrow end it hid a real failure: measured at 320px, the Lua
+caption's `examples/scripts/sst2.lua` token ran to **x270 against a rail at
+x272** — 2px. With `figure{ margin: 0 }` in the reset the specimen spans its
+column — **236.5px at 320**, **848.1px at 1440**, where it clears the 921.6
+spine by 20px — and the caption's ink stops 14px short of the line at 320.
+
+**4. The ledger's top rule was two weights.** `.cap:first-child` gave the left
+column `--rule` `rgb(184,181,172)` and the right column `--rule-soft`
+`rgb(213,209,198)` on the same line (y 3899.5 at 1440), an accident of source
+order rather than a decision. Both rules on the first row are `--rule` now, and
+below 1001px — where the ledger is one column — the second entry returns to
+`--rule-soft`.
+
+**5. Two phone rows could not fit their measure.** `.shift__row` is
+`minmax(0,1fr) auto auto auto`; `model(fn(input))` is 144px of ink in a 133.2px
+cell at 390px, so the arrow sat pinned against the closing paren with a **0px**
+gap. Below 641px the args take the row's first line and the arrow, output and
+tag the second. And `.uses__i` — `gliner2` + `span extraction` — needs 23
+characters where two 150px columns hold 17, which put `extraction` at **x327.5
+against a 333.06 rail: 5.6px**, inside the lane's own clearance; the ledger is
+one entry per row below 641px, where the longest entry ends 106px short of it.
+
+**6. The type floor held everywhere except the masthead.** `--btn--sm` and the
+mobile `Menu` disclosure were **13px** at ≤1000px against the committed 14px
+floor — the two controls a phone reader touches first, and the two the README's
+"the smallest text on a phone is 14px, measured" claim was quietly wrong about.
+Both are 14px now, and the masthead still fits at 320px: brand 20–71.9, menu
+83–151, CTA 159–300 inside a 280px content box. Measured smallest text at 390
+and 320: **14px**, no exception left.
+
+**7. The emb-top capture no longer breaks mid-field.** The render's longest line
+is 105 characters; below 1001px it wraps (`pre-wrap`), and `overflow-wrap:
+anywhere` let it split wherever the box ran out — measured at 390px, `280 r/s`
+arrived as `280` / `r/s`, the header as `●` / `connected`, and any field could
+land on either side of a break. Each field is now a `.tf` span
+(`white-space: nowrap`), so a line may break *between* fields and never inside
+one, and the ASCII histograms — a second encoding of the `r/s` number printed
+beside them — are dropped below 1001px, where they were the thing forcing the
+wrap. Every character of the render is unchanged at every width, verified by
+comparing the `<pre>`'s `textContent` against the original string rather than by
+eye. The plate is 454.3px tall at 390px.
+
+**8. A comment lost its opener and silently swallowed a rule.** The diff's
+syntax pass refused the file at `988:3`, and the cause was not this pass: an
+edit during pass 9 deleted the first two lines of a comment about the branch
+annotations — the branch annotations pass 9 itself removed — and left its tail
+orphaned, terminated by a `*/` with no `/*` before it. `HEAD` counts **109**
+comment openers against **110** terminators. CSS recovers from that by reading
+the stray text as a selector prelude and attaching it to the next `{`, which
+meant `.anno--left, .anno--right{ top: clamp(20px, 3.7vw, 52px) }` had been
+dropped by the parser since pass 9 — harmlessly, because `.anno` sets the
+identical value, which is exactly why it went unnoticed. The orphan is gone
+(openers and terminators now balance at **118/118**, braces at **382/382**),
+and the rule is in the CSSOM again, verified by walking
+`document.styleSheets[0]`. Rendered geometry is unchanged at 1440
+(`documentElement.scrollHeight` 5071) and at 390 (7087); both annotations
+still compute `top` 52px and 20px.
+
+**9. Re-verified, and unchanged where it should be.** At 1440: every spine and
+the route's fork still agree, section gaps 0, `scrollWidth == clientWidth`, 0
+contrast failures, 0 text boxes on a visible rail — the only ink that crosses
+the line is the block header bars and the console and emb-top plates, all
+opaque, all by design. At 641 and 1000: content column clears the rail by
+exactly `--fold-gap`. At 390 and 320: no horizontal scroll, no contrast
+failure, no target under 24px, no text box within `--fold-gap` of the rail.
+The console's two modes and its transcript replay were exercised at 390 after
+the changes (`SCRIPTS` tab → `EMB.EVSHA …` → `label POSITIVE / confidence
+0.99`), since the capture markup was edited.
+
+**10. Detector: 14 → 14**, no new categories. The reviewed list from pass 8 §8
+is unchanged; the `figure` fix moved no finding.
+
+**11. Two documents still described the branches.** Pass 9 removed the three
+data-branch spurs from the terrain and recorded it here, but `DESIGN.md`'s
+*Data branches* section and `website/README.md`'s motion paragraph still
+described them as shipped — including the 58%/14% staging and the below-1000px
+drop. Neither is a visual change; both now state the route is the trunk alone
+and that the two slogans are the only margin labels left. The visual world is
+untouched.
