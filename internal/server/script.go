@@ -317,6 +317,18 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		hosts.EncodePlain = oT.EncodeOffsets
 		hosts.EncodePair = oT.EncodePairOffsets
 	}
+	// A model with an image: block also gets emb.image.preprocess / emb.image.info.
+	// The plan copy carries the server's live byte/pixel caps so scripts cannot
+	// bypass them, exactly like EMB.IMG.
+	if imgRes, imgErr := entry.ImageResources(); imgErr == nil && imgRes != nil {
+		plan := imgRes.Plan
+		plan.MaxBytes = s.maxImageBytes
+		plan.MaxPixels = s.maxImagePixels
+		hosts.Image = &script.ImageHost{
+			Plan:       plan,
+			Preprocess: plan.Tensor,
+		}
+	}
 
 	// Cache lookup: serve entirely from cache when every text is a hit; any
 	// miss (or no cache) falls through to ONE evaluation with ALL the request

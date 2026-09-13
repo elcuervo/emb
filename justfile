@@ -54,7 +54,7 @@ all: test build
     else \
         $EMB_CMD >/tmp/emb-all-server.log 2>&1 & \
     fi; \
-    echo $$! > /tmp/emb-all.pid; \
+    echo $! > /tmp/emb-all.pid; \
     sleep 8
     cd gems/emb && bundle exec rake
     @echo "=== All tests passed ==="
@@ -101,18 +101,18 @@ download-libtokenizers:
         exit 0; \
     fi; \
     echo "Downloading libtokenizers.a ({{libtokenizers-version}})..." && \
-    case "$$(uname -s),$$(uname -m)" in \
+    case "$(uname -s),$(uname -m)" in \
         Darwin,arm64)  ARCH="darwin-arm64" ;; \
         Darwin,x86_64) ARCH="darwin-x86_64" ;; \
         Linux,aarch64) ARCH="linux-aarch64" ;; \
         Linux,x86_64)  ARCH="linux-x86_64" ;; \
-        *) echo "unsupported platform: $$(uname -s)-$$(uname -m)"; exit 1 ;; \
+        *) echo "unsupported platform: $(uname -s)-$(uname -m)"; exit 1 ;; \
     esac && \
-    curl -fsSL "https://github.com/daulet/tokenizers/releases/download/{{libtokenizers-version}}/libtokenizers.$${ARCH}.tar.gz" \
+    curl -fsSL "https://github.com/daulet/tokenizers/releases/download/{{libtokenizers-version}}/libtokenizers.${ARCH}.tar.gz" \
       -o /tmp/libtokenizers.tar.gz && \
     tar xzf /tmp/libtokenizers.tar.gz -C {{libtokenizers_dir}} && \
     rm /tmp/libtokenizers.tar.gz && \
-    echo "✓ Downloaded libtokenizers.a ($$ARCH)"
+    echo "✓ Downloaded libtokenizers.a ($ARCH)"
 
 # Download a model from HuggingFace
 # Usage: just download-model [huggingface_repo] [output_dir]
@@ -122,13 +122,26 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @echo "Downloading {{repo}}..."
     @# Try root model.onnx first, then onnx/model.onnx (newer repos)
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx"
-    @if [ -f "{{dir}}/model.onnx" ] && [ "$$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
+    @if [ -f "{{dir}}/model.onnx" ] && [ "$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
         echo "  model.onnx (root)"; \
     else \
         curl -sL "https://huggingface.co/{{repo}}/resolve/main/onnx/model.onnx" -o "{{dir}}/model.onnx" && echo "  model.onnx (onnx/)"; \
     fi
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"
     @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
+    @# Image preprocessing constants for EMB.IMG (best-effort; not all repos ship it).
+    @curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/preprocessor_config.json" -o "{{dir}}/preprocessor_config.json" && echo "  preprocessor_config.json" || rm -f "{{dir}}/preprocessor_config.json"
+
+# Download a vision export for EMB.IMG: a SigLIP2/CLIP ONNX vision model plus
+# its preprocessor_config.json (mean/std/rescale/size/crop/resample).
+# Usage: just download-vision-model [huggingface_repo] [output_dir]
+download-vision-model repo="onnx-community/siglip2-base-patch16-224-ONNX" dir="./models/siglip2-vision":
+    @mkdir -p {{dir}}
+    @for f in onnx/vision_model.onnx config.json preprocessor_config.json tokenizer.json; do \
+        out="{{dir}}/$(basename $f)"; \
+        if [ -f "$out" ] && [ "$(wc -c < "$out")" -gt 100 ]; then echo "✓ $f (exists)"; \
+        else curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/$f" -o "$out" && echo "✓ $f" || { rm -f "$out"; echo "failed to download $f" >&2; exit 1; }; fi; \
+    done
 
 # Download the GLiNER2 scripted-model testbed (cuerbot/gliner2-multi-v1 int8)
 # Used by the gated script-eval/GLiNER tests; ~380MB. Skips files that are
@@ -136,10 +149,10 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
 download-gliner-model:
     @mkdir -p ./models/gliner2
     @for f in model_int8.onnx tokenizer.json config.json; do \
-        if [ -f "./models/gliner2/$$f" ] && [ "$$(wc -c < "./models/gliner2/$$f")" -gt 100 ]; then \
-            echo "✓ $$f (exists)"; \
+        if [ -f "./models/gliner2/$f" ] && [ "$(wc -c < "./models/gliner2/$f")" -gt 100 ]; then \
+            echo "✓ $f (exists)"; \
         else \
-            curl -fsSL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/$$f" -o "./models/gliner2/$$f" && echo "✓ $$f" || { rm -f "./models/gliner2/$$f"; echo "failed to download $$f" >&2; exit 1; }; \
+            curl -fsSL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/$f" -o "./models/gliner2/$f" && echo "✓ $f" || { rm -f "./models/gliner2/$f"; echo "failed to download $f" >&2; exit 1; }; \
         fi; \
     done
 

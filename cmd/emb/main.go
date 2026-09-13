@@ -85,6 +85,10 @@ func run() error {
 		server.WithMaxConcurrentRequests(fc.MaxConcurrentRequests),
 		server.WithMaxTexts(intPtrOrDefault(fc.MaxTexts, 4096)),
 		server.WithMaxPairs(intPtrOrDefault(fc.MaxPairs, 4096)),
+		server.WithMaxImages(intPtrOrDefault(fc.MaxImages, 4096)),
+		server.WithMaxImageBytes(fc.EffectiveMaxImageBytes()),
+		server.WithMaxImagePixels(fc.EffectiveMaxImagePixels()),
+		server.WithMaxCommandBytes(fc.EffectiveMaxCommandBytes()),
 		server.WithPersistence(server.PersistenceConfig{
 			File:           fc.CacheFile,
 			Load:           fc.CacheLoadEnabled(),

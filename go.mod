@@ -13,6 +13,7 @@ require (
 	github.com/tidwall/redcon v1.6.2
 	github.com/yalue/onnxruntime_go v1.31.0
 	github.com/yuin/gopher-lua v1.1.2
+	golang.org/x/image v0.25.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -45,7 +46,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.20.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 )
 
-replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260908152233-262156df7a31
+replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260913215716-6625c199ee46

@@ -1376,16 +1376,16 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 88 {
-				t.Fatalf("expected 88 declared elements, got %d: %q", declared, resp)
+			if declared != 92 {
+				t.Fatalf("expected 92 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 88 {
-				t.Fatalf("expected 88 actual elements, got %d: %q", actual, resp)
+			if actual != 92 {
+				t.Fatalf("expected 92 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
 				"uptime_secs", "total_requests", "active_requests", "truncated_texts",
-				"truncated_pairs", "total_tokens",
+				"truncated_pairs", "image_requests", "truncated_images", "total_tokens",
 				"total_errors", "models_loaded", "per_model", "connections",
 				"idle_timeout_ms", "max_connections", "max_concurrent_requests",
 				"mem", "cpu_user_usec", "cpu_sys_usec", "goroutines",

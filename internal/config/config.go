@@ -41,8 +41,94 @@ type Config struct {
 	MaxTexts *int `yaml:"max_texts"`
 	// MaxPairs bounds pairs per EMB.MULTI command; commands beyond the cap are
 	// truncated (overflow reply slots null). nil = default 4096; 0 = unlimited.
-	MaxPairs *int                   `yaml:"max_pairs"`
-	Models   map[string]ModelConfig `yaml:"models"`
+	MaxPairs *int `yaml:"max_pairs"`
+	// MaxImages bounds images per EMB.IMG/EMB.IMGMULTI command; commands beyond
+	// the cap are truncated (overflow reply slots null). nil = default 4096;
+	// 0 = unlimited.
+	MaxImages *int `yaml:"max_images"`
+	// MaxCommandBytes bounds the buffered bytes of a single command (including
+	// binary image payloads); an oversized command is refused before decode or
+	// inference. nil = DefaultMaxCommandBytes; 0 = unlimited.
+	MaxCommandBytes *int64 `yaml:"max_command_bytes"`
+	// MaxImageBytes bounds the byte size of each image argument.
+	// nil = DefaultMaxImageBytes; 0 = unlimited.
+	MaxImageBytes *int64 `yaml:"max_image_bytes"`
+	// MaxImagePixels bounds the decoded pixel count of each image (checked from
+	// the header before full decode). nil = DefaultMaxImagePixels; 0 = unlimited.
+	MaxImagePixels *int64                 `yaml:"max_image_pixels"`
+	Models         map[string]ModelConfig `yaml:"models"`
+}
+
+// Default payload caps applied when the corresponding top-level key is unset.
+// They are generous enough for real images but bounded so a single command
+// cannot pin unbounded memory.
+const (
+	DefaultMaxCommandBytes = 64 << 20 // 64 MiB buffered per command
+	DefaultMaxImageBytes   = 32 << 20 // 32 MiB per image argument
+	DefaultMaxImagePixels  = 32 << 20 // 33.5 MP decoded before the full decode
+)
+
+// ImageConfig declares a model's server-side image preprocessing. A model
+// without a block does not accept EMB.IMG. Fields left at their zero value are
+// auto-detected from the ONNX graph and preprocessor_config.json where
+// possible; an undetectable required field fails model loading.
+type ImageConfig struct {
+	// Input is the ONNX input tensor that receives the pixel tensor (for
+	// example "pixel_values"). Empty auto-detects the 4D image input.
+	Input string `yaml:"input"`
+	// Size is the target square edge length. 0 auto-detects from the graph or
+	// preprocessor config.
+	Size int `yaml:"size"`
+	// Crop is "none" (default) or "center".
+	Crop string `yaml:"crop"`
+	// Resample is "bicubic" (default), "bilinear", "nearest", or "lanczos".
+	Resample string `yaml:"resample"`
+	// Rescale multiplies each pixel value in [0, 255] after resize
+	// (typically 1/255). nil auto-detects (default 1/255 when undetectable).
+	Rescale *float64 `yaml:"rescale"`
+	// Mean is the per-channel (RGB) normalization mean.
+	Mean []float64 `yaml:"mean"`
+	// Std is the per-channel (RGB) normalization standard deviation.
+	Std []float64 `yaml:"std"`
+	// Output is the ONNX output tensor the image embedding is read from. Empty
+	// uses the model's output_tensor (correct for a fused export whose text and
+	// image branches share one output tensor).
+	Output string `yaml:"output"`
+}
+
+// validateImageConfig rejects structurally invalid image blocks at config
+// load. Preprocessor defaults and graph detection happen later in the registry,
+// so absent fields are legal here; only inconsistent or unknown values fail.
+func validateImageConfig(name string, img ImageConfig) error {
+	switch img.Crop {
+	case "", "none", "center":
+	default:
+		return fmt.Errorf("model %q: image.crop must be \"none\", \"center\", or unset, got %q", name, img.Crop)
+	}
+	switch img.Resample {
+	case "", "nearest", "bilinear", "bicubic", "lanczos":
+	default:
+		return fmt.Errorf("model %q: image.resample must be one of nearest|bilinear|bicubic|lanczos or unset, got %q", name, img.Resample)
+	}
+	if img.Size < 0 {
+		return fmt.Errorf("model %q: image.size must be non-negative", name)
+	}
+	if img.Rescale != nil && *img.Rescale < 0 {
+		return fmt.Errorf("model %q: image.rescale must be non-negative", name)
+	}
+	// mean and std travel together: one without the other is an incomplete
+	// (partial) image block rather than an auto-detectable omission.
+	hasMean, hasStd := img.Mean != nil, img.Std != nil
+	if hasMean != hasStd {
+		return fmt.Errorf("model %q: image.mean and image.std must be set together", name)
+	}
+	if hasMean && len(img.Mean) != 3 {
+		return fmt.Errorf("model %q: image.mean must have 3 channels, got %d", name, len(img.Mean))
+	}
+	if hasStd && len(img.Std) != 3 {
+		return fmt.Errorf("model %q: image.std must have 3 channels, got %d", name, len(img.Std))
+	}
+	return nil
 }
 
 // DefaultIdleTimeout is the idle-connection TTL applied when idle_timeout is
@@ -128,6 +214,12 @@ type ModelConfig struct {
 	// preload at boot. Relative paths are resolved against the config file's
 	// directory; absolute paths are used as-is.
 	Scripts []string `yaml:"scripts"`
+	// Image opts the model into server-side image embedding (EMB.IMG); nil means
+	// the model is text-only and rejects image commands.
+	Image *ImageConfig `yaml:"image"`
+	// ImagePreload warms the image named-session pool at load time instead of on
+	// the first EMB.IMG request.
+	ImagePreload bool `yaml:"image_preload"`
 }
 
 func Load(path string) (*Config, error) {
@@ -159,6 +251,11 @@ func Load(path string) (*Config, error) {
 		if m.ExecutionMode != "" && m.ExecutionMode != "sequential" && m.ExecutionMode != "parallel" {
 			return nil, fmt.Errorf("model %q: execution_mode must be \"sequential\", \"parallel\", or unset, got %q", name, m.ExecutionMode)
 		}
+		if m.Image != nil {
+			if err := validateImageConfig(name, *m.Image); err != nil {
+				return nil, err
+			}
+		}
 		cfg.Models[name] = m
 	}
 
@@ -181,8 +278,56 @@ func Load(path string) (*Config, error) {
 	if cfg.MaxPairs != nil && *cfg.MaxPairs < 0 {
 		return nil, fmt.Errorf("max_pairs must be non-negative")
 	}
+	if err := cfg.validateImageLimits(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
+}
+
+// validateImageLimits rejects negative top-level image/command limits.
+func (c Config) validateImageLimits() error {
+	if c.MaxImages != nil && *c.MaxImages < 0 {
+		return fmt.Errorf("max_images must be non-negative")
+	}
+	if c.MaxCommandBytes != nil && *c.MaxCommandBytes < 0 {
+		return fmt.Errorf("max_command_bytes must be non-negative")
+	}
+	if c.MaxImageBytes != nil && *c.MaxImageBytes < 0 {
+		return fmt.Errorf("max_image_bytes must be non-negative")
+	}
+	if c.MaxImagePixels != nil && *c.MaxImagePixels < 0 {
+		return fmt.Errorf("max_image_pixels must be non-negative")
+	}
+	return nil
+}
+
+// EffectiveMaxCommandBytes resolves the command-size bound: nil keeps the
+// default guard, an explicit 0 disables the bound, and a positive value is the
+// configured cap.
+func (c Config) EffectiveMaxCommandBytes() int64 {
+	if c.MaxCommandBytes == nil {
+		return DefaultMaxCommandBytes
+	}
+	return *c.MaxCommandBytes
+}
+
+// EffectiveMaxImageBytes resolves the per-image byte cap like
+// EffectiveMaxCommandBytes.
+func (c Config) EffectiveMaxImageBytes() int64 {
+	if c.MaxImageBytes == nil {
+		return DefaultMaxImageBytes
+	}
+	return *c.MaxImageBytes
+}
+
+// EffectiveMaxImagePixels resolves the decoded-pixel cap like
+// EffectiveMaxCommandBytes.
+func (c Config) EffectiveMaxImagePixels() int64 {
+	if c.MaxImagePixels == nil {
+		return DefaultMaxImagePixels
+	}
+	return *c.MaxImagePixels
 }
 
 func boolValue(v *bool, def bool) bool {
@@ -456,6 +601,9 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 	}
 	if fc.MaxPairs != nil && *fc.MaxPairs < 0 {
 		return nil, fmt.Errorf("max_pairs must be non-negative")
+	}
+	if err := fc.validateImageLimits(); err != nil {
+		return nil, err
 	}
 
 	return fc, nil

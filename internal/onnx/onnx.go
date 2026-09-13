@@ -10,3 +10,11 @@ type OutputInfo struct {
 	Rank int
 	Dim  int64
 }
+
+// InputInfo describes one graph input tensor. Dimensions may contain -1 for a
+// dynamic axis.
+type InputInfo struct {
+	Name       string
+	Rank       int
+	Dimensions []int64
+}

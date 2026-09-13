@@ -9,14 +9,17 @@ import (
 // BenchmarkRuntimeSessionRun measures per-run allocation of the real ONNX
 // session path. The pre-zero-copy code allocated two flatSize float slices per
 // run (output tensor backing + result copy); steady-state should now be 0.
+// It skips when the minilm fixture is absent (run: just download-model), so
+// `just bench` stays green on a fresh checkout.
 func BenchmarkRuntimeSessionRun(b *testing.B) {
+	data := modelBytes(b)
 	if err := InitEnvironment(""); err != nil {
 		b.Fatal(err)
 	}
 	defer func() { _ = DestroyEnvironment() }()
 
 	sess, err := NewRuntimeSessionFromBytes(
-		modelBytes(b),
+		data,
 		[]string{"input_ids", "attention_mask", "token_type_ids"},
 		[]string{"last_hidden_state"},
 		384, 3, 1, 2, ExecModeSequential,
@@ -56,7 +59,7 @@ func batchSeqName(batch, seq int) string {
 func modelBytes(b *testing.B) []byte {
 	data, err := os.ReadFile("../../models/minilm/model.onnx")
 	if err != nil {
-		b.Fatal(err)
+		b.Skipf("minilm test model not present: %v (run: just download-model)", err)
 	}
 	return data
 }

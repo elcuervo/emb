@@ -89,13 +89,35 @@ func NewCache(maxBytes int64) *Cache {
 	}
 }
 
-// modelOf extracts the model prefix from a cache key ("model:text"). Keys
-// without a colon are attributed to the whole key.
+// modelOf extracts the model prefix from a cache key. Text keys are
+// "model:text"; image keys are "img:<model>:<sha256>" (see imageCacheKey), so
+// the img: prefix is unwrapped when it is followed by a 64-hex content hash.
+// Keys without a colon are attributed to the whole key.
 func modelOf(key string) string {
+	if strings.HasPrefix(key, "img:") {
+		rest := key[len("img:"):]
+		if i := strings.IndexByte(rest, ':'); i > 0 && isHexDigest(rest[i+1:]) {
+			return rest[:i]
+		}
+	}
 	if i := strings.IndexByte(key, ':'); i >= 0 {
 		return key[:i]
 	}
 	return key
+}
+
+// isHexDigest reports whether s is a 64-character lowercase hex SHA-256 digest.
+func isHexDigest(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // perModel returns (creating on demand) the stats bucket for a model. Caller

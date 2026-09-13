@@ -1,6 +1,42 @@
 package script
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestCacheKeyBoundedForLargePayloads(t *testing.T) {
+	// Short text keys stay byte-identical to the pre-change format (model:sha:hash:text).
+	short := CacheKey("m", "s", []string{"a"}, "hello")
+	if !strings.HasSuffix(short, ":hello") {
+		t.Fatalf("short-text key changed format: %q", short)
+	}
+
+	big := strings.Repeat("x", 1<<20)
+	key := CacheKey("m", "s", nil, big)
+	if len(key) > 512 {
+		t.Fatalf("large payload key size = %d, want bounded (<=512)", len(key))
+	}
+	// Distinct large payloads remain distinct entries.
+	if key == CacheKey("m", "s", nil, big+"y") {
+		t.Fatal("distinct large payloads collided")
+	}
+	// Deterministic.
+	if key != CacheKey("m", "s", nil, big) {
+		t.Fatal("large-payload key is not deterministic")
+	}
+
+	// The threshold is inclusive: at the limit the text stays inline, above it
+	// is digested.
+	atLimit := strings.Repeat("z", CacheKeyInlineLimit)
+	if !strings.HasSuffix(CacheKey("m", "s", nil, atLimit), ":"+atLimit) {
+		t.Fatal("at-limit KEYS element should stay inline")
+	}
+	overLimit := strings.Repeat("z", CacheKeyInlineLimit+1)
+	if strings.HasSuffix(CacheKey("m", "s", nil, overLimit), ":"+overLimit) {
+		t.Fatal("over-limit KEYS element must be digested")
+	}
+}
 
 func TestCacheKeyDistinct(t *testing.T) {
 	a := CacheKey("gliner2", "sha1", []string{"PERSON", "ORG"}, "apple text")

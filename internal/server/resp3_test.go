@@ -142,10 +142,10 @@ func TestRESP3IntrospectionMaps(t *testing.T) {
 		t.Fatalf("expected EMB.INFO map under RESP3, got %q", resp)
 	}
 
-	// EMB.STATS is a 44-pair map.
+	// EMB.STATS is a 46-pair map.
 	c.Write(respCommand("EMB.STATS"))
 	resp = readRESP(t, c)
-	if !strings.HasPrefix(resp, "%44\r\n$11\r\nuptime_secs\r\n") {
+	if !strings.HasPrefix(resp, "%46\r\n$11\r\nuptime_secs\r\n") {
 		t.Fatalf("expected EMB.STATS map under RESP3, got %q", resp)
 	}
 

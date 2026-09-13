@@ -250,6 +250,23 @@ func GetInputNames(modelPath string) ([]string, error) {
 	return names, nil
 }
 
+// GetInputInfo returns the graph's inputs with rank and dimensions (dynamic
+// axes as -1). The registry uses it to auto-detect a model's image input tensor
+// and static spatial size.
+func GetInputInfo(modelPath string) ([]InputInfo, error) {
+	inputs, _, err := ort.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading ONNX metadata from %q: %w", modelPath, err)
+	}
+	result := make([]InputInfo, len(inputs))
+	for i, inp := range inputs {
+		dims := make([]int64, len(inp.Dimensions))
+		copy(dims, inp.Dimensions)
+		result[i] = InputInfo{Name: inp.Name, Rank: len(inp.Dimensions), Dimensions: dims}
+	}
+	return result, nil
+}
+
 func GetOutputInfo(modelPath string) (map[string]OutputInfo, error) {
 	_, outputs, err := ort.GetInputOutputInfo(modelPath)
 	if err != nil {
