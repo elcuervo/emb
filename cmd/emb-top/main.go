@@ -741,8 +741,8 @@ func (m tuiModel) gaugesView() []string {
 		caption("cpu", m.cpuBar.View(), p.CPUPercent, "%"),
 		caption("mem", m.memBar.View(), float64(p.MemMB), "MB"),
 	)
-	texts := fmt.Sprintf("conns %d · active %d · goroutines %d · truncated %d/%d",
-		p.Conns, p.Active, p.Goroutines, p.TruncatedTexts, p.TruncatedPairs)
+	texts := fmt.Sprintf("conns %d · active %d · goroutines %d · truncated texts/pairs/images %d/%d/%d",
+		p.Conns, p.Active, p.Goroutines, p.TruncatedTexts, p.TruncatedPairs, p.TruncatedImages)
 	return []string{barLine, dimStyle.Render("  " + texts)}
 }
 

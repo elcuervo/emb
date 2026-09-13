@@ -1,6 +1,7 @@
 package script
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -8,6 +9,7 @@ import (
 
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/elcuervo/emb/internal/imageproc"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
@@ -80,6 +82,19 @@ type Hosts struct {
 	// EncodePair composes the BERT-family pair template with per-part offsets
 	// (emb.tokenize.encode_pair).
 	EncodePair func(first, second string, maxLen int) (ids, mask []int64, offsets [][2]int, sep int, err error)
+	// Image binds the model's image preprocessing plan to the sandbox
+	// (emb.image.preprocess / emb.image.info). Nil leaves emb.image absent.
+	Image *ImageHost
+}
+
+// ImageHost exposes a model's image preprocessing to scripts. Preprocess
+// decodes raw image bytes through the plan and returns the channel-first
+// float32 tensor; the plan supplies the shape, input tensor name, and the
+// parameters reported by emb.image.info(). Preprocessing is pure compute, so
+// script replies remain deterministic and cacheable.
+type ImageHost struct {
+	Plan       imageproc.Plan
+	Preprocess func(data []byte) ([]float32, error)
 }
 
 // registerHosts installs the whitelisted emb.* and json host functions into
@@ -106,6 +121,16 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	}))
 	emb.RawSetString("tokenize", tok)
 	registerMath(emb, ls)
+	if h.Image != nil {
+		img := ls.NewTable()
+		img.RawSetString("preprocess", ls.NewFunction(func(ls *lua.LState) int {
+			return imagePreprocessHost(ls, h.Image)
+		}))
+		img.RawSetString("info", ls.NewFunction(func(ls *lua.LState) int {
+			return imageInfoHost(ls, h.Image)
+		}))
+		emb.RawSetString("image", img)
+	}
 	ls.SetGlobal("emb", emb)
 
 	j := ls.NewTable()
@@ -249,6 +274,66 @@ func encodePairHost(ls *lua.LState, h Hosts) int {
 	return 1
 }
 
+// imagePreprocessHost implements emb.image.preprocess(bytes): it decodes raw
+// image bytes through the model's plan and returns the packed tensor spec
+// ({shape, bytes, dtype, input}) that emb.run accepts without a per-element
+// Lua table. The tensor is charged against the evaluation's tensor budget, and
+// the plan's byte/pixel caps apply exactly as for EMB.IMG.
+func imagePreprocessHost(ls *lua.LState, ih *ImageHost) int {
+	if ih.Preprocess == nil {
+		ls.RaiseError("emb.image.preprocess is unavailable for this model")
+		return 0
+	}
+	data := ls.CheckString(1)
+	tensor, err := ih.Preprocess([]byte(data))
+	if err != nil {
+		ls.RaiseError("emb.image.preprocess: %v", err)
+		return 0
+	}
+	if err := requestBudget(ls).charge(int64(len(tensor))); err != nil {
+		ls.RaiseError("emb.image.preprocess: %v", err)
+		return 0
+	}
+	buf := make([]byte, 0, 4*len(tensor))
+	for _, v := range tensor {
+		buf = binary.LittleEndian.AppendUint32(buf, math.Float32bits(v))
+	}
+	shape := ls.NewTable()
+	for i, d := range ih.Plan.Shape() {
+		shape.RawSetInt(i+1, lua.LNumber(d))
+	}
+	result := ls.NewTable()
+	result.RawSetString("shape", shape)
+	result.RawSetString("bytes", lua.LString(buf))
+	result.RawSetString("dtype", lua.LString("f32"))
+	result.RawSetString("input", lua.LString(ih.Plan.Input))
+	ls.Push(result)
+	return 1
+}
+
+// imageInfoHost implements emb.image.info(): the model's configured
+// preprocessing parameters.
+func imageInfoHost(ls *lua.LState, ih *ImageHost) int {
+	result := ls.NewTable()
+	result.RawSetString("input", lua.LString(ih.Plan.Input))
+	result.RawSetString("size", lua.LNumber(ih.Plan.Size))
+	result.RawSetString("crop", lua.LString(ih.Plan.Crop.String()))
+	result.RawSetString("resample", lua.LString(ih.Plan.Resample.String()))
+	result.RawSetString("rescale", lua.LNumber(ih.Plan.Rescale))
+	mean := ls.NewTable()
+	for i, v := range ih.Plan.Mean {
+		mean.RawSetInt(i+1, lua.LNumber(v))
+	}
+	std := ls.NewTable()
+	for i, v := range ih.Plan.Std {
+		std.RawSetInt(i+1, lua.LNumber(v))
+	}
+	result.RawSetString("mean", mean)
+	result.RawSetString("std", std)
+	ls.Push(result)
+	return 1
+}
+
 // offsetsToLua renders [][2]int spans as an array of {start, end} pairs.
 func offsetsToLua(ls *lua.LState, offsets [][2]int) *lua.LTable {
 	out := ls.NewTable()
@@ -327,11 +412,65 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 	if hasFill && !fillIsNumber {
 		return t, fmt.Errorf("fill must be a number")
 	}
-	if hasFill && hasData {
-		return t, fmt.Errorf("fill and data are mutually exclusive")
+	bytesField := spec.RawGetString("bytes")
+	hasBytes := bytesField != lua.LNil
+	provided := 0
+	if hasData {
+		provided++
 	}
-	if !hasFill && !hasData {
-		return t, fmt.Errorf("spec must provide exactly one of data or fill")
+	if hasFill {
+		provided++
+	}
+	if hasBytes {
+		provided++
+	}
+	if provided > 1 {
+		return t, fmt.Errorf("data, fill, and bytes are mutually exclusive")
+	}
+	if provided == 0 {
+		return t, fmt.Errorf("spec must provide exactly one of data, fill, or bytes")
+	}
+
+	// Packed bytes form: little-endian raw elements, the inverse of
+	// emb.math.float32_bytes. dtype is required (no inference from content) and
+	// the length must match the shape exactly.
+	if hasBytes {
+		if explicitDType == "" {
+			return t, fmt.Errorf("bytes requires an explicit dtype (\"f32\" or \"i64\")")
+		}
+		raw, ok := bytesField.(lua.LString)
+		if !ok {
+			return t, fmt.Errorf("bytes must be a string")
+		}
+		count, err := shapeElementCount(t.Shape)
+		if err != nil {
+			return t, fmt.Errorf("bytes: %w", err)
+		}
+		t.DType = dtypeFromString(explicitDType)
+		width := int64(4)
+		if t.DType == onnx.TensorInt64 {
+			width = 8
+		}
+		if want := count * width; int64(len(raw)) != want {
+			return t, fmt.Errorf("bytes length %d does not match shape element count %d × %d bytes (%d)", len(raw), count, width, want)
+		}
+		if err := budget.charge(count); err != nil {
+			return t, fmt.Errorf("bytes: %w", err)
+		}
+		b := []byte(raw)
+		switch t.DType {
+		case onnx.TensorFloat32:
+			t.Float = make([]float32, count)
+			for i := range t.Float {
+				t.Float[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:]))
+			}
+		default:
+			t.Int64 = make([]int64, count)
+			for i := range t.Int64 {
+				t.Int64[i] = int64(binary.LittleEndian.Uint64(b[i*8:]))
+			}
+		}
+		return t, nil
 	}
 
 	// Data form: read the element array and infer int64/float32; the session
@@ -395,6 +534,26 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 		}
 	}
 	return t, nil
+}
+
+// shapeElementCount returns the product of a tensor shape's dimensions with
+// checked multiplication, so a script-controlled shape cannot overflow the
+// element count before an allocation is sized.
+func shapeElementCount(shape []int64) (int64, error) {
+	count := int64(1)
+	for _, d := range shape {
+		if d < 0 {
+			return 0, fmt.Errorf("negative shape dimension %d", d)
+		}
+		if d == 0 {
+			return 0, nil
+		}
+		if count > math.MaxInt64/d {
+			return 0, fmt.Errorf("shape element count overflows")
+		}
+		count *= d
+	}
+	return count, nil
 }
 
 // dtypeFor resolves a tensor's dtype: an explicit dtype wins; otherwise data

@@ -43,6 +43,14 @@ type ModelEntry struct {
 	scriptRes    *ScriptResources
 	scriptResErr error
 
+	// image resources (EMB.IMG): a pool of named-tensor sessions plus the
+	// immutable preprocessing plan, resolved lazily on first image request.
+	// ImageRes is exported so tests can inject fake sessions; production code
+	// uses ImageResources().
+	ImageRes    *ImageResources
+	imageOnce   sync.Once
+	imageResErr error
+
 	// Fingerprints are expensive for large ONNX files. Persistence computes one
 	// lazily per model and all periodic/manual saves reuse it.
 	fingerprintOnce sync.Once
@@ -549,6 +557,13 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 		}
 		log.Printf("  preloaded scripted sessions for %q (workers=%d)", name, len(res.Sessions()))
 	}
+	if cfg.ImagePreload && cfg.Image != nil {
+		res, err := entry.ImageResources()
+		if err != nil {
+			return nil, err
+		}
+		logImagePlan(name, res)
+	}
 
 	return entry, nil
 }
@@ -696,6 +711,7 @@ func (r *Registry) Close() error {
 				_ = entry.scriptRes.Tokenizer.Close()
 			}
 		}
+		entry.closeImageSessions()
 	}
 	clear(r.models)
 	return nil

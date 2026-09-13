@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/elcuervo/emb/internal/imageproc"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
@@ -46,6 +47,74 @@ func evalExample(t *testing.T, file string, keys, argv []string, run func([]onnx
 		t.Fatalf("%s: %v", file, err)
 	}
 	return string(encoded)
+}
+
+func TestExampleImageZeroShot(t *testing.T) {
+	// Gated on the real tokenizer fixture (run: just download-model); inference
+	// is faked so the script itself is exercised end to end.
+	rt, err := tokenizer.NewTokenizer("../../models/minilm/tokenizer.json", false)
+	if err != nil {
+		t.Skipf("test tokenizer not present: %v", err)
+	}
+	defer rt.Close()
+
+	src, err := os.ReadFile("../../examples/scripts/image_zeroshot.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan := imageproc.Plan{Input: "pixel_values", Size: 2, Rescale: 1, Std: [3]float64{1, 1, 1}}
+	textCall := 0
+	hosts := Hosts{
+		EncodePlain: rt.EncodeOffsets,
+		Image: &ImageHost{Plan: plan, Preprocess: func(data []byte) ([]float32, error) {
+			if string(data) != "fake-image" {
+				t.Fatalf("preprocess got %q", data)
+			}
+			tensor := make([]float32, plan.ElementCount())
+			tensor[0] = 1 // nonzero marks the image call
+			return tensor, nil
+		}},
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			isImage := false
+			for _, in := range inputs {
+				if in.Name != "pixel_values" {
+					continue
+				}
+				for _, v := range in.Float {
+					if v != 0 {
+						isImage = true
+					}
+				}
+			}
+			if isImage {
+				return map[string]onnx.NamedTensor{
+					"image_embeds": {Name: "image_embeds", Shape: []int64{1, 2}, DType: onnx.TensorFloat32, Float: []float32{1, 0}},
+				}, nil
+			}
+			textCall++
+			vec := []float32{1, 0} // first label aligns with the image
+			if textCall == 2 {
+				vec = []float32{0, 1}
+			}
+			return map[string]onnx.NamedTensor{
+				"text_embeds": {Name: "text_embeds", Shape: []int64{1, 2}, DType: onnx.TensorFloat32, Float: vec},
+			}, nil
+		},
+	}
+
+	v, err := EvalWithHosts(string(src), []string{"fake-image"}, []string{"cat", "dog"}, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := EncodeReply(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply := string(encoded)
+	if !containsReply(reply, "cat") {
+		t.Fatalf("expected winning label cat in %q", reply)
+	}
 }
 
 func TestExampleSST2(t *testing.T) {

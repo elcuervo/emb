@@ -17,6 +17,14 @@ listen: ":6379"
 # max_texts: 4096               # max texts processed per EMB command
 # max_pairs: 4096               # max pairs processed per EMB.MULTI command
 
+# Image/command payload limits (live-tunable via CONFIG SET). A command whose
+# buffered bytes exceed max_command_bytes is rejected before decode/inference,
+# and an oversized declared bulk is refused before its payload is read.
+# max_command_bytes: 64MB       # 0 = unlimited
+# max_images: 4096              # images per EMB.IMG/EMB.IMGMULTI (0 = unlimited)
+# max_image_bytes: 32MB         # per-image byte cap (0 = unlimited)
+# max_image_pixels: 33554432    # decoded pixels per image, checked from the header first
+
 models:
   # Standard sentence-transformers model - 3D output, mean pooling
   minilm:
@@ -41,3 +49,26 @@ models:
   #   output_tensor: pooled_sentence_embeddings_debiased_normalized
   #   pooling: none
   #   normalize: false
+
+  # Dual-encoder vision model: enables EMB.IMG/EMB.IMGMULTI. Text EMB and image
+  # EMB.IMG share one embedding space; the dimensions of the text output and the
+  # image output must match (the server fails load otherwise). Fields omitted
+  # from `image:` are auto-detected from preprocessor_config.json and the ONNX
+  # graph. See the README's "Image models and preprocessing parity" section.
+  # clip:
+  #   onnx: ./models/clip/vision_model.onnx
+  #   tokenizer: ./models/clip/tokenizer.json
+  #   output_tensor: text_embeds
+  #   pooling: none
+  #   normalize: true
+  #   dim: 512
+  #   image:
+  #     input: pixel_values
+  #     output: image_embeds
+  #     size: 224
+  #     crop: center
+  #     resample: bicubic
+  #     rescale: 0.00392156862745098
+  #     mean: [0.48145466, 0.4578275, 0.40821073]
+  #     std:  [0.26862954, 0.26130258, 0.27577711]
+  #   image_preload: true
