@@ -3,6 +3,7 @@ package registry
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -44,10 +45,11 @@ type ModelEntry struct {
 	// ModelSize is the on-disk size of the resolved weights file.
 	ModelSize int64
 
-	once    sync.Once
-	cfg     config.ModelConfig
-	loaded  atomic.Bool
-	loadErr error
+	once      sync.Once
+	cfg       config.ModelConfig
+	poolReady atomic.Bool
+	loaded    atomic.Bool
+	loadErr   error
 
 	// scripted resources (task: scripted-model path): a generic named-tensor
 	// session plus the word-aligned tokenizer, created lazily on first script
@@ -127,6 +129,16 @@ func (e *ModelEntry) ScriptFootprint() (sessions int64, tokenizer bool) {
 // opening any (0 for a model that has never served an image request).
 func (e *ModelEntry) ImageFootprint() int64 { return e.imageSessions.Load() }
 
+// LoadedPool returns the safely published embedding pool, or nil until its
+// construction completes. poolReady is stored after Pool, so its acquire load
+// makes the pointer publication visible to concurrent observability readers.
+func (e *ModelEntry) LoadedPool() *pipeline.Pool {
+	if !e.poolReady.Load() {
+		return nil
+	}
+	return e.Pool
+}
+
 // ScriptResources bundles what a scripted evaluation needs for a model: a
 // pool of named-tensor sessions (parallel scripted executions, round-robin)
 // and the tokenizer (its plain/offsets/word-level capabilities are
@@ -189,6 +201,8 @@ type Registry struct {
 	mu          sync.RWMutex
 	models      map[string]*ModelEntry
 	totalModels atomic.Int64
+	closeOnce   sync.Once
+	closeErr    error
 }
 
 func New() *Registry {
@@ -375,6 +389,7 @@ func (e *ModelEntry) ensurePool() error {
 	}
 
 	e.Pool = pool
+	e.poolReady.Store(true)
 	e.loaded.Store(true)
 	workers := numWorkers
 	batchInfo := ""
@@ -663,12 +678,14 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 	if cfg.Preload {
 		log.Printf("  preloading model %q...", name)
 		if err := entry.ensurePool(); err != nil {
+			_ = entry.closeResources()
 			return nil, err
 		}
 	}
 	if cfg.ScriptPreload {
 		res, err := entry.ScriptResources()
 		if err != nil {
+			_ = entry.closeResources()
 			return nil, err
 		}
 		log.Printf("  preloaded scripted sessions for %q (workers=%d)", name, len(res.Sessions()))
@@ -676,6 +693,7 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 	if cfg.ImagePreload && cfg.Image != nil {
 		res, err := entry.ImageResources()
 		if err != nil {
+			_ = entry.closeResources()
 			return nil, err
 		}
 		logImagePlan(name, res)
@@ -685,20 +703,22 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 }
 
 func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
+	// Hold the read lock across initialization so a concurrent Close (which
+	// takes the write lock) waits for the load instead of closing under it.
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	entry, ok := r.models[name]
-	r.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("model '%s' not found", name)
 	}
 
-	if entry.Pool == nil {
-		entry.once.Do(func() {
-			entry.loadErr = entry.ensurePool()
-		})
-		if entry.loadErr != nil {
-			return nil, entry.loadErr
-		}
+	// Always enter Once: checking Pool before Once races the initialization
+	// goroutine's publication of that pointer on simultaneous cold requests.
+	entry.once.Do(func() {
+		entry.loadErr = entry.ensurePool()
+	})
+	if entry.loadErr != nil {
+		return nil, entry.loadErr
 	}
 	return entry, nil
 }
@@ -719,6 +739,13 @@ func (r *Registry) Resolve(name string) (*ModelEntry, error) {
 func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Tests and embedders may register an already-constructed pool. Publish its
+	// initialized state before the entry becomes visible and consume Once so a
+	// later GetOrInit does not try to rebuild it from absent config paths.
+	if entry.Pool != nil {
+		entry.poolReady.Store(true)
+		entry.once.Do(func() {})
+	}
 	r.models[name] = entry
 }
 
@@ -803,32 +830,42 @@ func (r *Registry) TotalErrors() int64 {
 	defer r.mu.RUnlock()
 	var total int64
 	for _, entry := range r.models {
-		if entry.Pool != nil {
-			total += entry.Pool.Stats().Errors
+		if pool := entry.LoadedPool(); pool != nil {
+			total += pool.Stats().Errors
 		}
 	}
 	return total
 }
 
 func (r *Registry) Close() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, entry := range r.models {
-		if entry.Pool != nil {
-			_ = entry.Pool.Close()
+	r.closeOnce.Do(func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		var closeErrs []error
+		for _, entry := range r.models {
+			closeErrs = append(closeErrs, entry.closeResources())
 		}
-		if entry.scriptRes != nil {
-			for _, sess := range entry.scriptRes.Sessions() {
-				_ = sess.Close()
-			}
-		}
-		// The tokenizer is shared by the pool and the scripted path; close it
-		// once here (the pool does not own it).
-		if entry.sharedTok != nil {
-			_ = entry.sharedTok.Close()
-		}
-		entry.closeImageSessions()
+		clear(r.models)
+		r.closeErr = errors.Join(closeErrs...)
+	})
+	return r.closeErr
+}
+
+func (e *ModelEntry) closeResources() error {
+	var closeErrs []error
+	if pool := e.LoadedPool(); pool != nil {
+		closeErrs = append(closeErrs, pool.Close())
 	}
-	clear(r.models)
-	return nil
+	if e.scriptRes != nil {
+		for _, sess := range e.scriptRes.Sessions() {
+			closeErrs = append(closeErrs, sess.Close())
+		}
+	}
+	e.closeImageSessions()
+	// The tokenizer is shared by every path and is released last, after all
+	// workers and sessions that can reference it have stopped.
+	if e.sharedTok != nil {
+		closeErrs = append(closeErrs, e.sharedTok.Close())
+	}
+	return errors.Join(closeErrs...)
 }

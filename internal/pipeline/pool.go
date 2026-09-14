@@ -1,7 +1,9 @@
 package pipeline
 
 import (
+	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +23,10 @@ type Worker struct {
 	totalLat  atomic.Int64
 	tokens    atomic.Int64
 	errors    atomic.Int64
+	stop      chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, normalize bool, pooling string) *Worker {
@@ -32,13 +38,22 @@ func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, norm
 		maxLen:    maxLen,
 		normalize: normalize,
 		pooling:   pooling,
+		stop:      make(chan struct{}),
+		done:      make(chan struct{}),
 	}
 	go w.run()
 	return w
 }
 
 func (w *Worker) run() {
-	for req := range w.reqChan {
+	defer close(w.done)
+	for {
+		var req Request
+		select {
+		case req = <-w.reqChan:
+		case <-w.stop:
+			return
+		}
 		start := time.Now()
 
 		resp := w.process(req.Texts)
@@ -81,7 +96,12 @@ func (w *Worker) Errors() int64 {
 }
 
 func (w *Worker) Close() error {
-	return w.session.Close()
+	w.closeOnce.Do(func() {
+		close(w.stop)
+		<-w.done
+		w.closeErr = w.session.Close()
+	})
+	return w.closeErr
 }
 
 type Pool struct {
@@ -95,6 +115,12 @@ type Pool struct {
 	// retained so the scripted path can reuse it instead of loading a second
 	// tokenizer for the same model (see registry.openScriptResources).
 	tok tokenizer.Tokenizer
+
+	lifecycleMu sync.Mutex
+	accepting   bool
+	active      sync.WaitGroup
+	closeOnce   sync.Once
+	closeErr    error
 }
 
 // Tokenizer returns the tokenizer shared by the pool, or nil when the pool was
@@ -114,15 +140,32 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 			normalize: normalize,
 			maxLen:    maxLen,
 			tok:       tok,
+			accepting: true,
 		}, nil
 	}
 
-	workers := make([]*Worker, numWorkers)
+	// Construct every native session before starting any worker. If a later
+	// factory call fails, roll back the sessions already opened so a failed
+	// pool is never partially published and leaves no goroutine behind.
+	sessions := make([]onnx.Session, 0, numWorkers)
 	for i := range numWorkers {
 		sess, err := sessionFactory()
 		if err != nil {
+			var closeErrs []error
+			for _, opened := range sessions {
+				if closeErr := opened.Close(); closeErr != nil {
+					closeErrs = append(closeErrs, closeErr)
+				}
+			}
+			if closeErr := errors.Join(closeErrs...); closeErr != nil {
+				return nil, fmt.Errorf("creating worker %d session: %w (rollback: %v)", i, err, closeErr)
+			}
 			return nil, fmt.Errorf("creating worker %d session: %w", i, err)
 		}
+		sessions = append(sessions, sess)
+	}
+	workers := make([]*Worker, len(sessions))
+	for i, sess := range sessions {
 		workers[i] = NewWorker(sess, tok, dim, maxLen, normalize, pooling)
 	}
 	return &Pool{
@@ -131,10 +174,20 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 		normalize: normalize,
 		maxLen:    maxLen,
 		tok:       tok,
+		accepting: true,
 	}, nil
 }
 
 func (p *Pool) Embed(texts []string) (Response, error) {
+	p.lifecycleMu.Lock()
+	if !p.accepting {
+		p.lifecycleMu.Unlock()
+		return Response{}, ErrClosed
+	}
+	p.active.Add(1)
+	p.lifecycleMu.Unlock()
+	defer p.active.Done()
+
 	if p.batcher != nil {
 		return p.batcher.Embed(texts)
 	}
@@ -190,11 +243,21 @@ func (p *Pool) Stats() Stats {
 }
 
 func (p *Pool) Close() error {
-	if p.batcher != nil {
-		return p.batcher.Close()
-	}
-	for _, w := range p.workers {
-		_ = w.Close()
-	}
-	return nil
+	p.closeOnce.Do(func() {
+		p.lifecycleMu.Lock()
+		p.accepting = false
+		p.lifecycleMu.Unlock()
+		p.active.Wait()
+
+		var closeErrs []error
+		if p.batcher != nil {
+			closeErrs = append(closeErrs, p.batcher.Close())
+		} else {
+			for _, w := range p.workers {
+				closeErrs = append(closeErrs, w.Close())
+			}
+		}
+		p.closeErr = errors.Join(closeErrs...)
+	})
+	return p.closeErr
 }

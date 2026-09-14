@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"runtime/metrics"
 
-	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/process"
 )
@@ -40,31 +39,20 @@ func TotalSystemMemory() uint64 {
 	return vm.Total
 }
 
-// CPUUserUsec returns the cumulative user-mode processor time of the process
-// in microseconds since start, including work performed inside cgo calls.
-func CPUUserUsec() uint64 {
-	ti, err := processTimes()
-	if err != nil {
-		return 0
-	}
-	return uint64(ti.User * 1e6)
-}
-
-// CPUSysUsec returns the cumulative system-mode processor time in microseconds.
-func CPUSysUsec() uint64 {
-	ti, err := processTimes()
-	if err != nil {
-		return 0
-	}
-	return uint64(ti.System * 1e6)
-}
-
-func processTimes() (*cpu.TimesStat, error) {
+// ProcessCPUTimes returns the process's cumulative user and system CPU time in
+// microseconds since start, including work performed inside cgo calls. Both
+// values come from one sampling call so a single INFO render reads a
+// consistent pair.
+func ProcessCPUTimes() (userUsec, sysUsec uint64) {
 	p, err := process.NewProcess(int32(os.Getpid()))
 	if err != nil {
-		return nil, err
+		return 0, 0
 	}
-	return p.Times()
+	ti, err := p.Times()
+	if err != nil {
+		return 0, 0
+	}
+	return uint64(ti.User * 1e6), uint64(ti.System * 1e6)
 }
 
 // HeapInUseBytes returns the Go heap currently in use in bytes.

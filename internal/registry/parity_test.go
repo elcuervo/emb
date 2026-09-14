@@ -2,6 +2,7 @@ package registry
 
 import (
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -9,6 +10,22 @@ import (
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
+
+func TestConcurrentColdLoadIsRaceFree(t *testing.T) {
+	reg, _ := loadModelFixture(t, config.ModelConfig{})
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Go(func() {
+			<-start
+			if _, err := reg.GetOrInit("test"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+}
 
 func intPtr(v int) *int { return &v }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/tidwall/redcon"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/elcuervo/emb/internal/bounded"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
@@ -23,20 +25,19 @@ import (
 // entries, because the graph contract differs.
 //
 // Ownership and bound: the cache owns the source strings and is bounded per
-// model by max (default 1024). Eviction drops the oldest entry; EMB.SCRIPT
-// FLUSH drops a model's entries (or all of them). The compiled-bytecode cache
-// (script.Compiler) is bounded the same way and flushed alongside it.
+// model by max (default 1024) via bounded.Map, which evicts the
+// lexicographically smallest key. EMB.SCRIPT FLUSH drops a model's entries (or
+// all of them). The compiled-bytecode cache (script.Compiler) is bounded the
+// same way and flushed alongside it.
 type scriptCache struct {
-	mu  sync.RWMutex
-	by  map[string]map[string]string // model → sha → source
-	max int
+	by *bounded.Map[string] // model → sha → source
 }
 
 func newScriptCache(max int) *scriptCache {
 	if max <= 0 {
 		max = 1024
 	}
-	return &scriptCache{by: make(map[string]map[string]string), max: max}
+	return &scriptCache{by: bounded.New[string](max)}
 }
 
 func scriptSHA(src string) string {
@@ -46,66 +47,19 @@ func scriptSHA(src string) string {
 }
 
 func (c *scriptCache) Load(model, src string) (sha string, exists bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	perModel := c.by[model]
-	if perModel != nil && len(perModel) >= c.max {
-		// Evict the oldest entry (maps iterate without order; a stable choice
-		// is the lexicographically smallest key, which is arbitrary but
-		// deterministic).
-		oldest := ""
-		for k := range perModel {
-			if oldest == "" || k < oldest {
-				oldest = k
-			}
-		}
-		if oldest != "" {
-			delete(perModel, oldest)
-		}
-	}
-	if perModel == nil {
-		perModel = make(map[string]string)
-		c.by[model] = perModel
-	}
 	sha = scriptSHA(src)
-	if _, ok := perModel[sha]; ok {
-		return sha, true
-	}
-	perModel[sha] = src
-	return sha, false
+	_, existed, _ := c.by.GetOrCreate(model, sha, func() (string, error) { return src, nil })
+	return sha, existed
 }
 
-func (c *scriptCache) Get(model, sha string) (string, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	perModel := c.by[model]
-	if perModel == nil {
-		return "", false
-	}
-	src, ok := perModel[sha]
-	return src, ok
-}
+func (c *scriptCache) Get(model, sha string) (string, bool) { return c.by.Get(model, sha) }
 
 func (c *scriptCache) Exists(model, sha string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	perModel := c.by[model]
-	if perModel == nil {
-		return false
-	}
-	_, ok := perModel[sha]
+	_, ok := c.by.Get(model, sha)
 	return ok
 }
 
-func (c *scriptCache) Flush(model string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if model == "" {
-		c.by = make(map[string]map[string]string)
-		return
-	}
-	delete(c.by, model)
-}
+func (c *scriptCache) Flush(model string) { c.by.Clear(model) }
 
 // handleSCRIPT implements EMB.SCRIPT LOAD|EXISTS|FLUSH [<model>] [<script>|<sha...>].
 func (s *Server) handleSCRIPT(conn redcon.Conn, cmd redcon.Command) {
@@ -184,10 +138,6 @@ func (s *Server) handleScriptFlush(conn redcon.Conn, args []string) {
 
 // handleEVAL implements EMB.EVAL <model> <script> <numtexts> <text...> <arg...>.
 func (s *Server) handleEVAL(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
 	args := cmdArgs(cmd)
 	rest, err := splitEvalArgs(args)
 	if err != nil {
@@ -199,10 +149,6 @@ func (s *Server) handleEVAL(conn redcon.Conn, cmd redcon.Command) {
 
 // handleEVSHA implements EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>.
 func (s *Server) handleEVSHA(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
 	args := cmdArgs(cmd)
 	if len(args) < 3 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.EVSHA' command")
@@ -251,8 +197,8 @@ func splitEvalArgs(args []string) (*evalSplit, error) {
 		return nil, fmt.Errorf("wrong number of arguments for script evaluation")
 	}
 	model, scriptSource := args[0], args[1]
-	numTexts, err := parseInt(args[2])
-	if err != nil || numTexts < 1 {
+	numTexts, err := strconv.Atoi(args[2])
+	if err != nil || numTexts < 1 || numTexts > 1<<30 {
 		return nil, fmt.Errorf("numtexts must be a positive integer")
 	}
 	if len(args) < 3+numTexts {
@@ -272,23 +218,6 @@ func splitEvalArgs(args []string) (*evalSplit, error) {
 	}, nil
 }
 
-func parseInt(s string) (int, error) {
-	n := 0
-	if s == "" {
-		return 0, fmt.Errorf("empty integer")
-	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, fmt.Errorf("not an integer: %q", s)
-		}
-		n = n*10 + int(c-'0')
-		if n > 1<<30 {
-			return 0, fmt.Errorf("integer too large")
-		}
-	}
-	return n, nil
-}
-
 // runScripted executes a script over one or more texts and writes the reply:
 // a single converted value for one text, an array of converted values for
 // several. The script runs ONCE with all request texts as KEYS, so the script
@@ -299,9 +228,6 @@ func parseInt(s string) (int, error) {
 // full KEYS list, and each text's converted element is cached under its
 // content-addressed key.
 func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, args []string) {
-	s.active.Add(1)
-	defer s.active.Done()
-
 	// Record the evaluation for EMB.STATS and MONITOR (bounded ring, no text
 	// payloads). The clock starts before any work so the recorded latency
 	// covers parsing through reply writing, mirroring EMB.

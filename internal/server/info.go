@@ -66,13 +66,14 @@ type resourceStats struct {
 // source it falls back to the Go heap (registry.CurrentMemoryUsage semantics).
 func (s *Server) resourceStats() resourceStats {
 	rss, _ := registry.CurrentMemoryUsage()
+	cpuUserUsec, cpuSysUsec := registry.ProcessCPUTimes()
 	return resourceStats{
 		rssBytes:    rss,
 		heapBytes:   registry.HeapInUseBytes(),
 		totalSysMem: registry.TotalSystemMemory(),
 		goroutines:  registry.NumGoroutines(),
-		cpuUserUsec: registry.CPUUserUsec(),
-		cpuSysUsec:  registry.CPUSysUsec(),
+		cpuUserUsec: cpuUserUsec,
+		cpuSysUsec:  cpuSysUsec,
 	}
 }
 
@@ -95,8 +96,8 @@ func (s *Server) infoSnapshot() infoSnapshot {
 	for _, m := range models {
 		names = append(names, m.Name)
 		res := &registryEntrySnapshot{dim: m.Dim}
-		if m.Pool != nil {
-			st := m.Pool.Stats()
+		if pool := m.LoadedPool(); pool != nil {
+			st := pool.Stats()
 			res.req, res.tok = st.Requests, st.Tokens
 		}
 		byName[m.Name] = res

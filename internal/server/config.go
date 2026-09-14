@@ -70,27 +70,27 @@ func (s *Server) configParams() []configParam {
 		{
 			name: "max_texts",
 			get:  func(s *Server) string { return strconv.Itoa(s.maxTexts) },
-			set:  (*Server).setConfigMaxTexts,
+			set:  intCapSetter(&s.maxTexts, "max_texts"),
 		},
 		{
 			name: "max_pairs",
 			get:  func(s *Server) string { return strconv.Itoa(s.maxPairs) },
-			set:  (*Server).setConfigMaxPairs,
+			set:  intCapSetter(&s.maxPairs, "max_pairs"),
 		},
 		{
 			name: "max_images",
 			get:  func(s *Server) string { return strconv.Itoa(s.maxImages) },
-			set:  (*Server).setConfigMaxImages,
+			set:  intCapSetter(&s.maxImages, "max_images"),
 		},
 		{
 			name: "max_image_bytes",
 			get:  func(s *Server) string { return strconv.FormatInt(s.maxImageBytes, 10) },
-			set:  (*Server).setConfigMaxImageBytes,
+			set:  int64CapSetter(&s.maxImageBytes, "max_image_bytes"),
 		},
 		{
 			name: "max_image_pixels",
 			get:  func(s *Server) string { return strconv.FormatInt(s.maxImagePixels, 10) },
-			set:  (*Server).setConfigMaxImagePixels,
+			set:  int64CapSetter(&s.maxImagePixels, "max_image_pixels"),
 		},
 		{
 			name: "max_command_bytes",
@@ -270,73 +270,38 @@ func (s *Server) setConfigCache(v string) error {
 	return nil
 }
 
-// setConfigMaxTexts bounds texts per EMB command (0 = unlimited). Non-integer
-// or negative values are rejected and leave the active cap unchanged.
-func (s *Server) setConfigMaxTexts(v string) error {
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
-		return fmt.Errorf("max_texts must be a non-negative integer")
+// intCapSetter / int64CapSetter build the CONFIG SET handler for a
+// non-negative integer cap. One helper covers every max_* key, so the parse
+// rule and error wording live in one place; label names the key in errors.
+func intCapSetter(target *int, label string) func(*Server, string) error {
+	return func(_ *Server, v string) error {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return fmt.Errorf("%s must be a non-negative integer", label)
+		}
+		*target = n
+		return nil
 	}
-	s.maxTexts = n
-	return nil
 }
 
-// setConfigMaxPairs bounds pairs per EMB.MULTI command (0 = unlimited).
-// Non-integer or negative values are rejected and leave the active cap
-// unchanged.
-func (s *Server) setConfigMaxPairs(v string) error {
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
-		return fmt.Errorf("max_pairs must be a non-negative integer")
+func int64CapSetter(target *int64, label string) func(*Server, string) error {
+	return func(_ *Server, v string) error {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			return fmt.Errorf("%s must be a non-negative integer", label)
+		}
+		*target = n
+		return nil
 	}
-	s.maxPairs = n
-	return nil
-}
-
-// setConfigMaxImages bounds images per EMB.IMG/EMB.IMGMULTI command.
-func (s *Server) setConfigMaxImages(v string) error {
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
-		return fmt.Errorf("max_images must be a non-negative integer")
-	}
-	s.maxImages = n
-	return nil
-}
-
-// maxByteCap parses a non-negative byte-cap value for CONFIG SET.
-func maxByteCap(name, v string) (int64, error) {
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 {
-		return 0, fmt.Errorf("%s must be a non-negative integer", name)
-	}
-	return n, nil
-}
-
-func (s *Server) setConfigMaxImageBytes(v string) error {
-	n, err := maxByteCap("max_image_bytes", v)
-	if err != nil {
-		return err
-	}
-	s.maxImageBytes = n
-	return nil
-}
-
-func (s *Server) setConfigMaxImagePixels(v string) error {
-	n, err := maxByteCap("max_image_pixels", v)
-	if err != nil {
-		return err
-	}
-	s.maxImagePixels = n
-	return nil
 }
 
 // setConfigMaxCommandBytes updates the command-size cap and both pre-buffer
 // reader guards (per-bulk and aggregate). Values are propagated to connections
 // accepted after the change.
 func (s *Server) setConfigMaxCommandBytes(v string) error {
-	n, err := maxByteCap("max_command_bytes", v)
-	if err != nil {
-		return err
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		return fmt.Errorf("max_command_bytes must be a non-negative integer")
 	}
 	s.maxCommandBytes = n
 	if s.srv != nil {

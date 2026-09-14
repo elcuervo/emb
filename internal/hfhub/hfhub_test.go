@@ -2,12 +2,26 @@ package hfhub
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+type failingCloseTemp struct {
+	name string
+	w    io.WriteCloser
+}
+
+func (f *failingCloseTemp) Write(p []byte) (int, error) { return f.w.Write(p) }
+func (f *failingCloseTemp) Close() error {
+	_ = f.w.Close()
+	return errors.New("injected close failure")
+}
+func (f *failingCloseTemp) Name() string { return f.name }
 
 // TestExtraModelFilesIncludesPreprocessorConfig guards the image-embedding
 // autoconfiguration contract: DownloadModel must fetch preprocessor_config.json
@@ -169,5 +183,108 @@ func TestDownloadMissingFile(t *testing.T) {
 	c := newTestClient(t, nil, nil)
 	if _, err := c.Download("test/model", "nope.onnx", t.TempDir()); err == nil {
 		t.Fatal("expected an HTTP error for a missing file")
+	}
+}
+
+func TestInterruptedDownloadIsNotPublishedAndCanRetry(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			w.Header().Set("Content-Length", "100")
+			_, _ = w.Write([]byte("partial"))
+			return
+		}
+		_, _ = w.Write([]byte("complete"))
+	}))
+	t.Cleanup(srv.Close)
+	c := &Client{HTTPClient: srv.Client(), BaseURL: srv.URL}
+	dest := t.TempDir()
+	if _, err := c.Download("test/model", "model.onnx", dest); err == nil {
+		t.Fatal("expected interrupted transfer error")
+	}
+	if _, err := os.Stat(filepath.Join(dest, "model.onnx")); !os.IsNotExist(err) {
+		t.Fatalf("partial final file exists: %v", err)
+	}
+	path, err := c.Download("test/model", "model.onnx", dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "complete" || requests != 2 {
+		t.Fatalf("retry returned %q after %d HTTP requests", data, requests)
+	}
+	assertNoDownloadTemps(t, dest)
+}
+
+func TestDownloadCleansUpAfterCloseFailure(t *testing.T) {
+	original := createDownloadTemp
+	t.Cleanup(func() { createDownloadTemp = original })
+	dest := t.TempDir()
+	createDownloadTemp = func(dir, pattern string) (downloadTempFile, error) {
+		f, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return nil, err
+		}
+		return &failingCloseTemp{name: f.Name(), w: f}, nil
+	}
+	c := newTestClient(t, nil, map[string]string{"model.onnx": "weights"})
+	if _, err := c.Download("test/model", "model.onnx", dest); err == nil {
+		t.Fatal("expected close error")
+	}
+	if _, err := os.Stat(filepath.Join(dest, "model.onnx")); !os.IsNotExist(err) {
+		t.Fatalf("final file exists after close failure: %v", err)
+	}
+	assertNoDownloadTemps(t, dest)
+}
+
+func TestDownloadCleansUpAfterPublishFailure(t *testing.T) {
+	original := publishDownload
+	t.Cleanup(func() { publishDownload = original })
+	publishDownload = func(_, _ string) error { return errors.New("injected rename failure") }
+	dest := t.TempDir()
+	c := newTestClient(t, nil, map[string]string{"model.onnx": "weights"})
+	if _, err := c.Download("test/model", "model.onnx", dest); err == nil {
+		t.Fatal("expected publish error")
+	}
+	assertNoDownloadTemps(t, dest)
+}
+
+func TestConcurrentDownloadsPublishOneCompleteArtifact(t *testing.T) {
+	c := newTestClient(t, nil, map[string]string{"model.onnx": "complete-weights"})
+	dest := t.TempDir()
+	start := make(chan struct{})
+	errs := make(chan error, 8)
+	for range 8 {
+		go func() {
+			<-start
+			_, err := c.Download("test/model", "model.onnx", dest)
+			errs <- err
+		}()
+	}
+	close(start)
+	for range 8 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(dest, "model.onnx"))
+	if err != nil || string(data) != "complete-weights" {
+		t.Fatalf("published artifact = %q, err=%v", data, err)
+	}
+	assertNoDownloadTemps(t, dest)
+}
+
+func assertNoDownloadTemps(t *testing.T, dir string) {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(dir, ".*.download-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary downloads remain: %v", matches)
 	}
 }

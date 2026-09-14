@@ -4,10 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
 // TestDefaultIntraOpThreads verifies the thread-isolation default: unset resolves to
@@ -160,5 +163,56 @@ func TestResolveQuantizeDefaultsAuto(t *testing.T) {
 	}
 	if cfg.Quantize != "auto" {
 		t.Fatalf("expected default auto, got %q", cfg.Quantize)
+	}
+}
+
+// TestCloseWaitsForInFlightInitialization proves Close waits for a lazy load
+// that holds the registry read lock, instead of opening resources under it.
+func TestCloseWaitsForInFlightInitialization(t *testing.T) {
+	orig := newTokenizer
+	t.Cleanup(func() { newTokenizer = orig })
+
+	var closes atomic.Int64
+	fake := &countingTokenizer{closes: &closes}
+	entered := make(chan struct{})
+	gate := make(chan struct{})
+	newTokenizer = func(string, bool) (tokenizer.Tokenizer, error) {
+		close(entered)
+		<-gate
+		return fake, nil
+	}
+
+	reg := New()
+	// A nonexistent ONNX path fails ensurePool right after the tokenizer is
+	// created, so the test needs no ONNX environment or downloaded model.
+	reg.Add("test", &ModelEntry{Name: "test", cfg: config.ModelConfig{
+		Tokenizer: "ignored",
+		ONNX:      filepath.Join(t.TempDir(), "missing.onnx"),
+	}})
+
+	loaded := make(chan error, 1)
+	go func() {
+		_, err := reg.GetOrInit("test")
+		loaded <- err
+	}()
+	<-entered
+
+	closed := make(chan error, 1)
+	go func() { closed <- reg.Close() }()
+	select {
+	case <-closed:
+		t.Fatal("Close returned while a lazy initialization was in flight")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(gate)
+	if err := <-loaded; err == nil {
+		t.Fatal("GetOrInit succeeded with a missing model file")
+	}
+	if err := <-closed; err != nil {
+		t.Fatal(err)
+	}
+	if got := closes.Load(); got != 1 {
+		t.Fatalf("tokenizer closes = %d, want exactly 1", got)
 	}
 }

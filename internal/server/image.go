@@ -53,17 +53,10 @@ func isURLArg(arg []byte) bool {
 // per argument (null for a failed/truncated one) under BLOB, or a single
 // dtype/shape/values envelope over the processed images under VALUES.
 func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
 	if len(cmd.Args) < 3 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.IMG' command")
 		return
 	}
-
-	s.active.Add(1)
-	defer s.active.Done()
 
 	started := time.Now()
 	modelName := string(cmd.Args[1])
@@ -283,11 +276,6 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, ima
 // handleIMGMULTI implements EMB.IMGMULTI [BLOB|VALUES] <model> <bytes> ... with
 // alternating model/image pairs and MGET-style per-pair nulls.
 func (s *Server) handleIMGMULTI(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
-
 	pairs := cmd.Args[1:]
 	format, hasFormat := parseFormatArg(cmd.Args[1:], 0)
 	if hasFormat {
@@ -297,9 +285,6 @@ func (s *Server) handleIMGMULTI(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.IMGMULTI' command")
 		return
 	}
-
-	s.active.Add(1)
-	defer s.active.Done()
 
 	for i := 1; i < len(pairs); i += 2 {
 		if isURLArg(pairs[i]) {

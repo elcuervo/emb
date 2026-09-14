@@ -51,7 +51,7 @@ func run() error {
 
 	dims := map[string]int{cfg.modelA: cfg.dimA, cfg.modelB: cfg.dimB}
 
-	printf(os.Stdout, "\nTest 1: cross-model EMB.MULTI vs sequential EMB\n")
+	embverify.Printf(os.Stdout, "\nTest 1: cross-model EMB.MULTI vs sequential EMB\n")
 	passed, failed, err := verifyGroup(e, []embverify.Pair{
 		{Model: cfg.modelA, Text: "hello world"},
 		{Model: cfg.modelB, Text: "query: test"},
@@ -60,7 +60,7 @@ func run() error {
 		return err
 	}
 
-	printf(os.Stdout, "\nTest 2: same-model EMB.MULTI (batcher) vs sequential EMB\n")
+	embverify.Printf(os.Stdout, "\nTest 2: same-model EMB.MULTI (batcher) vs sequential EMB\n")
 	p2, f2, err := verifyGroup(e, []embverify.Pair{
 		{Model: cfg.modelA, Text: "a"},
 		{Model: cfg.modelA, Text: "b"},
@@ -73,17 +73,11 @@ func run() error {
 	passed += p2
 	failed += f2
 	total := passed + failed
-	printf(os.Stdout, "\n%d/%d passed, %d failed\n", passed, total, failed)
+	embverify.Printf(os.Stdout, "\n%d/%d passed, %d failed\n", passed, total, failed)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d checks failed", failed, total)
 	}
 	return nil
-}
-
-// printf writes one report line. A write failure cannot change the verdict, so
-// the error is deliberately discarded here and nowhere else.
-func printf(w io.Writer, format string, args ...any) {
-	_, _ = fmt.Fprintf(w, format, args...)
 }
 
 // verifyGroup runs EMB.MULTI for pairs and compares each element, byte for
@@ -96,23 +90,23 @@ func verifyGroup(e *embverify.Embedder, pairs []embverify.Pair, dims map[string]
 	for i, p := range pairs {
 		label := fmt.Sprintf("%s/%q", p.Model, p.Text)
 		if multiRaw[i] == nil {
-			printf(out, "  ✗ %s returned null\n", label)
+			embverify.Printf(out, "  ✗ %s returned null\n", label)
 			failed++
 			continue
 		}
 		seq, err := e.RawEmbed(p.Model, p.Text)
 		if err != nil {
-			printf(out, "  ✗ %s sequential EMB: %v\n", label, err)
+			embverify.Printf(out, "  ✗ %s sequential EMB: %v\n", label, err)
 			failed++
 			continue
 		}
 		want := dims[p.Model]
 		if !bytes.Equal(multiRaw[i], seq) || (want > 0 && len(seq) != want*4) {
-			printf(out, "  ✗ %s differs from sequential EMB\n", label)
+			embverify.Printf(out, "  ✗ %s differs from sequential EMB\n", label)
 			failed++
 			continue
 		}
-		printf(out, "  ✓ %s byte-identical to EMB\n", label)
+		embverify.Printf(out, "  ✓ %s byte-identical to EMB\n", label)
 		passed++
 	}
 	return passed, failed, nil

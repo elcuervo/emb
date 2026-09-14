@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -39,6 +40,7 @@ type Server struct {
 	srv          *redcon.Server
 	ln           net.Listener
 	active       sync.WaitGroup
+	admissionMu  sync.Mutex
 	shuttingDown atomic.Bool
 	started      time.Time
 	addr         string
@@ -82,10 +84,9 @@ type Server struct {
 	conns atomic.Int64
 	// activeReqs counts EMB/EMB.MULTI commands currently being processed, used
 	// both for EMB.STATS and for the max_concurrent_requests gate.
-	activeReqs  atomic.Int64
-	idleTimeout time.Duration
-	maxConns    int
-	// maxConcurrentReqs int
+	activeReqs        atomic.Int64
+	idleTimeout       time.Duration
+	maxConns          int
 	maxConcurrentReqs int
 	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via New).
 	// Oversized commands are truncated: overflow texts are not processed and their
@@ -132,6 +133,48 @@ type Server struct {
 	scriptRequests  atomic.Int64
 	scriptErrors    atomic.Int64
 	scriptLatencyUs atomic.Int64
+}
+
+// ErrShutdownTimeout reports that accepted work outlived the shutdown
+// deadline. Callers must not destroy native model resources in this case.
+var ErrShutdownTimeout = errors.New("server shutdown deadline exceeded")
+
+func isInferenceCommand(name string) bool {
+	switch name {
+	case "emb", "emb.multi", "emb.img", "emb.imgmulti", "emb.eval", "emb.evsha":
+		return true
+	default:
+		return false
+	}
+}
+
+// admitInference atomically checks draining/capacity and registers accepted
+// work with the shutdown waiter. The returned release must be called once.
+func (s *Server) admitInference() (release func(), replyErr string) {
+	s.admissionMu.Lock()
+	defer s.admissionMu.Unlock()
+	if s.shuttingDown.Load() {
+		return nil, "ERR server shutting down"
+	}
+	if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
+		return nil, fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs)
+	}
+	s.activeReqs.Add(1)
+	s.active.Add(1)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.activeReqs.Add(-1)
+			s.active.Done()
+		})
+	}, ""
+}
+
+func (s *Server) beginDraining() {
+	s.admissionMu.Lock()
+	s.shuttingDown.Store(true)
+	s.state.Store(int64(stateDraining))
+	s.admissionMu.Unlock()
 }
 
 // Option configures a Server.
@@ -305,25 +348,30 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 			conn.WriteError("NOAUTH Authentication required.")
 			return
 		}
-		// Bounded concurrency: only EMB work goes through the gate; control
+		// Bounded concurrency: only inference work goes through the gate; control
 		// commands keep answering during saturation so operators can still
 		// observe and probe. The counter increments for every EMB command so
 		// EMB.STATS/INFO report live in-flight counts even when the cap is 0.
 		if len(cmd.Args) > 0 {
 			name := strings.ToLower(string(cmd.Args[0]))
-			if name == "emb" || name == "emb.multi" || name == "emb.img" || name == "emb.imgmulti" || name == "emb.eval" || name == "emb.evsha" {
-				if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
-					conn.WriteError(fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs))
+			if isInferenceCommand(name) {
+				release, replyErr := s.admitInference()
+				if replyErr != "" {
+					conn.WriteError(replyErr)
 					return
 				}
-				s.activeReqs.Add(1)
-				defer s.activeReqs.Add(-1)
+				defer release()
 			}
 		}
 		mux.ServeRESP(conn, cmd)
 	},
 		func(conn redcon.Conn) bool {
 			conn.SetContext(&connState{})
+			s.admissionMu.Lock()
+			defer s.admissionMu.Unlock()
+			if s.shuttingDown.Load() {
+				return false
+			}
 			if s.maxConns > 0 && s.conns.Load() >= int64(s.maxConns) {
 				// redcon closes refused conns without firing the closed handler,
 				// so refusing before counting keeps the accounting balanced.
@@ -357,6 +405,29 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 }
 
 func (s *Server) ListenAndServe() error {
+	ln, err := s.listen()
+	if err != nil {
+		return err
+	}
+	return s.srv.Serve(ln)
+}
+
+// Start binds synchronously, then serves in a goroutine. Binding before the
+// caller waits for signals removes the startup race where shutdown could run
+// before the listener existed.
+func (s *Server) Start() (<-chan error, error) {
+	ln, err := s.listen()
+	if err != nil {
+		return nil, err
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- s.srv.Serve(ln)
+	}()
+	return done, nil
+}
+
+func (s *Server) listen() (net.Listener, error) {
 	var ln net.Listener
 	var err error
 	if s.tlsConfig != nil {
@@ -365,7 +436,7 @@ func (s *Server) ListenAndServe() error {
 		ln, err = net.Listen("tcp", s.addr)
 	}
 	if err != nil {
-		return fmt.Errorf("listening on %s: %w", s.addr, err)
+		return nil, fmt.Errorf("listening on %s: %w", s.addr, err)
 	}
 	s.ln = ln
 	if s.tlsConfig != nil {
@@ -373,15 +444,14 @@ func (s *Server) ListenAndServe() error {
 	} else {
 		log.Printf("emb listening on %s", s.addr)
 	}
-	return s.srv.Serve(ln)
+	return ln, nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.shuttingDown.Store(true)
-
-	if s.ln != nil {
-		s.ln.Close()
-	}
+	// Keep redcon's accept loop alive while accepted requests drain. New TCP
+	// connections reach the accept callback above and are rejected, while
+	// existing sockets remain open long enough to receive completed replies.
+	s.beginDraining()
 
 	done := make(chan struct{})
 	go func() {
@@ -389,10 +459,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		close(done)
 	}()
 
+	timedOut := false
 	select {
 	case <-done:
 	case <-ctx.Done():
 		log.Printf("shutdown timeout after %v", ctx.Err())
+		timedOut = true
 	}
 	s.persistenceMu.RLock()
 	coordinator := s.snapshot
@@ -401,7 +473,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		coordinator.Shutdown(ctx)
 	}
 
-	return s.srv.Close()
+	closeErr := s.srv.Close()
+	if timedOut {
+		return errors.Join(ErrShutdownTimeout, ctx.Err(), closeErr)
+	}
+	return closeErr
 }
 
 func (s *Server) restoreSnapshot(cfg PersistenceConfig) {
@@ -469,6 +545,7 @@ func (s *Server) admitQuarantine(model string, entry *registry.ModelEntry) {
 }
 
 func (s *Server) Close() error {
+	s.beginDraining()
 	s.persistenceMu.RLock()
 	coordinator := s.snapshot
 	s.persistenceMu.RUnlock()
@@ -570,13 +647,6 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("PONG")
 }
 
-// handleHELLO negotiates the RESP protocol version for the connection. A bare
-// HELLO reports the current version; HELLO 2|3 switches the connection. The
-// reply carries server metadata in the standard Redis HELLO shape (a map under
-// RESP3, a flat array under RESP2) via the fork's WriteHello helper. HELLO is
-// deliberately NOT auth-exempt, so on a password-protected server the mux gate
-// rejects it with NOAUTH before this handler runs (see the spec's "HELLO
-// respects authentication" scenario).
 // handleCLIENT answers the small subset of CLIENT subcommands that RESP3 client
 // handshakes send. SETINFO carries client library metadata and is acknowledged
 // with OK; unknown subcommands get a NO such subcommand error. Without this,
@@ -598,6 +668,13 @@ func (s *Server) handleCLIENT(conn redcon.Conn, cmd redcon.Command) {
 	}
 }
 
+// handleHELLO negotiates the RESP protocol version for the connection. A bare
+// HELLO reports the current version; HELLO 2|3 switches the connection. The
+// reply carries server metadata in the standard Redis HELLO shape (a map under
+// RESP3, a flat array under RESP2) via the fork's WriteHello helper. HELLO is
+// deliberately NOT auth-exempt, so on a password-protected server the mux gate
+// rejects it with NOAUTH before this handler runs (see the spec's "HELLO
+// respects authentication" scenario).
 func (s *Server) handleHELLO(conn redcon.Conn, cmd redcon.Command) {
 	ver := conn.ProtocolVersion()
 	if len(cmd.Args) > 2 {
@@ -780,18 +857,10 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
-
 	if len(cmd.Args) < 3 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB' command")
 		return
 	}
-
-	s.active.Add(1)
-	defer s.active.Done()
 
 	// Start the MONITOR clock before argument parsing and conversion so the
 	// recorded latency covers the whole request, not just inference.
@@ -1119,8 +1188,8 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t",
 				m.Name, sreq, serr, sessions, tokenizer))
 		}
-		if m.Pool != nil {
-			st := m.Pool.Stats()
+		if pool := m.LoadedPool(); pool != nil {
+			st := pool.Stats()
 			totalReqs += st.Requests
 			totalToks += st.Tokens
 			batchInfo := ""
@@ -1277,11 +1346,6 @@ func avgLatencyUs(totalUs, count int64) int {
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
-
 	pairs := cmd.Args[1:]
 	// Leading reply-format keyword (EMB.MULTI [BLOB|VALUES] <model> <text>...):
 	// recognized only at the fixed first position, never among the pairs.
@@ -1293,9 +1357,6 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.MULTI' command")
 		return
 	}
-
-	s.active.Add(1)
-	defer s.active.Done()
 
 	// Truncate oversized commands: process only the first maxPairs pairs and
 	// reply with null slots for the overflow. Truncation bounds the inference

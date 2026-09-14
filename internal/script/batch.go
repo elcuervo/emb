@@ -177,7 +177,7 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 		}
 		// The merged tensor replaces the items' batch dim (0) with N and pads
 		// the remaining dims (1..rank-1) to the per-dimension maximum.
-		rank := rankOf(base.Shape)
+		rank := len(base.Shape)
 		if rank == 0 {
 			return nil, fmt.Errorf("input %q has an empty shape", name)
 		}
@@ -334,5 +334,3 @@ func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int, packed bool)
 	}
 	return renderTensor(ls, slice, packed)
 }
-
-func rankOf(shape []int64) int { return len(shape) }

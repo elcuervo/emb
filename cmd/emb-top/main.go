@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -383,7 +384,7 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 		m.modelOrder = append(m.modelOrder, mod.Name)
 	}
 	for name := range m.sparks {
-		if !contains(m.modelOrder, name) {
+		if !slices.Contains(m.modelOrder, name) {
 			delete(m.sparks, name)
 		}
 	}
@@ -802,15 +803,6 @@ func (m tuiModel) helpView() string {
 }
 
 // ---- formatting helpers ----
-
-func contains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
-}
 
 func trimModel(s string) string { return trimModelLen(s, 13) }
 

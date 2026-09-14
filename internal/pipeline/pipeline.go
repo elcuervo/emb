@@ -1,11 +1,16 @@
 package pipeline
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
+
+// ErrClosed is returned when inference is submitted after a pool or batcher
+// has begun closing.
+var ErrClosed = errors.New("embedding pipeline is closed")
 
 type Request struct {
 	Texts  []string

@@ -24,6 +24,18 @@ type Client struct {
 	BaseURL    string
 }
 
+type downloadTempFile interface {
+	io.Writer
+	Close() error
+	Name() string
+}
+
+var createDownloadTemp = func(dir, pattern string) (downloadTempFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
+var publishDownload = os.Rename
+
 func New() *Client {
 	return &Client{
 		HTTPClient: http.DefaultClient,
@@ -115,14 +127,29 @@ func (c *Client) Download(repo, filePath, destDir string) (string, error) {
 		return "", fmt.Errorf("downloading %s: HTTP %d", filePath, resp.StatusCode)
 	}
 
-	f, err := os.Create(destPath)
+	f, err := createDownloadTemp(destDir, "."+filepath.Base(filePath)+".download-*")
 	if err != nil {
-		return "", fmt.Errorf("creating %s: %w", destPath, err)
+		return "", fmt.Errorf("creating temporary download for %s: %w", destPath, err)
 	}
-	defer func() { _ = f.Close() }()
+	tempPath := f.Name()
+	closed := false
+	defer func() {
+		if !closed {
+			_ = f.Close()
+		}
+		_ = os.Remove(tempPath)
+	}()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		return "", fmt.Errorf("writing %s: %w", destPath, err)
+	}
+	if err := f.Close(); err != nil {
+		closed = true
+		return "", fmt.Errorf("closing temporary download for %s: %w", destPath, err)
+	}
+	closed = true
+	if err := publishDownload(tempPath, destPath); err != nil {
+		return "", fmt.Errorf("publishing %s: %w", destPath, err)
 	}
 
 	return destPath, nil
