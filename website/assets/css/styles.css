@@ -1394,7 +1394,6 @@ html.js .console__form{
    after the photograph. --muted is remapped for the same reason it is in the
    dark block: #6B6963 is only 3.40:1 on #111110. */
 .footer{
-  border-top: 1px solid var(--rule);
   background: #111110;
   color: var(--bg);
   --muted: var(--rule);
