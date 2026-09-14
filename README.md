@@ -11,7 +11,7 @@ A simple yet powerful text embeddings generator.
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/emb-wordmark-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/emb-wordmark-light.svg">
-    <img alt="emb — bytes in. vectors out." src="assets/emb-wordmark-light.svg" width="260" height="115">
+    <img alt="emb — bytes in. vectors out." src="assets/emb-wordmark-light.svg" width="270" height="115">
   </picture>
 </a>
 

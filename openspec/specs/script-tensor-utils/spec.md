@@ -1,40 +1,25 @@
-# script-tensor-utils
+## ADDED Requirements
 
-## Purpose
+### Requirement: Packed-byte tensor input (`bytes`)
 
-Gives scripts constant-filled tensor construction without Lua table round-trips (`fill`) and raw float32 byte packing (`emb.math.float32_bytes`), so scripted embeddings return the same byte layout as the embed path and avoid per-element RESP blowup.
+The server SHALL accept a `bytes` field on `emb.run` and `emb.run_batch` input specs as a third alternative to `data` and `fill`: `{shape = {...}, bytes = <string>, dtype = "f32"|"i64"}` SHALL interpret the string as the tensor's raw little-endian elements (4 bytes per element, `float32` for `f32`, 8 bytes per element, `int64` for `i64`). This is the inverse of `emb.math.float32_bytes` and lets host-produced tensors (for example `emb.image.preprocess` output) reach the session without a per-element Lua table round-trip. Exactly one of `data`, `fill`, or `bytes` SHALL be provided. The byte length SHALL exactly match `elementCount × elementWidth`; a mismatch SHALL be an error before inference. `dtype` SHALL be required for `bytes` (no inference from content). Packed tensors SHALL be charged against the per-tensor and request-wide element budgets exactly like `data` tensors.
 
-## Requirements
+#### Scenario: Packed float tensor feeds the session
 
-### Requirement: Constant-filled tensor specs (`fill`)
+- **WHEN** a spec is `{shape = {1, 3, 224, 224}, bytes = <602112 bytes>, dtype = "f32"}`
+- **THEN** the session receives a float32 tensor of that shape with no per-element Lua table construction
 
-The server SHALL accept a `fill` field on `emb.run` and `emb.run_batch` input specs as an alternative to `data`: `{shape = {...}, fill = n, dtype = "i64"|"f32"}` SHALL construct a tensor of the given shape with every element equal to `n`, allocated host-side without a Lua data table. Every spec SHALL provide exactly one of `data` or `fill` (an error when both are present, and an error when neither is present — no implicit zero-filled fallback). `dtype` behavior matches the existing spec rules (explicit or inferred — a non-integer `fill` infers float32). Shape dimensions SHALL be non-negative and the element count SHALL be computed with checked multiplication. Every tensor SHALL be bounded by a documented per-tensor maximum allocation (`maxFillElements`, 16M elements ≈ 64MB at 4 bytes/element — applies to `data` tensors too); additionally, the total elements allocated across one evaluation — data tensors, fill tensors, and the padded merges in `emb.run_batch` — SHALL be bounded by a documented request-wide maximum (`maxRequestElements`, 64M elements ≈ 256MB at 4 bytes/element), so a stack of individually valid specs cannot exhaust server memory. Exceeding any bound replies with an error before the offending allocation.
+#### Scenario: Round-trip with float32_bytes
 
-#### Scenario: Zero-filled float tensor for a fused model's auxiliary input
+- **WHEN** a tensor's values are packed with `emb.math.float32_bytes` and fed back via `bytes` with the same shape
+- **THEN** the session receives the original values
 
-- **WHEN** a script feeds an auxiliary float input with `{shape = {1, 3, 224, 224}, fill = 0, dtype = "f32"}`
-- **THEN** the session receives a float32 tensor of that shape filled with zeros, constructed without a Lua data table
+#### Scenario: Length mismatch errors
 
-#### Scenario: Ones-filled mask tensor
+- **WHEN** `bytes` length does not equal `elementCount × elementWidth` for the declared shape and dtype
+- **THEN** the evaluation fails with an error before inference
 
-- **WHEN** a script feeds `{shape = {1, 8}, fill = 1, dtype = "i64"}`
-- **THEN** the session receives an int64 tensor with eight ones
+#### Scenario: Mutually exclusive with data and fill
 
-#### Scenario: Fill and data conflict errors
-
-- **WHEN** a spec declares both `fill` and `data`
-- **THEN** the evaluation fails with an error reply
-
-### Requirement: Raw float32 byte packing (`emb.math.float32_bytes`)
-
-The server SHALL provide `emb.math.float32_bytes(vals)`: an array of Lua numbers SHALL be packed into a Lua string of 4 little-endian float32 bytes per element (IEEE 754). The reply grammar already passes strings through as bulks, so `return emb.math.float32_bytes(embedding)` yields a single bulk byte-identical to the embed path's float32 replies; clients decode with `unpack('e*')`. Empty arrays SHALL error.
-
-#### Scenario: Vector reply as a single byte bulk
-
-- **WHEN** a script returns `emb.math.float32_bytes(vec)` for a 768-dim vector
-- **THEN** the reply is one bulk string of 3072 bytes decodable back to the original 768 float32 values
-
-#### Scenario: Empty array errors
-
-- **WHEN** `emb.math.float32_bytes({})` is called
+- **WHEN** a spec provides more than one of `data`, `fill`, and `bytes`, or omits all three
 - **THEN** the evaluation fails with an error reply
