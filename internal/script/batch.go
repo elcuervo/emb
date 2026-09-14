@@ -2,6 +2,7 @@ package script
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 
@@ -195,13 +196,20 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 			}
 		}
 
-		inner, err := shapeElementCount(maxShape[1:])
+		// The padded merged allocation is charged against the request budget too:
+		// n*inner can exceed the sum of the items' tensor sizes (padding). Compute
+		// the total with the checked element-count primitive so a large padded
+		// batch cannot wrap the product negative and slip a bogus allocation past
+		// the budget.
+		total, err := shapeElementCount(maxShape)
 		if err != nil {
 			return nil, fmt.Errorf("input %q: %w", name, err)
 		}
-		// Charge the padded merged allocation against the request budget too:
-		// n*inner can exceed the sum of the items' tensor sizes (padding).
-		if err := budget.charge(int64(n) * inner); err != nil {
+		if total > math.MaxInt {
+			return nil, fmt.Errorf("input %q: merged shape %v needs %d elements, more than fit in memory", name, maxShape, total)
+		}
+		inner := total / int64(n)
+		if err := budget.charge(total); err != nil {
 			return nil, fmt.Errorf("merged input %q: %w", name, err)
 		}
 		var out onnx.NamedTensor
@@ -209,9 +217,9 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 		out.Shape = maxShape
 		out.DType = base.DType
 		if base.DType == onnx.TensorInt64 {
-			out.Int64 = make([]int64, int(int64(n)*inner))
+			out.Int64 = make([]int64, int(total))
 		} else {
-			out.Float = make([]float32, int(int64(n)*inner))
+			out.Float = make([]float32, int(total))
 		}
 		for i, ins := range items {
 			var in onnx.NamedTensor

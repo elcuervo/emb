@@ -314,6 +314,31 @@ func TestJSONNullRoundTrip(t *testing.T) {
 	}
 }
 
+// TestJSONEmptyArrayRoundTrip pins empty-array identity: a decoded empty array
+// has no entries to distinguish it from an empty object, so the decoder marks
+// it in the table's metatable and the encoder honors the marker. Without it,
+// json.decode('[]') would re-encode as {}.
+func TestJSONEmptyArrayRoundTrip(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`[]`, `[]`},
+		{`{}`, `{}`},
+		{`{"a":[]}`, `{"a":[]}`},
+		{`[[]]`, `[[]]`},
+		{`[[],{}]`, `[[],{}]`},
+		{`{"a":[],"b":1}`, `{"a":[],"b":1}`},
+	}
+	for _, tc := range cases {
+		src := `return json.encode(json.decode('` + tc.in + `'))`
+		v, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.in, err)
+		}
+		if v.String() != tc.want {
+			t.Fatalf("empty-array round-trip: got %q, want %q", v.String(), tc.want)
+		}
+	}
+}
+
 // TestDefaultOutputCarriesDtype pins the round-trip property: every emb.run
 // array output is itself a valid input spec. An all-integral float32 output
 // would otherwise re-infer i64 and mismatch the session.

@@ -54,7 +54,7 @@ When the server cache is enabled, scripted replies SHALL be cached under a conte
 
 ### Requirement: JSON values round-trip through the sandbox
 
-The server SHALL provide a `json` module with `encode`, `decode`, and a unique `null` sentinel. Decoding SHALL preserve `null` in both object values and array elements; because a Lua table cannot hold `nil`, the sentinel is stored in its place, and encoding that sentinel SHALL reproduce `null`. Encoding a table with contiguous integer keys `1..n` SHALL produce a JSON array, and a table with string keys SHALL produce a JSON object, so `json.encode(json.decode(s))` SHALL be semantically equal to `s` for any JSON value `s`.
+The server SHALL provide a `json` module with `encode`, `decode`, and a unique `null` sentinel. Decoding SHALL preserve `null` in both object values and array elements; because a Lua table cannot hold `nil`, the sentinel is stored in its place, and encoding that sentinel SHALL reproduce `null`. Encoding a table with contiguous integer keys `1..n` SHALL produce a JSON array, and a table with string keys SHALL produce a JSON object, so `json.encode(json.decode(s))` SHALL be semantically equal to `s` for any JSON value `s`. A decoded empty array SHALL stay distinguishable from an empty object, so `json.encode(json.decode('[]'))` SHALL be `[]` (not `{}`), including when the empty array is nested inside an object or another array.
 
 #### Scenario: Object null round-trips
 
@@ -65,6 +65,11 @@ The server SHALL provide a `json` module with `encode`, `decode`, and a unique `
 
 - **WHEN** a script returns `json.encode(json.decode('[1,null,3]'))`
 - **THEN** the reply is `[1,null,3]`
+
+#### Scenario: Empty array round-trips
+
+- **WHEN** a script returns `json.encode(json.decode('[]'))` or `json.encode(json.decode('{"a":[]}'))`
+- **THEN** the replies are `[]` and `{"a":[]}` respectively, and an empty object still encodes as `{}`
 
 #### Scenario: A user-constructed sentinel encodes as null
 

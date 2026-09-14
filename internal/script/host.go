@@ -543,21 +543,11 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 
 	// Fill form: construct the constant tensor directly from the shape (the
 	// count is exact by construction, so no Lua data table is ever built).
-	// The shape is script-controlled, so validate every dimension and bound
-	// the element count with checked multiplication before allocating.
-	count := int64(1)
-	for _, d := range t.Shape {
-		if d < 0 {
-			return t, fmt.Errorf("negative shape dimension %d", d)
-		}
-		if d == 0 {
-			count = 0
-			break
-		}
-		if count > math.MaxInt64/d {
-			return t, fmt.Errorf("shape element count overflows")
-		}
-		count *= d
+	// The shape is script-controlled, so bound the element count with the same
+	// checked primitive every other allocation path uses.
+	count, err := shapeElementCount(t.Shape)
+	if err != nil {
+		return t, err
 	}
 	if err := budget.charge(count); err != nil {
 		return t, fmt.Errorf("fill: %w", err)
@@ -712,6 +702,10 @@ func anyToLuaValue(ls *lua.LState, v any) lua.LValue {
 				tbl.RawSetInt(i+1, anyToLuaValue(ls, e))
 			}
 		}
+		// An empty Lua table is otherwise indistinguishable from an empty
+		// object, so mark the decoded array in its metatable; isListTable
+		// consults the marker for entry-less tables.
+		markJSONArray(ls, tbl)
 		return tbl
 	case map[string]any:
 		tbl := ls.NewTable()
@@ -738,7 +732,32 @@ func isListTable(t *lua.LTable) bool {
 			intKeys++
 		}
 	})
-	return entries > 0 && intKeys == entries && entries == t.Len()
+	if entries == 0 {
+		// An empty table carries no key evidence either way; only a decoded
+		// JSON array is marked, so empty objects still encode as {}.
+		return isMarkedJSONArray(t)
+	}
+	return intKeys == entries && entries == t.Len()
+}
+
+// jsonArrayMarker lives in the metatable of a table decoded from a JSON array.
+// The marker never appears among the table's own keys, so it cannot leak into
+// an encoded object, and it survives an empty array (which has no entries to
+// distinguish it from an empty object).
+const jsonArrayMarker = "__emb_json_array"
+
+func markJSONArray(ls *lua.LState, t *lua.LTable) {
+	mt := ls.NewTable()
+	mt.RawSetString(jsonArrayMarker, lua.LTrue)
+	t.Metatable = mt
+}
+
+func isMarkedJSONArray(t *lua.LTable) bool {
+	mt, ok := t.Metatable.(*lua.LTable)
+	if !ok {
+		return false
+	}
+	return lua.LVAsBool(mt.RawGetString(jsonArrayMarker))
 }
 
 // --- Lua array helpers ---------------------------------------------------

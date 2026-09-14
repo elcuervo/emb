@@ -86,7 +86,7 @@ The server SHALL compile a script's source once per (model, SHA) and reuse the c
 
 Scripted evaluation SHALL stay within a bounded factor of the equivalent native embedding work, so scripts are a production-viable path rather than a fallback. The budgets below SHALL be enforced by committed benchmarks run as part of the standard benchmark suite, with a captured baseline; a regression beyond 10% of the recorded value SHALL fail the benchmark gate.
 
-**Latency parity (embedding class).** A script that embeds texts with `emb.embed` and scores them with `emb.similarity` SHALL complete within **1.30×** the wall-clock time of an `EMB` command embedding the same texts, measured at 8, 32, and 128 tokens with a cold cache and a single connection.
+**Latency parity (embedding class).** A script that embeds texts with `emb.embed` and scores them with `emb.similarity` SHALL complete within **1.30×** the wall-clock time of an `EMB` command embedding the same texts at 8 tokens, and within **1.15×** at 32 and 128 tokens, measured with a cold cache and a single connection.
 
 **Metal parity (overhead share).** The non-inference overhead of a scripted evaluation — interpreter startup, host-call dispatch, tensor marshalling, and reply conversion — SHALL be a small bounded fraction of the inference it wraps, measured against the same graph run performed with no host-side reduction:
 
@@ -95,7 +95,7 @@ Scripted evaluation SHALL stay within a bounded factor of the equivalent native 
 
 **Materialization tax (raw-tensor class).** For a graph whose output is `[1, 128, 384]`, a script that requests packed output, reads it, and reduces it with host operations SHALL take no more than **1.35×** the time of the same graph run that requests no outputs. The non-inference overhead attributable to output materialization SHALL NOT exceed **0.02 µs per output element**.
 
-**Memory.** A scripted evaluation SHALL NOT add more than one named-tensor model session beyond what the embedding path already holds, and SHALL NOT grow RSS by more than a model footprint per session it does open. In particular:
+**Memory.** On an auto-tuned pool (`script_workers` unset or 0) a scripted evaluation SHALL NOT add more than one named-tensor model session beyond what the embedding path already holds, and SHALL NOT grow RSS by more than a model footprint per session it does open. An explicit `script_workers` override is honoured verbatim (see the session-pool requirement), so each session it opens adds roughly one model footprint of RSS — a deliberate memory-for-parallelism trade-off. In particular:
 
 - Embedding-class scripts (`emb.embed`) and scripts that open no model session SHALL stay within **15%** of the model's loaded footprint (the embedding pool is shared, not duplicated).
 - A raw-tensor script (`emb.run`) on a batcher-pool model SHALL open at most **one** named-tensor session where it previously opened one per auto-tuned worker (~10), i.e. RSS grows by at most roughly one model footprint instead of multiplying it.

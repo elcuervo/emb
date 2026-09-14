@@ -3,6 +3,7 @@
 - [x] 1.1 Store the `json.null` sentinel for `null` elements in `anyToLuaValue`'s `[]any` branch (mirror the `map[string]any` branch) and confirm `json.encode(json.decode('[1,null,3]'))` returns `[1,null,3]` in `internal/script/host_test.go`
 - [x] 1.2 Emit `dtype` from the default (non-packed) output path so every `emb.run`/`emb.run_batch` output is `{shape, data, dtype}`, and verify an all-integral float32 output round-trips back through `emb.run` without an inferred-`i64` mismatch in `internal/script/host_test.go`/`packed_test.go`
 - [x] 1.3 Add a `json.null` round-trip regression test covering nested arrays and objects (`{"a":[1,null]}`), verifying byte-identical re-encoding
+- [x] 1.4 Preserve empty-array identity through `anyToLuaValue`/`luaValueToAny`/`isListTable` (a decoded `[]` re-encodes as `[]`, not `{}`), with regression tests for direct, nested, and object-contained empty arrays
 
 ## 2. Operand decoder and math semantics
 

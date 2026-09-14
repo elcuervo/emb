@@ -95,6 +95,46 @@ func TestEmbEmbedAdmitsRestoredQuarantine(t *testing.T) {
 	}
 }
 
+// TestEmbMultiAdmitsRestoredQuarantine verifies EMB.MULTI re-checks the shared
+// cache after quarantine admission: a restored entry published while the model
+// loads is served directly instead of triggering a redundant inference.
+func TestEmbMultiAdmitsRestoredQuarantine(t *testing.T) {
+	addr, srv := serveScriptTest(t, "1GB")
+	entry, err := srv.reg.GetOrInit("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fp, err := entry.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := make([]byte, entry.Dim*4)
+	key := textCacheKey("test", "restored")
+	srv.quarantineMu.Lock()
+	srv.quarantine = map[string]restoreQuarantine{
+		"test": {
+			fingerprint: fp,
+			dim:         entry.Dim,
+			entries:     []pendingRestoreEntry{{Key: key, Value: restored}},
+		},
+	}
+	srv.quarantineMu.Unlock()
+
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.MULTI", "test", "restored"))
+	if len(elems) != 1 {
+		t.Fatalf("EMB.MULTI returned %d elements, want 1", len(elems))
+	}
+	if got := bulkOf(t, elems[0]); got != string(restored) {
+		t.Fatal("EMB.MULTI did not serve the restored entry admitted during the request")
+	}
+	srv.quarantineMu.Lock()
+	pending := len(srv.quarantine)
+	srv.quarantineMu.Unlock()
+	if pending != 0 {
+		t.Fatalf("quarantine not consumed: %d buckets remain", pending)
+	}
+}
+
 // TestEmbEmbedSharesEmbeddingCache verifies a text embedded by EMB is a cache
 // hit for emb.embed, so no second inference runs.
 func TestEmbEmbedSharesEmbeddingCache(t *testing.T) {

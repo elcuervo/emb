@@ -1428,6 +1428,15 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		return
 	}
 	s.admitQuarantine(model, entry)
+	// Admission may have published a restored entry for this exact text, so
+	// re-check before paying for inference.
+	if s.cache != nil {
+		key := textCacheKey(model, text)
+		if emb, ok := s.cache.Get(key); ok {
+			results[idx] = emb
+			return
+		}
+	}
 
 	resp, err := entry.Pool.Embed([]string{text})
 	if err != nil || resp.Err != nil {
