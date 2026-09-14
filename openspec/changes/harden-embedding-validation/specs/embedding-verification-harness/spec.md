@@ -35,12 +35,17 @@ All embedding verifier commands SHALL use one shared RESP client implementation 
 
 ### Requirement: Verifier commands are configurable and fail clearly
 
-Each verifier command SHALL take its server address, model names, dimension, and corpus from flags or environment rather than hardcoded constants, and SHALL exit non-zero with a named cause when a precondition is not met.
+Each verifier command SHALL take the inputs it runs on from flags or environment rather than hardcoded constants, and SHALL exit non-zero with a named cause when a precondition is not met. The server address and model names come from flags for every verifier; the dimension comes from a flag or the reference artifact where one is expected; `emb-verify` reads its corpus from the reference artifact it is given; `emb-verify-performance` takes an optional `-corpus` JSON file and otherwise uses its built-in corpus; `emb-multi-verify` exposes the models and dimensions of its built-in byte-equality test vectors, which are not a caller-supplied corpus.
 
 #### Scenario: Inputs are configurable
 
 - **WHEN** a user runs a verifier with an explicit address, model, and dimension
 - **THEN** the verifier uses those values instead of compiled-in defaults
+
+#### Scenario: Corpus is configurable
+
+- **WHEN** `emb-verify-performance` is given a `-corpus` JSON file with documents and queries
+- **THEN** it verifies against that corpus, and rejects an unreadable, malformed, or empty file with a named non-zero failure
 
 #### Scenario: Missing model or reference
 

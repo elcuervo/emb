@@ -14,7 +14,7 @@
 ## 3. Verifier commands
 
 - [x] 3.1 Port `cmd/emb-verify` onto the shared client with `-addr`, `-model`, `-dim`, `-reference`, `-min-cosine`, `-timeout` flags and a per-sentence report; verify it builds and a unit test drives a fake server through pass and fail paths.
-- [x] 3.2 Port `cmd/emb-verify-performance` onto the shared client with `-addr`, `-model-a`, `-model-b`, `-min-cosine` (0.99), `-min-ndcg` (0.95); verify the ranking math is unit-tested and the command builds.
+- [x] 3.2 Port `cmd/emb-verify-performance` onto the shared client with `-addr`, `-model-a`, `-model-b`, `-corpus`, `-min-cosine` (0.99), `-min-ndcg` (0.95); verify the ranking math is unit-tested, an invalid corpus fails with a named cause, and the command builds.
 - [x] 3.3 Port `cmd/emb-multi-verify` onto the shared client with configurable models/dims, and report the model and text of a differing element; verify a unit test exercises the array reply path.
 - [x] 3.4 Verify the three commands report a non-zero exit with a named cause for: connection refused, unknown model, and unreadable reference.
 

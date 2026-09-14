@@ -45,10 +45,11 @@ compute a similarity score to rank results.
 
 ### Requirement: Command surface
 
-The example SHALL expose exactly three operations: indexing a set of files,
-searching with a query and a result count, and reporting statistics. No
-operation MAY require an interactive session, and each MUST be invocable as a
-single non-interactive invocation.
+The application CLI (`app.rb`) SHALL expose exactly three operations: indexing a
+set of files, searching with a query and a result count, and reporting
+statistics. The example's lifecycle commands (`run.sh stop`) are outside this
+surface. No operation MAY require an interactive session, and each MUST be
+invocable as a single non-interactive invocation.
 
 #### Scenario: Index
 
