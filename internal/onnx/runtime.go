@@ -11,7 +11,7 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// Execution-mode selectors for NewRuntimeSession(…). Sequential (the ORT
+// Execution-mode selectors for the session constructors. Sequential (the ORT
 // default) is the documented choice for mostly-serial encoder graphs; the
 // inter-op thread pool only exists in parallel mode, so interOpThreads is
 // effectively ignored under sequential execution.
@@ -33,21 +33,6 @@ type RuntimeSession struct {
 	outTensor *ort.Tensor[float32]
 	outShape  []int64
 	outFlat   int
-}
-
-func NewRuntimeSession(modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int) (*RuntimeSession, error) {
-	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = opts.Destroy() }()
-
-	session, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, opts)
-	if err != nil {
-		return nil, fmt.Errorf("creating session: %w", err)
-	}
-
-	return newRuntimeSession(session, inputNames, dim, outputRank), nil
 }
 
 func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int) (*RuntimeSession, error) {

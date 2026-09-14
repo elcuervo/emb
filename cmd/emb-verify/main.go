@@ -1,130 +1,110 @@
+// Command emb-verify compares the running server's embeddings against an
+// independent Python (sentence-transformers) reference artifact.
+//
+// It embeds the reference's sentence set through the server and requires each
+// embedding to reach a minimum cosine similarity against the stored reference.
 package main
 
 import (
-	"encoding/json"
+	"flag"
 	"fmt"
-	"math"
-	"net"
+	"io"
 	"os"
+	"time"
+
+	"github.com/elcuervo/emb/internal/embverify"
+	"github.com/elcuervo/emb/internal/resp"
 )
 
-type ReferenceData struct {
-	Model      string      `json:"model"`
-	Dim        int         `json:"dim"`
-	Sentences  []string    `json:"sentences"`
-	Embeddings [][]float64 `json:"embeddings"`
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "emb-verify: %v\n", err)
+		os.Exit(1)
+	}
 }
 
-func main() {
-	addr := "127.0.0.1:6379"
-	if len(os.Args) > 1 {
-		addr = os.Args[1]
-	}
+type config struct {
+	addr    string
+	model   string
+	dim     int
+	refPath string
+	minCos  float64
+	timeout time.Duration
+}
 
-	data, err := os.ReadFile("reference-embeddings.json")
+func run() error {
+	cfg := config{}
+	flag.StringVar(&cfg.addr, "addr", "127.0.0.1:6379", "emb server address (host:port)")
+	flag.StringVar(&cfg.model, "model", "minilm", "model to verify")
+	flag.IntVar(&cfg.dim, "dim", 0, "expected embedding dimension (0 = take it from the reference)")
+	flag.StringVar(&cfg.refPath, "reference", "reference-embeddings.json", "reference artifact to compare against")
+	flag.Float64Var(&cfg.minCos, "min-cosine", 0.999, "minimum cosine similarity per sentence")
+	flag.DurationVar(&cfg.timeout, "timeout", 10*time.Second, "per-request timeout")
+	flag.Parse()
+	return verify(cfg, os.Stdout)
+}
+
+// printf writes one report line. A write failure cannot change the verdict, so
+// the error is deliberately discarded here and nowhere else.
+func printf(w io.Writer, format string, args ...any) {
+	_, _ = fmt.Fprintf(w, format, args...)
+}
+
+// verify loads the reference, embeds its sentence set through the server, and
+// reports each sentence's cosine. It returns an error when any sentence fails,
+// so the process exits non-zero.
+func verify(cfg config, out io.Writer) error {
+	ref, err := embverify.Load(cfg.refPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "reading reference: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-
-	var ref ReferenceData
-	if err := json.Unmarshal(data, &ref); err != nil {
-		fmt.Fprintf(os.Stderr, "parsing reference: %v\n", err)
-		os.Exit(1)
+	if err := ref.CheckInputs(cfg.model, cfg.dim, nil); err != nil {
+		return err
 	}
+	printf(out, "reference %s: model=%s dim=%d sentences=%d", cfg.refPath, ref.Model, ref.Dim, len(ref.Sentences))
+	if ref.Generator != "" {
+		printf(out, " generator=%s v%s", ref.Generator, ref.Version)
+	}
+	if v, ok := ref.Requires["sentence-transformers"]; ok {
+		printf(out, " sentence-transformers=%s", v)
+	}
+	printf(out, "\n")
 
-	passed := 0
-	failed := 0
+	c := resp.NewClient(cfg.addr, "", false)
+	c.SetTimeout(cfg.timeout)
+	if err := c.Dial(); err != nil {
+		return err
+	}
+	defer func() { _ = c.Close() }()
+	e := embverify.NewEmbedder(c)
 
+	passed, failed := 0, 0
 	for i, sentence := range ref.Sentences {
-		conn, err := net.Dial("tcp", addr)
+		vec, err := e.Embed(cfg.model, sentence)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "connecting: %v\n", err)
-			os.Exit(1)
-		}
-
-		cmd := fmt.Sprintf("*3\r\n$3\r\nEMB\r\n$6\r\nminilm\r\n$%d\r\n%s\r\n", len(sentence), sentence)
-		conn.Write([]byte(cmd))
-
-		emb, err := readEMBResponse(conn, ref.Dim)
-		conn.Close()
-		if err != nil {
-			fmt.Printf("  ✗ %d: %v\n", i+1, err)
+			printf(out, "  ✗ %d: %v\n", i+1, err)
 			failed++
 			continue
 		}
-
-		refEmb := ref.Embeddings[i]
-		cos := cosineSimilarity(emb, refEmb)
-		status := "✓"
-		if cos < 0.999 {
-			status = "✗"
+		if len(vec) != ref.Dim {
+			printf(out, "  ✗ %d: got dim %d, want %d\n", i+1, len(vec), ref.Dim)
 			failed++
-		} else {
-			passed++
+			continue
 		}
-		fmt.Printf("  %s %d: cosine=%.6f  (%s)\n", status, i+1, cos, sentence)
+		cos := embverify.Cosine(vec, embverify.ToFloat32(ref.Embeddings[i]))
+		if cos >= cfg.minCos {
+			passed++
+			printf(out, "  ✓ %d: cosine=%.6f  (%s)\n", i+1, cos, sentence)
+		} else {
+			failed++
+			printf(out, "  ✗ %d: cosine=%.6f < %.4f  (%s)\n", i+1, cos, cfg.minCos, sentence)
+		}
 	}
 
 	total := passed + failed
-	fmt.Printf("\n%d/%d passed, %d failed\n", passed, total, failed)
+	printf(out, "\n%d/%d passed at cosine ≥ %.4f, %d failed\n", passed, total, cfg.minCos, failed)
 	if failed > 0 {
-		os.Exit(1)
+		return fmt.Errorf("%d of %d sentences fell below cosine %.4f", failed, total, cfg.minCos)
 	}
-}
-
-func readEMBResponse(conn net.Conn, dim int) ([]float64, error) {
-	// Read header: $<len>\r\n
-	header := make([]byte, 0, 16)
-	for {
-		b := make([]byte, 1)
-		_, err := conn.Read(b)
-		if err != nil {
-			return nil, fmt.Errorf("reading header: %w", err)
-		}
-		header = append(header, b[0])
-		if len(header) >= 3 && header[len(header)-2] == '\r' && header[len(header)-1] == '\n' {
-			break
-		}
-	}
-	if header[0] != '$' {
-		return nil, fmt.Errorf("expected bulk string, got %q", string(header))
-	}
-
-	var dataLen int
-	fmt.Sscanf(string(header[1:]), "%d", &dataLen)
-
-	data := make([]byte, dataLen)
-	_, err := conn.Read(data)
-	if err != nil {
-		return nil, fmt.Errorf("reading data: %w", err)
-	}
-
-	trail := make([]byte, 2)
-	_, _ = conn.Read(trail)
-
-	return bytesToFloats(data, dim), nil
-}
-
-func bytesToFloats(data []byte, dim int) []float64 {
-	vals := make([]float64, dim)
-	for i := range dim {
-		bits := uint32(data[i*4]) | uint32(data[i*4+1])<<8 | uint32(data[i*4+2])<<16 | uint32(data[i*4+3])<<24
-		vals[i] = float64(math.Float32frombits(bits))
-	}
-	return vals
-}
-
-func cosineSimilarity(a []float64, b []float64) float64 {
-	var dot, na, nb float64
-	for i := range a {
-		dot += a[i] * b[i]
-		na += a[i] * a[i]
-		nb += b[i] * b[i]
-	}
-	denom := math.Sqrt(na) * math.Sqrt(nb)
-	if denom == 0 {
-		return 0
-	}
-	return dot / denom
+	return nil
 }

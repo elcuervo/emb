@@ -3,6 +3,7 @@ package embtop
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -116,7 +117,7 @@ func readRESPCommand(r *bufio.Reader) ([]string, error) {
 			return nil, err
 		}
 		buf := make([]byte, l)
-		if _, err := ioReadFull(r, buf); err != nil {
+		if _, err := io.ReadFull(r, buf); err != nil {
 			return nil, err
 		}
 		if _, err := r.Discard(2); err != nil {

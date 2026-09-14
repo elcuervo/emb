@@ -59,7 +59,8 @@ type EvalOptions struct {
 // ARGV globals set from the given strings, and returns the script's return
 // value (the last value of the script body, Redis-style). Each invocation
 // creates a fresh state: no global state leaks between evaluations, and a
-// runaway script kills only its own request.
+// runaway script kills only its own request. It is the package-level entry the
+// script tests drive; production goes through Compiler.Eval.
 func Eval(source string, keys, argv []string, opts EvalOptions) (lua.LValue, error) {
 	return EvalWithHosts(source, keys, argv, Hosts{}, opts)
 }

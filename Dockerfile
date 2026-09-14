@@ -1,5 +1,5 @@
 # Stage 1: build the Go binary with ONNX Runtime
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 
 ARG TARGETARCH
 ARG ORT_VERSION=v1.27.0
