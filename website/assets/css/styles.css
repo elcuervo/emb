@@ -368,13 +368,9 @@ button{ font: inherit; color: inherit; }
   padding-top: env(safe-area-inset-top, 0px);
 }
 .masthead__inner{
-  position: relative;
-  z-index: 1;
   display: grid;
-  /* three clusters: brand+tagline, nav, CTA. The poster's nav block sits on
-     55.6% of the frame — right of centre — and its CTA is flush with the
-     sheet's right gutter, so the nav is anchored to its right end instead of
-     being centred in the leftover space. */
+  /* three clusters: brand+tagline left, nav+CTA right. The nav sits next to
+     the CTA as one right-hand group, flush with the sheet's right gutter. */
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: clamp(12px, 1.6vw, 26px);
@@ -406,9 +402,7 @@ button{ font: inherit; color: inherit; }
   align-items: center;
   justify-content: flex-end;
   gap: clamp(18px, 3.34vw, 56px);
-  /* the poster leaves 10.3vw of air between the nav and the CTA */
   justify-self: end;
-  margin-right: 10.3vw;
 }
 .nav a{
   position: relative;
@@ -432,14 +426,6 @@ button{ font: inherit; color: inherit; }
 .nav a:hover::after{ transform: scaleX(1); }
 
 .masthead__cta{ justify-self: end; }
-/* The spine starts at the very top of the page: it is a child of the sticky
-   header (a full-width box at the viewport's left edge), so its axis is
-   --fold-x -- the same point --fold names, spelled against the viewport --
-   and it hands over to the hero's segment at the masthead rule. The header's
-   content sits above it, as block bodies sit above theirs. */
-.spine--masthead{
-  left: calc(var(--fold-x) - var(--spine-w) / 2);
-}
 .mobile-nav{ display: none; }
 
 /* ── 04 hero ───────────────────────────────────────────────────────── */
@@ -452,12 +438,13 @@ button{ font: inherit; color: inherit; }
 /* The hero's shell is lifted above the section-level spine the same way. */
 .shell--hero{ position: relative; z-index: 1; }
 /* The hero's segment runs the section's full height behind the shell -- from
-   the masthead's rule, behind the meta band and the wordmark (whose ink
-   covers it where they overlap), down through the pipeline to the first
-   block. It is a child of the full-width section, so its axis is --fold-x;
-   it shares its width with the masked SVG spine, so the two overdraw exactly
-   where they coincide. Sections have no margins, so the segments abut with
-   no step. */
+   just under the masthead's rule, behind the meta band and the wordmark
+   (whose ink covers it where they overlap), down through the pipeline to the
+   first block. The spine never enters the masthead: the header is the menu's
+   own band, and the signal starts where the page does. It is a child of the
+   full-width section, so its axis is --fold-x; it shares its width with the
+   masked SVG spine, so the two overdraw exactly where they coincide.
+   Sections have no margins, so the segments abut with no step. */
 .spine--hero-top{
   left: calc(var(--fold-x) - var(--spine-w) / 2);
 }

@@ -337,9 +337,9 @@ desktop frame. With the single width the segments agree exactly (`CORRECTIONS.md
 
 The hero keeps its own masked SVG spine (`.sig`), which is what hides the line
 behind each plate's front edge; a CSS segment runs the hero's full height
-behind the column at the same axis and weight, and the masthead carries one
-from the very top of the page, so the line is unbroken from the viewport top
-to the ridge. Every block and the terrain carry a `.spine` segment. Sections have **no
+behind the column from just under the masthead rule to the first block.
+The spine never enters the masthead. Every block and the terrain carry a
+`.spine` segment. Sections have **no
 vertical margins, only padding**, so consecutive segments abut exactly — and
 where a segment would cross body copy it is either placed in a lane the copy
 clears, or hidden behind an opaque plate, which is the rule the hero's plates
@@ -607,8 +607,8 @@ route come apart:
 | ≤640px | 90% | the rail moves to the right margin, because a 390px box cannot give both a centre line and a readable measure; everything is held to its left, the plates' own spine is hidden, and the rail threads the plates |
 
 Three measured corrections are baked in. The hero's CSS spine runs the shell's
-full height behind the column from the masthead's rule to the first block:
-confining it to a row of its own began it *below* the stage notes and left a
+full height behind the column from just under the masthead rule to the first
+block: confining it to a row of its own began it *below* the stage notes and left a
 390px hole after the last plate (phones) or whenever the notes outgrew the
 plates (tablets). The stack's paper covers the line behind the plates, so the
 masked SVG spine still draws the gaps rather than the CSS one filling them in.
