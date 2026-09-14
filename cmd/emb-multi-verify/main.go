@@ -1,300 +1,119 @@
+// Command emb-multi-verify checks that EMB.MULTI returns byte-identical
+// embeddings to the same texts requested one at a time with EMB, for both
+// cross-model pairs and several pairs of one model (the batcher path).
 package main
 
 import (
+	"bytes"
+	"flag"
 	"fmt"
-	"net"
+	"io"
 	"os"
+	"time"
+
+	"github.com/elcuervo/emb/internal/embverify"
+	"github.com/elcuervo/emb/internal/resp"
 )
 
-type ModelConfig struct {
-	Name string
-	Dim  int
-}
-
 func main() {
-	addr := "127.0.0.1:6379"
-	if len(os.Args) > 1 {
-		addr = os.Args[1]
-	}
-
-	models := []ModelConfig{
-		{Name: "minilm", Dim: 384},
-		{Name: "siglip2", Dim: 768},
-	}
-
-	passed := 0
-	failed := 0
-
-	check := func(name string, ok bool) {
-		if ok {
-			fmt.Printf("  ✓ %s\n", name)
-			passed++
-		} else {
-			fmt.Printf("  ✗ %s\n", name)
-			failed++
-		}
-	}
-
-	// 1. EMB.MULTI across two different models
-	fmt.Println("\nTest 1: Cross-model EMB.MULTI")
-	multiResp := sendEMBMULTI(addr, models, []string{"hello world", "query: test"}, check)
-	if multiResp == nil {
-		return
-	}
-
-	// 2. Compare against sequential EMB calls
-	fmt.Println("\nTest 2: Byte-equality vs sequential EMB")
-	compareSequential(addr, models, []string{"hello world", "query: test"}, multiResp, check)
-
-	// 3. Same model, multiple pairs (batcher test)
-	fmt.Println("\nTest 3: Same-model EMB.MULTI (batcher)")
-	sameModelResp := sendEMBMULTISame(addr, models[0], []string{"a", "b", "c"}, check)
-	if sameModelResp != nil {
-		compareSequentialSame(addr, models[0], []string{"a", "b", "c"}, sameModelResp, check)
-	}
-
-	total := passed + failed
-	fmt.Printf("\n%d/%d passed, %d failed\n", passed, total, failed)
-	if failed > 0 {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "emb-multi-verify: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func sendEMBMULTI(addr string, models []ModelConfig, texts []string, check func(string, bool)) [][]byte {
-	conn, err := net.Dial("tcp", addr)
+type config struct {
+	addr    string
+	modelA  string
+	modelB  string
+	dimA    int
+	dimB    int
+	timeout time.Duration
+}
+
+func run() error {
+	cfg := config{}
+	flag.StringVar(&cfg.addr, "addr", "127.0.0.1:6379", "emb server address (host:port)")
+	flag.StringVar(&cfg.modelA, "model-a", "minilm", "first model for cross-model pairs")
+	flag.StringVar(&cfg.modelB, "model-b", "siglip2", "second model for cross-model pairs")
+	flag.IntVar(&cfg.dimA, "dim-a", 0, "expected dimension for model-a (0 = unchecked)")
+	flag.IntVar(&cfg.dimB, "dim-b", 0, "expected dimension for model-b (0 = unchecked)")
+	flag.DurationVar(&cfg.timeout, "timeout", 10*time.Second, "per-request timeout")
+	flag.Parse()
+
+	c := resp.NewClient(cfg.addr, "", false)
+	c.SetTimeout(cfg.timeout)
+	if err := c.Dial(); err != nil {
+		return err
+	}
+	defer func() { _ = c.Close() }()
+	e := embverify.NewEmbedder(c)
+
+	dims := map[string]int{cfg.modelA: cfg.dimA, cfg.modelB: cfg.dimB}
+
+	printf(os.Stdout, "\nTest 1: cross-model EMB.MULTI vs sequential EMB\n")
+	passed, failed, err := verifyGroup(e, []embverify.Pair{
+		{Model: cfg.modelA, Text: "hello world"},
+		{Model: cfg.modelB, Text: "query: test"},
+	}, dims, os.Stdout)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "connecting: %v\n", err)
-		return nil
-	}
-	defer conn.Close()
-
-	// Build RESP: EMB.MULTI model1 text1 model2 text2
-	parts := []string{"EMB.MULTI"}
-	for i, m := range models {
-		parts = append(parts, m.Name, texts[i])
+		return err
 	}
 
-	cmd := buildRESPArray(parts)
-	conn.Write([]byte(cmd))
-
-	resp, err := readArrayResponse(conn, len(models))
+	printf(os.Stdout, "\nTest 2: same-model EMB.MULTI (batcher) vs sequential EMB\n")
+	p2, f2, err := verifyGroup(e, []embverify.Pair{
+		{Model: cfg.modelA, Text: "a"},
+		{Model: cfg.modelA, Text: "b"},
+		{Model: cfg.modelA, Text: "c"},
+	}, dims, os.Stdout)
 	if err != nil {
-		check(fmt.Sprintf("response: %v", err), false)
-		return nil
+		return err
 	}
 
-	if len(resp) != len(models) {
-		check(fmt.Sprintf("expected %d embeddings, got %d", len(models), len(resp)), false)
-		return nil
+	passed += p2
+	failed += f2
+	total := passed + failed
+	printf(os.Stdout, "\n%d/%d passed, %d failed\n", passed, total, failed)
+	if failed > 0 {
+		return fmt.Errorf("%d of %d checks failed", failed, total)
 	}
-
-	for i, emb := range resp {
-		if emb == nil {
-			check(fmt.Sprintf("%s: got nil", models[i].Name), false)
-			return nil
-		}
-		expectedLen := models[i].Dim * 4
-		if len(emb) != expectedLen {
-			check(fmt.Sprintf("%s: expected %d bytes, got %d", models[i].Name, expectedLen, len(emb)), false)
-			return nil
-		}
-	}
-	check(fmt.Sprintf("EMB.MULTI returned %d embeddings with correct dims", len(models)), true)
-	return resp
+	return nil
 }
 
-func compareSequential(addr string, models []ModelConfig, texts []string, multiResp [][]byte, check func(string, bool)) {
-	for i, m := range models {
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			check(fmt.Sprintf("%s: connect: %v", m.Name, err), false)
-			continue
-		}
-
-		cmd := buildRESPArray([]string{"EMB", m.Name, texts[i]})
-		conn.Write([]byte(cmd))
-
-		emb, err := readBulkResponse(conn)
-		conn.Close()
-		if err != nil {
-			check(fmt.Sprintf("%s: read: %v", m.Name, err), false)
-			continue
-		}
-
-		if len(emb) != len(multiResp[i]) {
-			check(fmt.Sprintf("%s: size mismatch: %d vs %d", m.Name, len(emb), len(multiResp[i])), false)
-			continue
-		}
-
-		match := true
-		for j := range emb {
-			if emb[j] != multiResp[i][j] {
-				match = false
-				break
-			}
-		}
-		check(fmt.Sprintf("%s: byte-identical to EMB", m.Name), match)
-	}
+// printf writes one report line. A write failure cannot change the verdict, so
+// the error is deliberately discarded here and nowhere else.
+func printf(w io.Writer, format string, args ...any) {
+	_, _ = fmt.Fprintf(w, format, args...)
 }
 
-func sendEMBMULTISame(addr string, model ModelConfig, texts []string, check func(string, bool)) [][]byte {
-	conn, err := net.Dial("tcp", addr)
+// verifyGroup runs EMB.MULTI for pairs and compares each element, byte for
+// byte, against a sequential EMB for the same model/text.
+func verifyGroup(e *embverify.Embedder, pairs []embverify.Pair, dims map[string]int, out io.Writer) (passed, failed int, err error) {
+	multiRaw, err := e.RawMultiEmbed(pairs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "connecting: %v\n", err)
-		return nil
+		return 0, 0, fmt.Errorf("EMB.MULTI: %w", err)
 	}
-	defer conn.Close()
-
-	parts := []string{"EMB.MULTI"}
-	for _, t := range texts {
-		parts = append(parts, model.Name, t)
-	}
-
-	cmd := buildRESPArray(parts)
-	conn.Write([]byte(cmd))
-
-	resp, err := readArrayResponse(conn, len(texts))
-	if err != nil {
-		check(fmt.Sprintf("same-model response: %v", err), false)
-		return nil
-	}
-
-	if len(resp) != len(texts) {
-		check(fmt.Sprintf("expected %d embeddings, got %d", len(texts), len(resp)), false)
-		return nil
-	}
-
-	for i, emb := range resp {
-		if emb == nil {
-			check(fmt.Sprintf("text %q: got nil", texts[i]), false)
-			return nil
-		}
-		expectedLen := model.Dim * 4
-		if len(emb) != expectedLen {
-			check(fmt.Sprintf("text %q: expected %d bytes, got %d", texts[i], expectedLen, len(emb)), false)
-			return nil
-		}
-	}
-	check(fmt.Sprintf("same-model EMB.MULTI returned %d embeddings", len(texts)), true)
-	return resp
-}
-
-func compareSequentialSame(addr string, model ModelConfig, texts []string, multiResp [][]byte, check func(string, bool)) {
-	for i, text := range texts {
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			check(fmt.Sprintf("%s: connect: %v", text, err), false)
+	for i, p := range pairs {
+		label := fmt.Sprintf("%s/%q", p.Model, p.Text)
+		if multiRaw[i] == nil {
+			printf(out, "  ✗ %s returned null\n", label)
+			failed++
 			continue
 		}
-
-		cmd := buildRESPArray([]string{"EMB", model.Name, text})
-		conn.Write([]byte(cmd))
-
-		emb, err := readBulkResponse(conn)
-		conn.Close()
+		seq, err := e.RawEmbed(p.Model, p.Text)
 		if err != nil {
-			check(fmt.Sprintf("%s: read: %v", text, err), false)
+			printf(out, "  ✗ %s sequential EMB: %v\n", label, err)
+			failed++
 			continue
 		}
-
-		match := len(emb) == len(multiResp[i])
-		if match {
-			for j := range emb {
-				if emb[j] != multiResp[i][j] {
-					match = false
-					break
-				}
-			}
+		want := dims[p.Model]
+		if !bytes.Equal(multiRaw[i], seq) || (want > 0 && len(seq) != want*4) {
+			printf(out, "  ✗ %s differs from sequential EMB\n", label)
+			failed++
+			continue
 		}
-		check(fmt.Sprintf("%q byte-identical to EMB", text), match)
+		printf(out, "  ✓ %s byte-identical to EMB\n", label)
+		passed++
 	}
-}
-
-func buildRESPArray(parts []string) string {
-	resp := fmt.Sprintf("*%d\r\n", len(parts))
-	for _, p := range parts {
-		resp += fmt.Sprintf("$%d\r\n%s\r\n", len(p), p)
-	}
-	return resp
-}
-
-func readBulkResponse(conn net.Conn) ([]byte, error) {
-	header := make([]byte, 0, 16)
-	for {
-		b := make([]byte, 1)
-		if _, err := conn.Read(b); err != nil {
-			return nil, fmt.Errorf("reading header: %w", err)
-		}
-		header = append(header, b[0])
-		if len(header) >= 3 && header[len(header)-2] == '\r' && header[len(header)-1] == '\n' {
-			break
-		}
-		if len(header) > 16 {
-			return nil, fmt.Errorf("malformed header: %q", string(header))
-		}
-	}
-
-	if header[0] == '-' {
-		return nil, fmt.Errorf("server error: %s", string(header[1:len(header)-2]))
-	}
-	if header[0] == '$' && header[1] == '-' {
-		return nil, nil
-	}
-	if header[0] != '$' {
-		return nil, fmt.Errorf("expected bulk string, got %q", string(header))
-	}
-
-	var dataLen int
-	fmt.Sscanf(string(header[1:]), "%d", &dataLen)
-
-	data := make([]byte, dataLen)
-	if _, err := conn.Read(data); err != nil {
-		return nil, fmt.Errorf("reading data: %w", err)
-	}
-
-	trail := make([]byte, 2)
-	conn.Read(trail)
-
-	return data, nil
-}
-
-func readArrayResponse(conn net.Conn, _ int) ([][]byte, error) {
-	header := make([]byte, 0, 16)
-	for {
-		b := make([]byte, 1)
-		if _, err := conn.Read(b); err != nil {
-			return nil, fmt.Errorf("reading array header: %w", err)
-		}
-		header = append(header, b[0])
-		if len(header) >= 3 && header[len(header)-2] == '\r' && header[len(header)-1] == '\n' {
-			break
-		}
-		if len(header) > 16 {
-			return nil, fmt.Errorf("malformed array header: %q", string(header))
-		}
-	}
-
-	if header[0] == '-' {
-		return nil, fmt.Errorf("server error: %s", string(header[1:len(header)-2]))
-	}
-	if header[0] != '*' {
-		return nil, fmt.Errorf("expected array, got %q", string(header))
-	}
-
-	var count int
-	fmt.Sscanf(string(header[1:]), "%d", &count)
-	if count < 0 {
-		return nil, nil
-	}
-
-	result := make([][]byte, count)
-	for i := range count {
-		emb, err := readBulkResponse(conn)
-		if err != nil {
-			return nil, fmt.Errorf("element %d: %w", i, err)
-		}
-		result[i] = emb
-	}
-
-	return result, nil
+	return passed, failed, nil
 }

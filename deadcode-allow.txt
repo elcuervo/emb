@@ -1,0 +1,15 @@
+# Functions `just deadcode` reports that are intentional test seams, not rot.
+# Each line is a literal substring match against the deadcode output.
+#
+# unreachable func: meanPoolAndNormalizeScalar / extractPrePooledScalar
+#   The scalar pooling implementations the fast (SIMD) path is checked against
+#   in internal/pipeline/pooling_fast_test.go. They are the oracle, by design.
+# unreachable func: Eval
+#   The package-level sandboxed evaluator (and its EvalWithHosts sibling) that
+#   the script tests drive directly; production goes through Compiler.Eval.
+# unreachable func: WithScriptDeadline
+#   A server option used only by the script-deadline test to shorten the bound.
+unreachable func: meanPoolAndNormalizeScalar
+unreachable func: extractPrePooledScalar
+unreachable func: Eval
+unreachable func: WithScriptDeadline
