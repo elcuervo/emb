@@ -1,0 +1,40 @@
+# Kitchensink — the example's emb instance.
+#
+# One model, one job: text in, vectors out. Storage and search live in the Redis
+# instance beside it (see README.md); this server deliberately knows nothing
+# about either.
+#
+#   ./bin/emb -config examples/kitchensink/emb.yaml
+#
+# Only `listen` and a model are required. The rest of the fields are here
+# because each one's effect is visible from outside the server, and app.rb's
+# documentation cites them.
+
+listen: "127.0.0.1:16400"
+
+# With caching on, searching the same query twice costs one inference, not two.
+# `app.rb stats` prints the counters that prove it.
+cache: auto
+
+models:
+  minilm:
+    model_repo: Xenova/all-MiniLM-L6-v2
+    preload: true      # pay the model load at startup, not on the first query
+    normalize: true    # makes the vectors handed to the client comparable by
+                       # plain dot product, so app-side math agrees with the
+                       # index. VSIM does not need it: its score is
+                       # scale-invariant. Pinned because the repo default is
+                       # false, so leaving it out would be a silent choice.
+    max_length: 256    # chunks are short; longer sequences buy nothing here
+
+  # ── Tier 2: rerank the top-k ────────────────────────────────────────────────
+  # Vector search is recall-oriented, a cross-encoder is precision-oriented.
+  # This is a forward pointer, not a working option: app.rb does not implement
+  # a --rerank path yet, so the README does not advertise one. Uncomment both
+  # together when it does.
+  #
+  # reranker:
+  #   model_repo: Xenova/bge-reranker-base
+  #   preload: true
+  #   scripts:
+  #     - ../scripts/rerank.lua   # relative paths resolve against THIS file

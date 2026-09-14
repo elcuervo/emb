@@ -24,3 +24,6 @@ bench/fargate/out/
 # Python bytecode caches
 __pycache__/
 *.pyc
+
+# Kitchensink example: the state directory holding its Redis index and pidfiles.
+/examples/kitchensink/.state/

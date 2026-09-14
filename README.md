@@ -382,6 +382,12 @@ More patterns live in [`examples/scripts/`](examples/scripts/): extractive QA
 (`rerank.lua` — per-document batched sigmoid scores), and span extraction
 (`gliner2.lua` — `emb.tokenize.words` schemas + `emb.run_batch`).
 
+For the whole loop rather than one construct, see
+[`examples/kitchensink/`](examples/kitchensink/): a runnable application that
+embeds a corpus with an `emb` instance, stores the vectors in a Redis vector
+set, and answers ranked queries — `emb` computing, Redis storing and searching,
+two servers and one protocol between them.
+
 ### Writing your own script
 
 1. **Know your graph.** Input tensor names/ranks/dtypes and the output tensor

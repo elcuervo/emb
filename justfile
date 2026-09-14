@@ -108,6 +108,21 @@ dev: download-libtokenizers build
 console:
     @cd gems/emb && bundle exec rake console
 
+# Run the kitchensink example: an end-to-end vector application that embeds a
+# corpus with emb and searches it with Redis vector sets (see
+# examples/kitchensink/README.md).
+#
+#   just kitchensink index README.md DESIGN.md
+#   just kitchensink stats
+#   just kitchensink stop
+#
+# Arguments are forwarded through the shell, so one containing spaces needs its
+# own quotes:
+#
+#   just kitchensink search '"how does batching work"' 3
+kitchensink *ARGS:
+    @examples/kitchensink/run.sh {{ARGS}}
+
 # Download libtokenizers.a for the current platform
 # Uses the pre-built release from daulet/tokenizers
 libtokenizers-version := `grep '^TOKENIZERS_VERSION=' .github/versions.env 2>/dev/null | cut -d= -f2 || echo "v1.27.0"`
