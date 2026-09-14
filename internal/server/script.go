@@ -184,10 +184,6 @@ func (s *Server) handleScriptFlush(conn redcon.Conn, args []string) {
 
 // handleEVAL implements EMB.EVAL <model> <script> <numtexts> <text...> <arg...>.
 func (s *Server) handleEVAL(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
 	args := cmdArgs(cmd)
 	rest, err := splitEvalArgs(args)
 	if err != nil {
@@ -199,10 +195,6 @@ func (s *Server) handleEVAL(conn redcon.Conn, cmd redcon.Command) {
 
 // handleEVSHA implements EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>.
 func (s *Server) handleEVSHA(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
 	args := cmdArgs(cmd)
 	if len(args) < 3 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB.EVSHA' command")
@@ -299,9 +291,6 @@ func parseInt(s string) (int, error) {
 // full KEYS list, and each text's converted element is cached under its
 // content-addressed key.
 func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, args []string) {
-	s.active.Add(1)
-	defer s.active.Done()
-
 	// Record the evaluation for EMB.STATS and MONITOR (bounded ring, no text
 	// payloads). The clock starts before any work so the recorded latency
 	// covers parsing through reply writing, mirroring EMB.

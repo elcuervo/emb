@@ -43,7 +43,13 @@ type Batcher struct {
 	realTokens      atomic.Int64
 	processedSlots  atomic.Int64
 	done            chan struct{}
-	once            sync.Once
+	runDone         chan struct{}
+	producerWG      sync.WaitGroup
+	lifecycleMu     sync.Mutex
+	accepting       bool
+	active          sync.WaitGroup
+	closeOnce       sync.Once
+	closeErr        error
 }
 
 // NewBatcher creates a windowed batch collector. maxBatch bounds the window by
@@ -66,8 +72,11 @@ func NewBatcher(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, nor
 		maxBatchTokens:  maxBatchTokens,
 		tokenizeWorkers: tokenizeWorkers,
 		done:            make(chan struct{}),
+		runDone:         make(chan struct{}),
+		accepting:       true,
 	}
 	for range tokenizeWorkers {
+		b.producerWG.Add(1)
 		go b.producer()
 	}
 	go b.run()
@@ -77,6 +86,7 @@ func NewBatcher(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, nor
 // producer encodes queued requests and hands encodings to the run loop,
 // overlapping tokenization of later requests with inference of earlier batches.
 func (b *Batcher) producer() {
+	defer b.producerWG.Done()
 	for {
 		select {
 		case req, ok := <-b.reqChan:
@@ -96,12 +106,22 @@ func (b *Batcher) producer() {
 }
 
 func (b *Batcher) Embed(texts []string) (Response, error) {
+	b.lifecycleMu.Lock()
+	if !b.accepting {
+		b.lifecycleMu.Unlock()
+		return Response{}, ErrClosed
+	}
+	b.active.Add(1)
+	b.lifecycleMu.Unlock()
+	defer b.active.Done()
+
 	result := make(chan Response, 1)
 	b.reqChan <- Request{Texts: texts, Result: result}
 	return <-result, nil
 }
 
 func (b *Batcher) run() {
+	defer close(b.runDone)
 	var batch []batchItem
 	budget := 0
 	timerRunning := false
@@ -200,10 +220,9 @@ func (b *Batcher) run() {
 		// idle.
 		if len(batch) == 0 && !timerRunning {
 			appendItem(it)
-			for tryAppendOne() && len(batch) < b.maxBatch {
-				if b.maxBatchTokens > 0 && budget >= b.maxBatchTokens {
-					break
-				}
+			for len(batch) < b.maxBatch &&
+				(b.maxBatchTokens <= 0 || budget < b.maxBatchTokens) &&
+				tryAppendOne() {
 			}
 			flush()
 			return
@@ -288,8 +307,15 @@ func (b *Batcher) Errors() int64 {
 }
 
 func (b *Batcher) Close() error {
-	b.once.Do(func() {
+	b.closeOnce.Do(func() {
+		b.lifecycleMu.Lock()
+		b.accepting = false
+		b.lifecycleMu.Unlock()
+		b.active.Wait()
 		close(b.done)
+		b.producerWG.Wait()
+		<-b.runDone
+		b.closeErr = b.session.Close()
 	})
-	return b.session.Close()
+	return b.closeErr
 }

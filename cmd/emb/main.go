@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -37,16 +38,26 @@ func run() error {
 	if err := onnx.InitEnvironment(fc.OrtLib); err != nil {
 		return fmt.Errorf("initializing ONNX Runtime: %w", err)
 	}
-	defer onnx.DestroyEnvironment()
+	destroyEnvironment := true
+	defer func() {
+		if destroyEnvironment {
+			_ = onnx.DestroyEnvironment()
+		}
+	}()
 
 	reg := registry.New()
+	closeRegistry := true
+	defer func() {
+		if closeRegistry {
+			_ = reg.Close()
+		}
+	}()
 
 	var modelCount int
 	for name, modelCfg := range fc.Models {
 		log.Printf("registering model %q", name)
 		entry, err := registry.LoadModel(modelCfg, name)
 		if err != nil {
-			onnx.DestroyEnvironment()
 			return fmt.Errorf("loading model %q: %w", name, err)
 		}
 		reg.Add(name, entry)
@@ -107,11 +118,9 @@ func run() error {
 		for _, scriptPath := range modelCfg.Scripts {
 			src, err := os.ReadFile(scriptPath)
 			if err != nil {
-				onnx.DestroyEnvironment()
 				return fmt.Errorf("reading script %q for model %q: %w", scriptPath, name, err)
 			}
 			if _, err := srv.PreloadScript(name, string(src)); err != nil {
-				onnx.DestroyEnvironment()
 				return fmt.Errorf("preloading script %q for model %q: %w", scriptPath, name, err)
 			}
 			log.Printf("preloaded script %s for model %q", scriptPath, name)
@@ -124,20 +133,43 @@ func run() error {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sig)
 
-	go func() {
-		s := <-sig
-		log.Printf("shutting down (signal: %v)...", s)
-		srv.SetDraining()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx)
-		_ = reg.Close()
-	}()
-
-	if err := srv.ListenAndServe(); err != nil {
+	serveDone, err := srv.Start()
+	if err != nil {
 		return fmt.Errorf("server error: %w", err)
 	}
+
+	select {
+	case serveErr := <-serveDone:
+		if serveErr != nil {
+			return fmt.Errorf("server error: %w", serveErr)
+		}
+	case received := <-sig:
+		log.Printf("shutting down (signal: %v)...", received)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		shutdownErr := srv.Shutdown(ctx)
+		cancel()
+		if errors.Is(shutdownErr, server.ErrShutdownTimeout) {
+			// Returning reaches main's fatal exit. Skip native cleanup because an
+			// inference call may still be using those resources; the OS reclaims
+			// them when the process exits.
+			closeRegistry = false
+			destroyEnvironment = false
+			return shutdownErr
+		}
+		if shutdownErr != nil {
+			return fmt.Errorf("shutting down server: %w", shutdownErr)
+		}
+		if serveErr := <-serveDone; serveErr != nil {
+			return fmt.Errorf("server shutdown: %w", serveErr)
+		}
+	}
+
+	if err := reg.Close(); err != nil {
+		return fmt.Errorf("closing model registry: %w", err)
+	}
+	closeRegistry = false
 
 	log.Print("server stopped")
 	return nil

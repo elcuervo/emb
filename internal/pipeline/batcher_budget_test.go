@@ -121,6 +121,40 @@ func TestBatcherFushesOnTokenBudget(t *testing.T) {
 	}
 }
 
+func TestBatcherHonorsMaxBatchBeforeIdleDrain(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		tokenizeWorkers int
+	}{
+		{name: "serial"},
+		{name: "asynchronous", tokenizeWorkers: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := &recordingSession{dim: 2}
+			b := NewBatcher(sess, fakeTok{}, 2, 16, false, "mean", 100000, 1, 0, tc.tokenizeWorkers)
+			defer b.Close()
+
+			out := make(chan Response, 4)
+			for i := range 4 {
+				go embedAsync(b, []string{fmt.Sprintf("request-%d", i)}, out)
+			}
+			for range 4 {
+				if resp := <-out; resp.Err != nil {
+					t.Fatal(resp.Err)
+				}
+			}
+			if len(sess.calls) != 4 {
+				t.Fatalf("got %d inference runs, want 4", len(sess.calls))
+			}
+			for _, call := range sess.calls {
+				if call.batchSize != 1 {
+					t.Fatalf("max_batch=1 produced inference batch size %d", call.batchSize)
+				}
+			}
+		})
+	}
+}
+
 func TestBatcherNeverSplitsOversizedRequest(t *testing.T) {
 	sess := &recordingSession{dim: 2}
 	b := NewBatcher(sess, fakeTok{}, 2, 16, false, "mean", 100000, 100, 3, 0)

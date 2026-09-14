@@ -95,8 +95,8 @@ func (s *Server) infoSnapshot() infoSnapshot {
 	for _, m := range models {
 		names = append(names, m.Name)
 		res := &registryEntrySnapshot{dim: m.Dim}
-		if m.Pool != nil {
-			st := m.Pool.Stats()
+		if pool := m.LoadedPool(); pool != nil {
+			st := pool.Stats()
 			res.req, res.tok = st.Requests, st.Tokens
 		}
 		byName[m.Name] = res
