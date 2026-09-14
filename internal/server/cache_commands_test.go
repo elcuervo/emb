@@ -78,8 +78,8 @@ func TestSaveCommandIsAsyncAndCommandsRemainAvailable(t *testing.T) {
 		t.Fatalf("INFO omitted active snapshot:\n%s", info)
 	}
 	stats := arrayOf(t, redisCmd(t, addr, "EMB.STATS"))
-	if len(stats) != 92 {
-		t.Fatalf("EMB.STATS length = %d, want 92", len(stats))
+	if len(stats) != 100 {
+		t.Fatalf("EMB.STATS length = %d, want 100", len(stats))
 	}
 
 	close(release)

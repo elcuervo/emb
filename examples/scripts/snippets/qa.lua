@@ -4,7 +4,7 @@
 -- named outputs, constrained argmax, answer slicing without a decode block.
 --
 --   EMB.EVSHA qa <sha> 1 "when was the Mac launched" "Apple launched the Mac in 1976."
---   -> hash {answer = "1976", start = 21, stop = 40, score = ...}
+--   -> hash {answer = "1976", start = 26, stop = 30, score = ...}
 
 local enc = emb.tokenize.encode_pair(KEYS[1], KEYS[2], 384)
 
@@ -23,7 +23,7 @@ local s, e = out.start_logits.data, out.end_logits.data
 -- tokens only (#s - 1 excludes the trailing separator).
 local bs, be, best = enc.sep + 1, enc.sep + 1, -1e9
 for i = enc.sep + 1, #s - 1 do
-  local stop_i = math.min(#s - 1, i + 30)
+  local stop_i = math.min(#s - 1, i + 29)
   for j = i, stop_i do
     local sc = s[i] + e[j]
     if sc > best then

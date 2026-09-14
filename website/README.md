@@ -483,7 +483,7 @@ states. Two modes are the two special functions: `REDIS` shows the bytes and
 the `VALUES` envelope, `SCRIPTS` shows a script loaded once and called by SHA
 to answer as a classifier. Every line is copied from `README.md` or
 `examples/scripts/`, and the SHA1 in the scripts transcript is a real
-`sha1()` of `examples/scripts/sst2.lua` — the same value the server's
+`sha1()` of `examples/scripts/snippets/sst2.lua` — the same value the server's
 `scriptSHA()` returns. The executor never touches the network, playback is
 line-by-line rather than per character, and `prefers-reduced-motion` collapses
 it to one frame. Without JavaScript the form is hidden and a `<noscript>`

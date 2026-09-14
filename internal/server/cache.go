@@ -2,6 +2,8 @@ package server
 
 import (
 	"container/list"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -89,15 +91,30 @@ func NewCache(maxBytes int64) *Cache {
 	}
 }
 
-// modelOf extracts the model prefix from a cache key. Text keys are
-// "model:text"; image keys are "img:<model>:<sha256>" (see imageCacheKey), so
-// the img: prefix is unwrapped when it is followed by a 64-hex content hash.
-// Keys without a colon are attributed to the whole key.
+// modelOf extracts the model prefix from a cache key. Every key format ends in
+// a fixed-width lowercase-hex digest, and model names may themselves contain
+// colons, so the model is parsed positionally rather than up to the first
+// colon:
+//
+//	text:   "txt:<model>:<sha256>"
+//	image:  "img:<model>:<sha256>"
+//	script: "<model>:<sha1(script)>:<sha256(args|text)>:<text>"
+//
+// Keys that do not match a known shape fall back to the first colon.
 func modelOf(key string) string {
-	if strings.HasPrefix(key, "img:") {
-		rest := key[len("img:"):]
-		if i := strings.IndexByte(rest, ':'); i > 0 && isHexDigest(rest[i+1:]) {
+	for _, prefix := range []string{"txt:", "img:"} {
+		rest, ok := strings.CutPrefix(key, prefix)
+		if !ok {
+			continue
+		}
+		if i := len(rest) - (sha256HexLen + 1); i >= 0 && rest[i] == ':' && isHexDigest(rest[i+1:]) {
 			return rest[:i]
+		}
+		return rest
+	}
+	for i := 0; i+sha1HexLen+2 <= len(key); i++ {
+		if key[i] == ':' && key[i+sha1HexLen+1] == ':' && isLowerHex(key[i+1:i+sha1HexLen+1]) {
+			return key[:i]
 		}
 	}
 	if i := strings.IndexByte(key, ':'); i >= 0 {
@@ -106,11 +123,16 @@ func modelOf(key string) string {
 	return key
 }
 
+const (
+	sha1HexLen   = 40
+	sha256HexLen = 64
+)
+
 // isHexDigest reports whether s is a 64-character lowercase hex SHA-256 digest.
-func isHexDigest(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
+func isHexDigest(s string) bool { return isLowerHex(s) && len(s) == sha256HexLen }
+
+// isLowerHex reports whether s consists solely of lowercase hex digits.
+func isLowerHex(s string) bool {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
@@ -118,6 +140,15 @@ func isHexDigest(s string) bool {
 		}
 	}
 	return true
+}
+
+// textCacheKey namespaces text embeddings under "txt:" so a text can never
+// collide with an image entry ("img:<model>:<sha256>") or a script reply-cache
+// entry ("<model>:<sha>:..."), which share the same cache map. The text is
+// hashed so keys stay bounded in length instead of embedding the payload.
+func textCacheKey(model, text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return "txt:" + model + ":" + hex.EncodeToString(sum[:])
 }
 
 // perModel returns (creating on demand) the stats bucket for a model. Caller

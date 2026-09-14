@@ -74,6 +74,11 @@ type Hosts struct {
 	// Run executes one inference over named tensors and returns the graph's
 	// named outputs. Nil makes emb.run unavailable.
 	Run func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error)
+	// Embed returns pooled, normalized embeddings for the given texts through
+	// the model's embedding path (the same path the EMB command uses, so
+	// results share the embedding cache). Nil makes emb.embed unavailable;
+	// host bindings leave it nil for models without an embedding config.
+	Embed func(texts []string) ([][]byte, error)
 	// EncodePretokenized word-encodes an already-split word list (emb.tokenize.pretokenized).
 	EncodePretokenized func(words []string, maxLen int) (ids, wordIDs []int64, err error)
 	// EncodePlain encodes a single text through the model tokenizer's own
@@ -87,14 +92,19 @@ type Hosts struct {
 	Image *ImageHost
 }
 
-// ImageHost exposes a model's image preprocessing to scripts. Preprocess
-// decodes raw image bytes through the plan and returns the channel-first
-// float32 tensor; the plan supplies the shape, input tensor name, and the
-// parameters reported by emb.image.info(). Preprocessing is pure compute, so
+// ImageHost exposes a model's image preprocessing to scripts. Plan resolves
+// the model's immutable preprocessing plan lazily, without opening inference
+// sessions, so emb.image.info can report configuration while image sessions
+// stay unopened. Preprocess decodes raw image bytes through the plan and
+// returns the channel-first float32 tensor. Preprocessing is pure compute, so
 // script replies remain deterministic and cacheable.
 type ImageHost struct {
-	Plan       imageproc.Plan
+	Plan       func() (imageproc.Plan, error)
 	Preprocess func(data []byte) ([]float32, error)
+	// Embed returns pooled, normalized image embeddings for raw encoded image
+	// bytes, in the model's shared text/image embedding space. Nil makes
+	// emb.image.embed unavailable.
+	Embed func(images [][]byte) ([][]byte, error)
 }
 
 // registerHosts installs the whitelisted emb.* and json host functions into
@@ -105,6 +115,16 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	emb.RawSetString("run", ls.NewFunction(func(ls *lua.LState) int {
 		return runHost(ls, h)
 	}))
+	// emb.embed is registered only when the model can produce embeddings, so
+	// capability detection via type(emb.embed) matches what a script can call.
+	if h.Embed != nil {
+		emb.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
+			return embedHost(ls, h)
+		}))
+	}
+	emb.RawSetString("similarity", ls.NewFunction(similarityHost))
+	emb.RawSetString("distance", ls.NewFunction(distanceHost))
+	emb.RawSetString("API_VERSION", lua.LString(APIVersion))
 	emb.RawSetString("run_batch", ls.NewFunction(func(ls *lua.LState) int {
 		return runBatchHost(ls, h)
 	}))
@@ -129,6 +149,11 @@ func registerHosts(ls *lua.LState, h Hosts) {
 		img.RawSetString("info", ls.NewFunction(func(ls *lua.LState) int {
 			return imageInfoHost(ls, h.Image)
 		}))
+		if h.Image.Embed != nil {
+			img.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
+				return imageEmbedHost(ls, h.Image)
+			}))
+		}
 		emb.RawSetString("image", img)
 	}
 	ls.SetGlobal("emb", emb)
@@ -158,6 +183,11 @@ func runHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 	arg := ls.CheckTable(1)
+	opts, err := parseRunOptions(ls, 2)
+	if err != nil {
+		ls.RaiseError("emb.run: %v", err)
+		return 0
+	}
 	var names []string
 	arg.ForEach(func(k, _ lua.LValue) {
 		if s, ok := k.(lua.LString); ok {
@@ -189,14 +219,18 @@ func runHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 
-	outNames := make([]string, 0, len(outputs))
-	for n := range outputs {
-		outNames = append(outNames, n)
+	outNames, err := selectOutputNames(outputs, opts)
+	if err != nil {
+		ls.RaiseError("emb.run: %v", err)
+		return 0
 	}
-	sort.Strings(outNames)
+	if err := chargeOutputs(ls, outputs, outNames); err != nil {
+		ls.RaiseError("emb.run: %v", err)
+		return 0
+	}
 	result := ls.NewTable()
 	for _, n := range outNames {
-		result.RawSetString(n, namedTensorToLua(ls, outputs[n]))
+		result.RawSetString(n, renderTensor(ls, outputs[n], opts.packed))
 	}
 	ls.Push(result)
 	return 1
@@ -284,6 +318,11 @@ func imagePreprocessHost(ls *lua.LState, ih *ImageHost) int {
 		ls.RaiseError("emb.image.preprocess is unavailable for this model")
 		return 0
 	}
+	plan, err := ih.Plan()
+	if err != nil {
+		ls.RaiseError("emb.image.preprocess: %v", err)
+		return 0
+	}
 	data := ls.CheckString(1)
 	tensor, err := ih.Preprocess([]byte(data))
 	if err != nil {
@@ -299,33 +338,39 @@ func imagePreprocessHost(ls *lua.LState, ih *ImageHost) int {
 		buf = binary.LittleEndian.AppendUint32(buf, math.Float32bits(v))
 	}
 	shape := ls.NewTable()
-	for i, d := range ih.Plan.Shape() {
+	for i, d := range plan.Shape() {
 		shape.RawSetInt(i+1, lua.LNumber(d))
 	}
 	result := ls.NewTable()
 	result.RawSetString("shape", shape)
 	result.RawSetString("bytes", lua.LString(buf))
 	result.RawSetString("dtype", lua.LString("f32"))
-	result.RawSetString("input", lua.LString(ih.Plan.Input))
+	result.RawSetString("input", lua.LString(plan.Input))
 	ls.Push(result)
 	return 1
 }
 
 // imageInfoHost implements emb.image.info(): the model's configured
-// preprocessing parameters.
+// preprocessing parameters. It resolves the plan lazily without opening image
+// sessions.
 func imageInfoHost(ls *lua.LState, ih *ImageHost) int {
+	plan, err := ih.Plan()
+	if err != nil {
+		ls.RaiseError("emb.image.info: %v", err)
+		return 0
+	}
 	result := ls.NewTable()
-	result.RawSetString("input", lua.LString(ih.Plan.Input))
-	result.RawSetString("size", lua.LNumber(ih.Plan.Size))
-	result.RawSetString("crop", lua.LString(ih.Plan.Crop.String()))
-	result.RawSetString("resample", lua.LString(ih.Plan.Resample.String()))
-	result.RawSetString("rescale", lua.LNumber(ih.Plan.Rescale))
+	result.RawSetString("input", lua.LString(plan.Input))
+	result.RawSetString("size", lua.LNumber(plan.Size))
+	result.RawSetString("crop", lua.LString(plan.Crop.String()))
+	result.RawSetString("resample", lua.LString(plan.Resample.String()))
+	result.RawSetString("rescale", lua.LNumber(plan.Rescale))
 	mean := ls.NewTable()
-	for i, v := range ih.Plan.Mean {
+	for i, v := range plan.Mean {
 		mean.RawSetInt(i+1, lua.LNumber(v))
 	}
 	std := ls.NewTable()
-	for i, v := range ih.Plan.Std {
+	for i, v := range plan.Std {
 		std.RawSetInt(i+1, lua.LNumber(v))
 	}
 	result.RawSetString("mean", mean)
@@ -447,10 +492,7 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 			return t, fmt.Errorf("bytes: %w", err)
 		}
 		t.DType = dtypeFromString(explicitDType)
-		width := int64(4)
-		if t.DType == onnx.TensorInt64 {
-			width = 8
-		}
+		width := int64(dtypeWidth(t.DType))
 		if want := count * width; int64(len(raw)) != want {
 			return t, fmt.Errorf("bytes length %d does not match shape element count %d × %d bytes (%d)", len(raw), count, width, want)
 		}
@@ -501,21 +543,11 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 
 	// Fill form: construct the constant tensor directly from the shape (the
 	// count is exact by construction, so no Lua data table is ever built).
-	// The shape is script-controlled, so validate every dimension and bound
-	// the element count with checked multiplication before allocating.
-	count := int64(1)
-	for _, d := range t.Shape {
-		if d < 0 {
-			return t, fmt.Errorf("negative shape dimension %d", d)
-		}
-		if d == 0 {
-			count = 0
-			break
-		}
-		if count > math.MaxInt64/d {
-			return t, fmt.Errorf("shape element count overflows")
-		}
-		count *= d
+	// The shape is script-controlled, so bound the element count with the same
+	// checked primitive every other allocation path uses.
+	count, err := shapeElementCount(t.Shape)
+	if err != nil {
+		return t, err
 	}
 	if err := budget.charge(count); err != nil {
 		return t, fmt.Errorf("fill: %w", err)
@@ -578,28 +610,6 @@ func dtypeFromString(s string) onnx.TensorType {
 		return onnx.TensorFloat32
 	}
 	return onnx.TensorInt64
-}
-
-func namedTensorToLua(ls *lua.LState, t onnx.NamedTensor) *lua.LTable {
-	out := ls.NewTable()
-	shape := ls.NewTable()
-	for i, d := range t.Shape {
-		shape.RawSetInt(i+1, lua.LNumber(d))
-	}
-	out.RawSetString("shape", shape)
-	data := ls.NewTable()
-	switch t.DType {
-	case onnx.TensorInt64:
-		for i, v := range t.Int64 {
-			data.RawSetInt(i+1, lua.LNumber(v))
-		}
-	default:
-		for i, v := range t.Float {
-			data.RawSetInt(i+1, lua.LNumber(v))
-		}
-	}
-	out.RawSetString("data", data)
-	return out
 }
 
 // --- json host functions ------------------------------------------------
@@ -680,10 +690,22 @@ func anyToLuaValue(ls *lua.LState, v any) lua.LValue {
 	case string:
 		return lua.LString(t)
 	case []any:
+		// A Lua table cannot hold nil, so a JSON null element stores the
+		// json.null sentinel exactly as the object branch does; encoding the
+		// sentinel reproduces null, so arrays round-trip too.
 		tbl := ls.NewTable()
+		null := jsonNullSentinel(ls)
 		for i, e := range t {
-			tbl.RawSetInt(i+1, anyToLuaValue(ls, e))
+			if e == nil {
+				tbl.RawSetInt(i+1, null)
+			} else {
+				tbl.RawSetInt(i+1, anyToLuaValue(ls, e))
+			}
 		}
+		// An empty Lua table is otherwise indistinguishable from an empty
+		// object, so mark the decoded array in its metatable; isListTable
+		// consults the marker for entry-less tables.
+		markJSONArray(ls, tbl)
 		return tbl
 	case map[string]any:
 		tbl := ls.NewTable()
@@ -710,7 +732,32 @@ func isListTable(t *lua.LTable) bool {
 			intKeys++
 		}
 	})
-	return entries > 0 && intKeys == entries && entries == t.Len()
+	if entries == 0 {
+		// An empty table carries no key evidence either way; only a decoded
+		// JSON array is marked, so empty objects still encode as {}.
+		return isMarkedJSONArray(t)
+	}
+	return intKeys == entries && entries == t.Len()
+}
+
+// jsonArrayMarker lives in the metatable of a table decoded from a JSON array.
+// The marker never appears among the table's own keys, so it cannot leak into
+// an encoded object, and it survives an empty array (which has no entries to
+// distinguish it from an empty object).
+const jsonArrayMarker = "__emb_json_array"
+
+func markJSONArray(ls *lua.LState, t *lua.LTable) {
+	mt := ls.NewTable()
+	mt.RawSetString(jsonArrayMarker, lua.LTrue)
+	t.Metatable = mt
+}
+
+func isMarkedJSONArray(t *lua.LTable) bool {
+	mt, ok := t.Metatable.(*lua.LTable)
+	if !ok {
+		return false
+	}
+	return lua.LVAsBool(mt.RawGetString(jsonArrayMarker))
 }
 
 // --- Lua array helpers ---------------------------------------------------

@@ -37,7 +37,7 @@ func TestImagePreprocessHostFeedsRun(t *testing.T) {
 			}, nil
 		},
 		Image: &ImageHost{
-			Plan: plan,
+			Plan: func() (imageproc.Plan, error) { return plan, nil },
 			Preprocess: func(data []byte) ([]float32, error) {
 				if string(data) != "fake-image-bytes" {
 					t.Fatalf("preprocess received %q", data)
@@ -77,7 +77,7 @@ return out.image_embeds.data[1]
 
 func TestImageInfoHost(t *testing.T) {
 	plan := testImagePlan(4)
-	hosts := Hosts{Image: &ImageHost{Plan: plan, Preprocess: func([]byte) ([]float32, error) { return nil, nil }}}
+	hosts := Hosts{Image: &ImageHost{Plan: func() (imageproc.Plan, error) { return plan, nil }, Preprocess: func([]byte) ([]float32, error) { return nil, nil }}}
 	v, err := EvalWithHosts(`local i = emb.image.info(); return i.input .. ":" .. i.size .. ":" .. i.crop .. ":" .. i.resample`, nil, nil, hosts, EvalOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestImageHostAbsentWithoutImageBlock(t *testing.T) {
 func TestImagePreprocessRespectsCaps(t *testing.T) {
 	plan := testImagePlan(2)
 	plan.MaxBytes = 3
-	hosts := Hosts{Image: &ImageHost{Plan: plan, Preprocess: plan.Tensor}}
+	hosts := Hosts{Image: &ImageHost{Plan: func() (imageproc.Plan, error) { return plan, nil }, Preprocess: plan.Tensor}}
 	_, err := EvalWithHosts(`return emb.image.preprocess("way too long to be an image")`, nil, nil, hosts, EvalOptions{})
 	if err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("expected byte-cap error, got %v", err)

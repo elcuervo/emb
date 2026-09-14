@@ -21,6 +21,19 @@ import (
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
+// ModelEntry owns every inference resource a model has: the embedding pool,
+// the scripted named-tensor sessions, the image sessions, and the single
+// tokenizer shared by all of them. Ownership table (resource → owner → release
+// point → bound):
+//
+//	named-tensor script sessions → ModelEntry → Registry.Close → effectiveEmbeddingSessions (default) or explicit script_workers
+//	shared tokenizer            → ModelEntry → Registry.Close (exactly once) → 1 per model
+//	image sessions              → ModelEntry → Registry.Close / closeImageSessions → image pool size
+//	output tensors              → onnx.NamedRuntimeSession.outCache → eviction or Close → maxCachedOutputShapes
+//	script source / bytecode    → scriptCache / Compiler → eviction or EMB.SCRIPT FLUSH → per-model caps
+//
+// Every owner releases on close; a model whose resources were never created
+// closes safely without creating anything.
 type ModelEntry struct {
 	Pool *pipeline.Pool
 	Dim  int
@@ -42,6 +55,13 @@ type ModelEntry struct {
 	scriptOnce   sync.Once
 	scriptRes    *ScriptResources
 	scriptResErr error
+	// scripted-evaluation counters and resource footprint, reported by
+	// EMB.STATS/EMB.INFO (see ScriptStats / ScriptFootprint). Updated
+	// atomically and never reset.
+	scriptRequests  atomic.Int64
+	scriptErrors    atomic.Int64
+	scriptSessions  atomic.Int64
+	scriptTokenizer atomic.Bool
 
 	// image resources (EMB.IMG): a pool of named-tensor sessions plus the
 	// immutable preprocessing plan, resolved lazily on first image request.
@@ -50,6 +70,21 @@ type ModelEntry struct {
 	ImageRes    *ImageResources
 	imageOnce   sync.Once
 	imageResErr error
+	// imageSessions is the number of image sessions opened so far, published
+	// atomically so observability (EMB.INFO) never races the lazy open.
+	imageSessions atomic.Int64
+	// imagePlanOnce memoizes the resolved preprocessing plan separately from the
+	// sessions, so emb.image.info can report configuration without opening any
+	// image session. imagePlanRes is written inside the Once (happens-before).
+	imagePlanOnce sync.Once
+	imagePlanRes  *imagePlanResult
+
+	// sharedTok is the single tokenizer for this model, shared by the
+	// embedding pool and the scripted path so a model never loads two. Created
+	// lazily on first use and closed once by Registry.Close.
+	sharedTokOnce sync.Once
+	sharedTok     tokenizer.Tokenizer
+	sharedTokErr  error
 
 	// Fingerprints are expensive for large ONNX files. Persistence computes one
 	// lazily per model and all periodic/manual saves reuse it.
@@ -57,6 +92,40 @@ type ModelEntry struct {
 	fingerprint     string
 	fingerprintErr  error
 }
+
+// RecordScriptedEvaluation bumps the model's cumulative scripted-evaluation
+// counters (one per completed EMB.EVAL/EMB.EVSHA evaluation).
+func (e *ModelEntry) RecordScriptedEvaluation(failed bool) {
+	e.scriptRequests.Add(1)
+	if failed {
+		e.scriptErrors.Add(1)
+	}
+}
+
+// ScriptStats returns the model's cumulative scripted evaluations and failures.
+func (e *ModelEntry) ScriptStats() (requests, errors int64) {
+	return e.scriptRequests.Load(), e.scriptErrors.Load()
+}
+
+// Embeddable reports whether the model can produce pooled embeddings: a
+// declared dimension and a pooling mode other than "none". Models without an
+// embedding configuration (e.g. GLiNER logits graphs) are not embeddable, and
+// their scripts leave emb.embed unavailable rather than loading a pool that
+// cannot serve the request.
+func (e *ModelEntry) Embeddable() bool {
+	return e.cfg.Dim > 0 && e.cfg.Pooling != "" && e.cfg.Pooling != "none"
+}
+
+// ScriptFootprint reports the model's scripted resource cost without creating
+// anything: the number of named-tensor sessions opened and whether the script
+// tokenizer has been loaded.
+func (e *ModelEntry) ScriptFootprint() (sessions int64, tokenizer bool) {
+	return e.scriptSessions.Load(), e.scriptTokenizer.Load()
+}
+
+// ImageFootprint reports the number of image sessions opened so far, without
+// opening any (0 for a model that has never served an image request).
+func (e *ModelEntry) ImageFootprint() int64 { return e.imageSessions.Load() }
 
 // ScriptResources bundles what a scripted evaluation needs for a model: a
 // pool of named-tensor sessions (parallel scripted executions, round-robin)
@@ -166,6 +235,45 @@ func autoTuneWorkers(modelPath string, maxWorkers int) int {
 	return byMem
 }
 
+// newTokenizer creates a model's tokenizer. It is a package var (wrapping the
+// concrete constructor) so tests can inject a counting fake and prove the
+// instance shared by the embedding pool and the scripted path is closed
+// exactly once.
+var newTokenizer = func(path string, padOutput bool) (tokenizer.Tokenizer, error) {
+	return tokenizer.NewTokenizer(path, padOutput)
+}
+
+// sharedTokenizer returns the model's single tokenizer, creating it on first
+// use. Both the embedding pool and the scripted path use this instance so a
+// model never pays for two tokenizers. Ownership stays with the ModelEntry:
+// callers must not close it (Registry.Close does).
+func (e *ModelEntry) sharedTokenizer() (tokenizer.Tokenizer, error) {
+	e.sharedTokOnce.Do(func() {
+		e.sharedTok, e.sharedTokErr = newTokenizer(e.cfg.Tokenizer, e.cfg.PadOutput)
+	})
+	return e.sharedTok, e.sharedTokErr
+}
+
+// effectiveEmbeddingSessions returns how many inference sessions a model's
+// embedding path actually holds, derived from the model config (so computing
+// it never forces a pool load). A nil batching timeout means the default
+// 1 ms window is on, so the pool is a batcher holding exactly one session; a
+// worker pool holds its configured (or auto-tuned) worker count. It is the
+// single source of truth for the auto-tuned scripted session bound.
+func effectiveEmbeddingSessions(cfg *config.ModelConfig) int {
+	if cfg.Batching.Timeout == nil || *cfg.Batching.Timeout > 0 {
+		return 1
+	}
+	if cfg.Workers > 0 {
+		return cfg.Workers
+	}
+	n := autoTuneWorkers(cfg.ONNX, 0)
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
 func (e *ModelEntry) ensurePool() error {
 	if e.loaded.Load() {
 		return nil
@@ -174,7 +282,7 @@ func (e *ModelEntry) ensurePool() error {
 	log.Printf("  loading model %q (dim=%d, max_length=%d)...", e.Name, e.cfg.Dim, e.cfg.MaxLength)
 
 	cfg := e.cfg
-	tok, err := tokenizer.NewTokenizer(cfg.Tokenizer, cfg.PadOutput)
+	tok, err := e.sharedTokenizer()
 	if err != nil {
 		return fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
 	}
@@ -186,7 +294,6 @@ func (e *ModelEntry) ensurePool() error {
 
 	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
 	if err != nil {
-		_ = tok.Close()
 		return fmt.Errorf("reading output info for %q: %w", e.Name, err)
 	}
 	if st, statErr := os.Stat(cfg.ONNX); statErr == nil {
@@ -216,14 +323,12 @@ func (e *ModelEntry) ensurePool() error {
 
 	inputNames, err := onnx.GetInputNames(cfg.ONNX)
 	if err != nil {
-		_ = tok.Close()
 		return fmt.Errorf("reading input names for %q: %w", e.Name, err)
 	}
 	log.Printf("  %s: inputs=%v output=%q rank=%d", e.Name, inputNames, cfg.OutputTensor, out.Rank)
 
 	modelData, err := os.ReadFile(cfg.ONNX)
 	if err != nil {
-		_ = tok.Close()
 		return fmt.Errorf("reading model file for %q: %w", e.Name, err)
 	}
 
@@ -266,7 +371,6 @@ func (e *ModelEntry) ensurePool() error {
 	}
 	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, timeoutMS, cfg.Batching.MaxBatch, maxBatchTokens, tokenizeWorkers)
 	if err != nil {
-		_ = tok.Close()
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
 	}
 
@@ -280,6 +384,13 @@ func (e *ModelEntry) ensurePool() error {
 	}
 	log.Printf("  %s: %d workers ready (detected dim=%d%s)", e.Name, workers, cfg.Dim, batchInfo)
 	return nil
+}
+
+// newNamedSession creates one named-tensor session for the scripted/image
+// paths. It is a package var so tests can inject a partial-construction failure
+// and count that already-opened sessions are closed.
+var newNamedSession = func(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads, execMode int) (onnx.NamedSession, error) {
+	return onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, intraOpThreads, interOpThreads, execMode)
 }
 
 // ScriptResources lazily opens the generic named-tensor session and the
@@ -297,19 +408,19 @@ func (e *ModelEntry) ScriptResources() (*ScriptResources, error) {
 func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	cfg := e.cfg
 
-	tok, err := tokenizer.NewTokenizer(cfg.Tokenizer, cfg.PadOutput)
+	// The tokenizer is shared with the embedding pool, so a model that serves
+	// both EMB and scripts loads exactly one.
+	tok, err := e.sharedTokenizer()
 	if err != nil {
 		return nil, fmt.Errorf("loading tokenizer for %q: %w", e.Name, err)
 	}
 
 	inputNames, err := onnx.GetInputNames(cfg.ONNX)
 	if err != nil {
-		_ = tok.Close()
 		return nil, fmt.Errorf("reading input names for %q: %w", e.Name, err)
 	}
 	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
 	if err != nil {
-		_ = tok.Close()
 		return nil, fmt.Errorf("reading output info for %q: %w", e.Name, err)
 	}
 	outputNames := make([]string, 0, len(outInfo))
@@ -320,7 +431,6 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 
 	modelData, err := os.ReadFile(cfg.ONNX)
 	if err != nil {
-		_ = tok.Close()
 		return nil, fmt.Errorf("reading model file for %q: %w", e.Name, err)
 	}
 
@@ -333,20 +443,24 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		execMode = onnx.ExecModeParallel
 	}
 
+	// The auto-tuned default never exceeds the embedding path's real session
+	// count (one for a batcher pool, one per worker otherwise), so scripting
+	// cannot multiply a model's footprint beyond what the embedding path
+	// already commits to. An explicitly configured script_workers is honoured
+	// verbatim as an operator override (memory for parallelism), never clamped.
 	numSessions := cfg.ScriptWorkers
 	if numSessions <= 0 {
-		numSessions = autoTuneWorkers(cfg.ONNX, 0)
+		numSessions = effectiveEmbeddingSessions(&cfg)
 	}
 	if numSessions < 1 {
 		numSessions = 1
 	}
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
-		sess, err := onnx.NewNamedRuntimeSessionFromBytes(
+		sess, err := newNamedSession(
 			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
 		)
 		if err != nil {
-			_ = tok.Close()
 			for _, opened := range sessions {
 				_ = opened.Close()
 			}
@@ -355,6 +469,8 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		sessions = append(sessions, sess)
 	}
 
+	e.scriptSessions.Store(int64(len(sessions)))
+	e.scriptTokenizer.Store(true)
 	return &ScriptResources{sessions: sessions, Tokenizer: tok}, nil
 }
 
@@ -705,11 +821,11 @@ func (r *Registry) Close() error {
 			for _, sess := range entry.scriptRes.Sessions() {
 				_ = sess.Close()
 			}
-			// The scripted tokenizer is a separate RefTokenizer from the embed
-			// pool's; release its native resources explicitly.
-			if entry.scriptRes.Tokenizer != nil {
-				_ = entry.scriptRes.Tokenizer.Close()
-			}
+		}
+		// The tokenizer is shared by the pool and the scripted path; close it
+		// once here (the pool does not own it).
+		if entry.sharedTok != nil {
+			_ = entry.sharedTok.Close()
 		}
 		entry.closeImageSessions()
 	}

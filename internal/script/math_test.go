@@ -77,7 +77,6 @@ func TestMathArgmax(t *testing.T) {
 
 func TestMathEmptyErrors(t *testing.T) {
 	for _, src := range []string{
-		"return emb.math.sigmoid({})",
 		"return emb.math.softmax({})",
 		"return emb.math.argmax({})",
 		"return emb.math.float32_bytes({})",
@@ -88,6 +87,66 @@ func TestMathEmptyErrors(t *testing.T) {
 	}
 	if _, err := EvalWithHosts(`return emb.math.softmax({"a"})`, nil, nil, Hosts{}, EvalOptions{}); err == nil {
 		t.Fatal("expected non-numeric error")
+	}
+}
+
+// TestMathScalarSoftmaxArgmax covers the degenerate scalar forms the
+// script-eval spec requires: softmax(x) == 1 and argmax(x) == (1, x).
+func TestMathScalarSoftmaxArgmax(t *testing.T) {
+	if got := evalNum(t, `return emb.math.softmax(5)`); got != 1 {
+		t.Fatalf("softmax(5) = %v, want 1", got)
+	}
+	v, err := EvalWithHosts(`local i, x = emb.math.argmax(5) return i .. "|" .. x`, nil, nil, Hosts{}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "1|5" {
+		t.Fatalf("argmax(5) = %q, want 1|5", v.String())
+	}
+}
+
+// TestMathDefinedEmptyResults pins the one empty-operand rule (design decision
+// 4): an empty operand is valid exactly where the operation has a defined empty
+// result.
+func TestMathDefinedEmptyResults(t *testing.T) {
+	empty := func(src string) {
+		t.Helper()
+		v, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", src, err)
+		}
+		tbl, ok := v.(*lua.LTable)
+		if !ok || tbl.Len() != 0 {
+			t.Fatalf("%s = %v, want an empty array", src, v)
+		}
+	}
+	// Element-wise maps and selections yield the empty array.
+	empty(`return emb.math.sigmoid({})`)
+	empty(`return emb.math.scale({}, 2)`)
+	empty(`return emb.math.add({}, {})`)
+	empty(`return emb.math.topk({}, 3)`)
+	empty(`return emb.math.gather({1, 2, 3}, {})`)
+	empty(`return emb.math.slice({1, 2, 3}, {3}, 1, 0)`)
+	// Linear reductions yield 0.
+	for _, src := range []string{
+		`return emb.math.dot({}, {})`,
+		`return emb.math.l2({}, {})`,
+		`return emb.math.norm({})`,
+	} {
+		if got := evalNum(t, src); got != 0 {
+			t.Fatalf("%s = %v, want 0", src, got)
+		}
+	}
+	// Operations needing an element or a non-zero denominator error.
+	for _, src := range []string{
+		`return emb.math.cosine({}, {})`,
+		`return emb.math.softmax({})`,
+		`return emb.math.argmax({})`,
+		`return emb.math.float32_bytes({})`,
+	} {
+		if _, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{}); err == nil {
+			t.Fatalf("%s should error on the empty operand", src)
+		}
 	}
 }
 

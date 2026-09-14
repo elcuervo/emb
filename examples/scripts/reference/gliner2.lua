@@ -1,13 +1,17 @@
--- gliner2.lua: GLiNER2 span extraction (example: cuerbot/gliner2-multi-v1 ONNX
--- export). This is a *demonstration* of the script building blocks, not a
--- maintained server component -- reuse emb.tokenize.words / pretokenized /
--- emb.run in your own scripts for other models.
+-- gliner2.lua: GLiNER2 span extraction (cuerbot/gliner2-multi-v1 ONNX export).
+-- This is the maintained reference implementation for scripted extraction.
 --
 --   EMB.EVSHA gliner2 <sha> 1 <text> PERSON ORG PRODUCT
 --   -> hash {PERSON = {"Tim Cook"}, ORG = {"Apple"}, PRODUCT = {"iPhone 15"}}
 --
 -- KEYS[1] = text, ARGV[1..] = labels. Schema baked into the sequence:
 --   ( [P] prompt ( [E] LAB1 [E] LAB2 ) ) [SEP_TEXT] word1 word2 ...
+--
+-- The logits tensor is read in its *packed* form ({bytes = true}) and reduced
+-- host-side (emb.math.gather + emb.math.sigmoid) instead of indexing the 4-D
+-- tensor element-by-element in Lua: the span search is seq x width x labels
+-- large, so keeping it out of the interpreter is what makes this script
+-- production-viable. See the production scripting guide.
 
 local PREFIX = "[E]"            -- label marker (span extraction)
 local SEP_TEXT = "[SEP_TEXT]"
@@ -109,41 +113,36 @@ for ti = 1, #texts do
   }
 end
 
--- Baseline block: one padded inference run for the whole batch.
-local outs = emb.run_batch(inputs)
-
--- Flat row-major access helper for decoded tensors (kept user-space: trivial).
-local function at(data, shape, ...)
-  local offset, args = 0, { ... }
-  for i = 1, #args do offset = offset * shape[i] + (args[i] - 1) end
-  return data[offset + 1]
-end
-
+-- Baseline block: one padded inference run for the whole batch, returning the
+-- logits packed (raw little-endian float32) rather than as per-element arrays.
+local outs = emb.run_batch(inputs, { bytes = true, outputs = { "logits" } })
 
 local function decode_text(ti)
   local o = outs[ti]
-  local logits, log_shape = o.logits.data, o.logits.shape
+  local logits, log_shape = o.logits.bytes, o.logits.shape
   local max_width, num_labels = log_shape[3], log_shape[4]
-  -- find_spans / format_spans close over the per-text state via setglobals;
-  -- re-implemented below as a closure over meta[ti] for clarity.
   local m = meta[ti]
   local norm, starts, ends = m.norm, m.starts, m.ends
   local text_len, seq, pos2word = m.text_len, m.seq, m.pos2word
   local function find_spans_li(li)
-    local raw, cand = {}, {}
+    -- Collect the flat 1-based indices of every (position, width) cell for this
+    -- label, then gather + sigmoid them in two host calls. The candidate list
+    -- stays in Lua because spans (not scores) are what the reply needs.
+    local idx, cand = {}, {}
     for pos = 1, seq do
       local sw = pos2word[pos]
       if sw then
         for w = 0, max_width - 1 do
           local end_word = sw - 1 + w
           if end_word >= text_len then break end
-          raw[#raw + 1] = at(logits, log_shape, 1, pos, w + 1, li)
+          -- flat [1, seq, max_width, num_labels] offset, 1-based
+          idx[#idx + 1] = (pos - 1) * max_width * num_labels + w * num_labels + li
           cand[#cand + 1] = { sw = sw, w = w }
         end
       end
     end
-    if #raw == 0 then return {} end
-    local scores = emb.math.sigmoid(raw)
+    if #idx == 0 then return {} end
+    local scores = emb.math.sigmoid(emb.math.gather(logits, idx))
     local spans = {}
     for i = 1, #scores do
       if scores[i] >= THRESHOLD then

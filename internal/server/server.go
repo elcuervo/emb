@@ -126,6 +126,12 @@ type Server struct {
 	netOut atomic.Uint64
 	// monitor records completed-request events for MONITOR (bounded ring).
 	monitor *Monitor
+	// scripted-evaluation counters (EMB.EVAL/EMB.EVSHA), reported by EMB.STATS
+	// as script_requests/script_errors/script_avg_latency_us. Latency is
+	// cumulative microseconds over completed evaluations.
+	scriptRequests  atomic.Int64
+	scriptErrors    atomic.Int64
+	scriptLatencyUs atomic.Int64
 }
 
 // Option configures a Server.
@@ -720,6 +726,59 @@ func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
 	}
 }
 
+// embedTexts resolves embeddings for `texts` against `model` through the
+// shared embedding path: cache lookups, one batched inference for the misses,
+// and cache writes. It is the single entry point used by both the EMB command
+// and the scripted `emb.embed` host, so embeddings produced by either path
+// share cache entries and batcher admission. entry.Pool must already be
+// resolved (see Registry.GetOrInit).
+func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []string) ([][]byte, error) {
+	if s.cache == nil {
+		resp, err := entry.Pool.Embed(texts)
+		if err != nil {
+			return nil, err
+		}
+		if resp.Err != nil {
+			return nil, resp.Err
+		}
+		return resp.Embeddings, nil
+	}
+
+	results := make([][]byte, len(texts))
+	// Admit any restored snapshot entries now that the model is loaded and its
+	// fingerprint is verified, before the first cache lookup, so every embedding
+	// path (EMB and scripted emb.embed) sees the recovered entries.
+	s.admitQuarantine(model, entry)
+	var missIdxs []int
+	for i, text := range texts {
+		if emb, ok := s.cache.Get(textCacheKey(model, text)); ok {
+			results[i] = emb
+		} else {
+			missIdxs = append(missIdxs, i)
+		}
+	}
+	if len(missIdxs) == 0 {
+		return results, nil
+	}
+
+	missTexts := make([]string, len(missIdxs))
+	for j, idx := range missIdxs {
+		missTexts[j] = texts[idx]
+	}
+	resp, err := entry.Pool.Embed(missTexts)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Err != nil {
+		return nil, resp.Err
+	}
+	for j, idx := range missIdxs {
+		results[idx] = resp.Embeddings[j]
+		s.cache.Set(textCacheKey(model, texts[idx]), resp.Embeddings[j])
+	}
+	return results, nil
+}
+
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	if s.shuttingDown.Load() {
 		conn.WriteError("ERR server shutting down")
@@ -774,59 +833,6 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		texts = texts[:s.maxTexts]
 	}
 
-	if s.cache != nil {
-		results := make([][]byte, len(texts))
-		var missIdxs []int
-		for i, text := range texts {
-			key := modelName + ":" + text
-			if emb, ok := s.cache.Get(key); ok {
-				results[i] = emb
-			} else {
-				missIdxs = append(missIdxs, i)
-			}
-		}
-
-		entry, err := s.reg.GetOrInit(modelName)
-		if err != nil {
-			failed = true
-			conn.WriteError(fmt.Sprintf("ERR %v", err))
-			return
-		}
-		s.admitQuarantine(modelName, entry)
-
-		if len(missIdxs) == 0 {
-			writeEmbResult(conn, format, results, total, entry.Dim)
-			return
-		}
-
-		missTexts := make([]string, len(missIdxs))
-		for j, idx := range missIdxs {
-			missTexts[j] = texts[idx]
-		}
-
-		resp, err := entry.Pool.Embed(missTexts)
-		if err != nil {
-			failed = true
-			conn.WriteError(fmt.Sprintf("ERR %v", err))
-			return
-		}
-		if resp.Err != nil {
-			failed = true
-			conn.WriteError(fmt.Sprintf("ERR %v", resp.Err))
-			return
-		}
-
-		for j, idx := range missIdxs {
-			results[idx] = resp.Embeddings[j]
-			s.cache.Set(modelName+":"+texts[idx], resp.Embeddings[j])
-		}
-
-		// Single-text requests keep their single-bulk reply shape; multi-text
-		// replies are arrays with null slots for truncated overflow texts.
-		writeEmbResult(conn, format, results, total, entry.Dim)
-		return
-	}
-
 	entry, err := s.reg.GetOrInit(modelName)
 	if err != nil {
 		failed = true
@@ -834,20 +840,16 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	resp, err := entry.Pool.Embed(texts)
+	results, err := s.embedTexts(entry, modelName, texts)
 	if err != nil {
 		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
-	if resp.Err != nil {
-		failed = true
-		conn.WriteError(fmt.Sprintf("ERR %v", resp.Err))
-		return
-	}
-
-	writeEmbResult(conn, format, resp.Embeddings, total, entry.Dim)
+	// Single-text requests keep their single-bulk reply shape; multi-text
+	// replies are arrays with null slots for truncated overflow texts.
+	writeEmbResult(conn, format, results, total, entry.Dim)
 }
 
 // writeEmbResult routes an embedding reply to the requested format: the BLOB
@@ -1026,9 +1028,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	stats := entry.Pool.Stats()
 
 	if s.cache != nil {
-		writePairs(conn, 22)
+		writePairs(conn, 27)
 	} else {
-		writePairs(conn, 15)
+		writePairs(conn, 20)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1064,6 +1066,20 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteBulkString(entry.Quantization)
 	conn.WriteBulkString("model_bytes")
 	conn.WriteInt(int(entry.ModelSize))
+	// Scripted-evaluation counters and resource footprint, distinct from the
+	// embedding pool's requests/errors above.
+	scriptReqs, scriptErrs := entry.ScriptStats()
+	scriptSessions, scriptTokenizer := entry.ScriptFootprint()
+	conn.WriteBulkString("script_requests")
+	conn.WriteInt(int(scriptReqs))
+	conn.WriteBulkString("script_errors")
+	conn.WriteInt(int(scriptErrs))
+	conn.WriteBulkString("script_sessions")
+	conn.WriteInt(int(scriptSessions))
+	conn.WriteBulkString("script_tokenizer")
+	conn.WriteInt(boolInt(scriptTokenizer))
+	conn.WriteBulkString("image_sessions")
+	conn.WriteInt(int(entry.ImageFootprint()))
 	if s.cache != nil {
 		cs := s.cache.Stats()
 		hitRate := 0.0
@@ -1095,7 +1111,14 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	totalToks := int64(0)
 
 	perModel := make([]string, 0, len(models))
+	perModelScripts := make([]string, 0, len(models))
 	for _, m := range models {
+		sreq, serr := m.ScriptStats()
+		sessions, tokenizer := m.ScriptFootprint()
+		if sreq > 0 {
+			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t",
+				m.Name, sreq, serr, sessions, tokenizer))
+		}
 		if m.Pool != nil {
 			st := m.Pool.Stats()
 			totalReqs += st.Requests
@@ -1131,7 +1154,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 46)
+	writePairs(conn, 50)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1154,6 +1177,14 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(len(models))
 	conn.WriteBulkString("per_model")
 	conn.WriteBulkString(strings.Join(perModel, " | "))
+	conn.WriteBulkString("script_requests")
+	conn.WriteInt(int(s.scriptRequests.Load()))
+	conn.WriteBulkString("script_errors")
+	conn.WriteInt(int(s.scriptErrors.Load()))
+	conn.WriteBulkString("script_avg_latency_us")
+	conn.WriteInt(avgLatencyUs(s.scriptLatencyUs.Load(), s.scriptRequests.Load()))
+	conn.WriteBulkString("per_model_scripts")
+	conn.WriteBulkString(strings.Join(perModelScripts, " | "))
 	conn.WriteBulkString("connections")
 	conn.WriteInt(int(s.conns.Load()))
 	conn.WriteBulkString("idle_timeout_ms")
@@ -1234,6 +1265,15 @@ func boolInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+// avgLatencyUs returns the mean latency in microseconds, or 0 when no request
+// has completed (avoids a divide-by-zero on a freshly started server).
+func avgLatencyUs(totalUs, count int64) int {
+	if count <= 0 {
+		return 0
+	}
+	return int(totalUs / count)
 }
 
 func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
@@ -1375,7 +1415,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	}()
 
 	if s.cache != nil {
-		key := model + ":" + text
+		key := textCacheKey(model, text)
 		if emb, ok := s.cache.Get(key); ok {
 			results[idx] = emb
 			return
@@ -1388,6 +1428,15 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		return
 	}
 	s.admitQuarantine(model, entry)
+	// Admission may have published a restored entry for this exact text, so
+	// re-check before paying for inference.
+	if s.cache != nil {
+		key := textCacheKey(model, text)
+		if emb, ok := s.cache.Get(key); ok {
+			results[idx] = emb
+			return
+		}
+	}
 
 	resp, err := entry.Pool.Embed([]string{text})
 	if err != nil || resp.Err != nil {
@@ -1396,7 +1445,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	}
 
 	if s.cache != nil {
-		s.cache.Set(model+":"+text, resp.Embeddings[0])
+		s.cache.Set(textCacheKey(model, text), resp.Embeddings[0])
 	}
 
 	results[idx] = resp.Embeddings[0]
@@ -1428,7 +1477,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
 		"Script input specs: {shape, data|fill|bytes, dtype} - fill builds a constant tensor host-side (no Lua data table); bytes packs little-endian elements; data/fill/bytes are mutually exclusive",
-		"Script blocks: emb.run / emb.run_batch(named tensors) emb.image.{preprocess,info} emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.embed / emb.image.{embed,preprocess,info} emb.tokenize.{encode,encode_pair,words,pretokenized} emb.similarity / emb.distance emb.math.{sigmoid,softmax,argmax,float32_bytes,dot,cosine,l2,norm,mean_pool,cls,topk,gather,slice,scale,add} json.{encode,decode,null} emb.API_VERSION",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

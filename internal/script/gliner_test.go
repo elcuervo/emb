@@ -21,7 +21,7 @@ var updateGLiNER = flag.Bool("update", false, "regenerate gliner golden fixtures
 const (
 	glinerModel     = "../../models/gliner2/model_int8.onnx"
 	glinerTokenizer = "../../models/gliner2/tokenizer.json"
-	glinerScript    = "../../examples/scripts/gliner2.lua"
+	glinerScript    = "../../examples/scripts/reference/gliner2.lua"
 	glinerGolden    = "testdata/gliner_golden.json"
 )
 

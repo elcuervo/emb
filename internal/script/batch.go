@@ -2,6 +2,7 @@ package script
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 
@@ -28,6 +29,11 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 	}
 	if itemsTab.Len() == 0 {
 		ls.RaiseError("emb.run_batch: empty item array")
+		return 0
+	}
+	opts, err := parseRunOptions(ls, 2)
+	if err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
 		return 0
 	}
 
@@ -102,15 +108,19 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 	// Split outputs along the batch axis.
 	n := len(items)
 	result := ls.NewTable()
-	outNames := make([]string, 0, len(outputs))
-	for name := range outputs {
-		outNames = append(outNames, name)
+	outNames, err := selectOutputNames(outputs, opts)
+	if err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
+		return 0
 	}
-	sort.Strings(outNames)
+	if err := chargeOutputs(ls, outputs, outNames); err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
+		return 0
+	}
 	for i := 0; i < n; i++ {
 		itemOut := ls.NewTable()
 		for _, name := range outNames {
-			itemOut.RawSetString(name, sliceBatchOutput(ls, outputs[name], i, n))
+			itemOut.RawSetString(name, sliceBatchOutput(ls, outputs[name], i, n, opts.packed))
 		}
 		result.RawSetInt(i+1, itemOut)
 	}
@@ -186,10 +196,20 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 			}
 		}
 
-		inner := innerInt(maxShape[1:])
-		// Charge the padded merged allocation against the request budget too:
-		// n*inner can exceed the sum of the items' tensor sizes (padding).
-		if err := budget.charge(int64(n) * int64(inner)); err != nil {
+		// The padded merged allocation is charged against the request budget too:
+		// n*inner can exceed the sum of the items' tensor sizes (padding). Compute
+		// the total with the checked element-count primitive so a large padded
+		// batch cannot wrap the product negative and slip a bogus allocation past
+		// the budget.
+		total, err := shapeElementCount(maxShape)
+		if err != nil {
+			return nil, fmt.Errorf("input %q: %w", name, err)
+		}
+		if total > math.MaxInt {
+			return nil, fmt.Errorf("input %q: merged shape %v needs %d elements, more than fit in memory", name, maxShape, total)
+		}
+		inner := total / int64(n)
+		if err := budget.charge(total); err != nil {
 			return nil, fmt.Errorf("merged input %q: %w", name, err)
 		}
 		var out onnx.NamedTensor
@@ -197,9 +217,9 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 		out.Shape = maxShape
 		out.DType = base.DType
 		if base.DType == onnx.TensorInt64 {
-			out.Int64 = make([]int64, n*inner)
+			out.Int64 = make([]int64, int(total))
 		} else {
-			out.Float = make([]float32, n*inner)
+			out.Float = make([]float32, int(total))
 		}
 		for i, ins := range items {
 			var in onnx.NamedTensor
@@ -211,7 +231,7 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 			if in.Shape[0] != 1 {
 				return nil, fmt.Errorf("input %q item %d: batch dimension must be 1, got %d", name, i+1, in.Shape[0])
 			}
-			row := i * inner
+			row := i * int(inner)
 			if slices.Equal(in.Shape[1:], maxShape[1:]) {
 				// Exact inner layout: a single contiguous copy fills the row.
 				if in.DType == onnx.TensorInt64 {
@@ -284,7 +304,7 @@ func scatterRow(out onnx.NamedTensor, dstStart int, in onnx.NamedTensor, maxInne
 // It validates that the output carries the expected batch dimension and data
 // length before slicing, so a graph output without a leading dim of size n
 // (e.g. a pooled or scalar result) raises a Lua error instead of panicking.
-func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int) *lua.LTable {
+func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int, packed bool) *lua.LTable {
 	out := ls.NewTable()
 	shape := t.Shape
 	if len(shape) == 0 {
@@ -295,42 +315,24 @@ func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int) *lua.LTable 
 		ls.RaiseError("emb.run_batch: output shape %v has batch dimension %d, want %d", shape, shape[0], n)
 		return out
 	}
-	inner := 1
-	for _, d := range shape[1:] {
-		inner *= int(d)
+	inner, err := shapeElementCount(shape[1:])
+	if err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
+		return out
 	}
-	if (t.DType == onnx.TensorInt64 && len(t.Int64) < n*inner) || (t.DType != onnx.TensorInt64 && len(t.Float) < n*inner) {
-		ls.RaiseError("emb.run_batch: output %q data has %d elements, want at least %d", t.Name, len(t.Int64)+len(t.Float), n*inner)
+	if (t.DType == onnx.TensorInt64 && int64(len(t.Int64)) < int64(n)*inner) || (t.DType != onnx.TensorInt64 && int64(len(t.Float)) < int64(n)*inner) {
+		ls.RaiseError("emb.run_batch: output %q data has %d elements, want at least %d", t.Name, len(t.Int64)+len(t.Float), int64(n)*inner)
 		return out
 	}
 	batchShape := append([]int64{1}, shape[1:]...)
-	shapeTab := ls.NewTable()
-	for k, d := range batchShape {
-		shapeTab.RawSetInt(k+1, lua.LNumber(d))
+	start := int64(i) * inner
+	slice := onnx.NamedTensor{Name: t.Name, Shape: batchShape, DType: t.DType}
+	if t.DType == onnx.TensorInt64 {
+		slice.Int64 = t.Int64[start : start+inner]
+	} else {
+		slice.Float = t.Float[start : start+inner]
 	}
-	out.RawSetString("shape", shapeTab)
-	data := ls.NewTable()
-	start := i * inner
-	switch t.DType {
-	case onnx.TensorInt64:
-		for j := 0; j < inner; j++ {
-			data.RawSetInt(j+1, lua.LNumber(t.Int64[start+j]))
-		}
-	default:
-		for j := 0; j < inner; j++ {
-			data.RawSetInt(j+1, lua.LNumber(t.Float[start+j]))
-		}
-	}
-	out.RawSetString("data", data)
-	return out
-}
-
-func innerInt(dims []int64) int {
-	n := 1
-	for _, d := range dims {
-		n *= int(d)
-	}
-	return n
+	return renderTensor(ls, slice, packed)
 }
 
 func rankOf(shape []int64) int { return len(shape) }

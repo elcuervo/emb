@@ -16,6 +16,13 @@ import (
 	"github.com/elcuervo/emb/internal/pipeline"
 )
 
+// imagePlanResult memoizes the outcome of resolving a model's preprocessing
+// plan without opening sessions.
+type imagePlanResult struct {
+	plan imageproc.Plan
+	err  error
+}
+
 // ImageResources bundles what an image embedding request needs: a pool of
 // named-tensor sessions (round-robin, so concurrent EMB.IMG requests do not
 // serialize) and the immutable preprocessing plan resolved at load.
@@ -108,6 +115,36 @@ func (r *ImageResources) pool(out onnx.NamedTensor, batch int) ([][]byte, error)
 	}
 }
 
+// HasImageSurface reports whether the model can serve the image surface — an
+// image: block in its config, or a test-injected ImageRes — without opening
+// any session. It is the gate for binding emb.image.* into the sandbox.
+func (e *ModelEntry) HasImageSurface() bool {
+	return e.cfg.Image != nil || e.ImageRes != nil
+}
+
+// ImagePlan resolves and validates the model's immutable preprocessing plan
+// without opening any inference session. It is memoized, so emb.image.info and
+// emb.image.preprocess can report/use configuration while the image session
+// pool stays unopened. A test-injected ImageRes (no image: block) contributes
+// its pre-built plan.
+func (e *ModelEntry) ImagePlan() (imageproc.Plan, error) {
+	e.imagePlanOnce.Do(func() {
+		if e.cfg.Image == nil {
+			// Text-only model; ImageRes is only ever set by test injection
+			// before the server starts serving.
+			if e.ImageRes != nil {
+				e.imagePlanRes = &imagePlanResult{plan: e.ImageRes.Plan}
+			} else {
+				e.imagePlanRes = &imagePlanResult{}
+			}
+			return
+		}
+		plan, err := resolveImagePlan(e.cfg, e.Name)
+		e.imagePlanRes = &imagePlanResult{plan: plan, err: err}
+	})
+	return e.imagePlanRes.plan, e.imagePlanRes.err
+}
+
 // ImageResources lazily opens the image named-session pool and resolves the
 // preprocessing plan. It returns (nil, nil) for a model without an image
 // block, so callers use a nil result to mean "this model is text-only".
@@ -127,7 +164,7 @@ func (e *ModelEntry) ImageResources() (*ImageResources, error) {
 
 func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 	cfg := e.cfg
-	plan, err := resolveImagePlan(cfg, e.Name)
+	plan, err := e.ImagePlan()
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +212,7 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 	}
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
-		sess, err := onnx.NewNamedRuntimeSessionFromBytes(
+		sess, err := newNamedSession(
 			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
 		)
 		if err != nil {
@@ -187,6 +224,7 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 		sessions = append(sessions, sess)
 	}
 
+	e.imageSessions.Store(int64(len(sessions)))
 	return &ImageResources{
 		Sessions:     sessions,
 		Plan:         plan,

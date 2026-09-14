@@ -201,6 +201,19 @@ download-gliner-model:
 bench-gliner intra="4":
     @EMB_BENCH_INTRA={{intra}} go test ./internal/script/ -bench=BenchmarkGLiNERExtract -benchtime=5x -run=^$
 
+# Scripted-inference benchmarks for the production-scripting change
+# (requires: just download-model)
+bench-script:
+    @go test ./internal/server/ -bench="BenchmarkScript" -benchmem -run=^$ -benchtime=20x
+
+# Enforce the scripted-inference budgets (latency parity, metal parity,
+# materialization, memory, throughput scaling). Timing- and RSS-sensitive: run
+# on a quiet reference machine. Set EMB_BENCH_REFERENCE=1 to also assert the
+# absolute throughput-scaling target (0.85 x N); on shared hosts the recorded
+# baseline ratio is the gate.
+bench-budgets:
+    @EMB_BENCH_BUDGETS=1 go test ./internal/server/ -run "Budget" -v -timeout 900s
+
 # Run redis-benchmark with a single-threaded server
 # Uses 1 client, 1 pipeline, 500 requests (~2s at 280 req/s)
 # Requires: redis-benchmark, downloaded model at ./models/minilm

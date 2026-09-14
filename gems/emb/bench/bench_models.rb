@@ -83,7 +83,7 @@ puts 'scenario              ops  total(ms) per-op(ms)      req/s      p50      p
 
 # --- siglip2: scripted text embedding (EVSHA, raw float32 bulk) ---
 sig_client = eager_client(port)
-script = File.read(File.expand_path('../../../examples/scripts/siglip2.lua', __dir__))
+script = File.read(File.expand_path('../../../examples/scripts/snippets/siglip2.lua', __dir__))
 sha = sig_client.script.load(:siglip2, script)
 # One warm call: decode: :f32 turns the single packed float32 bulk back into
 # 768 floats (dim must match the graph); the raw String would need unpack('e*').
@@ -112,7 +112,8 @@ report('e5 (embed)', samples, total, ops, e5_base)
 
 # --- gliner2: scripted NER extraction (EVSHA, dynamic labels) ---
 glin = eager_client(port)
-glin_sha = glin.script.load(:gliner2, File.read(File.expand_path('../../../examples/scripts/gliner2.lua', __dir__)))
+glin_src = File.read(File.expand_path('../../../examples/scripts/reference/gliner2.lua', __dir__))
+glin_sha = glin.script.load(:gliner2, glin_src)
 glin_base = median_of(5.times.map do |_i|
   t0 = ms
   glin.evalsha(:gliner2, glin_sha, [LINE], %w[PERSON ORG PRODUCT])

@@ -191,6 +191,20 @@ return "ok"`
 	}
 }
 
+func TestMergeBatchRejectsOverflowingPaddedShape(t *testing.T) {
+	// A padded batch whose total element count overflows int64 must be rejected
+	// before the budget is charged or either output slice is allocated, so a
+	// wrapped-negative product can never reach make().
+	items := [][]onnx.NamedTensor{
+		{{Name: "x", Shape: []int64{1, 1 << 62}, DType: onnx.TensorInt64}},
+		{{Name: "x", Shape: []int64{1, 1 << 62}, DType: onnx.TensorInt64}},
+	}
+	budget := newTensorBudget(DefaultMaxRequestElements)
+	if _, err := mergeBatch(items, []string{"x"}, budget); err == nil {
+		t.Fatal("expected an overflow error for an overflowing padded shape")
+	}
+}
+
 func TestRunBatchFillItems(t *testing.T) {
 	// Batch items may declare constant (fill) inputs; the merged tensor is the
 	// per-dimension max shape with the constant in every row.
