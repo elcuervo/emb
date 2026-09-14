@@ -80,8 +80,16 @@
      axis is width-independent:
          41.5% + 40.7% x (100% - 41.5%) = 65.31%
      Change any of the three inputs above and this constant must change with
-     them; the render test in CORRECTIONS.md pass 8 measures it. */
-  --fold: 65.31%;
+     them; the render test in CORRECTIONS.md pass 8 measures it.
+
+     It is stored as a NUMBER and widened to a percentage, because the terrain
+     needs the same axis in two shapes: as a percentage of the shell's content
+     box (every spine segment, every block's grid) and as a length from the
+     viewport's left edge (--fold-x below, which is what the artwork has to
+     cover against). One source, so the two can never disagree -- the spine
+     probe in `website/tools/spine-probe.html` asserts they do not. */
+  --fold-n: .6531;
+  --fold: calc(var(--fold-n) * 100%);
   /* ...and the same point in .hero__pipeline's own coordinates, which is
      40.7% of that container at desktop and 25%/50% once the pipeline stacks */
   --fold-hero: 40.7%;
@@ -101,14 +109,52 @@
      which is what guarantees the route's trunk starts exactly where the spine
      ends; the clamp only adds sky above the massif on small screens. */
   --art-ratio: .3546;
-  /* Desktop (>1000px) runs the massif the full width of the shell, so the
-     cut-out is complete and its base sits flush on the footer. The artwork
-     still carries its own ridge, whose fork is at 1124.3/2172 = 51.76% of
-     the box; the spine is at 64.18% of the shell, so the route is shifted
-     inside the SVG by the 12.42% between them (see the >=1001px block at
-     the end of the terrain section) and the fork still lands on the line.
-     Below 1000px the terrain overrides this and goes full-bleed. */
-  --art-w: min(100vw, var(--maxw));
+
+  /* THE FORK -- where the route forks, as a fraction of the artwork. It is the
+     authored fork (1124.3 of 2172) plus the constant 269.64-unit nudge the
+     route carries, which is what puts the fork on the ridge crest above the
+     spine instead of in the middle of the rock face. ONE constant at every
+     width: the route and the rock are never pulled apart, so the line cannot
+     float in the sky on one breakpoint and ride the ridge on another. */
+  --fork: .6417706;
+  --fork-rest: .3582294;                 /* 1 - --fork */
+
+  /* THE FOLD, as a length from the viewport's LEFT edge. The artwork has to
+     cover the viewport, so everything below is stated against the viewport
+     rather than the shell; the shell's own centring is reconstructed here from
+     the pieces the spine's `left` already uses -- the shell's offset, its
+     padding, and --fold-n of the content box -- so both spellings of the axis
+     resolve to the same pixel. `--pad-r` is its own term because a landscape
+     phone's safe areas are not symmetric. */
+  --fold-x: calc(
+    max(0px, (100vw - var(--maxw)) / 2) + var(--pad-l)
+    + var(--fold-n) * (min(100vw, var(--maxw)) - var(--pad-l) - var(--pad-r))
+  );
+
+  /* THE FLOOR -- the scale the artwork is drawn at when covering costs nothing.
+     Phones keep the massif as large as it already was; everything from the
+     tablet lane up is content with a viewport-width cut-out. */
+  --art-min: 100vw;
+
+  /* THE ARTWORK ALWAYS COVERS THE VIEWPORT. Its width is the smallest one that
+     reaches the fold from the viewport's left edge AND reaches the right edge
+     from the fold, so no edge of the cut-out is ever inside the frame at any
+     width -- which is the whole point of the image being a cut-out. The 1.005
+     is a half-percent bleed, so a sub-pixel rounding error on a fractional
+     layout cannot leave a sliver of paper at an edge.
+
+     This replaced three hand-tuned per-breakpoint offsets (a fixed 100vw box
+     at >=1001px that fell 100px short on a 1920px screen, its route nudged
+     269.6 units right; the same box with the route nudged 537.9 units LEFT on
+     tablets, which left the route hanging in the sky beside the massif; and a
+     156vw box on phones whose left edge sat 14-39px inside the frame). A
+     single derivation replaces all three: the box's left edge is derived from
+     the fork, so the route's fork lands on the spine by construction. */
+  --art-w: calc(1.005 * max(
+    var(--art-min),
+    var(--fold-x) / var(--fork),
+    (100vw - var(--fold-x)) / var(--fork-rest)
+  ));
   --art-h: calc(var(--art-w) * var(--art-ratio));
   --band: max(var(--art-h), clamp(210px, 27.66vw, calc(.2766 * var(--maxw))));
 
@@ -124,8 +170,25 @@ html{
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
   background: var(--bg);
+  /* No scrollbar anywhere on the sheet: the poster is the whole window, and a
+     browser bar down its right edge is the one piece of chrome the design does
+     not speak. It also makes `100vw` mean the content width on the platforms
+     whose scrollbars are classic rather than overlay -- where a 100vw full-bleed
+     band is otherwise 15px wider than the shell it is cancelling, and the page
+     picks up a horizontal scroll it did not ask for.
+     The page still scrolls: wheel, trackpad, touch, spacebar, arrows, Home/End
+     and the scrollbar-less scroll position all work, exactly as they do under
+     an overlay scrollbar. */
+  scrollbar-width: none;
+  /* `clip` is not a scroll container and creates no scrollable overflow region,
+     which is what the ink probe relies on; the `hidden` line above it is the
+     fallback for engines that predate `clip` (Safari < 16, Chrome < 90), where
+     an unrecognised value is dropped and a bare `overflow-x: visible` would let
+     the cut-out's bleed pan the whole sheet sideways on a phone. */
+  overflow-x: hidden;
   overflow-x: clip;
 }
+html::-webkit-scrollbar{ width: 0; height: 0; }
 
 body{
   margin: 0;
@@ -178,6 +241,20 @@ button{ font: inherit; color: inherit; }
 .skip:focus{ left: 8px; top: 8px; }
 
 .defs{ position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Every element that scrolls on its own, same rule as the sheet. The emb-top
+   capture is a real horizontal scroller (shift+wheel, trackpad, touch drag) and
+   keeps working; it simply stops advertising itself with a bar painted inside
+   the black panel. Listed together so a new scroller is one line away from the
+   others rather than a scrollbar someone finds on a phone. */
+.topviz__screen,
+.console__screen,
+.mobile-nav nav{
+  scrollbar-width: none;
+}
+.topviz__screen::-webkit-scrollbar,
+.console__screen::-webkit-scrollbar,
+.mobile-nav nav::-webkit-scrollbar{ width: 0; height: 0; }
 
 /* the page's signal, as a structural element. Each section that carries one
    is position:relative, and sections have NO vertical margins -- only padding
@@ -982,17 +1059,23 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
    own level -- which also stops the alpha cut-out flashing its own off-white
    ground while a layer is being promoted.
 
-   The art box is anchored by its LEFT edge, derived from --fold and the
-   fork's own x in the artwork (1124.3 of 2172), so the route's fork lands on
-   the spine by construction instead of by an offset that has to be defended
-   at seven widths. The right edge is free to bleed past the shell;
-   html{overflow-x:clip} holds it. */
+   The section is exactly as tall as the cut-out (or taller, on a phone, when
+   the slogans need more sky than the massif does), and the cut-out always
+   spans at least the whole viewport: --art-w holds that derivation and --fold-x
+   the axis it is derived against. Nothing here is cropped to fit. */
 .terrain{
   position: relative;
   isolation: isolate;
   z-index: 1;
   height: var(--band);
   background: var(--bg);
+  /* The cut-out is wider than the window by design (see --art-w) and must not
+     contribute that bleed to the document: clipping it here, in the section
+     that owns it, is what keeps the sheet itself exactly one viewport wide and
+     un-pannable on a phone -- rather than relying on the page frame's clip to
+     clean up after a child. x only: the registration mark above deliberately
+     rides over the seam into the block above. */
+  overflow-x: clip;
 }
 .terrain > .shell{ padding-block: 0; height: 100%; z-index: 3; }
 /* same reason as .block__body: the positioned box must be the content box */
@@ -1005,7 +1088,13 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .terrain__art{
   position: absolute;
   bottom: 0;
-  left: calc(var(--fold) - (1124.3 / 2172) * var(--art-w));
+  /* The box is anchored by its LEFT edge, derived from the fold and the fork's
+     own fraction of the artwork, so the route's fork lands on the spine by
+     construction instead of by an offset that has to be defended at seven
+     widths. The width itself is --art-w: at least wide enough to cover the
+     viewport, which is what keeps the cut-out's own edge -- the crop -- off
+     screen at every width. */
+  left: calc(var(--fold) - var(--fork) * var(--art-w));
   width: var(--art-w);
   aspect-ratio: 2172 / 770.2;
   z-index: 1;
@@ -1037,6 +1126,14 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   stroke-linecap: square;
   stroke-linejoin: miter;
 }
+/* The route rides 269.64 units right of where it was authored, which is the
+   difference between the artwork's own fork (1124.3 of 2172) and --fork. It is
+   a constant at every width: the shift is what puts the fork on the ridge crest
+   above the spine, and the artwork's placement is derived from the same
+   constant, so the route can never drift across the rock or, on a narrow
+   screen, be left hanging in the sky beside it. (The two paths are the two
+   branches; the trunk between them is authored vertical on the fork's x.) */
+.terrain__route path{ transform: translateX(269.64px); }
 html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 
 .anno{
@@ -1091,17 +1188,11 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 }
 .reg::before{ left: 50%; top: 0; width: 1px; height: 100%; }
 .reg::after{ top: 50%; left: 0; height: 1px; width: 100%; }
-
-/* Desktop runs the massif edge to edge (the <=1000px blocks above still
-   crop it). The route is nudged right inside its own box by the 12.42% that
-   takes the fork from its authored 51.76% of the image to the 64.18% where
-   the spine lands: 1124.3 + 269.6 = 1393.9 = 0.6417 x 2172. Without it the
-   spine would come down and stop in mid-air, because the artwork only rides
-   the ridge at its own fork. */
-@media (min-width: 1001px){
-  .terrain__art{ left: calc(-1 * var(--pad-l)); }
-  .terrain__route path{ transform: translateX(269.6px); }
-}
+/* (The >=1001px and 641-1000px blocks that used to live here set the cut-out's
+   left edge and nudged the route inside its box -- +269.6 units on desktop,
+   -537.9 on tablets. Both are gone: the artwork now covers the viewport at
+   every width by construction (--art-w), and the single constant +269.64-unit
+   route shift in the terrain block is what puts the fork on the crest. */
 
 
 /* ── 09 console ─────────────────────────────────────────────────────
@@ -1282,13 +1373,13 @@ html.js .console__form{
   white-space: pre;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  /* the scrollbar is part of the panel, so it is painted from the panel */
-  scrollbar-width: thin;
-  scrollbar-color: var(--rule) #111110;
+  /* The bar used to be painted from the panel (thin, --rule on #111110). It is
+     gone: a scrollbar inside a black plate is the one piece of chrome the
+     poster does not speak, and the panel scrolls without it -- trackpad,
+     shift+wheel and touch drag all still reach the columns past the fold. The
+     rule lives with every other scroller in the primitives block, so a new
+     one inherits it instead of rediscovering the bar. */
 }
-.topviz__screen::-webkit-scrollbar{ height: 8px; }
-.topviz__screen::-webkit-scrollbar-track{ background: #111110; }
-.topviz__screen::-webkit-scrollbar-thumb{ background: var(--rule); }
 .topviz__src{
   margin-top: 8px;
   font-family: var(--mono);
@@ -1513,9 +1604,9 @@ html.js.is-ready .hero__prose{
 
   /* From here the pipeline stacks into two columns of its own, so the plate
      centre -- and therefore the whole page's axis -- moves to 25% of the
-     content box. --fold, --fold-hero and --art-w move together or the spine
+     content box. --fold-n, --fold and --fold-hero move together or the spine
      and the route come apart. */
-  :root{ --fold: 25%; --fold-hero: 25%; --art-w: 145vw; --spine-w: calc(200% / 364); }
+  :root{ --fold-n: .25; --fold-hero: 25%; --art-min: 100vw; --spine-w: calc(200% / 364); }
 
   /* the blocks keep the lane: content right of it, line in the left gutter,
      measure 426.7px at 641 and 673.5px at 1000. The column placement that
@@ -1583,8 +1674,9 @@ html.js.is-ready .hero__prose{
   .plate-label{ font-size: 19px; }
   /* the kept-facts block sits on the same mobile floor as every other label */
   .hero__install, .hero__facts{ font-size: 14px; }
-  /* the massif: 145vw of artwork is 51.4vw of band, and --band never falls
-     below the art, so the spine always reaches the route's first point */
+  /* the massif: --art-w decides the artwork's width and --art-h follows from
+     it, and --band never falls below the art, so the spine always reaches the
+     route's first point */
   .terrain{
     height: max(var(--art-h), clamp(240px, calc(39.72vw + 96px), 470px));
   }
@@ -1641,7 +1733,7 @@ html.js.is-ready .hero__prose{
      room for one: two orange lines 40% apart, both visible in the gaps
      between the plates, is not a composition. The rail passes behind the
      plates instead, which is the language the desktop hero already uses. */
-  :root{ --fold: 90%; --fold-hero: 90%; --art-w: 156vw; --spine-w: calc(400% / 364); }
+  :root{ --fold-n: .9; --fold-hero: 90%; --art-min: 156vw; --spine-w: calc(400% / 364); }
   .pipeline__svg .sig{ display: none; }
   /* ...and the stack's paper stops being a knockout, so the rail threads the
      plates on the right instead of being hidden for their whole box: at 90% of
@@ -1707,7 +1799,7 @@ html.js.is-ready .hero__prose{
   .footer__inner{ display: grid; }
 }
 
-/* Tablet blocks (641-1000px). At this range --fold is 25%, the stacked
+/* Tablet blocks (641-1000px). At this range --fold-n is 25%, the stacked
    pipeline's own plate centre, so the lane is the LEFT gutter and everything
    the block says has to clear it. `.block__grid` puts its first column in
    that gutter, which left `.block__main` -- the deck, the specimens, the
@@ -1730,13 +1822,6 @@ html.js.is-ready .hero__prose{
   .block .topviz{
     margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap));
   }
-  /* The massif runs the full shell here too, so it is complete and sits on
-     the footer, with the ridge shifted left inside its box onto the 25%
-     lane: 1124.3 - 537.9 = 586.4 = 0.27 x 2172 (the tablet gutter is 4vw,
-     so the lane is 25% + half of 4% = 27% of the shell). */
-  :root{ --art-w: min(100vw, var(--maxw)); }
-  .terrain__art{ left: calc(-1 * var(--pad-l)); }
-  .terrain__route path{ transform: translateX(-537.9px); }
 }
 
 /* Short landscape screens should not lose space to a persistent header, and
