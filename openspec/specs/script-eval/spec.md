@@ -1,88 +1,8 @@
-# script-eval
-
-## Purpose
-
-Lets clients run Redis-style scripts over config-mounted ONNX models, so non-embedding models (e.g. GLiNER extractors) can be served through the same RESP2 surface as embeddings, with the script and its parameters supplied per request.
-
-## Requirements
-
-### Requirement: EVAL evaluates a script against a model
-
-The server SHALL support `EMB.EVAL <model> <script> <numtexts> <text...> <arg...>`: the script is compiled and executed against the named model, with the `numtexts` texts exposed to the script as `KEYS` and the remaining args as `ARGV` (positional, Redis-style). The model SHALL already be mounted in the server config (`models:`); scripts and labels never require config changes.
-
-#### Scenario: Inline script with dynamic labels
-
-- **WHEN** a client sends `EMB.EVAL` with a GLiNER script, `numtexts=1`, one text, and labels as args
-- **THEN** the script executes with `KEYS={text}`, `ARGV={labels...}` and the reply is the script's converted return value
-
-#### Scenario: Wrong numtexts
-
-- **WHEN** `numtexts` does not match the actual number of text arguments
-- **THEN** the server replies with a wrong-arity error and does not execute the script
-
-#### Scenario: Unknown model
-
-- **WHEN** `EMB.EVAL` names a model that is not mounted in config
-- **THEN** the server replies with a model-not-found error and does not execute the script
-
-### Requirement: Script identity and per-model caching
-
-Scripts SHALL be cached per model keyed by SHA1 of the script source. `EMB.SCRIPT LOAD <model> <script>` SHALL compile and cache the script, replying with its SHA1. `EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>` SHALL execute the cached script by SHA1. `EMB.SCRIPT EXISTS <model> <sha...>` SHALL reply with an array of 1/0 flags, and `EMB.SCRIPT FLUSH [<model>]` SHALL clear cached scripts (all models when the model name is omitted).
-
-#### Scenario: Load then evaluate by SHA
-
-- **WHEN** a client loads a script with `EMB.SCRIPT LOAD` and then sends `EMB.EVSHA` with the returned SHA1
-- **THEN** the cached script executes with the same KEYS/ARGV semantics as `EMB.EVAL`
-
-#### Scenario: Unknown SHA
-
-- **WHEN** `EMB.EVSHA` names a SHA1 that is not cached for the model
-- **THEN** the server replies with a no-such-script error
-
-#### Scenario: Exists reflects the per-model cache
-
-- **WHEN** a script is loaded for model A but not for model B
-- **THEN** `EMB.SCRIPT EXISTS A <sha>` replies `[1]` and `EMB.SCRIPT EXISTS B <sha>` replies `[0]`
-
-#### Scenario: Load rejects an invalid script
-
-- **WHEN** `EMB.SCRIPT LOAD` receives a script that fails to compile
-- **THEN** the server replies with an error and caches nothing
-
-#### Scenario: Boot-preloaded script is present without LOAD
-
-- **WHEN** a script was preloaded at boot from a config file path
-- **THEN** `EMB.SCRIPT EXISTS` reports it and `EMB.EVSHA` executes it without any client-side `EMB.SCRIPT LOAD`
-
-### Requirement: Lua-to-RESP reply conversion
-
-The server SHALL convert each script's return value to RESP2 using a Redis-faithful grammar: Lua string → bulk (byte-safe; UTF-8/JSON/binary all valid), integral Lua number → integer reply, non-integral Lua number → bulk string (RESP2 has no double, so the decimal is not truncated), list-form table (sequential integer keys from 1) → array reply, string-keyed table → hash reply as flat field/value pairs (HGETALL shape), `nil`/`false` → null, and a table with an `err` string field → error reply (an `err` value containing CR or LF SHALL be rejected so the error cannot splice extra RESP frames). Values SHALL nest recursively (a hash value may be an array, hash, bulk, integer, or null).
-
-#### Scenario: Hash reply from an entities table
-
-- **WHEN** a script returns `{PERSON={"Tim Cook"}, ORG={"Apple"}}`
-- **THEN** the reply is a flat 4-element field/value array: `PERSON`, `["Tim Cook"]`, `ORG`, `["Apple"]`
-
-#### Scenario: Array-of-hashes for multiple texts
-
-- **WHEN** `numtexts=2` and each text yields an entities table
-- **THEN** the reply is a 2-element array whose elements are the per-text converted values (hashes)
-
-#### Scenario: Raw bytes from a string
-
-- **WHEN** a script returns a Lua string containing raw bytes
-- **THEN** the reply is a single bulk string containing exactly those bytes
-
-#### Scenario: Script-reported error
-
-- **WHEN** a script returns `{err="message"}`
-- **THEN** the server replies with an error carrying that message
+## MODIFIED Requirements
 
 ### Requirement: Sandboxed execution with budgets
 
-Script execution SHALL be sandboxed and isolated: each evaluation runs in a fresh interpreter with only whitelisted host functions and a curated standard-library subset; `io`, `os`, `module`, file/network access, FFI, `math.random`, and all time functions SHALL be unavailable. The whitelisted surface SHALL be exactly: `emb.run`, `emb.run_batch`, `emb.embed` (models with an embedding configuration), `emb.tokenize.pretokenized`, `emb.tokenize.words`, `emb.tokenize.encode`, `emb.tokenize.encode_pair`, `emb.math`, `emb.similarity`, `emb.distance`, `emb.image.preprocess` / `emb.image.info` / `emb.image.embed` (models with an image configuration), `emb.API_VERSION`, and `json`. Each evaluation SHALL be bounded by a wall-clock deadline (enforced at VM instruction granularity), a call-stack depth limit, a script-size cap, and a tensor-element budget; exceeding any bound replies with an error for that request only and never affects other in-flight requests. Scripted evaluation commands SHALL count toward the server's `max_concurrent_requests` gate.
-
-Every host function SHALL be pure compute over the model and request inputs: no host function may perform network access, read the clock or randomness, or expose server state, so that identical inputs produce identical replies and the content-addressed reply cache stays correct.
+Script execution SHALL be sandboxed and isolated: each evaluation runs in a fresh interpreter with only whitelisted host functions (`emb.run`, `emb.run_batch`, `emb.tokenize.pretokenized`, `emb.tokenize.words`, `emb.tokenize.encode`, `emb.tokenize.encode_pair`, `emb.math`, `emb.image.preprocess`, `emb.image.info`, `json`) and a curated standard-library subset; `io`, `os`, `module`, file/network access, FFI, `math.random`, and all time functions SHALL be unavailable. Text arguments (KEYS) SHALL be binary-safe: arbitrary bytes SHALL be delivered to the script unmodified, so image content can be passed as a KEYS element without encoding. Each evaluation SHALL be bounded by a wall-clock deadline (enforced at VM instruction granularity), a call-stack depth limit, and a script-size cap; exceeding any bound replies with an error for that request only and never affects other in-flight requests. Scripted evaluation commands SHALL count toward the server's `max_concurrent_requests` gate.
 
 #### Scenario: Infinite loop in one request
 
@@ -99,92 +19,52 @@ Every host function SHALL be pure compute over the model and request inputs: no 
 - **WHEN** a script attempts to use `os` or `io` functions
 - **THEN** the script fails with an unknown-function error at runtime (or compile time), never touching the host
 
-#### Scenario: New host functions are pure compute
+#### Scenario: Binary KEYS are delivered unmodified
 
-- **WHEN** a script calls `emb.embed`, `emb.similarity`, `emb.distance`, or `emb.image.embed`
-- **THEN** the reply depends only on the model, the request inputs, and the loaded weights, and repeating the evaluation produces identical replies
+- **WHEN** an `EMB.EVAL`/`EMB.EVSHA` text argument contains arbitrary bytes (for example image content with NUL and high-bit bytes)
+- **THEN** the script receives those exact bytes in `KEYS`, and the sandbox remains network-free
 
-### Requirement: Content-addressed reply caching
+## ADDED Requirements
 
-When the server cache is enabled, scripted replies SHALL be cached under a content-addressed key derived from model name, script SHA1, the args, and the text — distinct args (e.g. different label sets) SHALL be distinct cache entries, and the arg hash SHALL keep argument boundaries unambiguous (nil, empty, and NUL-containing arguments are distinct keys). A cache hit (every text of a request) SHALL reply without re-running the script or model inference. When any text of a request misses, the server SHALL evaluate the script once with ALL the request texts as KEYS and merge the per-text results by their original indexes, so cache state never changes the inputs or the reply shape a script produces. Per-text caching assumes a script's reply for a text depends only on (model, script SHA1, args, text) — a script whose per-text output reads sibling texts in KEYS is outside the cache contract.
+### Requirement: Image preprocessing host block
 
-#### Scenario: Same script and labels hit the cache
+For a model configured with an `image:` block, the server SHALL provide `emb.image.preprocess(bytes)` to scripts: it SHALL decode the raw image bytes and apply the model's configured image preprocessing (size, crop, resample, rescale, mean, std), returning a tensor spec `{shape = {1, 3, H, W}, bytes = <little-endian float32>, dtype = "f32", input = <configured input tensor name>}` that can be passed directly to `emb.run` or `emb.run_batch`. The server SHALL also provide `emb.image.info()` returning the model's configured preprocessing parameters. Preprocessing SHALL be deterministic (identical bytes and config produce identical output), SHALL be bounded by the same per-image byte and decoded-pixel caps as `EMB.IMG`, and SHALL be charged against the evaluation's tensor budget. Calling `emb.image.preprocess` for a model without an `image:` block, or on undecodable bytes, SHALL raise an error. This block SHALL add no network capability.
 
-- **WHEN** `EMB.EVSHA` is sent twice with the same model, SHA1, args, and text
-- **THEN** the second reply is served from cache with identical bytes
+#### Scenario: Image bytes become a runnable tensor
 
-#### Scenario: Different labels miss the cache
+- **WHEN** a script calls `emb.image.preprocess(KEYS[1])` with image bytes for a model with `image: {input: pixel_values, size: 224}`
+- **THEN** it receives `{shape = {1, 3, 224, 224}, bytes = <4*3*224*224 bytes>, dtype = "f32", input = "pixel_values"}` that `emb.run` accepts without a per-element Lua table
 
-- **WHEN** the same script and text are sent with different label args
-- **THEN** each distinct arg set is executed and cached separately
+#### Scenario: Deterministic and cacheable
 
-### Requirement: Math helper functions
+- **WHEN** the same script runs twice with identical binary KEYS and args
+- **THEN** the preprocessed tensor is byte-identical and the reply is served from cache on the second request
 
-The server SHALL provide an `emb.math` module with `sigmoid`, `softmax`, and `argmax`, accepting either a single number or an array of numbers. `sigmoid(x)` SHALL compute 1/(1+exp(−x)) element-wise for arrays (vectorized, returning an array). `softmax` SHALL be numerically stable (subtract the max before exponentiating) and return probabilities summing to 1. `argmax` SHALL return the index (1-based) and value of the first maximum element. Empty arrays SHALL error; non-numeric elements SHALL error.
+#### Scenario: No image config errors
 
-#### Scenario: Vectorized sigmoid over a score array
+- **WHEN** a script calls `emb.image.preprocess` for a model without an `image:` block
+- **THEN** the evaluation fails with an error naming the model
 
-- **WHEN** a script calls `emb.math.sigmoid({0.5, 1, -1})`
-- **THEN** the result is an array of the three sigmoid values
+#### Scenario: Image block adds no network
 
-#### Scenario: Stable softmax and argmax
+- **WHEN** a script uses `emb.image.preprocess`
+- **THEN** the sandbox remains network-free and no fetch is performed
 
-- **WHEN** a script calls `emb.math.softmax({1000, 1001, 999})` and `emb.math.argmax({3, 7, 1})`
-- **THEN** softmax returns finite probabilities (no overflow) and argmax returns index 2 with value 7
+### Requirement: Bounded script reply-cache keys
 
-#### Scenario: Empty input errors
+The content-addressed script reply-cache key SHALL NOT inline large text payloads. When a KEYS element exceeds a small documented threshold, the key SHALL incorporate a digest of that element instead of its raw bytes, so image-sized KEYS do not retain megabytes per cache entry. Hit/miss semantics SHALL be unchanged: identical KEYS and args always map to the same key, and distinct KEYS always map to distinct keys. Short text elements SHALL continue to produce the same keys as before, so existing cached text entries remain reachable.
 
-- **WHEN** a script passes an empty array to `emb.math.argmax` or `emb.math.softmax`
-- **THEN** the evaluation fails with an error reply
+#### Scenario: Image KEYS do not bloat the key
 
-### Requirement: Plain and pair tokenization
+- **WHEN** a scripted image request is cached
+- **THEN** the cache key size is bounded (a digest, not the full image bytes) and the reply is identical to an uncached run
 
-The server SHALL provide `emb.tokenize.encode(text, maxLength)` and `emb.tokenize.encode_pair(first, second, maxLength)` using the model tokenizer's own pretokenization pipeline (not the word-splitting block). `encode` SHALL return `{ids, mask, offsets}` where offsets are per-token byte ranges into `text`; `encode_pair` SHALL compose the BERT-family pair template `[CLS] first [SEP] second [SEP]` and additionally return the `sep` token position (the separator between the two parts) and per-part offsets (tokens of `first` map into `first`, tokens of `second` map into `second`). Models with non-BERT pair templates SHALL remain script-composable via `encode` plus explicit separator token ids.
+#### Scenario: Text keys are unchanged
 
-#### Scenario: Plain encode matches the embedding path
+- **WHEN** a short text scripted request is cached
+- **THEN** its key matches the pre-change key format and previously cached entries still hit
 
-- **WHEN** a script encodes a text with `emb.tokenize.encode`
-- **THEN** the ids and mask equal the values the embedding pipeline's tokenizer produces for the same text
+#### Scenario: Distinct images remain distinct entries
 
-#### Scenario: Pair encode composes the pair template
-
-- **WHEN** a script calls `emb.tokenize.encode_pair("who founded Apple", "Apple was founded in 1976.", 512)`
-- **THEN** ids equal `[CLS]` + encode(first) + `[SEP]` + encode(second) + `[SEP]`, `sep` points at the separator token, and offsets of `second`-owned tokens slice the `second` string directly
-
-#### Scenario: QA answer slicing via offsets
-
-- **WHEN** a script selects start/end logits positions and slices `second` at the corresponding offsets
-- **THEN** the sliced text is the answer surface string (no token-decode block required)
-
-### Requirement: Structured extraction reference behavior
-
-The server SHALL serve GLiNER-style extraction end-to-end: with the `gliner2-multi-v1` ONNX mounted and a reference script loaded, `EMB.EVSHA` with a text and entity labels in ARGV SHALL return a hash whose fields are the labels and whose values are arrays of extracted entity strings. Extraction SHALL match the reference decoder of the model repository (span search over word-start positions, sigmoid thresholding, best-span selection, overlap suppression).
-
-#### Scenario: Extract entities from a sentence
-
-- **WHEN** `EMB.EVSHA` runs the reference script against `"Apple CEO Tim Cook announced iPhone 15."` with labels `PERSON`, `ORG`, `PRODUCT`
-- **THEN** the reply is a hash with `PERSON: ["Tim Cook"]`, `ORG: ["Apple"]`, `PRODUCT: ["iPhone 15"]`
-
-#### Scenario: Different labels, same script
-
-- **WHEN** the same script and text are run with a different label set
-- **THEN** the reply is a hash whose fields are exactly the requested labels, with array values of extracted entity strings (matching the reference decoder's output for those labels)
-
-### Requirement: Script API version
-
-The server SHALL expose `emb.API_VERSION` as a string describing the host function surface available to scripts. The value SHALL change when host functions are added, removed, or change semantics, and SHALL remain stable for changes that only affect performance. Scripts SHALL be able to compare it (for example by major version prefix) and report a capability error themselves; the server SHALL NOT refuse to evaluate a script on version grounds.
-
-#### Scenario: Version is readable
-
-- **WHEN** a script returns `emb.API_VERSION`
-- **THEN** the reply is a non-empty string
-
-#### Scenario: Version reflects the extended surface
-
-- **WHEN** a script asserts that `emb.similarity` and packed-output `emb.run` are available and the server version predates them
-- **THEN** the script can detect the absence and reply with its own error instead of failing at the call site
-
-#### Scenario: Version is stable across performance work
-
-- **WHEN** only performance characteristics of existing host functions change
-- **THEN** `emb.API_VERSION` is unchanged
+- **WHEN** two different images are embedded through the same script
+- **THEN** they occupy distinct cache entries and each returns its own embedding
