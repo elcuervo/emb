@@ -1,89 +1,25 @@
-# model-autoconfig Specification
+## ADDED Requirements
 
-## Purpose
-Specifies auto-detection of model settings from the ONNX graph and tokenizer config: embedding dim, max sequence length, pooling/normalization, and output tensor — with explicit config overriding.
+### Requirement: Image preprocessing autodetection
 
-## Requirements
-### Requirement: Auto-detect embedding dimension from ONNX graph
+When a model declares an `image:` block but omits fields, the server SHALL auto-detect them where possible: the image input tensor name and target size from the ONNX graph's image-input dimensions, and the rescale, mean, std, crop, and resample settings from the model's `preprocessor_config.json` when that file is present. Explicit configuration SHALL always override auto-detected values. When a required value cannot be determined, the server SHALL fail model loading with a descriptive error naming the missing field rather than guessing.
 
-The server SHALL read the ONNX model's output tensor shape to determine the embedding dimension.
+#### Scenario: Size detected from the ONNX graph
 
-#### Scenario: dim detected from last_hidden_state
+- **WHEN** an `image:` block omits `size` and the ONNX image input has static spatial dimensions `[batch, 3, H, W]`
+- **THEN** the server uses `H`/`W` as the configured size
 
-- **WHEN** a model is loaded with only `onnx` path (no `dim` in config)
-- **THEN** the server inspects the ONNX graph's `last_hidden_state` output shape and extracts the last dimension as `dim`
+#### Scenario: Preprocessing constants detected from preprocessor_config.json
 
-#### Scenario: explicit dim overrides auto-detect
+- **WHEN** the model directory contains `preprocessor_config.json` with image mean/std/rescale/size
+- **THEN** the server uses those values for preprocessing
 
-- **WHEN** `dim` is set in the model config
-- **THEN** the configured value is used regardless of the ONNX graph shape
+#### Scenario: Explicit config wins
 
-### Requirement: Auto-detect max sequence length
+- **WHEN** an `image:` block sets `mean` explicitly and `preprocessor_config.json` provides a different mean
+- **THEN** the explicit configured mean is used
 
-The server SHALL determine `max_length` from the tokenizer configuration or model config.json.
+#### Scenario: Undetectable required field errors
 
-#### Scenario: max_length from tokenizer config
-
-- **WHEN** a model is loaded with only `onnx` path (no `max_length` in config)
-- **THEN** the server reads the tokenizer's `max_length` or the model's `max_position_embeddings` from `config.json` in the same directory
-
-#### Scenario: explicit max_length overrides auto-detect
-
-- **WHEN** `max_length` is set in the model config
-- **THEN** the configured value is used
-
-### Requirement: Default pooling and normalization
-
-The server SHALL default to `mean` pooling and `normalize: true` when not specified.
-
-#### Scenario: pooling and normalize not in config
-
-- **WHEN** a model config omits `pooling` and `normalize`
-- **THEN** `pooling` defaults to `mean` and `normalize` defaults to `true`
-
-#### Scenario: explicit pooling or normalize overrides default
-
-- **WHEN** `pooling` or `normalize` are set in the config
-- **THEN** the configured values are used
-
-### Requirement: Output tensor auto-detected from ONNX graph
-
-The server SHALL auto-detect the output tensor name from the ONNX model's available outputs when not explicitly configured.
-
-#### Scenario: rank-2 output preferred over rank-3
-
-- **WHEN** a model has both a rank-2 output (e.g., `pooler_output`) and a rank-3 output (e.g., `last_hidden_state`)
-- **AND** `output_tensor` is not set in the config
-- **THEN** the server selects the rank-2 output
-
-#### Scenario: single rank-3 output selected
-
-- **WHEN** a model has only one rank-3 output (e.g., `last_hidden_state`)
-- **AND** `output_tensor` is not set in the config
-- **THEN** the server selects that rank-3 output
-
-#### Scenario: explicit output_tensor wins
-
-- **WHEN** `output_tensor` is set in the model config
-- **THEN** the configured value is used regardless of available outputs
-
-### Requirement: Pooling strategy inferred from output rank
-
-The server SHALL infer the pooling strategy from the selected output tensor's rank: rank-2 → `none`, rank-3 → `mean`.
-
-#### Scenario: rank-2 output sets pooling to none
-
-- **WHEN** the selected output tensor has rank 2 (shape `(batch, dim)`)
-- **AND** `pooling` is not set in the config
-- **THEN** `pooling` is set to `none` (no mean pooling applied)
-
-#### Scenario: rank-3 output sets pooling to mean
-
-- **WHEN** the selected output tensor has rank 3 (shape `(batch, seq_len, dim)`)
-- **AND** `pooling` is not set in the config
-- **THEN** `pooling` is set to `mean` (mean pool across sequence length)
-
-#### Scenario: explicit pooling wins
-
-- **WHEN** `pooling` is set in the model config
-- **THEN** the configured value is used regardless of output rank
+- **WHEN** the size cannot be determined from the graph or config files and is not set explicitly
+- **THEN** the server fails model loading with a descriptive error
