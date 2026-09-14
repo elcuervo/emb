@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"bytes"
 	"errors"
 	"net"
 	"strings"
@@ -155,5 +156,28 @@ func TestSetDeadlineWhenNotConnected(t *testing.T) {
 	c := NewClient("127.0.0.1:1", "", false)
 	if err := c.SetDeadline(time.Now()); err == nil {
 		t.Fatal("expected SetDeadline to fail while not connected")
+	}
+}
+
+func TestWriteWhenNotConnected(t *testing.T) {
+	c := NewClient("127.0.0.1:1", "", false)
+	if err := c.WriteArgv("PING"); err == nil || !strings.Contains(err.Error(), "not connected") {
+		t.Fatalf("WriteArgv err = %v, want not connected", err)
+	}
+	if err := c.Flush(); err == nil || !strings.Contains(err.Error(), "not connected") {
+		t.Fatalf("Flush err = %v, want not connected", err)
+	}
+}
+
+func TestReadLineIsBounded(t *testing.T) {
+	// A status line with no terminator, longer than MaxLineBytes, must be
+	// rejected rather than accumulated without limit.
+	payload := append([]byte("+"), bytes.Repeat([]byte("a"), MaxLineBytes+1)...)
+	c := dial(t, serveOnce(t, payload, time.Second))
+	defer c.Close()
+
+	_, err := c.ReadReply()
+	if err == nil || !strings.Contains(err.Error(), "line length") {
+		t.Fatalf("err = %v, want a line-length error", err)
 	}
 }

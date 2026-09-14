@@ -82,8 +82,7 @@ against its inputs; a mismatch is a hard error naming the field, and
 
 ### D4: Thresholds and inputs are flags with the spec's defaults
 
-Each verifier exposes `-addr`, `-model`/`-models`, `-dim`, `-corpus`,
-`-min-cosine`, `-min-ndcg`, `-timeout`. Defaults are the values the specs
+Each verifier exposes `-addr`, `-model`/`-model-a`,`-model-b`, `-dim`, `-min-cosine`, `-min-ndcg`, `-timeout`. The reference verifier's corpus is the sentence set in the `-reference` artifact; the retrieval verifier takes an optional `-corpus` JSON file (documents + queries) and otherwise uses its built-in set; the EMB.MULTI byte-equality verifier has no corpus — its pair sets are its test vectors, so it exposes their models and dimensions instead. Defaults are the values the specs
 state: text reference `0.999`; fast-path/quantized retrieval `0.99` mean cosine
 and `0.95` nDCG@10 retention; EMB.MULTI byte-equality (no threshold). The README
 preprocessing-parity caveat is about image preprocessing and is documented

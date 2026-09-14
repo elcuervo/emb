@@ -243,3 +243,17 @@ func TestRawMultiEmbedTransportError(t *testing.T) {
 		t.Fatal("expected the server error to fail the call")
 	}
 }
+
+func TestRawMultiEmbedRejectsCardinalityMismatch(t *testing.T) {
+	// A reply with fewer elements than requested pairs must be a protocol
+	// error, not a short slice the caller indexes out of range.
+	addr := startFake(t, func(cmd []string, _ int) []byte {
+		return append([]byte("*1\r\n"), encodeBulkFloats(1, 2)...)
+	})
+	e, _ := connectedEmbedder(t, addr)
+
+	_, err := e.RawMultiEmbed([]Pair{{Model: "a", Text: "x"}, {Model: "b", Text: "y"}})
+	if err == nil || !strings.Contains(err.Error(), "elements") {
+		t.Fatalf("err = %v, want a cardinality error", err)
+	}
+}

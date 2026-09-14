@@ -86,6 +86,25 @@ func TestMeanNDCG10DegenerateInputs(t *testing.T) {
 	}
 }
 
+func TestMeanNDCG10DetectsReordering(t *testing.T) {
+	// A's top-10, reversed by B: same documents, different order. Graded gains
+	// make this score below 1, so the gate can see an ordering regression.
+	q := [][]float32{{1, 0}}
+	docA := make([][]float32, 0, 10)
+	docB := make([][]float32, 0, 10)
+	for i := 0; i < 10; i++ {
+		docA = append(docA, []float32{1, float32(i)})     // cosine decreases with i
+		docB = append(docB, []float32{1, float32(9 - i)}) // reversed ranking
+	}
+	got := MeanNDCG10(q, docA, q, docB)
+	if got >= 1 {
+		t.Fatalf("reversed top-10 nDCG = %v, want < 1", got)
+	}
+	if got <= 0 {
+		t.Fatalf("reversed top-10 nDCG = %v, want > 0", got)
+	}
+}
+
 func TestMeanCosine(t *testing.T) {
 	a := [][]float32{{1, 0}, {0, 1}}
 	b := [][]float32{{1, 0}, {1, 0}}

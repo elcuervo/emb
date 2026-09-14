@@ -25,7 +25,15 @@ export REDIS_URL="redis://127.0.0.1:$REDIS_PORT"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-alive()     { [ -s "$state/$1.pid" ] && kill -0 "$(cat "$state/$1.pid")" 2>/dev/null; }
+alive()     {
+  local pid
+  [ -s "$state/$1.pid" ] || return 1
+  pid="$(cat "$state/$1.pid")"
+  kill -0 "$pid" 2>/dev/null || return 1
+  # A PID alone is not identity: the OS reuses numbers, so confirm the process
+  # is still the command we launched before reusing or terminating it.
+  ps -p "$pid" -o command= 2>/dev/null | grep -Fq -- "$2"
+}
 up()        { redis-cli -p "$1" ping >/dev/null 2>&1; }
 ready()     { [ "$(redis-cli -p "$EMB_PORT" EMB.READY 2>/dev/null)" = OK ]; }
 wait_down() { for _ in $(seq 1 40); do up "$1" || return 0; sleep 0.25; done; }
@@ -34,7 +42,7 @@ wait_down() { for _ in $(seq 1 40); do up "$1" || return 0; sleep 0.25; done; }
 # it did not launch rather than quietly talking to it.
 start() {
   local name="$1" port="$2"; shift 2
-  alive "$name" && return 0
+  alive "$name" "$1" && return 0
   if up "$port"; then
     echo "port $port is already serving something this example did not start" >&2
     exit 1
@@ -47,7 +55,13 @@ start() {
 
 if [ "${1:-}" = stop ]; then
   for name in emb redis; do
-    alive "$name" && kill "$(cat "$state/$name.pid")" 2>/dev/null || true
+    case "$name" in
+      emb)   pattern='bin/emb' ;;
+      redis) pattern='redis-server' ;;
+    esac
+    # Only signal a PID that is still the server we launched; a reused PID is a
+    # stale pidfile to drop, not a process to terminate.
+    alive "$name" "$pattern" && kill "$(cat "$state/$name.pid")" 2>/dev/null || true
     rm -f "$state/$name.pid"
   done
   # Wait rather than just signal: Redis fsyncs its append log on the way out,
@@ -78,6 +92,15 @@ export BUNDLE_GEMFILE="$PWD/gems/emb/Gemfile"
 # stop: `index` and `search` are separate invocations.
 start redis "$REDIS_PORT" redis-server --port "$REDIS_PORT" --dir "$state" \
   --appendonly yes --save ''
+
+# Wait for Redis before starting emb: app.rb's first command is a Redis call, so
+# a half-started Redis would fail the invocation instead of being waited for.
+for _ in $(seq 1 40); do up "$REDIS_PORT" && break; sleep 0.25; done
+if ! up "$REDIS_PORT"; then
+  echo "redis did not become ready on :$REDIS_PORT" >&2
+  tail -n 20 "$state/redis.log" >&2
+  exit 1
+fi
 
 start emb "$EMB_PORT" ./bin/emb -config "$here/emb.yaml" \
   -listen "127.0.0.1:$EMB_PORT" -ort-lib "$ort"

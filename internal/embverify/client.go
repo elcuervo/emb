@@ -3,6 +3,7 @@ package embverify
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/elcuervo/emb/internal/resp"
 )
@@ -22,9 +23,20 @@ type Embedder struct {
 // NewEmbedder wraps a connected client.
 func NewEmbedder(c *resp.Client) *Embedder { return &Embedder{c: c} }
 
+// refreshDeadline rebases the connection's absolute read/write deadline for one
+// round trip. Dial sets a single deadline; without this, every later request
+// shares it and a run whose total time exceeds the configured timeout fails
+// even when each request is fast.
+func (e *Embedder) refreshDeadline() error {
+	return e.c.SetDeadline(time.Now().Add(e.c.Timeout()))
+}
+
 // RawEmbed returns one text's raw embedding payload bytes (no float decode), so
 // callers that need byte-level comparison do not round-trip through float32.
 func (e *Embedder) RawEmbed(model, text string) ([]byte, error) {
+	if err := e.refreshDeadline(); err != nil {
+		return nil, err
+	}
 	if err := e.c.WriteArgv("EMB", model, text); err != nil {
 		return nil, err
 	}
@@ -69,6 +81,9 @@ func (e *Embedder) EmbedAll(model string, texts []string) ([][]float32, error) {
 // payload, with nil for a failed pair (MGET semantics). A transport or protocol
 // error fails the whole call.
 func (e *Embedder) RawMultiEmbed(pairs []Pair) ([][]byte, error) {
+	if err := e.refreshDeadline(); err != nil {
+		return nil, err
+	}
 	args := make([]string, 0, 1+2*len(pairs))
 	args = append(args, "EMB.MULTI")
 	for _, p := range pairs {
@@ -89,6 +104,9 @@ func (e *Embedder) RawMultiEmbed(pairs []Pair) ([][]byte, error) {
 	}
 	if rep.Type != '*' || rep.Nil {
 		return nil, fmt.Errorf("embverify: EMB.MULTI returned %q, want an array", rep.Type)
+	}
+	if len(rep.Elems) != len(pairs) {
+		return nil, fmt.Errorf("embverify: EMB.MULTI returned %d elements for %d pairs", len(rep.Elems), len(pairs))
 	}
 	out := make([][]byte, len(rep.Elems))
 	for i, el := range rep.Elems {
