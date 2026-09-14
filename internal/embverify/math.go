@@ -70,24 +70,27 @@ func RankDocuments(q []float32, docs [][]float32) []int {
 	return idx
 }
 
-// DCG scores a ranking against a relevance set, truncated to k.
-func DCG(ranking []int, relevant map[int]bool, k int) float64 {
+// DCG scores a ranking against per-document gains, truncated to k. A document
+// absent from gains contributes nothing.
+func DCG(ranking []int, gains map[int]float64, k int) float64 {
 	var sum float64
 	for i, doc := range ranking {
 		if i >= k {
 			break
 		}
-		if relevant[doc] {
-			sum += 1.0 / math.Log2(float64(i+2))
+		if g, ok := gains[doc]; ok {
+			sum += g / math.Log2(float64(i+2))
 		}
 	}
 	return sum
 }
 
 // MeanNDCG10 measures how well B's ranking retains A's top-10 results. For each
-// query, A's top-10 documents form the relevant set and B's ranking is scored
-// against it with nDCG@10; the result averages over queries (1.0 means B ranks
-// identically to A on A's top-10).
+// query, A's top-10 documents are graded by reference rank (A's first result is
+// worth the most) and B's ranking is scored against those gains with nDCG@10;
+// the result averages over queries (1.0 means B ranks identically to A on A's
+// top-10). Graded gains make a reordering of A's top-10 score below 1.0, so the
+// gate can see an ordering regression and not only a missing document.
 func MeanNDCG10(qA, docA, qB, docB [][]float32) float64 {
 	k := min(10, len(docA))
 	if k == 0 || len(qA) == 0 || len(qB) != len(qA) || len(docB) != len(docA) {
@@ -96,12 +99,12 @@ func MeanNDCG10(qA, docA, qB, docB [][]float32) float64 {
 	var sum float64
 	for qi := range qA {
 		refRank := RankDocuments(qA[qi], docA)[:k]
-		relevant := make(map[int]bool, k)
-		for _, d := range refRank {
-			relevant[d] = true
+		gains := make(map[int]float64, k)
+		for i, d := range refRank {
+			gains[d] = float64(k - i) // A's first result gets the largest gain
 		}
-		if ideal := DCG(refRank, relevant, k); ideal != 0 {
-			sum += DCG(RankDocuments(qB[qi], docB), relevant, k) / ideal
+		if ideal := DCG(refRank, gains, k); ideal != 0 {
+			sum += DCG(RankDocuments(qB[qi], docB), gains, k) / ideal
 		}
 	}
 	return sum / float64(len(qA))

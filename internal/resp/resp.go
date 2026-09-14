@@ -162,8 +162,11 @@ func (c *Client) Close() error {
 
 // WriteArgv appends one RESP2 command (array of bulk strings) to the write
 // buffer. Call Flush to send. Multiple WriteArgv calls batch into a single
-// round trip.
+// round trip. It returns an error when the client is not connected.
 func (c *Client) WriteArgv(args ...string) error {
+	if c.conn == nil {
+		return errors.New("resp: not connected")
+	}
 	w := c.w
 	if _, err := w.WriteString("*" + strconv.Itoa(len(args)) + "\r\n"); err != nil {
 		return err
@@ -177,8 +180,12 @@ func (c *Client) WriteArgv(args ...string) error {
 }
 
 // Flush sends the buffered commands, closing the connection on a write error
-// so the next EnsureConn re-establishes it.
+// so the next EnsureConn re-establishes it. It returns an error when the
+// client is not connected.
 func (c *Client) Flush() error {
+	if c.conn == nil {
+		return errors.New("resp: not connected")
+	}
 	err := c.w.Flush()
 	if err != nil {
 		_ = c.Close()
@@ -196,6 +203,9 @@ const (
 	MaxArrayLen = 1 << 20 // 1M elements
 	// MaxDepth caps reply nesting.
 	MaxDepth = 32
+	// MaxLineBytes caps one status/error/integer line. The peer controls the
+	// line length, so bound it the same way as bulks and arrays.
+	MaxLineBytes = 64 << 10 // 64 KiB
 )
 
 // ReadReply decodes one RESP2 reply, closing the connection on a decode error
@@ -279,12 +289,24 @@ func (c *Client) readReply(depth int) (Reply, error) {
 	}
 }
 
+// readLine reads one CRLF-terminated line, accumulating in bounded chunks so a
+// peer that never sends '\n' cannot make the client grow a buffer without
+// limit. Reads longer than MaxLineBytes are rejected.
 func (c *Client) readLine() (string, error) {
-	line, err := c.r.ReadString('\n')
-	if err != nil {
-		return "", err
+	var line []byte
+	for {
+		chunk, err := c.r.ReadSlice('\n')
+		line = append(line, chunk...)
+		if len(line) > MaxLineBytes {
+			return "", fmt.Errorf("resp: line length exceeds %d", MaxLineBytes)
+		}
+		if err == nil {
+			return strings.TrimRight(string(line), "\r\n"), nil
+		}
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return "", err
+		}
 	}
-	return strings.TrimRight(line, "\r\n"), nil
 }
 
 // ioReadFull mirrors io.ReadFull using the bufio.Reader.
