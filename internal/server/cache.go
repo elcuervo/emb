@@ -2,6 +2,8 @@ package server
 
 import (
 	"container/list"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -90,15 +92,22 @@ func NewCache(maxBytes int64) *Cache {
 }
 
 // modelOf extracts the model prefix from a cache key. Text keys are
-// "model:text"; image keys are "img:<model>:<sha256>" (see imageCacheKey), so
-// the img: prefix is unwrapped when it is followed by a 64-hex content hash.
-// Keys without a colon are attributed to the whole key.
+// "txt:<model>:<sha256>"; image keys are "img:<model>:<sha256>" (see
+// imageCacheKey), so the img: prefix is unwrapped when it is followed by a
+// 64-hex content hash. Keys without a colon are attributed to the whole key.
 func modelOf(key string) string {
 	if strings.HasPrefix(key, "img:") {
 		rest := key[len("img:"):]
 		if i := strings.IndexByte(rest, ':'); i > 0 && isHexDigest(rest[i+1:]) {
 			return rest[:i]
 		}
+	}
+	if strings.HasPrefix(key, "txt:") {
+		rest := key[len("txt:"):]
+		if i := strings.IndexByte(rest, ':'); i >= 0 {
+			return rest[:i]
+		}
+		return rest
 	}
 	if i := strings.IndexByte(key, ':'); i >= 0 {
 		return key[:i]
@@ -118,6 +127,15 @@ func isHexDigest(s string) bool {
 		}
 	}
 	return true
+}
+
+// textCacheKey namespaces text embeddings under "txt:" so a text can never
+// collide with an image entry ("img:<model>:<sha256>") or a script reply-cache
+// entry ("<model>:<sha>:..."), which share the same cache map. The text is
+// hashed so keys stay bounded in length instead of embedding the payload.
+func textCacheKey(model, text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return "txt:" + model + ":" + hex.EncodeToString(sum[:])
 }
 
 // perModel returns (creating on demand) the stats bucket for a model. Caller

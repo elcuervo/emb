@@ -23,4 +23,8 @@ local probs = emb.math.softmax(out.logits.data)
 local idx, score = emb.math.argmax(probs)
 
 -- Model logic: labels arrive in the model's training order (ARGV[i] <-> class i).
+-- Reject a short label list instead of silently dropping the label field.
+if #labels ~= #probs then
+  return { err = string.format("expected %d labels, got %d", #probs, #labels) }
+end
 return { label = labels[idx], confidence = score, scores = probs }

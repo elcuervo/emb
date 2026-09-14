@@ -20,8 +20,8 @@ func lifecycleRegistry() *registry.Registry {
 func makeLifecycleSnapshot(t *testing.T, path string) {
 	t.Helper()
 	cache := NewCache(1 << 20)
-	cache.Set("test:most-recent", make([]byte, 16))
-	cache.Set("test:least-recent", make([]byte, 16))
+	cache.Set(textCacheKey("test", "most-recent"), make([]byte, 16))
+	cache.Set(textCacheKey("test", "least-recent"), make([]byte, 16))
 	reg := lifecycleRegistry()
 	models, err := reg.Fingerprints()
 	if err != nil {
@@ -88,8 +88,11 @@ func TestServerSnapshotRestoreLifecycle(t *testing.T) {
 	})
 
 	t.Run("memory ceiling", func(t *testing.T) {
+		// Each restored record is a hashed text key (~73 bytes) plus a 16-byte
+		// value and per-entry overhead: the limit fits exactly one record, so the
+		// first is quarantined and the second is skipped for memory.
 		s := New("", lifecycleRegistry(), "", "1MB", nil, WithPersistence(PersistenceConfig{
-			File: path, Load: true, RestoreLimit: "80B", RestoreReserve: "1MB",
+			File: path, Load: true, RestoreLimit: "160B", RestoreReserve: "1MB",
 		}))
 		defer s.Close()
 		status := s.snapshot.Status()

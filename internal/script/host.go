@@ -115,9 +115,13 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	emb.RawSetString("run", ls.NewFunction(func(ls *lua.LState) int {
 		return runHost(ls, h)
 	}))
-	emb.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
-		return embedHost(ls, h)
-	}))
+	// emb.embed is registered only when the model can produce embeddings, so
+	// capability detection via type(emb.embed) matches what a script can call.
+	if h.Embed != nil {
+		emb.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
+			return embedHost(ls, h)
+		}))
+	}
 	emb.RawSetString("similarity", ls.NewFunction(similarityHost))
 	emb.RawSetString("distance", ls.NewFunction(distanceHost))
 	emb.RawSetString("API_VERSION", lua.LString(APIVersion))
@@ -145,9 +149,11 @@ func registerHosts(ls *lua.LState, h Hosts) {
 		img.RawSetString("info", ls.NewFunction(func(ls *lua.LState) int {
 			return imageInfoHost(ls, h.Image)
 		}))
-		img.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
-			return imageEmbedHost(ls, h.Image)
-		}))
+		if h.Image.Embed != nil {
+			img.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
+				return imageEmbedHost(ls, h.Image)
+			}))
+		}
 		emb.RawSetString("image", img)
 	}
 	ls.SetGlobal("emb", emb)

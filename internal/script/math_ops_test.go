@@ -131,6 +131,32 @@ func TestMathShapeValidation(t *testing.T) {
 	}
 }
 
+// TestMathShapeRejectsZeroDimensions pins the DoS guard on the 3-D shape
+// helpers: a zero dimension collapses batch*seq*dim to zero, so a tiny operand
+// would otherwise pass the element-count check while the loops iterate a huge
+// shape.
+func TestMathShapeRejectsZeroDimensions(t *testing.T) {
+	for _, script := range []string{
+		`return emb.math.cls({}, {100, 1, 0})`,
+		`return emb.math.cls({}, {0, 4, 8})`,
+		`return emb.math.mean_pool({}, {100, 1, 0}, {})`,
+	} {
+		if msg := evalErr(t, script); !strings.Contains(msg, "positive") {
+			t.Fatalf("%s error = %q, want a positive-dimension rejection", script, msg)
+		}
+	}
+}
+
+// TestMathSliceRejectsOverflow pins the range guard: offset-1+length can wrap
+// negative for large positive inputs, letting an attacker-selected allocation
+// through.
+func TestMathSliceRejectsOverflow(t *testing.T) {
+	msg := evalErr(t, `return emb.math.slice({1, 2, 3, 4}, {2, 2}, 5e18, 5e18)`)
+	if !strings.Contains(msg, "out of range") {
+		t.Fatalf("slice overflow error = %q, want an out-of-range rejection", msg)
+	}
+}
+
 func TestMathSigmoidSoftmaxArgmaxAcceptPacked(t *testing.T) {
 	array := evalNum(t, `return emb.math.sigmoid({0, 1, -1})[2]`)
 	packed := evalNum(t, `return emb.math.sigmoid(emb.math.float32_bytes({0, 1, -1}))[2]`)

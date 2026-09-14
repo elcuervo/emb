@@ -51,7 +51,10 @@ func serveScriptModel(t *testing.T, modelCfg config.ModelConfig, cacheCfg string
 	addr := getFreeAddr()
 	srv := New(addr, reg, "", cacheCfg, nil)
 	go srv.ListenAndServe()
-	t.Cleanup(func() { srv.Close() })
+	t.Cleanup(func() {
+		_ = srv.Close()
+		_ = reg.Close()
+	})
 	time.Sleep(50 * time.Millisecond)
 	return addr, srv
 }

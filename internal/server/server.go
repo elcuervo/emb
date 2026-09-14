@@ -745,9 +745,13 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 	}
 
 	results := make([][]byte, len(texts))
+	// Admit any restored snapshot entries now that the model is loaded and its
+	// fingerprint is verified, before the first cache lookup, so every embedding
+	// path (EMB and scripted emb.embed) sees the recovered entries.
+	s.admitQuarantine(model, entry)
 	var missIdxs []int
 	for i, text := range texts {
-		if emb, ok := s.cache.Get(model + ":" + text); ok {
+		if emb, ok := s.cache.Get(textCacheKey(model, text)); ok {
 			results[i] = emb
 		} else {
 			missIdxs = append(missIdxs, i)
@@ -770,7 +774,7 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 	}
 	for j, idx := range missIdxs {
 		results[idx] = resp.Embeddings[j]
-		s.cache.Set(model+":"+texts[idx], resp.Embeddings[j])
+		s.cache.Set(textCacheKey(model, texts[idx]), resp.Embeddings[j])
 	}
 	return results, nil
 }
@@ -834,9 +838,6 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
-	}
-	if s.cache != nil {
-		s.admitQuarantine(modelName, entry)
 	}
 
 	results, err := s.embedTexts(entry, modelName, texts)
@@ -1414,7 +1415,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	}()
 
 	if s.cache != nil {
-		key := model + ":" + text
+		key := textCacheKey(model, text)
 		if emb, ok := s.cache.Get(key); ok {
 			results[idx] = emb
 			return
@@ -1435,7 +1436,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	}
 
 	if s.cache != nil {
-		s.cache.Set(model+":"+text, resp.Embeddings[0])
+		s.cache.Set(textCacheKey(model, text), resp.Embeddings[0])
 	}
 
 	results[idx] = resp.Embeddings[0]

@@ -96,6 +96,28 @@ func product(shape []int) int {
 	return n
 }
 
+// mathShape3 validates a {batch, seq, dim} shape against an operand length. It
+// requires every dimension to be positive: a zero dimension makes the element
+// product zero, so a tiny operand could satisfy a plain count check while the
+// loops below iterate an attacker-chosen number of times (CWE-400). The product
+// is computed with overflow guards so a huge shape cannot wrap into a match.
+func mathShape3(fn string, shape []int, n int) (batch, seq, dim int, err error) {
+	if len(shape) != 3 {
+		return 0, 0, 0, fmt.Errorf("%s: shape must be {batch, seq, dim}, got %v", fn, shape)
+	}
+	batch, seq, dim = shape[0], shape[1], shape[2]
+	if batch < 1 || seq < 1 || dim < 1 {
+		return 0, 0, 0, fmt.Errorf("%s: shape dimensions must be positive, got %v", fn, shape)
+	}
+	if batch > math.MaxInt/seq || batch*seq > math.MaxInt/dim {
+		return 0, 0, 0, fmt.Errorf("%s: shape %v overflows the element count", fn, shape)
+	}
+	if elems := batch * seq * dim; elems != n {
+		return 0, 0, 0, fmt.Errorf("%s: shape %v needs %d elements, got %d", fn, shape, elems, n)
+	}
+	return batch, seq, dim, nil
+}
+
 // floatTable renders a slice as a Lua array of numbers.
 func floatTable(ls *lua.LState, vals []float64) *lua.LTable {
 	t := ls.CreateTable(0, len(vals))
@@ -146,9 +168,9 @@ func mathMeanPool(ls *lua.LState) int {
 		ls.RaiseError("%s: mask: %v", fn, err)
 		return 0
 	}
-	batch, seq, dim := shape[0], shape[1], shape[2]
-	if len(hidden) != batch*seq*dim {
-		ls.RaiseError("%s: shape %v needs %d elements, got %d", fn, shape, batch*seq*dim, len(hidden))
+	batch, seq, dim, err := mathShape3(fn, shape, len(hidden))
+	if err != nil {
+		ls.RaiseError("%v", err)
 		return 0
 	}
 	if len(mask) != batch*seq {
@@ -201,9 +223,9 @@ func mathCLS(ls *lua.LState) int {
 		ls.RaiseError("%s: shape must be {batch, seq>=1, dim}, got %v", fn, shape)
 		return 0
 	}
-	batch, seq, dim := shape[0], shape[1], shape[2]
-	if len(hidden) != batch*seq*dim {
-		ls.RaiseError("%s: shape %v needs %d elements, got %d", fn, shape, batch*seq*dim, len(hidden))
+	batch, seq, dim, err := mathShape3(fn, shape, len(hidden))
+	if err != nil {
+		ls.RaiseError("%v", err)
 		return 0
 	}
 	out := ls.NewTable()
@@ -299,12 +321,15 @@ func mathSlice(ls *lua.LState) int {
 	}
 	offset := int(ls.CheckNumber(3))
 	length := int(ls.CheckNumber(4))
-	if offset < 1 || length < 0 || offset-1+length > len(vals) {
+	// Validate by subtraction: offset-1+length can overflow for large positive
+	// inputs and wrap negative, letting an attacker-selected allocation through.
+	start := offset - 1
+	if offset < 1 || length < 0 || start > len(vals) || length > len(vals)-start {
 		ls.RaiseError("%s: offset %d length %d out of range (len %d)", fn, offset, length, len(vals))
 		return 0
 	}
 	out := make([]float64, length)
-	copy(out, vals[offset-1:offset-1+length])
+	copy(out, vals[start:start+length])
 	ls.Push(floatTable(ls, out))
 	return 1
 }

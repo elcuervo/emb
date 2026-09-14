@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -72,7 +73,10 @@ func serveScriptBenchWorkers(b testing.TB, cacheCfg string, scriptWorkers int) (
 	addr := getFreeAddr()
 	srv := New(addr, reg, "", cacheCfg, nil)
 	go srv.ListenAndServe()
-	b.Cleanup(func() { srv.Close() })
+	b.Cleanup(func() {
+		_ = srv.Close()
+		_ = reg.Close()
+	})
 	time.Sleep(50 * time.Millisecond)
 	return addr, srv
 }
@@ -271,38 +275,40 @@ func benchBudgetsEnabled(t *testing.T) {
 func TestScriptEmbedParityBudget(t *testing.T) {
 	benchBudgetsEnabled(t)
 	for _, tokens := range []int{8, 32, 128} {
-		text := strings.TrimSpace(strings.Repeat("cat ", tokens))
-		other := strings.TrimSpace(strings.Repeat("dog ", tokens))
+		t.Run(fmt.Sprintf("tokens=%d", tokens), func(t *testing.T) {
+			text := strings.TrimSpace(strings.Repeat("cat ", tokens))
+			other := strings.TrimSpace(strings.Repeat("dog ", tokens))
 
-		addr, srv := serveScriptBench(t, "")
-		sha, err := srv.PreloadScript("test", embedParityScript)
-		if err != nil {
-			t.Fatal(err)
-		}
-		conn, r := benchConn(t, addr)
-		// Warm up both paths so first-call lazy loads do not skew the ratio.
-		benchRoundTrip(t, conn, r, "EMB", "test", text, other)
-		benchRoundTrip(t, conn, r, "EMB.EVSHA", "test", sha, "1", text, other)
+			addr, srv := serveScriptBench(t, "")
+			sha, err := srv.PreloadScript("test", embedParityScript)
+			if err != nil {
+				t.Fatal(err)
+			}
+			conn, r := benchConn(t, addr)
+			// Warm up both paths so first-call lazy loads do not skew the ratio.
+			benchRoundTrip(t, conn, r, "EMB", "test", text, other)
+			benchRoundTrip(t, conn, r, "EMB.EVSHA", "test", sha, "1", text, other)
 
-		native := testing.Benchmark(func(b *testing.B) {
-			for b.Loop() {
-				benchRoundTrip(b, conn, r, "EMB", "test", text, other)
+			native := testing.Benchmark(func(b *testing.B) {
+				for b.Loop() {
+					benchRoundTrip(b, conn, r, "EMB", "test", text, other)
+				}
+			})
+			scripted := testing.Benchmark(func(b *testing.B) {
+				for b.Loop() {
+					benchRoundTrip(b, conn, r, "EMB.EVSHA", "test", sha, "1", text, other)
+				}
+			})
+			ratio := float64(scripted.NsPerOp()) / float64(native.NsPerOp())
+			budget := parityBudget
+			if tokens > 8 {
+				budget = parityBudgetLong
+			}
+			t.Logf("tokens=%d native=%dns script=%dns ratio=%.3f budget=%.2f", tokens, native.NsPerOp(), scripted.NsPerOp(), ratio, budget)
+			if ratio > budget {
+				t.Errorf("tokens=%d: scripted/native ratio %.3f exceeds %.2f", tokens, ratio, budget)
 			}
 		})
-		scripted := testing.Benchmark(func(b *testing.B) {
-			for b.Loop() {
-				benchRoundTrip(b, conn, r, "EMB.EVSHA", "test", sha, "1", text, other)
-			}
-		})
-		ratio := float64(scripted.NsPerOp()) / float64(native.NsPerOp())
-		budget := parityBudget
-		if tokens > 8 {
-			budget = parityBudgetLong
-		}
-		t.Logf("tokens=%d native=%dns script=%dns ratio=%.3f budget=%.2f", tokens, native.NsPerOp(), scripted.NsPerOp(), ratio, budget)
-		if ratio > budget {
-			t.Errorf("tokens=%d: scripted/native ratio %.3f exceeds %.2f", tokens, ratio, budget)
-		}
 	}
 }
 
@@ -312,47 +318,49 @@ func TestScriptEmbedParityBudget(t *testing.T) {
 func TestScriptPackedReadBudget(t *testing.T) {
 	benchBudgetsEnabled(t)
 	for _, tokens := range []int{32, 128} {
-		text := strings.TrimSpace(strings.Repeat("cat ", tokens))
+		t.Run(fmt.Sprintf("tokens=%d", tokens), func(t *testing.T) {
+			text := strings.TrimSpace(strings.Repeat("cat ", tokens))
 
-		addr, srv := serveScriptBench(t, "")
-		packSHA, err := srv.PreloadScript("test", packReadScript)
-		if err != nil {
-			t.Fatal(err)
-		}
-		noReadSHA, err := srv.PreloadScript("test", `local e = emb.tokenize.encode(KEYS[1], 128)
+			addr, srv := serveScriptBench(t, "")
+			packSHA, err := srv.PreloadScript("test", packReadScript)
+			if err != nil {
+				t.Fatal(err)
+			}
+			noReadSHA, err := srv.PreloadScript("test", `local e = emb.tokenize.encode(KEYS[1], 128)
 local out = emb.run({
   input_ids = {shape = {1, #e.ids}, data = e.ids},
   attention_mask = {shape = {1, #e.mask}, data = e.mask},
   token_type_ids = {shape = {1, #e.ids}, fill = 0, dtype = "i64"},
 })
 return #out.last_hidden_state.shape`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		conn, r := benchConn(t, addr)
-		benchRoundTrip(t, conn, r, "EMB.EVSHA", "test", noReadSHA, "1", text)
-		benchRoundTrip(t, conn, r, "EMB.EVSHA", "test", packSHA, "1", text)
+			if err != nil {
+				t.Fatal(err)
+			}
+			conn, r := benchConn(t, addr)
+			benchRoundTrip(t, conn, r, "EMB.EVSHA", "test", noReadSHA, "1", text)
+			benchRoundTrip(t, conn, r, "EMB.EVSHA", "test", packSHA, "1", text)
 
-		noRead := testing.Benchmark(func(b *testing.B) {
-			for b.Loop() {
-				benchRoundTrip(b, conn, r, "EMB.EVSHA", "test", noReadSHA, "1", text)
+			noRead := testing.Benchmark(func(b *testing.B) {
+				for b.Loop() {
+					benchRoundTrip(b, conn, r, "EMB.EVSHA", "test", noReadSHA, "1", text)
+				}
+			})
+			packed := testing.Benchmark(func(b *testing.B) {
+				for b.Loop() {
+					benchRoundTrip(b, conn, r, "EMB.EVSHA", "test", packSHA, "1", text)
+				}
+			})
+			ratio := float64(packed.NsPerOp()) / float64(noRead.NsPerOp())
+			elements := float64(tokens * 384)
+			perElementUs := float64(packed.NsPerOp()-noRead.NsPerOp()) / 1e3 / elements
+			t.Logf("tokens=%d no-read=%dns packed=%dns ratio=%.3f per-element=%.4fus", tokens, noRead.NsPerOp(), packed.NsPerOp(), ratio, perElementUs)
+			if ratio > materializationBudget {
+				t.Errorf("tokens=%d: packed/no-read ratio %.3f exceeds %.2f", tokens, ratio, materializationBudget)
+			}
+			if perElementUs > perElementBudgetUs {
+				t.Errorf("tokens=%d: per-element overhead %.4fus exceeds %.2fus", tokens, perElementUs, perElementBudgetUs)
 			}
 		})
-		packed := testing.Benchmark(func(b *testing.B) {
-			for b.Loop() {
-				benchRoundTrip(b, conn, r, "EMB.EVSHA", "test", packSHA, "1", text)
-			}
-		})
-		ratio := float64(packed.NsPerOp()) / float64(noRead.NsPerOp())
-		elements := float64(tokens * 384)
-		perElementMs := float64(packed.NsPerOp()-noRead.NsPerOp()) / 1e6 / elements
-		t.Logf("tokens=%d no-read=%dns packed=%dns ratio=%.3f per-element=%.4fus", tokens, noRead.NsPerOp(), packed.NsPerOp(), ratio, perElementMs)
-		if ratio > materializationBudget {
-			t.Errorf("tokens=%d: packed/no-read ratio %.3f exceeds %.2f", tokens, ratio, materializationBudget)
-		}
-		if perElementMs > perElementBudgetUs {
-			t.Errorf("tokens=%d: per-element overhead %.4fus exceeds %.2fus", tokens, perElementMs, perElementBudgetUs)
-		}
 	}
 }
 
@@ -428,7 +436,10 @@ func serveScriptScalingBench(b testing.TB, scriptWorkers int) (string, *Server) 
 	addr := getFreeAddr()
 	srv := New(addr, reg, "", "", nil)
 	go srv.ListenAndServe()
-	b.Cleanup(func() { srv.Close() })
+	b.Cleanup(func() {
+		_ = srv.Close()
+		_ = reg.Close()
+	})
 	time.Sleep(50 * time.Millisecond)
 	return addr, srv
 }
@@ -591,7 +602,10 @@ local out = emb.run({
 return #out.last_hidden_state.shape`
 
 // measureScriptThroughput drives `sessions` connections for `iters` scripted
-// evaluations each and returns the aggregate evaluations per second.
+// evaluations each and returns the aggregate evaluations per second. It counts
+// only responses that were actually read back, and fails the test on the first
+// write/read error, so a failure cannot shorten the elapsed window and inflate
+// the reported throughput.
 func measureScriptThroughput(t testing.TB, addr, sha, text string, sessions, iters int) float64 {
 	t.Helper()
 	conns := make([]*net.TCPConn, sessions)
@@ -599,6 +613,9 @@ func measureScriptThroughput(t testing.TB, addr, sha, text string, sessions, ite
 	for i := range conns {
 		conns[i], readers[i] = benchConn(t, addr)
 	}
+	var completed atomic.Int64
+	var firstErr error
+	var errOnce sync.Once
 	start := time.Now()
 	var wg sync.WaitGroup
 	for i := 0; i < sessions; i++ {
@@ -607,20 +624,26 @@ func measureScriptThroughput(t testing.TB, addr, sha, text string, sessions, ite
 			defer wg.Done()
 			for j := 0; j < iters; j++ {
 				if _, err := conns[i].Write(respCommand("EMB.EVSHA", "test", sha, "1", text)); err != nil {
+					errOnce.Do(func() { firstErr = err })
 					return
 				}
 				if err := drainRESP(readers[i]); err != nil {
+					errOnce.Do(func() { firstErr = err })
 					return
 				}
+				completed.Add(1)
 			}
 		}(i)
 	}
 	wg.Wait()
+	if firstErr != nil {
+		t.Fatalf("scripted throughput worker failed after %d/%d responses: %v", completed.Load(), sessions*iters, firstErr)
+	}
 	elapsed := time.Since(start).Seconds()
 	if elapsed <= 0 {
 		return 0
 	}
-	return float64(sessions*iters) / elapsed
+	return float64(completed.Load()) / elapsed
 }
 
 // BenchmarkScriptThroughputScaling reports sustained scripted throughput with
@@ -645,11 +668,16 @@ func BenchmarkScriptThroughputScaling(b *testing.B) {
 }
 
 // throughputScalingBaselineRatio is the captured scaled/single throughput ratio
-// for 4 script sessions (see benchmark-baseline.txt: 106.6 req/s vs 33.62 req/s).
+// for 4 script sessions (see benchmark-baseline.txt: 108.1 req/s vs 33.71 req/s).
 // It is the CI regression gate; the absolute 0.85 x N target is asserted only on
 // a quiet reference host (EMB_BENCH_REFERENCE=1), because external CPU load
 // changes the ratio on a shared machine.
-const throughputScalingBaselineRatio = 3.17
+const throughputScalingBaselineRatio = 3.21
+
+// throughputScalingBaselineSessions is the session count the captured baseline
+// ratio was measured at, used to derive a per-session expectation for hosts
+// with fewer cores than the reference run.
+const throughputScalingBaselineSessions = 4
 
 // TestScriptThroughputScalingBudget asserts sustained throughput with N script
 // sessions reaches at least 0.85 x N times the single-session throughput (up to
@@ -700,9 +728,14 @@ func TestScriptThroughputScalingBudget(t *testing.T) {
 		}
 		return
 	}
-	// Non-reference host: gate against the captured baseline (10% regression).
-	if scalingFactor < 0.9*throughputScalingBaselineRatio {
-		t.Errorf("throughput scaling %.2fx regressed more than 10%% below the %.2fx baseline (single=%.1f, scaled=%.1f, sessions=%d)", scalingFactor, throughputScalingBaselineRatio, single, scaled, sessions)
+	// Non-reference host: gate against the captured baseline (10% regression),
+	// scaled to the session count actually measured. The recorded ratio is a
+	// four-session number; on a host with fewer cores the four-session threshold
+	// is unreachable (a two-core host tops out near 2x), so derive the expected
+	// ratio per session before applying the gate.
+	expected := throughputScalingBaselineRatio * float64(sessions) / throughputScalingBaselineSessions
+	if scalingFactor < 0.9*expected {
+		t.Errorf("throughput scaling %.2fx regressed more than 10%% below the %.2fx baseline for %d sessions (single=%.1f, scaled=%.1f)", scalingFactor, expected, sessions, single, scaled)
 	}
 }
 
