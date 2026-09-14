@@ -30,8 +30,15 @@ website/
 │       ├── terrain-v2.png  generated rock formation, the matte's source
 │       ├── terrain-v2.md   generation prompts and provenance
 │       ├── speckle.svg     original photocopy speckle asset
-│       └── og.png          1200×630 social card
+│       └── og.png          1200×630 social card (source: tools/og-card.html,
+│                           a locked brand composition — never a page screenshot,
+│                           so landing changes cannot rot it)
 ├── tools/
+│   ├── og-card.html      the locked source of assets/img/og.png: masthead,
+│   │                     timeless mono strip, the logo's own outlines, the
+│   │                     fold spine, and the positioning line. Regenerate at
+│   │                     viewport 1200x630 after `just website` (see the file
+│   │                     header), capture exactly 1200×630
 │   ├── gen-isometric.py    regenerates the pipeline SVG
 │   ├── gen-terrain-matte.py derives the terrain cut-out from terrain-v2.png
 │   ├── png_lib.py          dependency-free PNG reader/writer for the above

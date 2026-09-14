@@ -1,0 +1,130 @@
+<!doctype html>
+<!-- og-card.html — the locked source of assets/img/og.png (1200×630).
+     A standalone composition from brand tokens, NOT a screenshot of the
+     landing page: nav items, numbers and sections come and go, the card
+     must not rot with them. The giant word reuses the landing's optical
+     outlines (copied from index.html) so it always matches the logo.
+     Regenerate: serve website/ (`just website`), then
+       agent-browser open http://localhost:8080/tools/og-card.html
+       agent-browser set viewport 1200 630
+       agent-browser eval "document.fonts.ready.then(()=>1)" (wait)
+       agent-browser screenshot website/assets/img/og.png
+     The capture must be exactly 1200×630. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face{
+    font-family: "Inter";
+    src: url("../assets/fonts/inter-900-latin.woff2") format("woff2");
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face{
+    font-family: "Archivo";
+    src: url("../assets/fonts/archivo-var-latin.woff2") format("woff2");
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face{
+    font-family: "JetBrains Mono";
+    src: url("../assets/fonts/jetbrains-mono-var-latin.woff2") format("woff2");
+    font-weight: 100 800; font-style: normal; font-display: swap;
+  }
+  *{ margin: 0; padding: 0; box-sizing: border-box; }
+  html, body{ width: 1200px; height: 630px; }
+  body{
+    background: #F3F0E8; color: #0B0B0B;
+    font-family: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    overflow: hidden; position: relative;
+    -webkit-font-smoothing: antialiased;
+    font-synthesis-weight: none;
+  }
+  /* spine at the page fold (--fold-n .6531): 1200 × .6531 ≈ 784 */
+  .spine{
+    position: absolute; top: 0; bottom: 120px; left: 781px; width: 6px;
+    background: #FF5A1F; z-index: 3;
+  }
+  .top{
+    position: relative; z-index: 4; height: 100px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; border-bottom: 2px solid #0B0B0B;
+    background: #F3F0E8;
+  }
+  .top__brand{ display: flex; align-items: center; gap: 20px; }
+  .mark{ width: 30px; height: 30px; background: #F3F0E8;
+    border: 2px solid #0B0B0B; position: relative; flex: none; }
+  .mark::after{ content: ""; position: absolute; top: 0; bottom: 0; left: 11px;
+    width: 4px; background: #FF5A1F; }
+  .word{ font-family: "Inter", "Archivo", sans-serif; font-weight: 900;
+    font-size: 48px; letter-spacing: -.04em; line-height: 1; }
+  .vrule{ width: 1px; height: 30px; background: #B8B5AC; }
+  .tag{ font-family: "JetBrains Mono", monospace; font-size: 15px;
+    font-weight: 500; letter-spacing: .18em; line-height: 1.5; }
+  .top__meta{ font-family: "JetBrains Mono", monospace; font-size: 14px;
+    font-weight: 600; letter-spacing: .14em; text-align: right; line-height: 1.9; }
+  .strip{
+    position: relative; z-index: 4; height: 96px; background: #F3F0E8;
+    border-bottom: 2px solid #0B0B0B;
+    display: flex; align-items: center; padding: 0 48px; gap: 48px;
+    font-family: "JetBrains Mono", monospace; font-size: 15px; font-weight: 500;
+    letter-spacing: .14em; line-height: 1.8;
+  }
+  .strip__c{ text-align: left; }
+  .strip__r{ margin-left: auto; text-align: right; }
+  .mid{ position: relative; height: 310px; overflow: hidden; }
+  .giant{
+    position: absolute; left: 35px; top: -95px; width: 1150px; height: auto;
+    color: #0B0B0B; z-index: 1;
+  }
+  .giant svg{ display: block; width: 100%; height: auto; }
+  .bottom{
+    position: relative; z-index: 4; height: 120px; background: #111110;
+    color: #F3F0E8; border-top: 2px solid #0B0B0B;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px;
+  }
+  .claim{ font-family: "Archivo", sans-serif; font-weight: 750;
+    font-size: 27px; letter-spacing: -.01em; white-space: nowrap; }
+  .claim em{ font-style: normal; color: #FF5A1F; }
+  .domain{ font-family: "JetBrains Mono", monospace; font-size: 16px;
+    font-weight: 600; letter-spacing: .14em;
+    border: 1px solid #F3F0E8; padding: 10px 16px; }
+</style>
+</head>
+<body>
+  <div class="spine"></div>
+
+  <header class="top">
+    <div class="top__brand">
+      <span class="mark"></span>
+      <span class="word">emb</span>
+      <span class="vrule"></span>
+      <span class="tag">BYTES IN.<br>VECTORS OUT.</span>
+    </div>
+    <p class="top__meta">REDIS PROTOCOL<br>OPEN SOURCE · MIT</p>
+  </header>
+
+  <div class="strip">
+    <p>SAME PROTOCOL.<br>A MORE SEMANTIC WORLD.</p>
+    <p class="strip__c">OPEN SOURCE<br>EMBEDDING SERVER</p>
+    <p class="strip__r">ONNX RUNTIME<br>RESP2 / RESP3</p>
+  </div>
+
+  <div class="mid">
+    <div class="giant">
+      <!-- Optical outlines follow the reference lockup (from index.html). -->
+      <svg viewBox="0 0 1086 480">
+        <g fill="currentColor" fill-rule="evenodd">
+          <path d="M319 334H121C120 375 132 393 162 393C184 393 199 384 207 365H316C297 436 243 479 165 479C58 479-5 416-5 310C-5 203 63 131 168 131C269 131 319 197 319 296ZM123 269H203C203 236 191 219 166 219C142 219 127 235 123 269Z"/>
+          <path d="M321 467V140H433V162C450 140 470 131 495 131C531 131 552 147 564 177C581 147 608 131 645 131C705 131 737 164 737 225V461H619V263C619 244 614 237 603 237C589 237 580 250 580 274V461H463V266C463 245 459 237 448 237C435 237 430 250 430 274V467Z"/>
+          <path d="M747 463V0H865V164C887 142 914 131 947 131C1035 131 1091 198 1091 305C1091 415 1035 480 947 480C906 480 876 470 851 447V463ZM852 315C852 369 870 393 907 393C944 393 962 369 962 315C962 261 945 236 909 236C872 236 852 263 852 315Z"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <footer class="bottom">
+    <p class="claim">A fast embedding server that speaks <em>the Redis protocol.</em></p>
+    <p class="domain">emb.is</p>
+  </footer>
+</body>
+</html>
