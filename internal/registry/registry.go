@@ -703,9 +703,11 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 }
 
 func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
+	// Hold the read lock across initialization so a concurrent Close (which
+	// takes the write lock) waits for the load instead of closing under it.
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	entry, ok := r.models[name]
-	r.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("model '%s' not found", name)
 	}

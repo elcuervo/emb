@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -94,14 +95,21 @@ func TestShutdownPreservesAcceptedConnectionUntilReply(t *testing.T) {
 	}()
 	waitFor(t, srv.shuttingDown.Load)
 
+	// A timeout is also what an accepted idle connection does; send PING to
+	// tell rejection (EOF/reset) apart from acceptance (reply or timeout).
 	probe, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
 	if err == nil {
-		_ = probe.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		defer probe.Close()
+		_ = probe.SetDeadline(time.Now().Add(200 * time.Millisecond))
+		_, _ = probe.Write([]byte("*1\r\n$4\r\nPING\r\n"))
 		buf := make([]byte, 1)
-		if _, readErr := probe.Read(buf); readErr == nil {
-			t.Fatal("connection accepted during drain")
+		n, readErr := probe.Read(buf)
+		if readErr == nil {
+			t.Fatalf("drained server answered the probe connection: %q", buf[:n])
 		}
-		_ = probe.Close()
+		if errors.Is(readErr, os.ErrDeadlineExceeded) {
+			t.Fatal("drained server kept the probe connection open")
+		}
 	}
 
 	close(gate)
