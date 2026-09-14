@@ -91,7 +91,16 @@ type Pool struct {
 	pooling   string
 	normalize bool
 	maxLen    int
+	// tok is the tokenizer shared by every worker/batcher in the pool. It is
+	// retained so the scripted path can reuse it instead of loading a second
+	// tokenizer for the same model (see registry.openScriptResources).
+	tok tokenizer.Tokenizer
 }
+
+// Tokenizer returns the tokenizer shared by the pool, or nil when the pool was
+// constructed without one. Callers must not close it: the registry owns its
+// lifetime.
+func (p *Pool) Tokenizer() tokenizer.Tokenizer { return p.tok }
 
 func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenizer, numWorkers, dim, maxLen int, normalize bool, pooling string, timeoutMS, maxBatch, maxBatchTokens, tokenizeWorkers int) (*Pool, error) {
 	if timeoutMS > 0 {
@@ -104,6 +113,7 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 			pooling:   pooling,
 			normalize: normalize,
 			maxLen:    maxLen,
+			tok:       tok,
 		}, nil
 	}
 
@@ -120,6 +130,7 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 		pooling:   pooling,
 		normalize: normalize,
 		maxLen:    maxLen,
+		tok:       tok,
 	}, nil
 }
 

@@ -90,10 +90,10 @@ func benchTexts(words int) string {
 	return strings.Join(parts, " ")
 }
 
-// decodeMarker anchors the cut in examples/scripts/gliner2.lua: everything
+// decodeMarker anchors the cut in examples/scripts/reference/gliner2.lua: everything
 // before it is input construction + the single emb.run_batch inference call;
 // the span-scan decode comes after. It must keep matching the example script.
-const decodeMarker = "-- Flat row-major access helper"
+const decodeMarker = "local function decode_text(ti)"
 
 // noDecodeSource cuts the decode stage from the example script so the delta
 // between full and build-only isolates decode cost. It fails loudly when the
@@ -106,7 +106,7 @@ func noDecodeSource(tb testing.TB, full string) string {
 	if idx < 0 {
 		tb.Fatalf("decode marker %q not found in gliner script", decodeMarker)
 	}
-	return full[:idx] + "return { texts = #texts, nlab = nlab, nlogits = #outs[1].logits.data }\n"
+	return full[:idx] + "return { texts = #texts, nlab = nlab, nlogits = #outs[1].logits.bytes }\n"
 }
 
 func BenchmarkGLiNERExtract(b *testing.B) {

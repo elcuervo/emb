@@ -58,7 +58,7 @@ func TestExampleImageZeroShot(t *testing.T) {
 	}
 	defer rt.Close()
 
-	src, err := os.ReadFile("../../examples/scripts/image_zeroshot.lua")
+	src, err := os.ReadFile("../../examples/scripts/snippets/image_zeroshot.lua")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestExampleImageZeroShot(t *testing.T) {
 	textCall := 0
 	hosts := Hosts{
 		EncodePlain: rt.EncodeOffsets,
-		Image: &ImageHost{Plan: plan, Preprocess: func(data []byte) ([]float32, error) {
+		Image: &ImageHost{Plan: func() (imageproc.Plan, error) { return plan, nil }, Preprocess: func(data []byte) ([]float32, error) {
 			if string(data) != "fake-image" {
 				t.Fatalf("preprocess got %q", data)
 			}
@@ -124,7 +124,7 @@ func TestExampleSST2(t *testing.T) {
 			"logits": {Name: "logits", Shape: []int64{1, 2}, DType: onnx.TensorFloat32, Float: []float32{-1.5, 1.5}},
 		}, nil
 	}
-	reply := evalExample(t, "sst2.lua", []string{"this film is great"}, []string{"NEGATIVE", "POSITIVE"}, run)
+	reply := evalExample(t, "snippets/sst2.lua", []string{"this film is great"}, []string{"NEGATIVE", "POSITIVE"}, run)
 	// sst2 returns {label, confidence, scores}: label must be POSITIVE.
 	if !containsReply(reply, "POSITIVE") {
 		t.Fatalf("expected POSITIVE label in %q", reply)
@@ -183,7 +183,7 @@ func TestExampleQA(t *testing.T) {
 			"end_logits":   {Name: "end_logits", Shape: []int64{1, int64(n)}, DType: onnx.TensorFloat32, Float: end},
 		}, nil
 	}
-	reply := evalExample(t, "qa.lua", []string{question, context}, nil, run)
+	reply := evalExample(t, "snippets/qa.lua", []string{question, context}, nil, run)
 	// The answer surfaced from the context via offsets must include 1976.
 	if !containsReply(reply, "1976") {
 		t.Fatalf("expected answer 1976 in %q", reply)
@@ -242,7 +242,7 @@ func TestExampleQARegressionTrailingSep(t *testing.T) {
 			"end_logits":   {Name: "end_logits", Shape: []int64{1, int64(n)}, DType: onnx.TensorFloat32, Float: end},
 		}, nil
 	}
-	reply := evalExample(t, "qa.lua", []string{question, context}, nil, run)
+	reply := evalExample(t, "snippets/qa.lua", []string{question, context}, nil, run)
 	if !containsReply(reply, "1976") {
 		t.Fatalf("trailing [SEP] must not win the span search: %q", reply)
 	}
@@ -267,7 +267,7 @@ func TestExampleSiglip2(t *testing.T) {
 			"text_embeds": {Name: "text_embeds", Shape: []int64{1, 768}, DType: onnx.TensorFloat32, Float: embeddings},
 		}, nil
 	}
-	reply := evalExample(t, "siglip2.lua", []string{"a photo of a cat"}, []string{"normalize"}, run)
+	reply := evalExample(t, "snippets/siglip2.lua", []string{"a photo of a cat"}, []string{"normalize"}, run)
 
 	if gotPixel.DType != onnx.TensorFloat32 || len(gotPixel.Float) != 1*3*224*224 {
 		t.Fatalf("pixel_values must be a host-built float32 fill, got dtype=%v n=%d", gotPixel.DType, len(gotPixel.Float))
@@ -304,7 +304,7 @@ func TestExampleRerank(t *testing.T) {
 			"logits": {Name: "logits", Shape: []int64{1, 1}, DType: onnx.TensorFloat32, Float: []float32{v}},
 		}, nil
 	}
-	reply := evalExample(t, "rerank.lua", []string{"what is the capital of france"}, []string{"Paris", "Lyon", "Nice"}, run)
+	reply := evalExample(t, "snippets/rerank.lua", []string{"what is the capital of france"}, []string{"Paris", "Lyon", "Nice"}, run)
 	// sigmoid(2) > sigmoid(1) > sigmoid(-1), so Nice ranks first, Lyon second,
 	// Paris third. The reply is an array of {rank, doc, score} hashes in order.
 	if !containsReply(reply, "Nice") || !containsReply(reply, "Paris") {

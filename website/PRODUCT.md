@@ -106,8 +106,7 @@ Real, usable in future work:
 
 - `BENCHMARK.md` — measured throughput, latency, cache hit-rate, and BLOB-vs-VALUES
   numbers, with reproduction commands.
-- `examples/scripts/` — five working Lua scripts: `siglip2.lua`, `sst2.lua`,
-  `qa.lua`, `rerank.lua`, `gliner2.lua`.
+- `examples/scripts/reference/` — the maintained GLiNER2 extractor; `examples/scripts/snippets/` — illustrative `siglip2.lua`, `sst2.lua`, `qa.lua`, `rerank.lua`, `image_zeroshot.lua`.
 - `gems/emb` — Ruby client with unit/integration specs; `gems/emb-server` —
   precompiled server distribution.
 - `cmd/` — server, `emb-top` dashboard, and the performance verification tool.

@@ -74,6 +74,11 @@ type Hosts struct {
 	// Run executes one inference over named tensors and returns the graph's
 	// named outputs. Nil makes emb.run unavailable.
 	Run func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error)
+	// Embed returns pooled, normalized embeddings for the given texts through
+	// the model's embedding path (the same path the EMB command uses, so
+	// results share the embedding cache). Nil makes emb.embed unavailable;
+	// host bindings leave it nil for models without an embedding config.
+	Embed func(texts []string) ([][]byte, error)
 	// EncodePretokenized word-encodes an already-split word list (emb.tokenize.pretokenized).
 	EncodePretokenized func(words []string, maxLen int) (ids, wordIDs []int64, err error)
 	// EncodePlain encodes a single text through the model tokenizer's own
@@ -87,14 +92,19 @@ type Hosts struct {
 	Image *ImageHost
 }
 
-// ImageHost exposes a model's image preprocessing to scripts. Preprocess
-// decodes raw image bytes through the plan and returns the channel-first
-// float32 tensor; the plan supplies the shape, input tensor name, and the
-// parameters reported by emb.image.info(). Preprocessing is pure compute, so
+// ImageHost exposes a model's image preprocessing to scripts. Plan resolves
+// the model's immutable preprocessing plan lazily, without opening inference
+// sessions, so emb.image.info can report configuration while image sessions
+// stay unopened. Preprocess decodes raw image bytes through the plan and
+// returns the channel-first float32 tensor. Preprocessing is pure compute, so
 // script replies remain deterministic and cacheable.
 type ImageHost struct {
-	Plan       imageproc.Plan
+	Plan       func() (imageproc.Plan, error)
 	Preprocess func(data []byte) ([]float32, error)
+	// Embed returns pooled, normalized image embeddings for raw encoded image
+	// bytes, in the model's shared text/image embedding space. Nil makes
+	// emb.image.embed unavailable.
+	Embed func(images [][]byte) ([][]byte, error)
 }
 
 // registerHosts installs the whitelisted emb.* and json host functions into
@@ -105,6 +115,12 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	emb.RawSetString("run", ls.NewFunction(func(ls *lua.LState) int {
 		return runHost(ls, h)
 	}))
+	emb.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
+		return embedHost(ls, h)
+	}))
+	emb.RawSetString("similarity", ls.NewFunction(similarityHost))
+	emb.RawSetString("distance", ls.NewFunction(distanceHost))
+	emb.RawSetString("API_VERSION", lua.LString(APIVersion))
 	emb.RawSetString("run_batch", ls.NewFunction(func(ls *lua.LState) int {
 		return runBatchHost(ls, h)
 	}))
@@ -128,6 +144,9 @@ func registerHosts(ls *lua.LState, h Hosts) {
 		}))
 		img.RawSetString("info", ls.NewFunction(func(ls *lua.LState) int {
 			return imageInfoHost(ls, h.Image)
+		}))
+		img.RawSetString("embed", ls.NewFunction(func(ls *lua.LState) int {
+			return imageEmbedHost(ls, h.Image)
 		}))
 		emb.RawSetString("image", img)
 	}
@@ -158,6 +177,11 @@ func runHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 	arg := ls.CheckTable(1)
+	opts, err := parseRunOptions(ls, 2)
+	if err != nil {
+		ls.RaiseError("emb.run: %v", err)
+		return 0
+	}
 	var names []string
 	arg.ForEach(func(k, _ lua.LValue) {
 		if s, ok := k.(lua.LString); ok {
@@ -189,14 +213,18 @@ func runHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 
-	outNames := make([]string, 0, len(outputs))
-	for n := range outputs {
-		outNames = append(outNames, n)
+	outNames, err := selectOutputNames(outputs, opts)
+	if err != nil {
+		ls.RaiseError("emb.run: %v", err)
+		return 0
 	}
-	sort.Strings(outNames)
+	if err := chargeOutputs(ls, outputs, outNames); err != nil {
+		ls.RaiseError("emb.run: %v", err)
+		return 0
+	}
 	result := ls.NewTable()
 	for _, n := range outNames {
-		result.RawSetString(n, namedTensorToLua(ls, outputs[n]))
+		result.RawSetString(n, namedTensorToLua(ls, outputs[n], opts.packed))
 	}
 	ls.Push(result)
 	return 1
@@ -284,6 +312,11 @@ func imagePreprocessHost(ls *lua.LState, ih *ImageHost) int {
 		ls.RaiseError("emb.image.preprocess is unavailable for this model")
 		return 0
 	}
+	plan, err := ih.Plan()
+	if err != nil {
+		ls.RaiseError("emb.image.preprocess: %v", err)
+		return 0
+	}
 	data := ls.CheckString(1)
 	tensor, err := ih.Preprocess([]byte(data))
 	if err != nil {
@@ -299,33 +332,39 @@ func imagePreprocessHost(ls *lua.LState, ih *ImageHost) int {
 		buf = binary.LittleEndian.AppendUint32(buf, math.Float32bits(v))
 	}
 	shape := ls.NewTable()
-	for i, d := range ih.Plan.Shape() {
+	for i, d := range plan.Shape() {
 		shape.RawSetInt(i+1, lua.LNumber(d))
 	}
 	result := ls.NewTable()
 	result.RawSetString("shape", shape)
 	result.RawSetString("bytes", lua.LString(buf))
 	result.RawSetString("dtype", lua.LString("f32"))
-	result.RawSetString("input", lua.LString(ih.Plan.Input))
+	result.RawSetString("input", lua.LString(plan.Input))
 	ls.Push(result)
 	return 1
 }
 
 // imageInfoHost implements emb.image.info(): the model's configured
-// preprocessing parameters.
+// preprocessing parameters. It resolves the plan lazily without opening image
+// sessions.
 func imageInfoHost(ls *lua.LState, ih *ImageHost) int {
+	plan, err := ih.Plan()
+	if err != nil {
+		ls.RaiseError("emb.image.info: %v", err)
+		return 0
+	}
 	result := ls.NewTable()
-	result.RawSetString("input", lua.LString(ih.Plan.Input))
-	result.RawSetString("size", lua.LNumber(ih.Plan.Size))
-	result.RawSetString("crop", lua.LString(ih.Plan.Crop.String()))
-	result.RawSetString("resample", lua.LString(ih.Plan.Resample.String()))
-	result.RawSetString("rescale", lua.LNumber(ih.Plan.Rescale))
+	result.RawSetString("input", lua.LString(plan.Input))
+	result.RawSetString("size", lua.LNumber(plan.Size))
+	result.RawSetString("crop", lua.LString(plan.Crop.String()))
+	result.RawSetString("resample", lua.LString(plan.Resample.String()))
+	result.RawSetString("rescale", lua.LNumber(plan.Rescale))
 	mean := ls.NewTable()
-	for i, v := range ih.Plan.Mean {
+	for i, v := range plan.Mean {
 		mean.RawSetInt(i+1, lua.LNumber(v))
 	}
 	std := ls.NewTable()
-	for i, v := range ih.Plan.Std {
+	for i, v := range plan.Std {
 		std.RawSetInt(i+1, lua.LNumber(v))
 	}
 	result.RawSetString("mean", mean)
@@ -580,14 +619,17 @@ func dtypeFromString(s string) onnx.TensorType {
 	return onnx.TensorInt64
 }
 
-func namedTensorToLua(ls *lua.LState, t onnx.NamedTensor) *lua.LTable {
-	out := ls.NewTable()
-	shape := ls.NewTable()
-	for i, d := range t.Shape {
-		shape.RawSetInt(i+1, lua.LNumber(d))
+func namedTensorToLua(ls *lua.LState, t onnx.NamedTensor, packed bool) *lua.LTable {
+	if packed {
+		return packedTensorTable(ls, t)
 	}
-	out.RawSetString("shape", shape)
-	data := ls.NewTable()
+	out := ls.NewTable()
+	out.RawSetString("shape", shapeTable(ls, t.Shape))
+	n := len(t.Float)
+	if t.DType == onnx.TensorInt64 {
+		n = len(t.Int64)
+	}
+	data := ls.CreateTable(0, n)
 	switch t.DType {
 	case onnx.TensorInt64:
 		for i, v := range t.Int64 {

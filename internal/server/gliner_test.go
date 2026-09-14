@@ -39,7 +39,7 @@ func serveGLiNER(t *testing.T, cacheCfg string) (string, *Server) {
 
 func glinerScriptSrc(t *testing.T) string {
 	t.Helper()
-	raw, err := os.ReadFile("../../examples/scripts/gliner2.lua")
+	raw, err := os.ReadFile("../../examples/scripts/reference/gliner2.lua")
 	if err != nil {
 		t.Fatal(err)
 	}

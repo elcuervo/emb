@@ -135,17 +135,17 @@ func TestRESP3IntrospectionMaps(t *testing.T) {
 		t.Fatalf("expected model map under RESP3, got %q", resp)
 	}
 
-	// EMB.INFO is a 15-pair map (no cache), same field order as RESP2.
+	// EMB.INFO is a 20-pair map (no cache), same field order as RESP2.
 	c.Write(respCommand("EMB.INFO", "test"))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "%15\r\n$3\r\ndim\r\n:4\r\n") {
+	if !strings.HasPrefix(resp, "%20\r\n$3\r\ndim\r\n:4\r\n") {
 		t.Fatalf("expected EMB.INFO map under RESP3, got %q", resp)
 	}
 
-	// EMB.STATS is a 46-pair map.
+	// EMB.STATS is a 50-pair map.
 	c.Write(respCommand("EMB.STATS"))
 	resp = readRESP(t, c)
-	if !strings.HasPrefix(resp, "%46\r\n$11\r\nuptime_secs\r\n") {
+	if !strings.HasPrefix(resp, "%50\r\n$11\r\nuptime_secs\r\n") {
 		t.Fatalf("expected EMB.STATS map under RESP3, got %q", resp)
 	}
 

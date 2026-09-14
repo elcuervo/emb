@@ -30,6 +30,11 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 		ls.RaiseError("emb.run_batch: empty item array")
 		return 0
 	}
+	opts, err := parseRunOptions(ls, 2)
+	if err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
+		return 0
+	}
 
 	// Parse each item into a named-tensor set (same production rules as emb.run),
 	// charging one request-wide tensor budget across all items and the merge.
@@ -102,15 +107,19 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 	// Split outputs along the batch axis.
 	n := len(items)
 	result := ls.NewTable()
-	outNames := make([]string, 0, len(outputs))
-	for name := range outputs {
-		outNames = append(outNames, name)
+	outNames, err := selectOutputNames(outputs, opts)
+	if err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
+		return 0
 	}
-	sort.Strings(outNames)
+	if err := chargeOutputs(ls, outputs, outNames); err != nil {
+		ls.RaiseError("emb.run_batch: %v", err)
+		return 0
+	}
 	for i := 0; i < n; i++ {
 		itemOut := ls.NewTable()
 		for _, name := range outNames {
-			itemOut.RawSetString(name, sliceBatchOutput(ls, outputs[name], i, n))
+			itemOut.RawSetString(name, sliceBatchOutput(ls, outputs[name], i, n, opts.packed))
 		}
 		result.RawSetInt(i+1, itemOut)
 	}
@@ -284,7 +293,7 @@ func scatterRow(out onnx.NamedTensor, dstStart int, in onnx.NamedTensor, maxInne
 // It validates that the output carries the expected batch dimension and data
 // length before slicing, so a graph output without a leading dim of size n
 // (e.g. a pooled or scalar result) raises a Lua error instead of panicking.
-func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int) *lua.LTable {
+func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int, packed bool) *lua.LTable {
 	out := ls.NewTable()
 	shape := t.Shape
 	if len(shape) == 0 {
@@ -304,13 +313,25 @@ func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int) *lua.LTable 
 		return out
 	}
 	batchShape := append([]int64{1}, shape[1:]...)
+	start := i * inner
+	if packed {
+		slice := onnx.NamedTensor{Name: t.Name, Shape: batchShape, DType: t.DType}
+		if t.DType == onnx.TensorInt64 {
+			slice.Int64 = t.Int64[start : start+inner]
+		} else {
+			slice.Float = t.Float[start : start+inner]
+		}
+		out.RawSetString("shape", shapeTable(ls, batchShape))
+		out.RawSetString("bytes", lua.LString(packTensor(slice)))
+		out.RawSetString("dtype", lua.LString(dtypeName(t.DType)))
+		return out
+	}
 	shapeTab := ls.NewTable()
 	for k, d := range batchShape {
 		shapeTab.RawSetInt(k+1, lua.LNumber(d))
 	}
 	out.RawSetString("shape", shapeTab)
 	data := ls.NewTable()
-	start := i * inner
 	switch t.DType {
 	case onnx.TensorInt64:
 		for j := 0; j < inner; j++ {

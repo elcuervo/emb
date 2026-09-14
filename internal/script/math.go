@@ -19,6 +19,17 @@ func registerMath(emb *lua.LTable, ls *lua.LState) {
 	m.RawSetString("softmax", ls.NewFunction(mathSoftmax))
 	m.RawSetString("argmax", ls.NewFunction(mathArgmax))
 	m.RawSetString("float32_bytes", ls.NewFunction(mathFloat32Bytes))
+	m.RawSetString("dot", ls.NewFunction(func(ls *lua.LState) int { return mathPairwise(ls, "dot") }))
+	m.RawSetString("cosine", ls.NewFunction(func(ls *lua.LState) int { return mathPairwise(ls, "cosine") }))
+	m.RawSetString("l2", ls.NewFunction(func(ls *lua.LState) int { return mathPairwise(ls, "l2") }))
+	m.RawSetString("norm", ls.NewFunction(mathNorm))
+	m.RawSetString("mean_pool", ls.NewFunction(mathMeanPool))
+	m.RawSetString("cls", ls.NewFunction(mathCLS))
+	m.RawSetString("topk", ls.NewFunction(mathTopk))
+	m.RawSetString("gather", ls.NewFunction(mathGather))
+	m.RawSetString("slice", ls.NewFunction(mathSlice))
+	m.RawSetString("scale", ls.NewFunction(mathScale))
+	m.RawSetString("add", ls.NewFunction(mathAdd))
 	emb.RawSetString("math", m)
 }
 
@@ -26,36 +37,31 @@ func registerMath(emb *lua.LTable, ls *lua.LState) {
 // array in, the element-wise sigmoid array out. Empty arrays error.
 func mathSigmoid(ls *lua.LState) int {
 	v := ls.Get(1)
-	switch t := v.(type) {
-	case lua.LNumber:
-		ls.Push(lua.LNumber(sigmoid(float64(t))))
+	if n, ok := v.(lua.LNumber); ok {
+		ls.Push(lua.LNumber(sigmoid(float64(n))))
 		return 1
-	case *lua.LTable:
-		vals, err := numberArrayFromLua(t)
-		if err != nil {
-			ls.RaiseError("emb.math.sigmoid: %v", err)
-			return 0
-		}
-		if len(vals) == 0 {
-			ls.RaiseError("emb.math.sigmoid: empty array")
-			return 0
-		}
-		out := ls.NewTable()
-		for i, x := range vals {
-			out.RawSetInt(i+1, lua.LNumber(sigmoid(x)))
-		}
-		ls.Push(out)
-		return 1
-	default:
-		ls.RaiseError("emb.math.sigmoid: expected number or array, got %s", v.Type())
+	}
+	vals, err := mathOperand(v)
+	if err != nil {
+		ls.RaiseError("emb.math.sigmoid: %v", err)
 		return 0
 	}
+	if len(vals) == 0 {
+		ls.RaiseError("emb.math.sigmoid: empty array")
+		return 0
+	}
+	out := ls.NewTable()
+	for i, x := range vals {
+		out.RawSetInt(i+1, lua.LNumber(sigmoid(x)))
+	}
+	ls.Push(out)
+	return 1
 }
 
 // mathSoftmax implements emb.math.softmax(vals): a numerically stable
 // softmax (subtract the max before exponentiating) over the input array.
 func mathSoftmax(ls *lua.LState) int {
-	vals, err := numberArrayFromLua(ls.CheckTable(1))
+	vals, err := mathOperand(ls.Get(1))
 	if err != nil {
 		ls.RaiseError("emb.math.softmax: %v", err)
 		return 0
@@ -87,7 +93,7 @@ func mathSoftmax(ls *lua.LState) int {
 // mathArgmax implements emb.math.argmax(vals): the 1-based index and value
 // of the first maximum element (multi-return: index, value).
 func mathArgmax(ls *lua.LState) int {
-	vals, err := numberArrayFromLua(ls.CheckTable(1))
+	vals, err := mathOperand(ls.Get(1))
 	if err != nil {
 		ls.RaiseError("emb.math.argmax: %v", err)
 		return 0

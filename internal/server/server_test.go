@@ -894,11 +894,11 @@ func TestServerINFOArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 30 {
-		t.Fatalf("expected 30 declared elements, got %d: %q", declared, resp)
+	if declared != 40 {
+		t.Fatalf("expected 40 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 30 {
-		t.Fatalf("expected 30 actual elements, got %d: %q", actual, resp)
+	if actual != 40 {
+		t.Fatalf("expected 40 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -912,11 +912,11 @@ func TestCacheInfoArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 44 {
-		t.Fatalf("expected 44 declared elements, got %d: %q", declared, resp)
+	if declared != 54 {
+		t.Fatalf("expected 54 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 44 {
-		t.Fatalf("expected 44 actual elements, got %d: %q", actual, resp)
+	if actual != 54 {
+		t.Fatalf("expected 54 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -1376,11 +1376,11 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 92 {
-				t.Fatalf("expected 92 declared elements, got %d: %q", declared, resp)
+			if declared != 100 {
+				t.Fatalf("expected 100 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 92 {
-				t.Fatalf("expected 92 actual elements, got %d: %q", actual, resp)
+			if actual != 100 {
+				t.Fatalf("expected 100 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
@@ -1390,6 +1390,7 @@ func TestStatsRESPParity(t *testing.T) {
 				"idle_timeout_ms", "max_connections", "max_concurrent_requests",
 				"mem", "cpu_user_usec", "cpu_sys_usec", "goroutines",
 				"cache_hits", "cache_misses", "cache_evictions",
+				"script_requests", "script_errors", "script_avg_latency_us", "per_model_scripts",
 			} {
 				if !strings.Contains(resp, f) {
 					t.Fatalf("missing field %q in stats: %q", f, resp)
@@ -1747,6 +1748,15 @@ func respValueLen(s []byte) (int, bool) {
 	case '+', '-':
 		j := bytes.IndexByte(s, '\r')
 		if j < 0 {
+			return 0, false
+		}
+		return j + 2, true
+	case ':':
+		j := bytes.IndexByte(s, '\r')
+		if j < 0 {
+			return 0, false
+		}
+		if _, err := strconv.Atoi(string(s[1:j])); err != nil {
 			return 0, false
 		}
 		return j + 2, true

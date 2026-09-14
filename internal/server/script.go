@@ -3,14 +3,17 @@ package server
 import (
 	"crypto/sha1" //nolint:gosec // script cache identity by SHA1, Redis semantics (not a security primitive)
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tidwall/redcon"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
@@ -18,6 +21,11 @@ import (
 // scriptCache stores script source by model and SHA1. Scripts are cached per
 // model (mirroring the registry): the same SHA against two models is two
 // entries, because the graph contract differs.
+//
+// Ownership and bound: the cache owns the source strings and is bounded per
+// model by max (default 1024). Eviction drops the oldest entry; EMB.SCRIPT
+// FLUSH drops a model's entries (or all of them). The compiled-bytecode cache
+// (script.Compiler) is bounded the same way and flushed alongside it.
 type scriptCache struct {
 	mu  sync.RWMutex
 	by  map[string]map[string]string // model → sha → source
@@ -232,6 +240,11 @@ type evalSplit struct {
 	args   []string
 }
 
+// errTokenizerUnavailable is returned by the lazily-bound tokenizer hosts when
+// the model's tokenizer does not provide the requested capability. It mirrors
+// the message the eager binding used to produce via a nil host.
+var errTokenizerUnavailable = errors.New("unavailable for this model")
+
 // splitEvalArgs parses `<model> <script> <numtexts> <text...> <arg...>`.
 func splitEvalArgs(args []string) (*evalSplit, error) {
 	if len(args) < 3 {
@@ -289,44 +302,157 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	s.active.Add(1)
 	defer s.active.Done()
 
+	// Record the evaluation for EMB.STATS and MONITOR (bounded ring, no text
+	// payloads). The clock starts before any work so the recorded latency
+	// covers parsing through reply writing, mirroring EMB.
+	started := time.Now()
+	failed := false
+	defer func() {
+		latency := time.Since(started)
+		s.scriptRequests.Add(1)
+		s.scriptLatencyUs.Add(latency.Microseconds())
+		if failed {
+			s.scriptErrors.Add(1)
+		}
+		if entry, err := s.reg.Resolve(model); err == nil {
+			entry.RecordScriptedEvaluation(failed)
+		}
+		s.monitor.Add(MonitorEvent{
+			AtUs:      started.UnixMicro(),
+			Model:     model,
+			Texts:     len(texts),
+			LatencyUs: latency.Microseconds(),
+			Err:       failed,
+		})
+	}()
+
 	if s.maxTexts > 0 && len(texts) > s.maxTexts {
+		failed = true
 		conn.WriteError(fmt.Sprintf("ERR too many texts: %d (max %d)", len(texts), s.maxTexts))
 		return
 	}
 
 	entry, err := s.reg.Resolve(model)
 	if err != nil {
-		conn.WriteError(fmt.Sprintf("ERR %v", err))
-		return
-	}
-	res, err := entry.ScriptResources()
-	if err != nil {
+		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
+	// Script resources (named-tensor sessions + the model tokenizer) are loaded
+	// lazily: only the host functions that actually need them trigger the load.
+	// A script that uses emb.embed alone, or that returns a constant, therefore
+	// never opens a second session pool.
+	var resOnce sync.Once
+	var res *registry.ScriptResources
+	var resErr error
+	resolve := func() (*registry.ScriptResources, error) {
+		resOnce.Do(func() { res, resErr = entry.ScriptResources() })
+		return res, resErr
+	}
+
 	hosts := script.Hosts{
 		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
-			return res.Session().RunNamed(inputs)
+			r, err := resolve()
+			if err != nil {
+				return nil, err
+			}
+			return r.Session().RunNamed(inputs)
+		},
+		EncodePretokenized: func(words []string, maxLen int) ([]int64, []int64, error) {
+			r, err := resolve()
+			if err != nil {
+				return nil, nil, err
+			}
+			pT, ok := r.Tokenizer.(tokenizer.PretokenizedTokenizer)
+			if !ok {
+				return nil, nil, errTokenizerUnavailable
+			}
+			return pT.EncodePretokenized(words, maxLen)
+		},
+		EncodePlain: func(text string, maxLen int) ([]int64, []int64, [][2]int, error) {
+			r, err := resolve()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			oT, ok := r.Tokenizer.(tokenizer.OffsetTokenizer)
+			if !ok {
+				return nil, nil, nil, errTokenizerUnavailable
+			}
+			return oT.EncodeOffsets(text, maxLen)
+		},
+		EncodePair: func(first, second string, maxLen int) ([]int64, []int64, [][2]int, int, error) {
+			r, err := resolve()
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			oT, ok := r.Tokenizer.(tokenizer.OffsetTokenizer)
+			if !ok {
+				return nil, nil, nil, 0, errTokenizerUnavailable
+			}
+			return oT.EncodePairOffsets(first, second, maxLen)
 		},
 	}
-	if pT, ok := res.Tokenizer.(tokenizer.PretokenizedTokenizer); ok {
-		hosts.EncodePretokenized = pT.EncodePretokenized
+	// emb.embed is bound only for models that can produce embeddings, so a
+	// script targeting a non-embeddable graph leaves the function absent (the
+	// same gating style as emb.image). The pool loads lazily on first call.
+	if entry.Embeddable() {
+		hosts.Embed = func(texts []string) ([][]byte, error) {
+			e, err := s.reg.GetOrInit(model)
+			if err != nil {
+				return nil, err
+			}
+			if s.maxTexts > 0 && len(texts) > s.maxTexts {
+				return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), s.maxTexts)
+			}
+			return s.embedTexts(e, model, texts)
+		}
 	}
-	if oT, ok := res.Tokenizer.(tokenizer.OffsetTokenizer); ok {
-		hosts.EncodePlain = oT.EncodeOffsets
-		hosts.EncodePair = oT.EncodePairOffsets
-	}
-	// A model with an image: block also gets emb.image.preprocess / emb.image.info.
-	// The plan copy carries the server's live byte/pixel caps so scripts cannot
-	// bypass them, exactly like EMB.IMG.
-	if imgRes, imgErr := entry.ImageResources(); imgErr == nil && imgRes != nil {
-		plan := imgRes.Plan
-		plan.MaxBytes = s.maxImageBytes
-		plan.MaxPixels = s.maxImagePixels
+	// A model with an image surface also gets emb.image.preprocess / info /
+	// embed. The plan resolves lazily without opening sessions (so info and
+	// preprocess allocate nothing image-related), and the image session pool is
+	// opened only on the first emb.image.embed, which shares the EMB.IMG cache
+	// through embedImages.
+	if entry.HasImageSurface() {
+		var imgOnce sync.Once
+		var imgRes *registry.ImageResources
+		var imgErr error
+		resolveImage := func() (*registry.ImageResources, error) {
+			imgOnce.Do(func() { imgRes, imgErr = entry.ImageResources() })
+			return imgRes, imgErr
+		}
 		hosts.Image = &script.ImageHost{
-			Plan:       plan,
-			Preprocess: plan.Tensor,
+			Plan: entry.ImagePlan,
+			Preprocess: func(data []byte) ([]float32, error) {
+				plan, err := entry.ImagePlan()
+				if err != nil {
+					return nil, err
+				}
+				// The per-request plan copy carries the server's live byte/pixel
+				// caps so scripts cannot bypass them, exactly like EMB.IMG.
+				plan.MaxBytes = s.maxImageBytes
+				plan.MaxPixels = s.maxImagePixels
+				return plan.Tensor(data)
+			},
+			Embed: func(images [][]byte) ([][]byte, error) {
+				r, err := resolveImage()
+				if err != nil {
+					return nil, err
+				}
+				if r == nil {
+					return nil, fmt.Errorf("model '%s' has no image configuration", model)
+				}
+				if s.maxImages > 0 && len(images) > s.maxImages {
+					return nil, fmt.Errorf("too many images: %d (max %d)", len(images), s.maxImages)
+				}
+				results, errs := s.embedImages(model, r, images)
+				for i, e := range errs {
+					if e != nil {
+						return nil, fmt.Errorf("image %d: %w", i, e)
+					}
+				}
+				return results, nil
+			},
 		}
 	}
 
@@ -356,6 +482,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	// text returns the value itself.
 	v, err := s.compiler.Eval(model, src, texts, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
 	if err != nil {
+		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
@@ -366,6 +493,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	} else {
 		tbl, ok := v.(*lua.LTable)
 		if !ok || tbl.Len() != len(texts) {
+			failed = true
 			conn.WriteError(fmt.Sprintf("ERR script must return one value per text (%d texts)", len(texts)))
 			return
 		}
@@ -378,6 +506,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	for i := range values {
 		encoded, err := script.EncodeReply(values[i])
 		if err != nil {
+			failed = true
 			conn.WriteError(fmt.Sprintf("ERR %v", err))
 			return
 		}

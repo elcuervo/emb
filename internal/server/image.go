@@ -123,7 +123,7 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	}
 	images := imgArgs[:n]
 
-	results, errs := s.embedImageBatch(modelName, res, images)
+	results, errs := s.embedImages(modelName, res, images)
 	for _, e := range errs {
 		if e != nil {
 			failed = true
@@ -168,7 +168,7 @@ func writeIMGResult(conn redcon.Conn, format replyFormat, results [][]byte, n, t
 	}
 }
 
-// embedImageBatch resolves raw image bytes to embeddings for one model: cache
+// embedImages resolves raw image bytes to embeddings for one model: cache
 // hits are returned directly, misses are preprocessed (in parallel) and run in
 // bounded batched inferences. results[i] is nil when images[i] failed and errs[i]
 // carries its error. A single bad image never fails the others.
@@ -179,7 +179,7 @@ func writeIMGResult(conn redcon.Conn, format replyFormat, results [][]byte, n, t
 // decoded tensors (plus one equally large contiguous batch) before any inference
 // runs. Chunking keeps peak memory proportional to the budget, not to the number
 // of images.
-func (s *Server) embedImageBatch(modelName string, res *registry.ImageResources, images [][]byte) ([][]byte, []error) {
+func (s *Server) embedImages(modelName string, res *registry.ImageResources, images [][]byte) ([][]byte, []error) {
 	results := make([][]byte, len(images))
 	errs := make([]error, len(images))
 	if len(images) == 0 {
@@ -365,7 +365,7 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, results [][]byte, idx int) 
 		failed = true
 		return
 	}
-	embeddings, errs := s.embedImageBatch(model, res, [][]byte{data})
+	embeddings, errs := s.embedImages(model, res, [][]byte{data})
 	if len(errs) == 1 && errs[0] != nil {
 		failed = true
 		return

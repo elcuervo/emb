@@ -223,7 +223,7 @@
          README.md §EMB.MULTI      the multi-model reply
          README.md §Example 2      the sst2 classifier reply
          README.md §Operations     EMB.READY
-         examples/scripts/sst2.lua the SHA1 below, which is sha1() of that
+         examples/scripts/snippets/sst2.lua the SHA1 below, which is sha1() of that
                                    file's exact bytes -- the same value the
                                    server's scriptSHA() returns
 
