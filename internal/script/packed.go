@@ -88,13 +88,14 @@ func selectOutputNames(outputs map[string]onnx.NamedTensor, opts runOptions) ([]
 	return names, nil
 }
 
-// elementCountOf returns the product of a tensor's dimensions.
-func elementCountOf(shape []int64) int64 {
-	n := int64(1)
-	for _, d := range shape {
-		n *= d
+// dtypeWidth returns the byte width of a tensor dtype: 4 for float32, 8 for
+// int64. It is the single source of the 4/8 constants used by the packed
+// bytes decoder, the renderer, packTensor, and chargeOutputs.
+func dtypeWidth(dt onnx.TensorType) int {
+	if dt == onnx.TensorInt64 {
+		return 8
 	}
-	return n
+	return 4
 }
 
 // chargeOutputs charges every selected output against the evaluation's tensor
@@ -105,13 +106,13 @@ func chargeOutputs(ls *lua.LState, outputs map[string]onnx.NamedTensor, names []
 	budget := requestBudget(ls)
 	for _, n := range names {
 		t := outputs[n]
-		count := elementCountOf(t.Shape)
-		width := int64(4)
-		if t.DType == onnx.TensorInt64 {
-			width = 8
+		count, err := shapeElementCount(t.Shape)
+		if err != nil {
+			return fmt.Errorf("output %q: %w", n, err)
 		}
-		if count*width > maxOutputBytes {
-			return fmt.Errorf("output %q is %d bytes, over the %d-byte output cap", n, count*width, maxOutputBytes)
+		width := int64(dtypeWidth(t.DType))
+		if count > int64(maxOutputBytes)/width {
+			return fmt.Errorf("output %q is over the %d-byte output cap (%d elements × %d bytes)", n, maxOutputBytes, count, width)
 		}
 		if err := budget.charge(count); err != nil {
 			return fmt.Errorf("output %q: %w", n, err)
@@ -132,27 +133,55 @@ func dtypeName(dt onnx.TensorType) string {
 // allocation: the packed form emb.run accepts on input and
 // emb.math.float32_bytes produces. No per-element Lua table is built.
 func packTensor(t onnx.NamedTensor) []byte {
+	width := dtypeWidth(t.DType)
 	if t.DType == onnx.TensorInt64 {
-		buf := make([]byte, 8*len(t.Int64))
+		buf := make([]byte, width*len(t.Int64))
 		for i, v := range t.Int64 {
 			binary.LittleEndian.PutUint64(buf[i*8:], uint64(v))
 		}
 		return buf
 	}
-	buf := make([]byte, 4*len(t.Float))
+	buf := make([]byte, width*len(t.Float))
 	for i, v := range t.Float {
 		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
 	}
 	return buf
 }
 
-// packedTensorTable renders one tensor in the packed form:
-// {shape = {...}, bytes = <string>, dtype = "f32"|"i64"}.
-func packedTensorTable(ls *lua.LState, t onnx.NamedTensor) *lua.LTable {
+// renderTensor is the single output-table builder for every returned tensor:
+//
+//	{shape = {...}, data = {...}, dtype = "f32"|"i64"}   default (array) form
+//	{shape = {...}, bytes = <string>, dtype = "f32"|"i64"} packed form
+//
+// Both forms carry dtype, so every documented output is already a valid
+// emb.run input spec: no dtype is re-inferred from element values (an
+// all-integral float32 output would otherwise infer i64 and mismatch the
+// session). emb.run, emb.run_batch slices, and the packed form all render
+// through here, so the two forms cannot drift.
+func renderTensor(ls *lua.LState, t onnx.NamedTensor, packed bool) *lua.LTable {
 	out := ls.NewTable()
 	out.RawSetString("shape", shapeTable(ls, t.Shape))
-	out.RawSetString("bytes", lua.LString(packTensor(t)))
 	out.RawSetString("dtype", lua.LString(dtypeName(t.DType)))
+	if packed {
+		out.RawSetString("bytes", lua.LString(packTensor(t)))
+		return out
+	}
+	n := len(t.Float)
+	if t.DType == onnx.TensorInt64 {
+		n = len(t.Int64)
+	}
+	data := ls.CreateTable(0, n)
+	switch t.DType {
+	case onnx.TensorInt64:
+		for i, v := range t.Int64 {
+			data.RawSetInt(i+1, lua.LNumber(v))
+		}
+	default:
+		for i, v := range t.Float {
+			data.RawSetInt(i+1, lua.LNumber(v))
+		}
+	}
+	out.RawSetString("data", data)
 	return out
 }
 

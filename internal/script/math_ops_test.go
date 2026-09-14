@@ -116,6 +116,23 @@ func TestMathGatherAndSliceAndScaleAndAdd(t *testing.T) {
 	}
 }
 
+// TestMathFractionalArgumentsRejected pins the integer rule for every scalar
+// math argument: a fractional k, offset, length, or index errors rather than
+// being silently truncated.
+func TestMathFractionalArgumentsRejected(t *testing.T) {
+	for _, src := range []string{
+		`return emb.math.gather({10, 20}, {1.5})`,
+		`return emb.math.slice({1, 2, 3}, {3}, 1.5, 2)`,
+		`return emb.math.slice({1, 2, 3}, {3}, 1, 1.5)`,
+		`return emb.math.topk({1, 2, 3}, 2.5)`,
+	} {
+		msg := evalErr(t, src)
+		if !strings.Contains(msg, "integer") {
+			t.Fatalf("%s error = %q, want an integer rejection", src, msg)
+		}
+	}
+}
+
 func TestMathShapeValidation(t *testing.T) {
 	msg := evalErr(t, `return emb.math.mean_pool({1, 2}, {1, 2, 2}, {1, 1})`)
 	if !strings.Contains(msg, "needs 4 elements") {

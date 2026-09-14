@@ -46,10 +46,12 @@ func TestExampleScriptsCompile(t *testing.T) {
 }
 
 // TestReplyCacheKeyUnchanged pins the content-addressed reply-cache key format
-// so the cache identity of existing scripts cannot drift silently.
+// (with the host API version folded into the digest) so the cache identity of
+// existing scripts cannot drift silently. The digest changed once when the
+// version was folded in (design decision 8); it is pinned again here.
 func TestReplyCacheKeyUnchanged(t *testing.T) {
 	got := CacheKey("minilm", "0123456789abcdef0123456789abcdef01234567", []string{"PERSON", "ORG"}, "hello world")
-	const want = "minilm:0123456789abcdef0123456789abcdef01234567:450876d0ec462235e107010e7abd9dee583a87803ebb476c5952736ea897cd4f:hello world"
+	const want = "minilm:0123456789abcdef0123456789abcdef01234567:9a249ece555117246fdca83f58b01aeccdd383e81eaf40d48e4ce2d63a221117:hello world"
 	if got != want {
 		t.Fatalf("reply cache key changed:\n got %q\nwant %q", got, want)
 	}
@@ -78,7 +80,7 @@ func TestHostSurfaceIsComplete(t *testing.T) {
 		"emb.math.mean_pool", "emb.math.cls", "emb.math.topk", "emb.math.gather",
 		"emb.math.slice", "emb.math.scale", "emb.math.add",
 		"emb.image.preprocess", "emb.image.info", "emb.image.embed",
-		"json.encode", "json.decode", "emb.API_VERSION",
+		"json.encode", "json.decode", "json.null", "emb.API_VERSION",
 	}
 	for _, path := range want {
 		v, err := EvalWithHosts("return type("+path+")", nil, nil, hosts, EvalOptions{})

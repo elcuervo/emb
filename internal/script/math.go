@@ -34,20 +34,17 @@ func registerMath(emb *lua.LTable, ls *lua.LState) {
 }
 
 // mathSigmoid implements emb.math.sigmoid(x): a number in, a number out; an
-// array in, the element-wise sigmoid array out. Empty arrays error.
+// array in, the element-wise sigmoid array out. The empty array has the
+// defined result {} (element-wise map); softmax and argmax need an element.
 func mathSigmoid(ls *lua.LState) int {
 	v := ls.Get(1)
 	if n, ok := v.(lua.LNumber); ok {
 		ls.Push(lua.LNumber(sigmoid(float64(n))))
 		return 1
 	}
-	vals, err := mathOperand(v)
+	vals, err := mathOperand(v, "operand", emptyAllowed)
 	if err != nil {
 		ls.RaiseError("emb.math.sigmoid: %v", err)
-		return 0
-	}
-	if len(vals) == 0 {
-		ls.RaiseError("emb.math.sigmoid: empty array")
 		return 0
 	}
 	out := ls.NewTable()
@@ -59,9 +56,16 @@ func mathSigmoid(ls *lua.LState) int {
 }
 
 // mathSoftmax implements emb.math.softmax(vals): a numerically stable
-// softmax (subtract the max before exponentiating) over the input array.
+// softmax (subtract the max before exponentiating) over the input array. A
+// single number takes the degenerate scalar form (the result is 1); an empty
+// array errors, since there is no element to normalize.
 func mathSoftmax(ls *lua.LState) int {
-	vals, err := mathOperand(ls.Get(1))
+	v := ls.Get(1)
+	if _, ok := v.(lua.LNumber); ok {
+		ls.Push(lua.LNumber(1))
+		return 1
+	}
+	vals, err := mathOperand(v, "operand", emptyAllowed)
 	if err != nil {
 		ls.RaiseError("emb.math.softmax: %v", err)
 		return 0
@@ -91,9 +95,16 @@ func mathSoftmax(ls *lua.LState) int {
 }
 
 // mathArgmax implements emb.math.argmax(vals): the 1-based index and value
-// of the first maximum element (multi-return: index, value).
+// of the first maximum element (multi-return: index, value). A single number
+// takes the degenerate scalar form (1, x); an empty array errors.
 func mathArgmax(ls *lua.LState) int {
-	vals, err := mathOperand(ls.Get(1))
+	v := ls.Get(1)
+	if n, ok := v.(lua.LNumber); ok {
+		ls.Push(lua.LNumber(1))
+		ls.Push(lua.LNumber(n))
+		return 2
+	}
+	vals, err := mathOperand(v, "operand", emptyAllowed)
 	if err != nil {
 		ls.RaiseError("emb.math.argmax: %v", err)
 		return 0

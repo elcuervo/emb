@@ -230,7 +230,7 @@ func runHost(ls *lua.LState, h Hosts) int {
 	}
 	result := ls.NewTable()
 	for _, n := range outNames {
-		result.RawSetString(n, namedTensorToLua(ls, outputs[n], opts.packed))
+		result.RawSetString(n, renderTensor(ls, outputs[n], opts.packed))
 	}
 	ls.Push(result)
 	return 1
@@ -492,10 +492,7 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 			return t, fmt.Errorf("bytes: %w", err)
 		}
 		t.DType = dtypeFromString(explicitDType)
-		width := int64(4)
-		if t.DType == onnx.TensorInt64 {
-			width = 8
-		}
+		width := int64(dtypeWidth(t.DType))
 		if want := count * width; int64(len(raw)) != want {
 			return t, fmt.Errorf("bytes length %d does not match shape element count %d × %d bytes (%d)", len(raw), count, width, want)
 		}
@@ -625,31 +622,6 @@ func dtypeFromString(s string) onnx.TensorType {
 	return onnx.TensorInt64
 }
 
-func namedTensorToLua(ls *lua.LState, t onnx.NamedTensor, packed bool) *lua.LTable {
-	if packed {
-		return packedTensorTable(ls, t)
-	}
-	out := ls.NewTable()
-	out.RawSetString("shape", shapeTable(ls, t.Shape))
-	n := len(t.Float)
-	if t.DType == onnx.TensorInt64 {
-		n = len(t.Int64)
-	}
-	data := ls.CreateTable(0, n)
-	switch t.DType {
-	case onnx.TensorInt64:
-		for i, v := range t.Int64 {
-			data.RawSetInt(i+1, lua.LNumber(v))
-		}
-	default:
-		for i, v := range t.Float {
-			data.RawSetInt(i+1, lua.LNumber(v))
-		}
-	}
-	out.RawSetString("data", data)
-	return out
-}
-
 // --- json host functions ------------------------------------------------
 
 func jsonEncodeHost(ls *lua.LState) int {
@@ -728,9 +700,17 @@ func anyToLuaValue(ls *lua.LState, v any) lua.LValue {
 	case string:
 		return lua.LString(t)
 	case []any:
+		// A Lua table cannot hold nil, so a JSON null element stores the
+		// json.null sentinel exactly as the object branch does; encoding the
+		// sentinel reproduces null, so arrays round-trip too.
 		tbl := ls.NewTable()
+		null := jsonNullSentinel(ls)
 		for i, e := range t {
-			tbl.RawSetInt(i+1, anyToLuaValue(ls, e))
+			if e == nil {
+				tbl.RawSetInt(i+1, null)
+			} else {
+				tbl.RawSetInt(i+1, anyToLuaValue(ls, e))
+			}
 		}
 		return tbl
 	case map[string]any:

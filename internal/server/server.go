@@ -1468,7 +1468,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
 		"Script input specs: {shape, data|fill|bytes, dtype} - fill builds a constant tensor host-side (no Lua data table); bytes packs little-endian elements; data/fill/bytes are mutually exclusive",
-		"Script blocks: emb.run / emb.run_batch(named tensors) emb.image.{preprocess,info} emb.tokenize.{encode,encode_pair,words,pretokenized} emb.math.{sigmoid,softmax,argmax,float32_bytes} json",
+		"Script blocks: emb.run / emb.run_batch(named tensors) emb.embed / emb.image.{embed,preprocess,info} emb.tokenize.{encode,encode_pair,words,pretokenized} emb.similarity / emb.distance emb.math.{sigmoid,softmax,argmax,float32_bytes,dot,cosine,l2,norm,mean_pool,cls,topk,gather,slice,scale,add} json.{encode,decode,null} emb.API_VERSION",
 	}, "\n")
 	conn.WriteBulkString(help)
 }

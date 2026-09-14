@@ -277,7 +277,7 @@ value per text. The whitelisted host blocks:
 
 | Block | Purpose |
 |-------|---------|
-| `emb.run(spec [, opts])` | Named-tensor inference → `{name = {shape, data}}` per output; `opts = {bytes = true, outputs = {"name", ...}}` |
+| `emb.run(spec [, opts])` | Named-tensor inference → `{name = {shape, data, dtype}}` per output; `opts = {bytes = true, outputs = {"name", ...}}` |
 | `emb.run_batch({item, ...} [, opts])` | One model call for N items (padded into a single session run), same `opts` |
 | `emb.embed(text \| {texts...} [, {bytes = true}])` | **Pooled, normalized embedding(s)** through the server's embedding path: shares the batcher, the `model:text` cache, and the ORT sessions with `EMB` |
 | `emb.image.embed(bytes \| {bytes...} [, {bytes = true}])` | Pooled image embedding(s) from the model's image branch, in the same space as `emb.embed` (URLs rejected) |
@@ -287,15 +287,15 @@ value per text. The whitelisted host blocks:
 | `emb.tokenize.encode_pair(a, b, max_len)` | BERT-family pair framing → `{ids, mask, offsets, sep}` |
 | `emb.tokenize.words(text)` | Generic word split (BertPreTokenizer rules, byte offsets) |
 | `emb.tokenize.pretokenized(words, max_len)` | Encode an already-split word list → `{ids, word_ids}` |
-| `emb.math.{sigmoid, softmax, argmax}` | Post-processing primitives (accept an array **or** packed bytes) |
+| `emb.math.{sigmoid, softmax, argmax}` | Post-processing primitives (accept a number, an array, **or** packed bytes); scalar `sigmoid(x)`/`softmax(x) == 1`/`argmax(x) == (1, x)` |
 | `emb.math.{dot, cosine, l2, norm}` | Vector reductions over arrays or packed bytes |
 | `emb.math.mean_pool(hidden, shape, mask)` / `emb.math.cls(hidden, shape)` | Pooled + L2-normalized vectors per batch row, host-side |
-| `emb.math.{topk, gather, slice, scale, add}` | Selection/arithmetic without interpreted loops |
+| `emb.math.{topk, gather, slice, scale, add}` | Selection/arithmetic without interpreted loops (scalar arguments must be integers) |
 | `emb.math.float32_bytes(vals)` | Pack numbers into ONE little-endian float32 bulk (`unpack('e*')`) |
 | `emb.image.preprocess(bytes)` | Decode and preprocess raw image bytes with the model's `image:` plan → `{shape, bytes, dtype, input}` ready for `emb.run` |
 | `emb.image.info()` | The model's configured image preprocessing parameters (`input`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`) |
 | `emb.API_VERSION` | Host-surface version string, for scripts that must detect an older server |
-| `json.{encode, decode}` | Structured replies / parsing |
+| `json.{encode, decode, null}` | Structured replies / parsing; `json.null` is the unique null sentinel (arrays round-trip) |
 
 `emb.embed` and `emb.image.embed` are available only for models that configure an
 embedding (`dim` + `pooling != none`) or image branch respectively; on any other
@@ -336,6 +336,37 @@ Replies convert through the standard grammar: Lua string → bulk, list → arra
 string-keyed table → hash (flat field/value pairs), `{err = "..."}` → error
 reply. `EMB.HELP` lists the full surface.
 
+### JSON values and math semantics
+
+`json.encode` / `json.decode` round-trip any JSON value. A Lua table cannot
+hold `nil`, so a decoded `null` — in an object value **or** an array element —
+is stored as the unique `json.null` sentinel, and encoding that sentinel
+reproduces `null`:
+
+```lua
+json.encode(json.decode('[1,null,3]'))   -- [1,null,3]
+json.encode({1, json.null, 3})           -- [1,null,3]
+```
+
+The `emb.math` helpers share one rule for scalars, empties, and argument types:
+
+- `sigmoid`, `softmax`, and `argmax` accept a single number as well as an array
+  or packed buffer. The scalar forms are the degenerate ones: `sigmoid(x)`,
+  `softmax(x) == 1`, and `argmax(x) == (1, x)`.
+- An operand with **zero elements** is valid exactly where the operation has a
+  defined empty result: element-wise maps (`sigmoid`, `scale`, `add`) and
+  selections (`topk`, `gather`, `slice`) return `{}`; linear reductions (`dot`,
+  `l2`, `norm`) return `0`; and `softmax`, `argmax`, `cosine`, and
+  `float32_bytes` error.
+- Scalar arguments must be integers: a fractional `k`, `offset`, `length`, or
+  index is an error, not a silent truncation. `shape` dimensions are validated
+  the same way.
+
+Every `emb.run` / `emb.run_batch` output carries its `dtype` in both forms
+(`{shape, data, dtype}` and the packed `{shape, bytes, dtype}`), so any output
+can be fed straight back as an input spec without the server re-inferring the
+dtype from element values.
+
 ### Packed and selective outputs
 
 `emb.run` and `emb.run_batch` take an options table as their final argument:
@@ -343,7 +374,8 @@ reply. `EMB.HELP` lists the full surface.
 - `{bytes = true}` returns each output as `{shape = {...}, bytes = <string>, dtype = "f32"|"i64"}`
   — one Lua string of little-endian raw elements, the exact inverse of the
   `bytes` input form. Nothing is materialized element-by-element, which is what
-  keeps large graph outputs cheap.
+  keeps large graph outputs cheap. Without the option each output is the
+  equivalent array form `{shape = {...}, data = {...}, dtype = ...}`.
 - `{outputs = {"logits"}}` materializes only the named outputs; an unknown name
   is an error listing what the graph produces.
 

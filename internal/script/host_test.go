@@ -284,6 +284,65 @@ return json.encode({PERSON = {"Tim Cook"}, score = 0.9823})`
 	}
 }
 
+// TestJSONNullRoundTrip pins the json.null sentinel rule: a decoded null is
+// preserved in array elements as well as object values, so encode(decode(s))
+// re-encodes byte-identically for any JSON value containing null.
+func TestJSONNullRoundTrip(t *testing.T) {
+	cases := []string{
+		`[1,null,3]`,
+		`{"a":[1,null]}`,
+		`[null,[1,null],{"b":null}]`,
+		`{"a":null,"b":1}`,
+	}
+	for _, doc := range cases {
+		src := `return json.encode(json.decode('` + doc + `'))`
+		v, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", doc, err)
+		}
+		if v.String() != doc {
+			t.Fatalf("json null round-trip: got %q, want %q", v.String(), doc)
+		}
+	}
+	// A user-constructed sentinel encodes as null.
+	v, err := EvalWithHosts(`return json.encode({1, json.null, 3})`, nil, nil, Hosts{}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != `[1,null,3]` {
+		t.Fatalf("constructed sentinel encoded as %q, want [1,null,3]", v.String())
+	}
+}
+
+// TestDefaultOutputCarriesDtype pins the round-trip property: every emb.run
+// array output is itself a valid input spec. An all-integral float32 output
+// would otherwise re-infer i64 and mismatch the session.
+func TestDefaultOutputCarriesDtype(t *testing.T) {
+	var gotDType onnx.TensorType
+	hosts := Hosts{Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+		if len(inputs) > 0 && inputs[0].Name == "y" {
+			gotDType = inputs[0].DType
+		}
+		// Declare a float32 output whose elements are all integral.
+		return map[string]onnx.NamedTensor{
+			"x_out": {Name: "x_out", Shape: []int64{2}, DType: onnx.TensorFloat32, Float: []float32{0, 0}},
+		}, nil
+	}}
+	v, err := EvalWithHosts(`
+local a = emb.run({x = {shape = {2}, data = {0, 0}}})
+local b = emb.run({y = a.x_out})
+return a.x_out.dtype .. "|" .. b.x_out.data[1]`, nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "f32|0" {
+		t.Fatalf("default-form dtype round-trip = %q, want f32|0", v.String())
+	}
+	if gotDType != onnx.TensorFloat32 {
+		t.Fatalf("output fed back inferred dtype %v, want float32", gotDType)
+	}
+}
+
 func TestHostRunExplicitDtype(t *testing.T) {
 	// All-integral data with an explicit f32 dtype must produce a float32
 	// tensor (zero-filled inputs like fused-CLIP pixel_values).

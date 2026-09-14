@@ -85,6 +85,21 @@ func TestCacheKeyArgBoundaries(t *testing.T) {
 	}
 }
 
+func TestCacheKeyFoldsAPIVersion(t *testing.T) {
+	old := cacheKey("1.1.0", "m", "s", []string{"a"}, "t")
+	newer := cacheKey("1.2.0", "m", "s", []string{"a"}, "t")
+	if old == newer {
+		t.Fatal("distinct API versions must produce distinct cache keys")
+	}
+	// A fixed version is deterministic, and CacheKey folds the live one.
+	if old != cacheKey("1.1.0", "m", "s", []string{"a"}, "t") {
+		t.Fatal("cache key is not deterministic for a fixed version")
+	}
+	if CacheKey("m", "s", []string{"a"}, "t") != cacheKey(APIVersion, "m", "s", []string{"a"}, "t") {
+		t.Fatal("CacheKey must fold the current APIVersion")
+	}
+}
+
 func TestEncodeReplyMatchesConvert(t *testing.T) {
 	v, err := Eval(`return {PERSON = {"Tim Cook"}, ORG = {"Apple"}}`, nil, nil, EvalOptions{})
 	if err != nil {
