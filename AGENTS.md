@@ -46,6 +46,10 @@ steps in `just all` may fail to find the ORT library).
 | Command | What it runs |
 |---|---|
 | `just test` | `go test ./...` |
+| `just verify-harness` | `CGO_ENABLED=0 go test ./internal/resp/... ./internal/embverify/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/` — no server, model, or ONNX |
+| `just deadcode` | `go tool deadcode ./...` filtered by `deadcode-allow.txt`; fails on any unreachable production function not on the documented test-seam list |
+| `just cover` | per-package statement coverage + total |
+| `just verify-embeddings` / `just verify-emb-multi` | reference-embedding checks; need a downloaded model (the Python reference also needs `sentence-transformers`) |
 | `just lint` | `golangci-lint run ./...` **then** `go vet ./...` (this is the "go vet" check) |
 | `just format` | `golangci-lint fmt ./...` (gofmt + goimports) |
 | `just build` | CGo build with `-ldflags "-X main.version=$(cat VERSION)"` → `bin/emb` |

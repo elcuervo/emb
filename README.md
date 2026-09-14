@@ -859,6 +859,8 @@ Ruby gems:
 just format          # Format all Go code (gofmt + goimports)
 just lint            # Linters (golangci-lint + go vet)
 just test            # Run tests
+just deadcode        # Fail on unreachable production functions (see deadcode-allow.txt)
+just cover           # Per-package statement coverage + total
 just bench           # Run Go benchmarks
 just bench-all       # redis-benchmark suite (see BENCHMARK.md)
 just bench-ruby      # End-to-end Ruby client harness (lazy-mode mechanisms) against a live server
@@ -866,6 +868,9 @@ just bench-ruby-multi # Same harness across TWO partitioned emb instances (url-a
 just build           # Build the emb binary
 just dev             # Build and run the server
 just download-model  # Download a model from HuggingFace
+just verify-harness  # Unit-test the shared verification harness (no server/model/ONNX)
+just verify-embeddings # Compare served embeddings to a Python reference (needs a model)
+just verify-emb-multi  # EMB.MULTI byte-equality vs sequential EMB (two models)
 ```
 
 Nix provides a reproducible dev shell with Go, ONNX Runtime, golangci-lint,

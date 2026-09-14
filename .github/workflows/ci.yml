@@ -134,7 +134,7 @@ jobs:
           CGO_LDFLAGS: "-L/opt/libtokenizers"
 
       - name: Test
-        run: go test -short ./internal/config/... ./internal/hfhub/...
+        run: go test -short ./internal/config/... ./internal/hfhub/... ./internal/resp/... ./internal/embverify/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/
         env:
           CGO_ENABLED: "0"
 

@@ -29,6 +29,24 @@ lint:
 test:
     go test ./...
 
+# Report production functions no entry point can reach. Names in
+# deadcode-allow.txt are intentional test seams, documented there; anything
+# else fails the check. Uses the pinned golang.org/x/tools tool dependency.
+deadcode:
+    @go tool deadcode ./... 2>/tmp/emb-deadcode.err > /tmp/emb-deadcode.out || { echo "✗ deadcode failed:"; cat /tmp/emb-deadcode.err; exit 1; }; \
+    unexpected=$(grep -vF -f deadcode-allow.txt /tmp/emb-deadcode.out || true); \
+    if [ -n "$unexpected" ]; then \
+        echo "✗ unreachable production functions:"; \
+        echo "$unexpected"; \
+        exit 1; \
+    fi; \
+    echo "✓ no unreachable production functions outside deadcode-allow.txt"
+
+# Per-package statement coverage plus an overall total (visibility, no gate).
+cover:
+    @go test -coverprofile=/tmp/emb-cover.out -covermode=atomic ./... 2>/dev/null | grep -E "coverage:" | sort
+    @go tool cover -func=/tmp/emb-cover.out | tail -1
+
 # Run all benchmarks (no baseline comparison)
 bench:
     go test -bench=. -benchmem ./...
@@ -118,19 +136,20 @@ download-libtokenizers:
 # Usage: just download-model [huggingface_repo] [output_dir]
 download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @mkdir -p {{dir}}
-    @test -f {{dir}}/model.onnx && echo "✓ Already exists at {{dir}}" && exit 0
-    @echo "Downloading {{repo}}..."
-    @# Try root model.onnx first, then onnx/model.onnx (newer repos)
-    @curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx"
-    @if [ -f "{{dir}}/model.onnx" ] && [ "$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
+    @if [ -f "{{dir}}/model.onnx" ]; then \
+        echo "✓ Already exists at {{dir}}"; \
+        exit 0; \
+    fi; \
+    echo "Downloading {{repo}}..."; \
+    curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx"; \
+    if [ -f "{{dir}}/model.onnx" ] && [ "$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
         echo "  model.onnx (root)"; \
     else \
         curl -sL "https://huggingface.co/{{repo}}/resolve/main/onnx/model.onnx" -o "{{dir}}/model.onnx" && echo "  model.onnx (onnx/)"; \
-    fi
-    @curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"
-    @curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"
-    @# Image preprocessing constants for EMB.IMG (best-effort; not all repos ship it).
-    @curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/preprocessor_config.json" -o "{{dir}}/preprocessor_config.json" && echo "  preprocessor_config.json" || rm -f "{{dir}}/preprocessor_config.json"
+    fi; \
+    curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"; \
+    curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"; \
+    curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/preprocessor_config.json" -o "{{dir}}/preprocessor_config.json" && echo "  preprocessor_config.json" || rm -f "{{dir}}/preprocessor_config.json"
 
 # Download a vision export for EMB.IMG: a SigLIP2/CLIP ONNX vision model plus
 # its preprocessor_config.json (mean/std/rescale/size/crop/resample).
@@ -285,6 +304,10 @@ bench-fargate-diff before after:
 
 # Verify embeddings match Python reference (requires downloaded model)
 verify-embeddings: build
+    @if [ ! -f ./models/minilm/model.onnx ]; then \
+        echo "ERROR: ./models/minilm/model.onnx not found — run 'just download-model' first"; \
+        exit 1; \
+    fi
     @echo "Generating reference embeddings..."
     @if [ ! -f reference-embeddings.json ]; then \
         python3 -m venv /tmp/emb-verify-venv; \
@@ -292,30 +315,39 @@ verify-embeddings: build
         pip install -q sentence-transformers torch --extra-index-url https://download.pytorch.org/whl/cpu; \
         python3 cmd/emb-verify/generate-reference.py; \
         rm -rf /tmp/emb-verify-venv; \
-    else echo "✓ reference-embeddings.json exists"; fi
+    else echo "✓ reference-embeddings.json exists (use 'python3 cmd/emb-verify/generate-reference.py --refresh' to regenerate)"; fi
     @echo "Starting server..."
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
-    sleep 3
+    @deadline=$(( $(date +%s) + 60 )); until redis-cli -p 6379 ping >/dev/null 2>&1; do \
+        kill -0 `cat /tmp/emb-srv.pid` 2>/dev/null || { echo "ERROR: emb exited during startup"; exit 1; }; \
+        [ $(date +%s) -lt $deadline ] || { echo "ERROR: emb not ready within 60s"; exit 1; }; \
+        sleep 1; \
+    done
     @echo "Running verification..."
-    CGO_ENABLED=0 go run ./cmd/emb-verify
+    CGO_ENABLED=0 go run ./cmd/emb-verify -model minilm -reference reference-embeddings.json
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
-# Download two models and test EMB.MULTI across them
+# Test EMB.MULTI byte-equality against sequential EMB across two models.
+# Reuses test-two-models.yaml (minilm + bge, auto-downloaded on first start on
+# 127.0.0.1:16379).
 # Usage: just verify-emb-multi
-verify-emb-multi:
-    @echo "Ensuring models are downloaded..."
-    just download-model "Xenova/all-MiniLM-L6-v2" "./models/minilm"
-    just download-model "onnx-community/siglip2-base-patch16-224-ONNX" "./models/siglip2"
-    @echo "Generating e2e config..."
-    @printf 'listen: ":6379"\nmodels:\n  minilm:\n    onnx: ./models/minilm/model.onnx\n    tokenizer: ./models/minilm/tokenizer.json\n    max_length: 256\n    pooling: mean\n    normalize: true\n  siglip2:\n    onnx: ./models/siglip2/text_model.onnx\n    tokenizer: ./models/siglip2/tokenizer.json\n    max_length: 256\n    output_tensor: pooler_output\n    pooling: none\n    normalize: true\n    dim: 768\n' > /tmp/emb-multi-config.yaml
-    @echo "Starting server with both models..."
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config /tmp/emb-multi-config.yaml & echo $! > /tmp/emb-srv.pid
-    sleep 3
+verify-emb-multi: build
+    @echo "Starting server with two models (test-two-models.yaml)..."
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config test-two-models.yaml & echo $! > /tmp/emb-srv.pid
+    @deadline=$(( $(date +%s) + 180 )); until redis-cli -p 16379 ping >/dev/null 2>&1; do \
+        kill -0 `cat /tmp/emb-srv.pid` 2>/dev/null || { echo "ERROR: emb exited during startup"; exit 1; }; \
+        [ $(date +%s) -lt $deadline ] || { echo "ERROR: emb not ready within 180s"; exit 1; }; \
+        sleep 1; \
+    done
     @echo "Running EMB.MULTI verification..."
-    CGO_ENABLED=0 go run ./cmd/emb-multi-verify
+    CGO_ENABLED=0 go run ./cmd/emb-multi-verify -addr 127.0.0.1:16379 -model-a minilm -model-b bge -dim-a 384 -dim-b 384
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
-    rm -f /tmp/emb-srv.pid /tmp/emb-multi-config.yaml
+    rm -f /tmp/emb-srv.pid
+
+# Unit-test the shared verification harness with no server, model, or ONNX.
+verify-harness:
+    CGO_ENABLED=0 go test -count=1 ./internal/resp/... ./internal/embverify/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/
 
 # Build Docker image (native platform)
 docker:

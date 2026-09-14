@@ -20,3 +20,7 @@ bench/fargate/out/
 
 # Wrangler's local build/state scratch, created by `wrangler deploy --dry-run`.
 /.wrangler/
+
+# Python bytecode caches
+__pycache__/
+*.pyc
