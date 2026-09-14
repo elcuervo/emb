@@ -160,7 +160,7 @@ func packTensor(t onnx.NamedTensor) []byte {
 // through here, so the two forms cannot drift.
 func renderTensor(ls *lua.LState, t onnx.NamedTensor, packed bool) *lua.LTable {
 	out := ls.NewTable()
-	out.RawSetString("shape", shapeTable(ls, t.Shape))
+	out.RawSetString("shape", numberTable(ls, t.Shape))
 	out.RawSetString("dtype", lua.LString(dtypeName(t.DType)))
 	if packed {
 		out.RawSetString("bytes", lua.LString(packTensor(t)))
@@ -183,12 +183,4 @@ func renderTensor(ls *lua.LState, t onnx.NamedTensor, packed bool) *lua.LTable {
 	}
 	out.RawSetString("data", data)
 	return out
-}
-
-func shapeTable(ls *lua.LState, shape []int64) *lua.LTable {
-	t := ls.NewTable()
-	for i, d := range shape {
-		t.RawSetInt(i+1, lua.LNumber(d))
-	}
-	return t
 }

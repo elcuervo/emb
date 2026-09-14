@@ -404,10 +404,10 @@ func TestScriptSourceCacheBounded(t *testing.T) {
 		c.Load("test", fmt.Sprintf("return %d", i))
 		c.Load("other", fmt.Sprintf("return %d", i))
 	}
-	if got := len(c.by["test"]); got != 4 {
+	if got := c.by.Len("test"); got != 4 {
 		t.Fatalf("script cache for test = %d entries, want 4", got)
 	}
-	if got := len(c.by["other"]); got != 4 {
+	if got := c.by.Len("other"); got != 4 {
 		t.Fatalf("script cache for other = %d entries, want 4", got)
 	}
 }

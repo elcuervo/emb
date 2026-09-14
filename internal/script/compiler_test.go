@@ -4,6 +4,10 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	lua "github.com/yuin/gopher-lua"
+
+	"github.com/elcuervo/emb/internal/bounded"
 )
 
 func TestCompilerReusesProto(t *testing.T) {
@@ -96,17 +100,14 @@ func TestCompilerProtoCacheBounded(t *testing.T) {
 	// EMB.EVAL feeds unique inline scripts per request; the prototype cache
 	// must stay bounded instead of growing without limit.
 	c := NewCompiler()
-	c.max = 8
+	c.protos = bounded.New[*lua.FunctionProto](8)
 	for i := 0; i < 100; i++ {
 		if _, err := c.Eval("m", "return '"+string(rune('a'+i%26))+"' .. "+strconv.Itoa(i), nil, nil, Hosts{}, EvalOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	c.mu.Lock()
-	n := len(c.protos["m"])
-	c.mu.Unlock()
-	if n != c.max {
-		t.Fatalf("expected proto cache capped at %d, got %d", c.max, n)
+	if n := c.protos.Len("m"); n != 8 {
+		t.Fatalf("expected proto cache capped at 8, got %d", n)
 	}
 }
 

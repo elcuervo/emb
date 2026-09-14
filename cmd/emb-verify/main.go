@@ -44,12 +44,6 @@ func run() error {
 	return verify(cfg, os.Stdout)
 }
 
-// printf writes one report line. A write failure cannot change the verdict, so
-// the error is deliberately discarded here and nowhere else.
-func printf(w io.Writer, format string, args ...any) {
-	_, _ = fmt.Fprintf(w, format, args...)
-}
-
 // verify loads the reference, embeds its sentence set through the server, and
 // reports each sentence's cosine. It returns an error when any sentence fails,
 // so the process exits non-zero.
@@ -61,14 +55,14 @@ func verify(cfg config, out io.Writer) error {
 	if err := ref.CheckInputs(cfg.model, cfg.dim, nil); err != nil {
 		return err
 	}
-	printf(out, "reference %s: model=%s dim=%d sentences=%d", cfg.refPath, ref.Model, ref.Dim, len(ref.Sentences))
+	embverify.Printf(out, "reference %s: model=%s dim=%d sentences=%d", cfg.refPath, ref.Model, ref.Dim, len(ref.Sentences))
 	if ref.Generator != "" {
-		printf(out, " generator=%s v%s", ref.Generator, ref.Version)
+		embverify.Printf(out, " generator=%s v%s", ref.Generator, ref.Version)
 	}
 	if v, ok := ref.Requires["sentence-transformers"]; ok {
-		printf(out, " sentence-transformers=%s", v)
+		embverify.Printf(out, " sentence-transformers=%s", v)
 	}
-	printf(out, "\n")
+	embverify.Printf(out, "\n")
 
 	c := resp.NewClient(cfg.addr, "", false)
 	c.SetTimeout(cfg.timeout)
@@ -82,27 +76,27 @@ func verify(cfg config, out io.Writer) error {
 	for i, sentence := range ref.Sentences {
 		vec, err := e.Embed(cfg.model, sentence)
 		if err != nil {
-			printf(out, "  ✗ %d: %v\n", i+1, err)
+			embverify.Printf(out, "  ✗ %d: %v\n", i+1, err)
 			failed++
 			continue
 		}
 		if len(vec) != ref.Dim {
-			printf(out, "  ✗ %d: got dim %d, want %d\n", i+1, len(vec), ref.Dim)
+			embverify.Printf(out, "  ✗ %d: got dim %d, want %d\n", i+1, len(vec), ref.Dim)
 			failed++
 			continue
 		}
 		cos := embverify.Cosine(vec, embverify.ToFloat32(ref.Embeddings[i]))
 		if cos >= cfg.minCos {
 			passed++
-			printf(out, "  ✓ %d: cosine=%.6f  (%s)\n", i+1, cos, sentence)
+			embverify.Printf(out, "  ✓ %d: cosine=%.6f  (%s)\n", i+1, cos, sentence)
 		} else {
 			failed++
-			printf(out, "  ✗ %d: cosine=%.6f < %.4f  (%s)\n", i+1, cos, cfg.minCos, sentence)
+			embverify.Printf(out, "  ✗ %d: cosine=%.6f < %.4f  (%s)\n", i+1, cos, cfg.minCos, sentence)
 		}
 	}
 
 	total := passed + failed
-	printf(out, "\n%d/%d passed at cosine ≥ %.4f, %d failed\n", passed, total, cfg.minCos, failed)
+	embverify.Printf(out, "\n%d/%d passed at cosine ≥ %.4f, %d failed\n", passed, total, cfg.minCos, failed)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d sentences fell below cosine %.4f", failed, total, cfg.minCos)
 	}

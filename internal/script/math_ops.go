@@ -158,15 +158,6 @@ func mathShape3(fn string, shape []int64, n int) (batch, seq, dim int, err error
 	return int(b), int(s), int(d), nil
 }
 
-// floatTable renders a slice as a Lua array of numbers.
-func floatTable(ls *lua.LState, vals []float64) *lua.LTable {
-	t := ls.CreateTable(0, len(vals))
-	for i, v := range vals {
-		t.RawSetInt(i+1, lua.LNumber(v))
-	}
-	return t
-}
-
 // l2NormalizeInPlace normalizes a vector to unit length (no-op on a zero
 // vector, which stays all zeros rather than producing NaNs).
 func l2NormalizeInPlace(v []float64) {
@@ -239,7 +230,7 @@ func mathMeanPool(ls *lua.LState) int {
 			vec[d] /= float64(n)
 		}
 		l2NormalizeInPlace(vec)
-		out.RawSetInt(b+1, floatTable(ls, vec))
+		out.RawSetInt(b+1, numberTable(ls, vec))
 	}
 	ls.Push(out)
 	return 1
@@ -273,7 +264,7 @@ func mathCLS(ls *lua.LState) int {
 		vec := make([]float64, dim)
 		copy(vec, hidden[b*seq*dim:b*seq*dim+dim])
 		l2NormalizeInPlace(vec)
-		out.RawSetInt(b+1, floatTable(ls, vec))
+		out.RawSetInt(b+1, numberTable(ls, vec))
 	}
 	ls.Push(out)
 	return 1
@@ -345,7 +336,7 @@ func mathGather(ls *lua.LState) int {
 		}
 		out[i] = vals[j]
 	}
-	ls.Push(floatTable(ls, out))
+	ls.Push(numberTable(ls, out))
 	return 1
 }
 
@@ -392,7 +383,7 @@ func mathSlice(ls *lua.LState) int {
 	}
 	out := make([]float64, length)
 	copy(out, vals[start:start+length])
-	ls.Push(floatTable(ls, out))
+	ls.Push(numberTable(ls, out))
 	return 1
 }
 
@@ -408,7 +399,7 @@ func mathScale(ls *lua.LState) int {
 	for i, v := range vals {
 		out[i] = v * factor
 	}
-	ls.Push(floatTable(ls, out))
+	ls.Push(numberTable(ls, out))
 	return 1
 }
 
@@ -432,6 +423,6 @@ func mathAdd(ls *lua.LState) int {
 	for i := range a {
 		out[i] = a[i] + b[i]
 	}
-	ls.Push(floatTable(ls, out))
+	ls.Push(numberTable(ls, out))
 	return 1
 }

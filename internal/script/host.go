@@ -276,8 +276,8 @@ func encodeHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 	result := ls.NewTable()
-	result.RawSetString("ids", int64ArrayToLua(ls, ids))
-	result.RawSetString("mask", int64ArrayToLua(ls, mask))
+	result.RawSetString("ids", numberTable(ls, ids))
+	result.RawSetString("mask", numberTable(ls, mask))
 	result.RawSetString("offsets", offsetsToLua(ls, offsets))
 	ls.Push(result)
 	return 1
@@ -300,8 +300,8 @@ func encodePairHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 	result := ls.NewTable()
-	result.RawSetString("ids", int64ArrayToLua(ls, ids))
-	result.RawSetString("mask", int64ArrayToLua(ls, mask))
+	result.RawSetString("ids", numberTable(ls, ids))
+	result.RawSetString("mask", numberTable(ls, mask))
 	result.RawSetString("offsets", offsetsToLua(ls, offsets))
 	result.RawSetString("sep", lua.LNumber(sep))
 	ls.Push(result)
@@ -410,8 +410,8 @@ func tokenizeHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 	result := ls.NewTable()
-	result.RawSetString("ids", int64ArrayToLua(ls, ids))
-	result.RawSetString("word_ids", int64ArrayToLua(ls, wordIDs))
+	result.RawSetString("ids", numberTable(ls, ids))
+	result.RawSetString("word_ids", numberTable(ls, wordIDs))
 	ls.Push(result)
 	return 1
 }
@@ -802,8 +802,10 @@ func numberArrayFromLua(t *lua.LTable) ([]float64, error) {
 	return out, nil
 }
 
-func int64ArrayToLua(ls *lua.LState, vals []int64) *lua.LTable {
-	t := ls.NewTable()
+// numberTable renders a numeric slice as a 1-based Lua array. It is the single
+// slice→table builder for token ids, shapes, and float vectors.
+func numberTable[T int64 | float64](ls *lua.LState, vals []T) *lua.LTable {
+	t := ls.CreateTable(len(vals), 0)
 	for i, v := range vals {
 		t.RawSetInt(i+1, lua.LNumber(v))
 	}

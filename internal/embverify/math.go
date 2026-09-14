@@ -54,9 +54,6 @@ func Cosine(a, b []float32) float64 {
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
-// PairCosine is Cosine under the name used by the retrieval verifier.
-func PairCosine(a, b []float32) float64 { return Cosine(a, b) }
-
 // RankDocuments returns document indices ordered by descending cosine to q.
 // Ties keep their original order.
 func RankDocuments(q []float32, docs [][]float32) []int {
@@ -65,7 +62,7 @@ func RankDocuments(q []float32, docs [][]float32) []int {
 		idx[i] = i
 	}
 	sort.SliceStable(idx, func(i, j int) bool {
-		return PairCosine(q, docs[idx[i]]) > PairCosine(q, docs[idx[j]])
+		return Cosine(q, docs[idx[i]]) > Cosine(q, docs[idx[j]])
 	})
 	return idx
 }
@@ -119,7 +116,7 @@ func MeanCosine(a, b [][]float32) (mean, minPair float64) {
 	}
 	minPair = 2
 	for i := range a {
-		c := PairCosine(a[i], b[i])
+		c := Cosine(a[i], b[i])
 		mean += c
 		if c < minPair {
 			minPair = c

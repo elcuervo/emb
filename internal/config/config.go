@@ -1,7 +1,9 @@
 package config
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -237,16 +239,9 @@ func Load(path string) (*Config, error) {
 		cfg.Listen = ":6379"
 	}
 
-	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
-		return nil, fmt.Errorf("both tls_cert and tls_key must be set together")
-	}
-
 	for name, m := range cfg.Models {
 		if strings.EqualFold(name, "blob") || strings.EqualFold(name, "values") {
 			return nil, fmt.Errorf("model %q: %q is a reserved word (reserved for the EMB reply-format keyword)", name, name)
-		}
-		if m.ModelRepo == "" && m.ONNX == "" {
-			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
 		}
 		if m.ExecutionMode != "" && m.ExecutionMode != "sequential" && m.ExecutionMode != "parallel" {
 			return nil, fmt.Errorf("model %q: execution_mode must be \"sequential\", \"parallel\", or unset, got %q", name, m.ExecutionMode)
@@ -256,7 +251,6 @@ func Load(path string) (*Config, error) {
 				return nil, err
 			}
 		}
-		cfg.Models[name] = m
 	}
 
 	configDir := filepath.Dir(path)
@@ -269,20 +263,37 @@ func Load(path string) (*Config, error) {
 		cfg.Models[name] = m
 	}
 
-	if err := cfg.validatePersistence(); err != nil {
-		return nil, err
-	}
-	if cfg.MaxTexts != nil && *cfg.MaxTexts < 0 {
-		return nil, fmt.Errorf("max_texts must be non-negative")
-	}
-	if cfg.MaxPairs != nil && *cfg.MaxPairs < 0 {
-		return nil, fmt.Errorf("max_pairs must be non-negative")
-	}
-	if err := cfg.validateImageLimits(); err != nil {
+	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// validate applies the checks shared by the YAML loader and the CLI parser:
+// the TLS pair, per-model onnx-or-repo, persistence, request-size caps, and the
+// image/command limits. Path-specific checks (reserved model names, execution
+// mode, image config shape in Load; the has-config/has-model requirement in
+// ParseFlags) stay with their caller.
+func (c *Config) validate() error {
+	if (c.TLSCert == "") != (c.TLSKey == "") {
+		return fmt.Errorf("both tls_cert and tls_key must be set together")
+	}
+	for name, m := range c.Models {
+		if m.ModelRepo == "" && m.ONNX == "" {
+			return fmt.Errorf("model %q: onnx path or model_repo is required", name)
+		}
+	}
+	if err := c.validatePersistence(); err != nil {
+		return err
+	}
+	if c.MaxTexts != nil && *c.MaxTexts < 0 {
+		return fmt.Errorf("max_texts must be non-negative")
+	}
+	if c.MaxPairs != nil && *c.MaxPairs < 0 {
+		return fmt.Errorf("max_pairs must be non-negative")
+	}
+	return c.validateImageLimits()
 }
 
 // validateImageLimits rejects negative top-level image/command limits.
@@ -405,6 +416,28 @@ type FlagConfig struct {
 	OrtLib string
 }
 
+// lenientInt is an int flag that ignores parse errors, preserving the
+// historical CLI behavior where a malformed numeric flag became 0 rather than a
+// fatal error.
+type lenientInt struct{ dst *int }
+
+func (l lenientInt) String() string {
+	if l.dst == nil {
+		return "0"
+	}
+	return strconv.Itoa(*l.dst)
+}
+
+func (l lenientInt) Set(s string) error {
+	n, _ := strconv.Atoi(s)
+	*l.dst = n
+	return nil
+}
+
+// ParseFlags parses the emb CLI. Model options are order-dependent: `-model
+// <name>` opens a section, the following `-model-*` flags attach to it, and a
+// `-model-*` flag with no preceding `-model` attaches to an implicit "model".
+// The standard flag package accepts both -flag and --flag forms.
 func ParseFlags(args []string) (*FlagConfig, error) {
 	fc := &FlagConfig{
 		Config: Config{
@@ -412,200 +445,159 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 			Models: make(map[string]ModelConfig),
 		},
 	}
-	var currentModel string
-	hasModel := false
-	hasConfig := false
+	fs := flag.NewFlagSet("emb", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
+	var (
+		currentModel string
+		hasModel     bool
+		hasConfig    bool
+		showVersion  bool
+	)
 
-		switch {
-		case arg == "-listen" && i+1 < len(args):
-			i++
-			fc.Listen = args[i]
-
-		case arg == "-config" && i+1 < len(args):
-			i++
-			hasConfig = true
-			cfg, err := Load(args[i])
-			if err != nil {
-				return nil, fmt.Errorf("loading config: %w", err)
-			}
-			fc.Config = *cfg
-			// -config implies models, mark hasModel so the check below passes
-			hasModel = true
-
-		case arg == "-password" && i+1 < len(args):
-			i++
-			fc.Password = args[i]
-
-		case arg == "-cache" && i+1 < len(args):
-			i++
-			fc.Cache = args[i]
-
-		case arg == "-cache-file" && i+1 < len(args):
-			i++
-			fc.CacheFile = args[i]
-
-		case arg == "-cache-load" && i+1 < len(args):
-			i++
-			v, err := strconv.ParseBool(args[i])
-			if err != nil {
-				return nil, fmt.Errorf("parsing -cache-load: %w", err)
-			}
-			fc.CacheLoad = &v
-
-		case arg == "-cache-save" && i+1 < len(args):
-			i++
-			fc.CacheSave = args[i]
-
-		case arg == "-cache-save-on-shutdown" && i+1 < len(args):
-			i++
-			v, err := strconv.ParseBool(args[i])
-			if err != nil {
-				return nil, fmt.Errorf("parsing -cache-save-on-shutdown: %w", err)
-			}
-			fc.CacheSaveOnShutdown = &v
-
-		case arg == "-cache-restore-limit" && i+1 < len(args):
-			i++
-			fc.CacheRestoreLimit = args[i]
-
-		case arg == "-cache-restore-reserve" && i+1 < len(args):
-			i++
-			fc.CacheRestoreReserve = args[i]
-
-		case arg == "-cache-save-rate-limit" && i+1 < len(args):
-			i++
-			fc.CacheSaveRateLimit = args[i]
-
-		case arg == "-idle-timeout" && i+1 < len(args):
-			i++
-			d, err := time.ParseDuration(args[i])
-			if err != nil {
-				return nil, fmt.Errorf("parsing -idle-timeout: %w", err)
-			}
-			if d < 0 {
-				return nil, fmt.Errorf("-idle-timeout must not be negative")
-			}
-			dur := Duration(d)
-			fc.IdleTimeout = &dur
-
-		case arg == "-max-connections" && i+1 < len(args):
-			i++
-			fc.MaxConnections, _ = strconv.Atoi(args[i])
-
-		case arg == "-max-concurrent-requests" && i+1 < len(args):
-			i++
-			fc.MaxConcurrentRequests, _ = strconv.Atoi(args[i])
-
-		case arg == "-max-texts" && i+1 < len(args):
-			i++
-			v, _ := strconv.Atoi(args[i])
-			fc.MaxTexts = &v
-
-		case arg == "-max-pairs" && i+1 < len(args):
-			i++
-			v, _ := strconv.Atoi(args[i])
-			fc.MaxPairs = &v
-
-		case arg == "-tls-cert" && i+1 < len(args):
-			i++
-			fc.TLSCert = args[i]
-
-		case arg == "-tls-key" && i+1 < len(args):
-			i++
-			fc.TLSKey = args[i]
-
-		case arg == "-ort-lib" && i+1 < len(args):
-			i++
-			fc.OrtLib = args[i]
-
-		case arg == "-version":
-			return nil, fmt.Errorf("__version__")
-
-		case arg == "-model" && i+1 < len(args):
-			i++
-			currentModel = args[i]
+	withModel := func(f func(*ModelConfig)) {
+		if currentModel == "" {
+			currentModel = "model"
 			fc.Models[currentModel] = ModelConfig{}
-			hasModel = true
-
-		case strings.HasPrefix(arg, "-model-"):
-			if currentModel == "" {
-				currentModel = "model"
-				fc.Models[currentModel] = ModelConfig{}
-			}
-			hasModel = true
-			m := fc.Models[currentModel]
-			val := func() string {
-				if i+1 < len(args) {
-					i++
-					return args[i]
-				}
-				return ""
-			}
-			switch arg {
-			case "-model-onnx":
-				m.ONNX = val()
-			case "-model-repo":
-				m.ModelRepo = val()
-			case "-model-tokenizer":
-				m.Tokenizer = val()
-			case "-pooling":
-				m.Pooling = val()
-			case "-normalize":
-				m.Normalize = true
-			case "-output-tensor":
-				m.OutputTensor = val()
-			case "-pad-output":
-				m.PadOutput = true
-			case "-dim":
-				m.Dim, _ = strconv.Atoi(val())
-			case "-max-length":
-				m.MaxLength, _ = strconv.Atoi(val())
-			case "-quantize":
-				m.Quantize = val()
-			case "-workers":
-				m.Workers, _ = strconv.Atoi(val())
-			case "-tokenize-workers":
-				v, _ := strconv.Atoi(val())
-				m.TokenizeWorkers = &v
-			case "-intra-op-threads":
-				m.IntraOpThreads, _ = strconv.Atoi(val())
-			case "-inter-op-threads":
-				m.InterOpThreads, _ = strconv.Atoi(val())
-			}
-			fc.Models[currentModel] = m
 		}
+		m := fc.Models[currentModel]
+		f(&m)
+		fc.Models[currentModel] = m
+		hasModel = true
+	}
+	modelString := func(name string, set func(*ModelConfig, string)) {
+		fs.Func(name, "", func(s string) error {
+			withModel(func(m *ModelConfig) { set(m, s) })
+			return nil
+		})
 	}
 
+	fs.StringVar(&fc.Listen, "listen", fc.Listen, "")
+	fs.Func("config", "", func(s string) error {
+		cfg, err := Load(s)
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		hasConfig = true
+		hasModel = true
+		fc.Config = *cfg
+		if fc.Models == nil {
+			fc.Models = make(map[string]ModelConfig)
+		}
+		return nil
+	})
+	fs.StringVar(&fc.Password, "password", "", "")
+	fs.StringVar(&fc.Cache, "cache", "", "")
+	fs.StringVar(&fc.CacheFile, "cache-file", "", "")
+	fs.Func("cache-load", "", func(s string) error {
+		v, err := strconv.ParseBool(s)
+		if err != nil {
+			return fmt.Errorf("parsing -cache-load: %w", err)
+		}
+		fc.CacheLoad = &v
+		return nil
+	})
+	fs.StringVar(&fc.CacheSave, "cache-save", "", "")
+	fs.Func("cache-save-on-shutdown", "", func(s string) error {
+		v, err := strconv.ParseBool(s)
+		if err != nil {
+			return fmt.Errorf("parsing -cache-save-on-shutdown: %w", err)
+		}
+		fc.CacheSaveOnShutdown = &v
+		return nil
+	})
+	fs.StringVar(&fc.CacheRestoreLimit, "cache-restore-limit", "", "")
+	fs.StringVar(&fc.CacheRestoreReserve, "cache-restore-reserve", "", "")
+	fs.StringVar(&fc.CacheSaveRateLimit, "cache-save-rate-limit", "", "")
+	fs.Func("idle-timeout", "", func(s string) error {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return fmt.Errorf("parsing -idle-timeout: %w", err)
+		}
+		if d < 0 {
+			return fmt.Errorf("-idle-timeout must not be negative")
+		}
+		dur := Duration(d)
+		fc.IdleTimeout = &dur
+		return nil
+	})
+	fs.Var(lenientInt{&fc.MaxConnections}, "max-connections", "")
+	fs.Var(lenientInt{&fc.MaxConcurrentRequests}, "max-concurrent-requests", "")
+	fs.Func("max-texts", "", func(s string) error {
+		v, _ := strconv.Atoi(s)
+		fc.MaxTexts = &v
+		return nil
+	})
+	fs.Func("max-pairs", "", func(s string) error {
+		v, _ := strconv.Atoi(s)
+		fc.MaxPairs = &v
+		return nil
+	})
+	fs.StringVar(&fc.TLSCert, "tls-cert", "", "")
+	fs.StringVar(&fc.TLSKey, "tls-key", "", "")
+	fs.StringVar(&fc.OrtLib, "ort-lib", "", "")
+	fs.BoolVar(&showVersion, "version", false, "")
+
+	fs.Func("model", "", func(name string) error {
+		currentModel = name
+		fc.Models[name] = ModelConfig{}
+		hasModel = true
+		return nil
+	})
+	modelString("model-onnx", func(m *ModelConfig, s string) { m.ONNX = s })
+	modelString("model-repo", func(m *ModelConfig, s string) { m.ModelRepo = s })
+	modelString("model-tokenizer", func(m *ModelConfig, s string) { m.Tokenizer = s })
+	modelString("model-pooling", func(m *ModelConfig, s string) { m.Pooling = s })
+	modelString("model-output-tensor", func(m *ModelConfig, s string) { m.OutputTensor = s })
+	modelString("model-quantize", func(m *ModelConfig, s string) { m.Quantize = s })
+	fs.BoolFunc("model-normalize", "", func(string) error {
+		withModel(func(m *ModelConfig) { m.Normalize = true })
+		return nil
+	})
+	fs.BoolFunc("model-pad-output", "", func(string) error {
+		withModel(func(m *ModelConfig) { m.PadOutput = true })
+		return nil
+	})
+	fs.Func("model-dim", "", func(s string) error {
+		withModel(func(m *ModelConfig) { m.Dim, _ = strconv.Atoi(s) })
+		return nil
+	})
+	fs.Func("model-max-length", "", func(s string) error {
+		withModel(func(m *ModelConfig) { m.MaxLength, _ = strconv.Atoi(s) })
+		return nil
+	})
+	fs.Func("model-workers", "", func(s string) error {
+		withModel(func(m *ModelConfig) { m.Workers, _ = strconv.Atoi(s) })
+		return nil
+	})
+	fs.Func("model-tokenize-workers", "", func(s string) error {
+		withModel(func(m *ModelConfig) {
+			v, _ := strconv.Atoi(s)
+			m.TokenizeWorkers = &v
+		})
+		return nil
+	})
+	fs.Func("model-intra-op-threads", "", func(s string) error {
+		withModel(func(m *ModelConfig) { m.IntraOpThreads, _ = strconv.Atoi(s) })
+		return nil
+	})
+	fs.Func("model-inter-op-threads", "", func(s string) error {
+		withModel(func(m *ModelConfig) { m.InterOpThreads, _ = strconv.Atoi(s) })
+		return nil
+	})
+
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	if showVersion {
+		return nil, fmt.Errorf("__version__")
+	}
 	if !hasConfig && !hasModel {
 		return nil, fmt.Errorf("no models configured; use -config, or -model with -model-onnx/-model-repo")
 	}
-
-	if (fc.TLSCert == "") != (fc.TLSKey == "") {
-		return nil, fmt.Errorf("both -tls-cert and -tls-key must be set together")
-	}
-
-	for name, m := range fc.Models {
-		if m.ModelRepo == "" && m.ONNX == "" {
-			return nil, fmt.Errorf("model %q: onnx path or model_repo is required", name)
-		}
-	}
-
-	if err := fc.validatePersistence(); err != nil {
+	if err := fc.validate(); err != nil {
 		return nil, err
 	}
-	if fc.MaxTexts != nil && *fc.MaxTexts < 0 {
-		return nil, fmt.Errorf("max_texts must be non-negative")
-	}
-	if fc.MaxPairs != nil && *fc.MaxPairs < 0 {
-		return nil, fmt.Errorf("max_pairs must be non-negative")
-	}
-	if err := fc.validateImageLimits(); err != nil {
-		return nil, err
-	}
-
 	return fc, nil
 }
 

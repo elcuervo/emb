@@ -35,14 +35,16 @@ func TestHeapInUseBytesPositive(t *testing.T) {
 // gopsutil reads the kernel's process accounting, so no GC is required to
 // prime the sampler.
 func TestCPUTimeNonDecreasing(t *testing.T) {
-	a := CPUUserUsec() + CPUSysUsec()
+	aUser, aSys := ProcessCPUTimes()
+	a := aUser + aSys
 
 	// Burn ~80ms of user CPU.
 	deadline := time.Now().Add(80 * time.Millisecond)
 	for time.Now().Before(deadline) {
 	}
 
-	b := CPUUserUsec() + CPUSysUsec()
+	bUser, bSys := ProcessCPUTimes()
+	b := bUser + bSys
 	if b < a {
 		t.Errorf("cumulative CPU time decreased: %d -> %d", a, b)
 	}

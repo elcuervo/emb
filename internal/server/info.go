@@ -66,13 +66,14 @@ type resourceStats struct {
 // source it falls back to the Go heap (registry.CurrentMemoryUsage semantics).
 func (s *Server) resourceStats() resourceStats {
 	rss, _ := registry.CurrentMemoryUsage()
+	cpuUserUsec, cpuSysUsec := registry.ProcessCPUTimes()
 	return resourceStats{
 		rssBytes:    rss,
 		heapBytes:   registry.HeapInUseBytes(),
 		totalSysMem: registry.TotalSystemMemory(),
 		goroutines:  registry.NumGoroutines(),
-		cpuUserUsec: registry.CPUUserUsec(),
-		cpuSysUsec:  registry.CPUSysUsec(),
+		cpuUserUsec: cpuUserUsec,
+		cpuSysUsec:  cpuSysUsec,
 	}
 }
 

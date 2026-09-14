@@ -84,10 +84,9 @@ type Server struct {
 	conns atomic.Int64
 	// activeReqs counts EMB/EMB.MULTI commands currently being processed, used
 	// both for EMB.STATS and for the max_concurrent_requests gate.
-	activeReqs  atomic.Int64
-	idleTimeout time.Duration
-	maxConns    int
-	// maxConcurrentReqs int
+	activeReqs        atomic.Int64
+	idleTimeout       time.Duration
+	maxConns          int
 	maxConcurrentReqs int
 	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via New).
 	// Oversized commands are truncated: overflow texts are not processed and their
@@ -648,13 +647,6 @@ func (s *Server) handlePING(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteString("PONG")
 }
 
-// handleHELLO negotiates the RESP protocol version for the connection. A bare
-// HELLO reports the current version; HELLO 2|3 switches the connection. The
-// reply carries server metadata in the standard Redis HELLO shape (a map under
-// RESP3, a flat array under RESP2) via the fork's WriteHello helper. HELLO is
-// deliberately NOT auth-exempt, so on a password-protected server the mux gate
-// rejects it with NOAUTH before this handler runs (see the spec's "HELLO
-// respects authentication" scenario).
 // handleCLIENT answers the small subset of CLIENT subcommands that RESP3 client
 // handshakes send. SETINFO carries client library metadata and is acknowledged
 // with OK; unknown subcommands get a NO such subcommand error. Without this,
@@ -676,6 +668,13 @@ func (s *Server) handleCLIENT(conn redcon.Conn, cmd redcon.Command) {
 	}
 }
 
+// handleHELLO negotiates the RESP protocol version for the connection. A bare
+// HELLO reports the current version; HELLO 2|3 switches the connection. The
+// reply carries server metadata in the standard Redis HELLO shape (a map under
+// RESP3, a flat array under RESP2) via the fork's WriteHello helper. HELLO is
+// deliberately NOT auth-exempt, so on a password-protected server the mux gate
+// rejects it with NOAUTH before this handler runs (see the spec's "HELLO
+// respects authentication" scenario).
 func (s *Server) handleHELLO(conn redcon.Conn, cmd redcon.Command) {
 	ver := conn.ProtocolVersion()
 	if len(cmd.Args) > 2 {
