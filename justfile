@@ -149,21 +149,27 @@ download-libtokenizers:
 
 # Download a model from HuggingFace
 # Usage: just download-model [huggingface_repo] [output_dir]
+# Fills in whatever is missing; a directory with only some of the files is
+# completed rather than reported as done.
 download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     @mkdir -p {{dir}}
-    @if [ -f "{{dir}}/model.onnx" ]; then \
+    @if [ -f "{{dir}}/model.onnx" ] && [ "$(wc -c < '{{dir}}/model.onnx')" -gt 100 ] && [ -f "{{dir}}/tokenizer.json" ] && [ -f "{{dir}}/config.json" ]; then \
         echo "✓ Already exists at {{dir}}"; \
         exit 0; \
     fi; \
-    echo "Downloading {{repo}}..."; \
-    curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx"; \
     if [ -f "{{dir}}/model.onnx" ] && [ "$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
-        echo "  model.onnx (root)"; \
+        echo "✓ model.onnx already exists at {{dir}}"; \
     else \
-        curl -sL "https://huggingface.co/{{repo}}/resolve/main/onnx/model.onnx" -o "{{dir}}/model.onnx" && echo "  model.onnx (onnx/)"; \
+        echo "Downloading {{repo}}..."; \
+        curl -sL "https://huggingface.co/{{repo}}/resolve/main/model.onnx" -o "{{dir}}/model.onnx"; \
+        if [ -f "{{dir}}/model.onnx" ] && [ "$(wc -c < '{{dir}}/model.onnx')" -gt 100 ]; then \
+            echo "  model.onnx (root)"; \
+        else \
+            curl -sL "https://huggingface.co/{{repo}}/resolve/main/onnx/model.onnx" -o "{{dir}}/model.onnx" && echo "  model.onnx (onnx/)"; \
+        fi; \
     fi; \
-    curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"; \
-    curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"; \
+    if [ -s "{{dir}}/tokenizer.json" ]; then echo "✓ tokenizer.json already exists"; else curl -sL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"; fi; \
+    if [ -s "{{dir}}/config.json" ]; then echo "✓ config.json already exists"; else curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"; fi; \
     curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/preprocessor_config.json" -o "{{dir}}/preprocessor_config.json" && echo "  preprocessor_config.json" || rm -f "{{dir}}/preprocessor_config.json"
 
 # Download a vision export for EMB.IMG: a SigLIP2/CLIP ONNX vision model plus

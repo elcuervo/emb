@@ -35,13 +35,15 @@ Hit = Data.define(:id, :score, :src, :body)
 # ── ingest ───────────────────────────────────────────────────────────────────
 
 # A paragraph is a good chunk: long enough to answer with, short enough to embed
-# sharply. Oversized ones are wrapped on a word boundary. Ids are a digest of
-# source and text, so re-indexing is idempotent and an edit replaces exactly the
-# chunks it touched.
+# sharply. Oversized ones are wrapped on a word boundary; a run with no
+# whitespace at all (a long URL, identifier, or encoded value) is cut at CHUNK
+# instead of being dropped, so every source character reaches an embedding.
+# Ids are a digest of source and text, so re-indexing is idempotent and an edit
+# replaces exactly the chunks it touched.
 def chunks(path)
   File.read(path)
       .split(/\n{2,}/)
-      .flat_map { |para| para.strip.scan(/.{1,#{CHUNK}}(?:\s|\z)/m) }
+      .flat_map { |para| para.strip.scan(/.{1,#{CHUNK}}(?:\s|\z)|\S{1,#{CHUNK}}/m) }
       .map(&:strip)
       .reject { |body| body.length < MIN }
       .map { |body| { id: Digest::SHA1.hexdigest("#{path}:#{body}"), body:, src: path } }
