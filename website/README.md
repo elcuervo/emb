@@ -324,18 +324,22 @@ column 2 of `.hero__body` — which has no `gap`, so column 2 is
 the axis width-independent, so every spine segment in the page and the route's
 fork can be derived from the one value instead of defended at seven widths.
 
-`--spine-w` exists because the SVG spine is `stroke-width: 4` in a 364-unit
-viewBox, so its rendered width scales with whatever the SVG is stretched to.
-Above 1000px that is `--plate`; below it the stack column is 50% of the content
-box and then the whole of it, and each breakpoint redeclares `--spine-w` to
-match. It is not a cosmetic number: measured with the plate-derived value at
-600px, the CSS line was **2.406px against a 6.066px SVG stroke** — a 2.5x
-weight step at the handover. With the per-breakpoint values the two agree to
-**0.009px** (`CORRECTIONS.md`).
+`--spine-w` is the line's one rendered weight. The SVG spine and the terrain
+route both carry `vector-effect="non-scaling-stroke"` with that width, so they
+render at exactly the CSS value however their viewBoxes are stretched to
+cover their boxes. Above 1000px that value is `--plate`-derived; below it each
+breakpoint redeclares `--spine-w` to hold the poster's weight as the stack
+column goes to 50% of the content box and then the whole of it. It is not a
+cosmetic number: measured with the plate-derived value at 600px, the CSS line
+was **2.406px against a 6.066px SVG stroke** — a 2.5x weight step at the
+handover — and the route rendered **~1.2px heavier** than the spine on a
+desktop frame. With the single width the segments agree exactly (`CORRECTIONS.md`).
 
 The hero keeps its own masked SVG spine (`.sig`), which is what hides the line
-behind each plate's front edge; the CSS spine begins where that SVG's box ends.
-Every block and the terrain carry a `.spine` segment. Sections have **no
+behind each plate's front edge; a CSS segment runs the hero's full height
+behind the column at the same axis and weight, and the masthead carries one
+from the very top of the page, so the line is unbroken from the viewport top
+to the ridge. Every block and the terrain carry a `.spine` segment. Sections have **no
 vertical margins, only padding**, so consecutive segments abut exactly — and
 where a segment would cross body copy it is either placed in a lane the copy
 clears, or hidden behind an opaque plate, which is the rule the hero's plates
@@ -592,9 +596,9 @@ wide form does not fit at the 14px floor: `.shift__row` puts
 ledger — `gliner2  span extraction` needs 23 characters where two 150px
 columns hold 17 — goes to one entry per row.
 
-**The spine is responsive in three states, and `--fold`, `--fold-hero` and
-`--art-w` move together in each one** — change one without the others and the
-line and the route come apart:
+**The spine is responsive in three states, and `--fold-n` and `--art-w` move
+together in each one** — change one without the others and the line and the
+route come apart:
 
 | Range | `--fold` | What the spine does |
 |---|---|---|
@@ -602,12 +606,17 @@ line and the route come apart:
 | 641–1000px | 25% | the lane is the **left** gutter — the stacked pipeline's plate centre — so the blocks and the emb-top band take the column right of it; the massif runs the full shell with the ridge shifted `-537.9` units onto that lane |
 | ≤640px | 90% | the rail moves to the right margin, because a 390px box cannot give both a centre line and a readable measure; everything is held to its left, the plates' own spine is hidden, and the rail threads the plates |
 
-Four measured corrections are baked in. The hero's CSS spine and the diagram
-now share **one grid cell** below 1001px: with the spine in a row of its own it
-began *below* the stage notes and left a 390px hole after the last plate
-(phones) or whenever the notes outgrew the plates (tablets). The stack's paper
-covers the line behind the plates, so the masked SVG spine still draws the gaps
-rather than the CSS one filling them in.
+Three measured corrections are baked in. The hero's CSS spine runs the shell's
+full height behind the column from the masthead's rule to the first block:
+confining it to a row of its own began it *below* the stage notes and left a
+390px hole after the last plate (phones) or whenever the notes outgrew the
+plates (tablets). The stack's paper covers the line behind the plates, so the
+masked SVG spine still draws the gaps rather than the CSS one filling them in.
+The masthead carries the same line from the very top of the page, and every
+spine segment, the SVG spine and the route render at exactly `--spine-w` — a
+`%` width resolved against different boxes (and, for the non-scaling SVG
+strokes, against the viewport diagonal), so the breakpoint values are lengths
+derived from the content box.
 
 And **on phones the rail moves to the right margin** (`--fold: 90%`), with the
 stage notes, the block grids, the header bars and the emb-top panel all held to

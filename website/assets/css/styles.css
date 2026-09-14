@@ -90,17 +90,19 @@
      probe in `website/tools/spine-probe.html` asserts they do not. */
   --fold-n: .6531;
   --fold: calc(var(--fold-n) * 100%);
-  /* ...and the same point in .hero__pipeline's own coordinates, which is
-     40.7% of that container at desktop and 25%/50% once the pipeline stacks */
-  --fold-hero: 40.7%;
   /* the gap between body copy and the line, either side of the lane */
   --fold-gap: clamp(14px, 1.4vw, 22px);
   /* The SVG spine is stroke-width 4 in a 364-unit viewBox, so its rendered
      width scales with whatever the SVG is stretched to -- and that stops
      being --plate the moment the pipeline stacks. Each breakpoint below
      redeclares this to match the stack's actual share of the content box
-     (50%, then 100%); measured at 600px, a fixed calc() off --plate gave a
-     2.41px CSS line against a 6.07px SVG stroke. */
+     (50%, then 100%). The values are LENGTHS, never percentages: a % width
+     resolves against whatever box it sits in, and the masthead and hero
+     spines sit in full-width sections while the block spines sit in content
+     boxes -- at 390px that was a 4.28px line handing over to a 3.84px one.
+     Lengths also keep the SVG spine and the route exact, since both carry
+     vector-effect="non-scaling-stroke" (a % stroke-width would resolve
+     against the viewport diagonal instead of the line's own width). */
   --spine-w: calc(var(--plate) * 4 / 364);
 
   /* the terrain. The artwork is 2172 x 770.2 (the extra 46.2 units at the top
@@ -366,6 +368,8 @@ button{ font: inherit; color: inherit; }
   padding-top: env(safe-area-inset-top, 0px);
 }
 .masthead__inner{
+  position: relative;
+  z-index: 1;
   display: grid;
   /* three clusters: brand+tagline, nav, CTA. The poster's nav block sits on
      55.6% of the frame — right of centre — and its CTA is flush with the
@@ -428,6 +432,14 @@ button{ font: inherit; color: inherit; }
 .nav a:hover::after{ transform: scaleX(1); }
 
 .masthead__cta{ justify-self: end; }
+/* The spine starts at the very top of the page: it is a child of the sticky
+   header (a full-width box at the viewport's left edge), so its axis is
+   --fold-x -- the same point --fold names, spelled against the viewport --
+   and it hands over to the hero's segment at the masthead rule. The header's
+   content sits above it, as block bodies sit above theirs. */
+.spine--masthead{
+  left: calc(var(--fold-x) - var(--spine-w) / 2);
+}
 .mobile-nav{ display: none; }
 
 /* ── 04 hero ───────────────────────────────────────────────────────── */
@@ -437,6 +449,20 @@ button{ font: inherit; color: inherit; }
   /* no trailing gap: the terrain's base IS the footer rule on the poster */
   padding-block: clamp(16px, 2vw, 30px) 0;
 }
+/* The hero's shell is lifted above the section-level spine the same way. */
+.shell--hero{ position: relative; z-index: 1; }
+/* The hero's segment runs the section's full height behind the shell -- from
+   the masthead's rule, behind the meta band and the wordmark (whose ink
+   covers it where they overlap), down through the pipeline to the first
+   block. It is a child of the full-width section, so its axis is --fold-x;
+   it shares its width with the masked SVG spine, so the two overdraw exactly
+   where they coincide. Sections have no margins, so the segments abut with
+   no step. */
+.spine--hero-top{
+  left: calc(var(--fold-x) - var(--spine-w) / 2);
+}
+.hero__meta,
+.hero__body{ position: relative; z-index: 1; }
 
 .hero__meta{
   display: grid;
@@ -645,25 +671,14 @@ button{ font: inherit; color: inherit; }
 }
 
 /* ── 06 pipeline ───────────────────────────────────────────────────── */
-/* Row 1 is the plate stack; row 2 is the CSS spine. The SVG spine (.sig) ends
-   at the bottom of the SVG box, which is the bottom of row 1, so the two meet
-   exactly -- .pipeline's -22px top margin cancels out of both. Row 2 runs to
-   the bottom of the hero's right column, which is the hero's own bottom. */
+/* The plate stack draws its own masked SVG spine (.sig), which hides the line
+   behind each plate's front edge; the shell's CSS spine runs behind the whole
+   column at the same axis and weight, so the hero reads as one line from the
+   masthead's rule to the first block. */
 .hero__pipeline{
   grid-column: 2;
   min-width: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   position: relative;
-}
-.spine--hero{
-  position: relative;
-  inset: auto;
-  grid-row: 2;
-  justify-self: start;
-  /* 40.7% of this container is the same point --fold names in the shell's
-     coordinates, so the two expressions cannot disagree */
-  margin-left: calc(var(--fold-hero) - var(--spine-w) / 2);
 }
 
 .pipeline{
@@ -683,8 +698,11 @@ button{ font: inherit; color: inherit; }
   overflow: visible;
 }
 .pipeline__svg{ display: block; width: 100%; height: auto; overflow: visible; }
-/* the spine starts just under the masthead, as on the poster */
-.sig{ fill: none; stroke: var(--accent); stroke-width: 4; }
+/* vector-effect (set as an attribute in the markup) keeps the stroke at its
+   CSS width however the viewBox is stretched, so the SVG spine renders at
+   exactly --spine-w at every breakpoint instead of only where the plate math
+   happens to agree with it. */
+.sig{ fill: none; stroke: var(--accent); stroke-width: var(--spine-w); }
 html.js .sig{
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -1120,9 +1138,12 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .route--signal{
   fill: none;
   stroke: currentColor;
-  /* viewBox units: 10/2172 of the artwork box is the spine's 4/364, so the
-     two orange strokes meet at the same weight as they hand over */
-  stroke-width: 10;
+  /* vector-effect (set as an attribute in the markup) keeps the stroke at its
+     CSS width however the cut-out is stretched to cover the viewport, so the
+     route meets the spine at exactly one weight at every width. It replaces
+     the old 10-unit stroke, which rendered ~1.2px heavier than the spine on
+     a desktop frame. */
+  stroke-width: var(--spine-w);
   stroke-linecap: square;
   stroke-linejoin: miter;
 }
@@ -1603,9 +1624,11 @@ html.js.is-ready .hero__prose{
 
   /* From here the pipeline stacks into two columns of its own, so the plate
      centre -- and therefore the whole page's axis -- moves to 25% of the
-     content box. --fold-n, --fold and --fold-hero move together or the spine
+     content box. --fold-n, --fold and the pipeline geometry move together or the spine
      and the route come apart. */
-  :root{ --fold-n: .25; --fold-hero: 25%; --art-min: 100vw; --spine-w: calc(200% / 364); }
+  :root{ --fold-n: .25; --art-min: 100vw;
+    /* half the content box is the stack's share here: lengths, per above */
+    --spine-w: calc((min(100vw, var(--maxw)) - var(--pad-l) - var(--pad-r)) * 0.5 * 4 / 364); }
 
   /* the blocks keep the lane: content right of it, line in the left gutter,
      measure 426.7px at 641 and 673.5px at 1000. The column placement that
@@ -1649,16 +1672,11 @@ html.js.is-ready .hero__prose{
   .topviz__src{ font-size: 14px; }
 
   .hero__pipeline{ grid-column: 1; margin-top: 48px; }
-  /* Once the pipeline stacks, the notes can outgrow the plate stack, and a
-     spine confined to the wrapper's second row then begins BELOW them --
-     leaving a hole after the last plate (measured: 390px at 390w). Collapse
-     the wrapper to one row and put the spine and the diagram in the same
-     cell: the stack's paper hides the line behind the plates (whose own
-     masked SVG line draws the visible gaps), and the seam below it is the
-     connector into the first block. */
-  .hero__pipeline{ grid-template-rows: auto; }
-  .pipeline{ grid-row: 1; grid-column: 1; position: relative; z-index: 1; }
-  .spine--hero{ grid-row: 1; grid-column: 1; }
+  /* The shell's spine already runs the hero's full height behind the column,
+     so there is no second-row tail to place: the stack's paper hides the
+     line behind the plates (whose own masked SVG line draws the visible
+     gaps), and the seam below it is the connector into the first block. */
+  .pipeline{ position: relative; z-index: 1; }
   .pipeline__stack{ background: var(--bg); }
   .pipeline{ margin: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .pipeline__svg{ overflow: hidden; }
@@ -1732,7 +1750,9 @@ html.js.is-ready .hero__prose{
      room for one: two orange lines 40% apart, both visible in the gaps
      between the plates, is not a composition. The rail passes behind the
      plates instead, which is the language the desktop hero already uses. */
-  :root{ --fold-n: .9; --fold-hero: 90%; --art-min: 156vw; --spine-w: calc(400% / 364); }
+  :root{ --fold-n: .9; --art-min: 156vw;
+    /* the whole content box: lengths, per above */
+    --spine-w: calc((min(100vw, var(--maxw)) - var(--pad-l) - var(--pad-r)) * 4 / 364); }
   .pipeline__svg .sig{ display: none; }
   /* ...and the stack's paper stops being a knockout, so the rail threads the
      plates on the right instead of being hidden for their whole box: at 90% of

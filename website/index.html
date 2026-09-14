@@ -45,6 +45,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
 
 <!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
 <header class="masthead">
+  <span class="spine spine--masthead" aria-hidden="true"></span>
   <div class="shell masthead__inner">
     <div class="masthead__brand">
       <a class="brand" href="#top" aria-label="emb — home">emb</a>
@@ -75,7 +76,8 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
 
 <!-- ══════════════════════════════════════════════════════════════ HERO -->
 <section class="hero" id="top" aria-labelledby="claim">
-  <div class="shell">
+  <span class="spine spine--hero-top" aria-hidden="true"></span>
+  <div class="shell shell--hero">
 
     <div class="hero__meta">
       <p class="hero__meta-a">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
@@ -448,8 +450,10 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
         <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 74)">TEXT</text>
       </g>
 
-      <!-- The signal enters each surface and passes behind its front edge. -->
-      <line class="sig" x1="182" y1="-490" x2="182" y2="553" pathLength="1" mask="url(#signal-depth)"/>
+      <!-- The signal enters each surface and passes behind its front edge.
+           vector-effect keeps the stroke at exactly --spine-w, so the SVG
+           spine and every CSS segment render at one weight. -->
+      <line class="sig" x1="182" y1="-490" x2="182" y2="553" pathLength="1" mask="url(#signal-depth)" vector-effect="non-scaling-stroke"/>
 </svg>
           </div>
 
@@ -478,8 +482,6 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
             </li>
           </ol>
         </div>
-
-        <span class="spine spine--hero" aria-hidden="true"></span>
       </div>
     </div>
   </div>
@@ -786,9 +788,9 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
         <div class="terrain__art">
         <img class="terrain__photo" src="assets/img/terrain-matte.png" width="2172" height="724" alt="" decoding="async" fetchpriority="low">
         <svg class="terrain__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          <path class="route--signal" pathLength="1"
+          <path class="route--signal" pathLength="1" vector-effect="non-scaling-stroke"
           d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
-          <path class="route--signal" pathLength="1"
+          <path class="route--signal" pathLength="1" vector-effect="non-scaling-stroke"
           d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
         </svg>
         </div>
