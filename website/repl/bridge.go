@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -329,7 +330,7 @@ func (b *Bridge) probe() bool {
 // request (a refused origin, or a completed preflight).
 func (b *Bridge) allowCORS(w http.ResponseWriter, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	if origin != "" && !b.origins[origin] && origin != requestOrigin(r) {
+	if origin != "" && !b.origins[origin] && origin != requestOrigin(r) && !sameHostOrigin(origin, r) {
 		writeJSON(w, http.StatusForbidden, errorEnvelope(codeRefused, "origin not allowed"))
 		return false
 	}
@@ -359,6 +360,24 @@ func requestOrigin(r *http.Request) string {
 		scheme = proto
 	}
 	return scheme + "://" + r.Host
+}
+
+// sameHostOrigin reports whether origin names the same host as the request,
+// ignoring the port. The local dev loop (`just website-dev`) serves the page and
+// the bridge from one machine on two ports, so the page's Origin can never equal
+// the bridge's own origin; this keeps that loop working at whichever address the
+// browser used — `localhost`, `127.0.0.1`, or a LAN IP. A different host is still
+// refused.
+func sameHostOrigin(origin string, r *http.Request) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(r.Host); err == nil {
+		host = h
+	}
+	return strings.EqualFold(u.Hostname(), host)
 }
 
 // capacityEnvelope turns a spend-bound refusal into the "capacity" reply kind,

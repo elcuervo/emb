@@ -960,3 +960,44 @@ func TestPresetsEndpointPublishesTheManifest(t *testing.T) {
 		t.Fatalf("first preset = %+v", body.Presets[0])
 	}
 }
+
+func TestCORSSameHostDifferentPortIsAllowed(t *testing.T) {
+	// The local dev loop serves the page and the bridge from one machine on two
+	// ports (`just website-dev`, reachable from the LAN), so the page's Origin
+	// never equals the bridge's own. Another host is still refused.
+	f := startFakeEmb(t)
+	b := newTestBridge(t, f.addr(), presets{}, testLimits(), "https://emb.is")
+	srv := httptest.NewServer(b.Handler())
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/exec",
+		strings.NewReader(`{"args":["PING"],"proto":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://192.168.1.20:8080")
+	req.Host = "192.168.1.20:8081"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("same-host, other-port POST = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "http://192.168.1.20:8080" {
+		t.Fatalf("allow-origin = %q, want the page's origin", got)
+	}
+
+	other, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/exec",
+		strings.NewReader(`{"args":["PING"],"proto":2}`))
+	other.Header.Set("Content-Type", "application/json")
+	other.Header.Set("Origin", "http://192.168.1.99:8080")
+	other.Host = "192.168.1.20:8081"
+	denied, err := http.DefaultClient.Do(other)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer denied.Body.Close()
+	if denied.StatusCode != http.StatusForbidden {
+		t.Fatalf("different-host POST = %d, want 403", denied.StatusCode)
+	}
+}

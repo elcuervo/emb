@@ -437,24 +437,29 @@ website port="8080":
 #   * emb         on 127.0.0.1:{{upstream}}, with a generated config whose model
 #                 paths point at ./models (the sandbox config's own paths are
 #                 the deployment's /data/models)
-#   * the bridge  on 127.0.0.1:{{bridge}}, reading that same config for its
-#                 preset digest manifest
-#   * the site    on :{{port}}, with the console's module origin rewritten from
-#                 https://cli.emb.is to the local bridge
+#   * the bridge  on {{bind}}:{{bridge}}, reading that same config for its preset
+#                 digest manifest
+#   * the site    on {{bind}}:{{port}}, with the console's module origin rewritten
+#                 from https://cli.emb.is to this machine's own address
 #
-# Open http://localhost:{{port}} and the console runs real commands. Ctrl-C
-# stops all three. `just website` still serves the published tree untouched —
-# use it for the ink probe, which must measure what ships.
+# Both the site and the bridge bind 0.0.0.0, so a phone on the same network can
+# open http://<your-lan-ip>:{{port}} and get the same live console: the module
+# origin is derived per request from the address the browser used, and the
+# bridge accepts that same host on its own port. emb stays on loopback.
+#
+# Ctrl-C stops all three. `just website` still serves the published tree
+# untouched — use it for the ink probe, which must measure what ships.
 #
 #   just website-dev                             # site :8080, bridge :8081, emb :6379
 #   just website-dev port=9000 bridge=9001 upstream=16399
-website-dev port="8080" bridge="8081" upstream="6379": sandbox-build
+#   just website-dev bind=127.0.0.1              # this machine only
+website-dev port="8080" bridge="8081" upstream="6379" bind="0.0.0.0": sandbox-build
     @set -eu; \
     cfg=website/repl/.sandbox-dev.yaml; \
     sed -e 's|^listen: .*|listen: "127.0.0.1:{{upstream}}"|' \
         -e "s|/data/models|$PWD/models|" \
         website/repl/sandbox.yaml > "$cfg"; \
-    echo "website-dev: emb 127.0.0.1:{{upstream}} · bridge 127.0.0.1:{{bridge}} · site http://localhost:{{port}}"; \
+    echo "website-dev: emb 127.0.0.1:{{upstream}} · bridge {{bind}}:{{bridge}} · site http://localhost:{{port}} (and http://<lan-ip>:{{port}})"; \
     emb=; repl=; \
     cleanup() { \
         if [ -n "$emb" ]; then kill "$emb" 2>/dev/null || true; fi; \
@@ -463,10 +468,10 @@ website-dev port="8080" bridge="8081" upstream="6379": sandbox-build
     }; \
     trap cleanup EXIT INT TERM; \
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" & emb=$!; \
-    ./bin/repl -listen 127.0.0.1:{{bridge}} -upstream 127.0.0.1:{{upstream}} \
+    ./bin/repl -listen {{bind}}:{{bridge}} -upstream 127.0.0.1:{{upstream}} \
         -config "$cfg" \
         -origins "http://localhost:{{port}},http://127.0.0.1:{{port}}" & repl=$!; \
-    python3 website/tools/dev-server.py {{port}} --sandbox http://127.0.0.1:{{bridge}}
+    python3 website/tools/dev-server.py {{port}} --bind {{bind}} --sandbox-port {{bridge}}
 
 # One-time browser fetch for the site's checks (needs `nix develop .#website`).
 # agent-browser drives Chrome for Testing; nixpkgs ships the CLI only. Set

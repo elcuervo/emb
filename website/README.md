@@ -318,9 +318,16 @@ starts all three and points the console at the local bridge:
 just website-dev        # site :8080, bridge :8081, emb :6379 — Ctrl-C stops all three
 ```
 
+Both the site and the bridge bind `0.0.0.0`, so a phone on the same network
+reaches the same live console at `http://<your-lan-ip>:8080`. `emb` stays on
+loopback. Pass `bind=127.0.0.1` to keep the loop to this machine.
+
 `website/tools/dev-server.py` is what makes that possible: it serves this tree
 with exactly one substitution in HTML responses, the console's module origin
-(`https://cli.emb.is` → the local bridge). The published page keeps a single
+(`https://cli.emb.is` → this machine). The origin is derived per request from
+the address the browser used, so a phone loads the module from the same LAN
+address it loaded the page from rather than from its own loopback, and the
+bridge accepts that host on its own port. The published page keeps a single
 source, and the page under test differs from production in that one respect.
 `just website` still serves the tree untouched — use it for the ink probe and
 anything else that must measure what ships.
