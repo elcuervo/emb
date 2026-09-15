@@ -50,6 +50,9 @@
   --muted:     #6B6963;
   --rule:      #B8B5AC;
   --rule-soft: #D5D1C6;
+  /* the hairline and plate edge on the #111110 dark-block ground; the light
+     --rule would be 9.22:1 there and read as a bright line, not a hairline */
+  --rule-dark: #292823;
   --leader-c:  #A9A69D;
   /* the stepped leader: its run, and the notes' inline padding (= the gap
      between the plate's right edge and the note's own box) */
@@ -768,8 +771,8 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   position: relative;
   padding-left: var(--lead);
   /* the poster's technical labels run out to the edge of the sheet, not to
-     the shell gutter: without this the description column is 116px and
-     "Raw text, documents," wraps onto a third line */
+     the shell gutter: without this the description column is 116px and the
+     INPUT note wraps onto a third line */
   margin-right: calc(-1 * var(--pad-r));
 }
 .note{
@@ -780,8 +783,8 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
      sheet edge is also the viewport edge, and `html{overflow-x: clip}` sliced
      the ink that reached it. Measured on glyph rects, three of the four
      descriptions ran 5.84px past at the 1086px reference frame (worst 8.89px
-     at 1070): the comma in "Raw text, documents," and the period in
-     "optimized execution." were being cut. `documentElement.scrollWidth`
+     at 1070): the comma in the INPUT note and the period in the INFERENCE
+     note were being cut. `documentElement.scrollWidth`
      stayed equal to `clientWidth` the whole time, because `overflow: clip`
      removes the clipped content from the scrollable region -- which is why
      twelve passes of measurement could not see it. The assertion that can is
@@ -846,17 +849,18 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .note.is-hot .note__desc{ color: var(--fg); }
 
 /* ── 07 blocks ─────────────────────────────────────────────────────── */
-/* Three movements between the hero and the massif. Each is built only from
-   the poster's atoms and carries the same spine; what changes is the ground
-   and the measure, because four capabilities at one weight read as a list.
+/* The landing's three movements between the hero and the massif, and the docs
+   surface's one-per-section sequence. Each block is built only from the
+   poster's atoms; on the landing each also carries the same spine, so what
+   changes is the ground and the measure, because several capabilities at one
+   weight read as a list.
 
-   The dark block is the page's only inversion, and it is made of material
-   already on the page: the SERVE plate's own #111110 and #292823. It is not
-   a new palette, it is this one turned over. Its --muted is remapped to
-   --rule because #6B6963 is only 3.40:1 on #111110.
+   The dark block is an inversion, not a new palette: it is made of material
+   already on the page, the SERVE plate's own #111110 and #292823. Its --muted
+   is remapped to --rule because #6B6963 is only 3.40:1 on #111110.
 
-   Sections carry padding and NEVER vertical margins: that is what lets
-   consecutive spine segments abut with no seam. */
+   Blocks carry padding and NEVER vertical margins: on the landing that is what
+   lets consecutive spine segments abut with no seam. */
 .block{ position: relative; }
 /* The positioned wrapper IS the shell's content box, which is what makes
    `left: <percentage>` mean the same thing here as it means for the hero's
@@ -952,7 +956,7 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   font-size: clamp(13px, 1.25vw, 16px);
   line-height: 1.45;
 }
-.block--dark .cap{ border-top-color: #292823; }
+.block--dark .cap{ border-top-color: var(--rule-dark); }
 .block--dark .cap:first-child,
 .block--dark .block__main--ledger > .cap:nth-child(2){ border-top-color: var(--rule); }
 
@@ -983,7 +987,7 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   border-top: 1px solid var(--rule);
   padding-top: clamp(12px, 1.3vw, 18px);
 }
-.block--dark .code{ border-top-color: #292823; }
+.block--dark .code{ border-top-color: var(--rule-dark); }
 .code__body{
   margin: 0;
   font-family: var(--mono);

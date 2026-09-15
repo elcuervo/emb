@@ -77,7 +77,8 @@ project, not a separate docs site.
 
 The reading experience worth staying in comes from measure and rhythm, not
 decoration: a narrow prose column for explanation, full-width ruled rows for
-command reference, and code specimens that are the only dark objects on the page.
+command reference, and the landing's own paper/dark block rhythm — a solid
+section bar and a full-bleed ground — so the page opens and beats like the poster.
 
 ## Constraints
 
@@ -88,9 +89,9 @@ command reference, and code specimens that are the only dark objects on the page
   (`--fold: 65.31%`, computed from the landing's two-column spread). This surface
   has no such composition, so it carries no spine, no `--fold`, and no second
   orange line.
-- **Atoms only**: `rule-head` with its hairline rule, ruled ledgers, the code
-  specimen treatment, the annotation form. No cards, no gradients, no radii, no
-  decorative shadows, no glass.
+- **Atoms only**: the shared `.block`/`.block--paper`/`.block--dark` ground and
+  `.block__head` bar, ruled ledgers, the code specimen treatment, the annotation
+  form. No cards, no gradients, no radii, no decorative shadows, no glass.
 - **No `--fold`, and no redefined token.** Anything both surfaces need is defined
   once in the shared stylesheet; this surface's own stylesheet carries
   page-specific rules only.
@@ -119,16 +120,17 @@ set.
 ## Direction contract
 
 THESIS: The documentation is the poster's own hand applied to a reference — one
-rule, one measure, one dark object per idea — rather than a separate docs site in
-the project's colours. It refuses the category default of a sidebar-plus-cards
-docs layout by using the landing's own ruled-ledger and code-specimen atoms, so a
-reader recognizes the project from the first command block.
+rule, one measure, one solid section bar per idea, and the landing's black/cream
+block rhythm — rather than a separate docs site in the project's colours. It
+refuses the category default of a sidebar-plus-cards docs layout by using the
+landing's own ruled-ledger, code-specimen and inverted-block atoms, so a reader
+recognizes the project from the first command block.
 
 OWN-WORLD: Identical to the landing and nothing added — `#F3F0E8` paper, `#0B0B0B`
 ink, `#FF5A1F` only as a surface, `#C23D00` as the accent ink, the three
 self-hosted families, hairline rules, tracked mono labels, and the `#111110` /
-`#292823` code grounds. With all content removed, what remains is a ruled
-ledger, a hairline rule under a tracked label, and a black code block.
+`#292823` block inversion and code grounds. With all content removed, what remains
+is a ruled ledger, a solid section bar, and the page's black/cream block rhythm.
 
 STORY: The visitor gets a vector out of the model in the first screen, then finds
 any later answer — a command's arity, a reply's shape, a configuration key, a
@@ -147,8 +149,10 @@ SECTION ORDER: install → first vector; commands; replies and protocol;
 configuration; Lua API; operations; benchmarks; clients and framework
 integration; status and version. Commands precede configuration, configuration
 precedes the Lua surface, and the Lua surface precedes operations, because that
-is the order a reader asks the questions. Every section carries an anchor, and
-the first one is reachable without scrolling past anything.
+is the order a reader asks the questions. Every section is a full-bleed block
+whose ground alternates paper/dark (install paper, commands dark, and so on to
+status paper), carries its own solid bar, and has a stable anchor; the first one
+is reachable without scrolling past anything.
 
 FORM: Refinement of an established world, with a new surface inside it
 (`new-work.md` §3, first case). The visual system is fixed by `DESIGN.md` and the

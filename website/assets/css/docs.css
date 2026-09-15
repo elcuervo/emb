@@ -65,18 +65,14 @@
 .doc-toc a:hover{ color: var(--accent-ink); }
 .doc-toc__n{ font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: .06em; }
 
-/* ── sections ────────────────────────────────────────────────────────── */
-.doc-sec{ margin-top: clamp(52px, 6vw, 104px); scroll-margin-top: clamp(64px, 6vw, 96px); }
-.doc-sec > h2{
-  font-family: var(--sans);
-  font-weight: 800;
-  font-size: clamp(20px, 2.4vw, 32px);
-  line-height: 1.1;
-  letter-spacing: -.015em;
-  padding-bottom: clamp(10px, 1.1vw, 16px);
-  border-bottom: 1.5px solid var(--fg);
-}
-.doc-sec > * + *{ margin-top: clamp(16px, 1.7vw, 26px); }
+/* ── sections are blocks ───────────────────────────────────────────────
+   Each section is now a full-bleed `.block` from styles.css, so this surface
+   carries the landing's black/cream rhythm instead of one flat sheet: a solid
+   `.block__head` bar per section, and the same #111110 inversion. The page
+   still has no spine and no `--fold` -- it borrows only the ground and the
+   bar. The `.doc-body` keeps the old section's internal rhythm. */
+.doc-body{ margin-top: clamp(22px, 2.6vw, 42px); }
+.doc-body > * + *{ margin-top: clamp(16px, 1.7vw, 26px); }
 
 .doc-prose{ max-width: 68ch; font-size: clamp(15px, 1.1vw, 16px); }
 .doc-prose + .doc-prose{ margin-top: clamp(12px, 1.2vw, 18px); }
@@ -155,12 +151,27 @@
 .doc-status dt{ color: var(--muted); letter-spacing: .05em; }
 .doc-status dd{ min-width: 0; overflow-wrap: anywhere; }
 
+/* ── the inverted block ────────────────────────────────────────────────
+   `.block--dark` supplies the ground, the paper text colour and the
+   `--muted` remap; these are the page-local primitives it cannot know about,
+   turned over with the same `--rule-dark` hairline the landing's dark block
+   uses. Links and inline code move to `--accent` / `--bg`: `--accent-ink` is
+   only 2.4:1 on #111110, where `--accent` is 6.06:1. */
+.block--dark .doc-prose code,
+.block--dark .doc-note code,
+.block--dark .doc-cmds code{ color: var(--bg); }
+.block--dark .doc-prose a{ color: var(--accent); }
+.block--dark .doc-note{ border-top-color: var(--rule-dark); }
+.block--dark .doc-note strong{ color: var(--bg); }
+.block--dark .doc-cmds{ border-top-color: var(--rule); }
+.block--dark .doc-cmds dt,
+.block--dark .doc-cmds dd{ border-bottom-color: var(--rule-dark); }
+
 /* code specimens reuse the landing's `.code` atom unchanged; the only
    page-local need is that a specimen inside a docs column may be wide. */
-.doc-sec .code{ max-width: 96ch; }
-
-/* ── foot ────────────────────────────────────────────────────────────── */
-.doc-foot{ margin-top: clamp(56px, 6vw, 110px); }
+/* code specimens reuse the landing's `.code` atom unchanged; the only
+   page-local need is that a specimen inside a docs column may be wide. */
+.doc-body .code{ max-width: 96ch; }
 
 /* ── responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 1000px){
@@ -179,5 +190,4 @@
 
 @media (max-width: 640px){
   .doc-toc ol{ grid-template-columns: minmax(0, 1fr); }
-  .doc-sec{ scroll-margin-top: 88px; }
 }

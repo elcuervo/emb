@@ -47,8 +47,6 @@
     <nav class="nav" aria-label="Primary">
       <a href="index.html">Docs</a>
       <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
-      <a href="#configuration">Models</a>
-      <a href="https://github.com/elcuervo/emb/issues" rel="noopener">Community</a>
     </nav>
 
     <details class="mobile-nav">
@@ -56,8 +54,6 @@
       <nav aria-label="Mobile">
         <a href="index.html">Docs <span aria-hidden="true">&#8594;</span></a>
         <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
-        <a href="#configuration">Models <span aria-hidden="true">&#8594;</span></a>
-        <a href="https://github.com/elcuervo/emb/issues">Community <span aria-hidden="true">&#8599;</span></a>
       </nav>
     </details>
 
@@ -101,10 +97,14 @@
         <li><a href="#status"><span class="doc-toc__n">09</span><span>Status and version</span></a></li>
       </ol>
     </nav>
+  </div>
 
     <!-- ═══════════════════════════════════════════════════ 01 · INSTALL -->
-    <section class="doc-sec" id="install" aria-labelledby="install-h">
-      <h2 id="install-h">01 · Install and first vector</h2>
+    <section class="block block--paper" id="install" aria-labelledby="install-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="install-h">01 · Install and first vector</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         Three ways to get the server. All of them install the same single binary
@@ -157,11 +157,17 @@
         <dt>model source</dt>
         <dd>a local ONNX path, or a Hugging Face repository id that is downloaded and cached.</dd>
       </dl>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ══════════════════════════════════════════════════ 02 · COMMANDS -->
-    <section class="doc-sec" id="commands" aria-labelledby="commands-h">
-      <h2 id="commands-h">02 · Commands</h2>
+    <section class="block block--dark" id="commands" aria-labelledby="commands-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="commands-h">02 · Commands</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         The command surface. Argument shapes are shown in full: where a command
@@ -246,11 +252,17 @@
           position does not fail the others.
         </figcaption>
       </figure>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ═══════════════════════════════════════════════ 03 · REPLIES      -->
-    <section class="doc-sec" id="replies" aria-labelledby="replies-h">
-      <h2 id="replies-h">03 · Replies and protocol</h2>
+    <section class="block block--paper" id="replies" aria-labelledby="replies-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="replies-h">03 · Replies and protocol</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         <code>EMB</code> and <code>EMB.MULTI</code> accept an optional leading
@@ -316,11 +328,17 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
           <code>format: :values</code> to opt in.
         </figcaption>
       </figure>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ═════════════════════════════════════════ 04 · CONFIGURATION     -->
-    <section class="doc-sec" id="configuration" aria-labelledby="configuration-h">
-      <h2 id="configuration-h">04 · Configuration</h2>
+    <section class="block block--dark" id="configuration" aria-labelledby="configuration-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="configuration-h">04 · Configuration</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         Settings live in a YAML file passed with <code>-config</code>, or as the
@@ -404,11 +422,17 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         optimization rather than a durable database — it is disposable, and a
         restore that does not fit the configured budget is simply skipped.
       </p>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ═══════════════════════════════════════════════════ 05 · SCRIPTS -->
-    <section class="doc-sec" id="scripts" aria-labelledby="scripts-h">
-      <h2 id="scripts-h">05 · Lua scripting</h2>
+    <section class="block block--paper" id="scripts" aria-labelledby="scripts-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="scripts-h">05 · Lua scripting</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         The plain embed command is a fixed pipeline:
@@ -543,11 +567,17 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <code>emb.image.embed</code>, which returns a pooled image embedding in
         the model's shared text/image space.
       </p>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ═══════════════════════════════════════════════ 06 · OPERATIONS   -->
-    <section class="doc-sec" id="operations" aria-labelledby="operations-h">
-      <h2 id="operations-h">06 · Operations</h2>
+    <section class="block block--dark" id="operations" aria-labelledby="operations-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="operations-h">06 · Operations</h2>
+    <div class="doc-body">
 
       <h3 class="doc-h3">Health checks</h3>
       <p class="doc-prose">
@@ -636,11 +666,17 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         ticker. It supports <code>AUTH</code> and TLS, reconnects automatically,
         and has a headless <code>-once</code> mode for scripts and CI.
       </p>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ═══════════════════════════════════════════════ 07 · BENCHMARKS   -->
-    <section class="doc-sec" id="benchmarks" aria-labelledby="benchmarks-h">
-      <h2 id="benchmarks-h">07 · Benchmarks</h2>
+    <section class="block block--paper" id="benchmarks" aria-labelledby="benchmarks-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="benchmarks-h">07 · Benchmarks</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         Measured with <code>redis-benchmark</code>, which formats positional
@@ -698,11 +734,17 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
           harness and the Fargate arm64 numbers.
         </figcaption>
       </figure>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ════════════════════════════════════════════════════ 08 · CLIENTS -->
-    <section class="doc-sec" id="clients" aria-labelledby="clients-h">
-      <h2 id="clients-h">08 · Clients</h2>
+    <section class="block block--dark" id="clients" aria-labelledby="clients-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="clients-h">08 · Clients</h2>
+    <div class="doc-body">
 
       <p class="doc-prose">
         Because the reply is ordinary RESP, any Redis client works unchanged —
@@ -733,11 +775,17 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         decoding, and the <code>emb-server</code> gem ships the precompiled
         binary. Neither is required — they are conveniences over the wire.
       </p>
-    </section>
+    </div>
+  </div>
+  </div>
+</section>
 
     <!-- ═════════════════════════════════════════════════════ 09 · STATUS -->
-    <section class="doc-sec" id="status" aria-labelledby="status-h">
-      <h2 id="status-h">09 · Status and version</h2>
+    <section class="block block--paper" id="status" aria-labelledby="status-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="status-h">09 · Status and version</h2>
+    <div class="doc-body">
 
       <dl class="doc-status">
         <dt>VERSION</dt>
@@ -755,9 +803,11 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         <dt>SOURCE</dt>
         <dd><a href="https://github.com/elcuervo/emb" rel="noopener">github.com/elcuervo/emb</a></dd>
       </dl>
-    </section>
-
+    </div>
   </div>
+  </div>
+</section>
+
 </main>
 
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->

@@ -94,10 +94,10 @@ Technical labels, metadata, navigation, diagrams, annotations, and system text u
 Examples:
 
 ```text
-TEXT IN.
-FLOATS OUT.
+BYTES IN.
+VECTORS OUT.
 
-RESP/3
+RESP3
 384D
 ONNX
 
@@ -177,8 +177,8 @@ emb
 Immediately beside the logo:
 
 ```text
-TEXT IN.
-FLOATS OUT.
+BYTES IN.
+VECTORS OUT.
 ```
 
 with a thin vertical divider between them.
@@ -188,8 +188,6 @@ Center navigation:
 ```text
 DOCS
 GITHUB
-MODELS
-COMMUNITY
 ```
 
 Right side:
@@ -230,14 +228,14 @@ The main components are:
 
 ```text
 top left:
-TEXT IN.
-FLOATS OUT.
+BYTES IN.
+VECTORS OUT.
 
 top center:
 small open-source description
 
 top right:
-RESP/3
+RESP3
 384D
 ONNX
 
@@ -327,8 +325,8 @@ Above or around the giant wordmark, place small fragments of technical informati
 Top left:
 
 ```text
-TEXT IN.
-FLOATS OUT.
+BYTES IN.
+VECTORS OUT.
 ```
 
 Top center:
@@ -336,14 +334,14 @@ Top center:
 ```text
 OPEN SOURCE
 EMBEDDING SERVER
-FOR A MORE
-VECTOR-NATIVE WORLD.
+FOR THE STACK
+YOU ALREADY RUN.
 ```
 
 Top right:
 
 ```text
-RESP/3
+RESP3
 384D
 ONNX
 —
@@ -429,9 +427,9 @@ The stacked typography should feel almost like editorial poster copy.
 Below it, smaller text:
 
 ```text
-Drop-in compatible. Production ready.
-Turn text, images, and more into vectors
-at massive speed.
+Any Redis client works unchanged. Pre-1.0, MIT licensed.
+Turn text — or any tensor a script builds —
+into vectors.
 ```
 
 Keep the paragraph narrow.
@@ -545,8 +543,8 @@ Right-side annotation:
 ```text
 01 INPUT
 
-Raw text, documents,
-or images.
+Raw text, or any tensor
+a script builds.
 ```
 
 The annotation should be small and mono.
@@ -571,7 +569,7 @@ Right-side text:
 02 INFERENCE
 
 ONNX Runtime,
-optimized execution.
+batched runs.
 ```
 
 The visual should imply computation.
@@ -604,7 +602,7 @@ Right-side annotation:
 03 EMBEDDINGS
 
 High-dimensional
-vectors, e.g. 384D.
+vectors (e.g. 384D).
 ```
 
 This section should feel slightly more complex than the previous two.
@@ -626,8 +624,8 @@ Right-side text:
 ```text
 04 SERVE
 
-Speak Redis (RESP/3).
-Fast. Familiar. Powerful.
+Speak Redis.
+RESP2 or RESP3.
 ```
 
 This creates a visual progression:
@@ -693,7 +691,7 @@ Under the main product copy, place a compact feature list.
 Heading:
 
 ```text
-BUILT FOR REAL SYSTEMS
+EVERYTHING SERVER-SIDE
 ────────
 ```
 
@@ -706,7 +704,7 @@ Example:
   Fast, portable inference.
 
 ☻ Hugging Face
-  Thousands of models, instantly.
+  Download models by repo id.
 
 ▱ Smart Batching
   High throughput, low latency.
@@ -718,7 +716,7 @@ Example:
   Load and switch models on the fly.
 
 ▤ Lua Scripting
-  Extend, compose, automate.
+  Your code around the model call.
 ```
 
 Each item contains:
@@ -925,7 +923,7 @@ Left:
 Right:
 
 ```text
-TEXT IN. FLOATS OUT. / EMB
+BYTES IN. VECTORS OUT. / EMB
 ```
 
 No giant multi-column footer.
@@ -1059,7 +1057,7 @@ might increase contrast while:
 
 ```text
 ONNX Runtime
-optimized execution
+batched runs
 ```
 
 becomes fully opaque.
@@ -1181,7 +1179,7 @@ EMB
 could be 300px tall, while:
 
 ```text
-RESP/3
+RESP3
 384D
 ONNX
 ```
@@ -1208,7 +1206,7 @@ The user should perceive the page approximately in this order:
 2. embedding server + Redis
 3. exploded architecture
 4. Get Started
-5. TEXT IN / FLOATS OUT
+5. BYTES IN / VECTORS OUT
 6. implementation details
 7. mountain / scale metaphor
 ```
@@ -1288,8 +1286,8 @@ Hero:
 ```text
 emb
 
-TEXT IN.
-FLOATS OUT.
+BYTES IN.
+VECTORS OUT.
 
 A fast
 embedding server
@@ -1422,7 +1420,7 @@ Create reusable components for the visual language.
 ## TechnicalLabel
 
 ```text
-RESP/3
+RESP3
 384D
 ONNX
 ```
@@ -1440,7 +1438,7 @@ WORLD.
 ## SectionRule
 
 ```text
-BUILT FOR REAL SYSTEMS ─────────
+EVERYTHING SERVER-SIDE ─────────
 ```
 
 ## PipelineNumber
@@ -1574,8 +1572,8 @@ The mountain at the bottom transforms the same signal into a metaphor for scale.
 The repeated statement:
 
 ```text
-TEXT IN.
-FLOATS OUT.
+BYTES IN.
+VECTORS OUT.
 ```
 
 reduces the entire product to the simplest possible explanation.

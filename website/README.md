@@ -73,8 +73,13 @@ one a decision a reader makes before clicking:
 Everything else lives on `/docs` only: the command tables, the configuration
 block, the reply-format prose beyond the one line that carries the argument,
 the `emb-top` figures, and every version string. The landing's calls to action
-and its `Docs`/`Models` navigation entries all resolve to `/docs`; the only
-reference link that leaves the site is the benchmark's `reproduce`.
+and its `Docs` navigation entry resolve to `/docs`; `GitHub` and the benchmark's
+`reproduce` are the only links that leave the site.
+
+Both surfaces render the same masthead and carry the same black/cream block
+rhythm — a full-bleed `.block` per section with a solid `.block__head` bar. The
+docs surface has no hero, so it takes the ground and the bar and none of the
+spine or `--fold` geometry.
 
 **Why `/docs` links `styles.css` rather than a shared subset.** The landing's
 geometry is selector-scoped, not global — the only element-level rules in the
@@ -441,7 +446,10 @@ above it.
 
 **The blocks** — the poster argues; these prove. Each is built only from the
 poster's atoms: a `.block__head` bar, ruled `.cap` entries (a hairline and a
-mono ladder, never cards), and dark plates.
+mono ladder, never cards), and dark plates. The docs surface reuses the same
+atoms — one `.block` per section, alternating paper and dark — so the two
+surfaces beat alike. It carries no spine, so it takes the ground and the bar
+without the lane.
 
 **The block header is a solid bar, and it inverts with its ground.** The
 heading is not a label with a hairline under it — it is the poster's loudest
@@ -464,9 +472,10 @@ sibling of `.block__grid` rather than a child of it, so it carries the same
 left inset as a `margin-left` instead of a column placement — the lane is on
 the opposite side of the content on a phone, which is the mirror-image rule.
 
-**The dark block is the page's one inversion, made of material already on the
-page** — the SERVE plate's own `#111110` and `#292823`, lit by the spine
-crossing it in `--accent` at **6.06:1**. There is no new palette here, only
+**The dark block is the landing's one inversion, and the docs surface's
+repeated one, made of material already on the page** — the SERVE plate's own
+`#111110` and `#292823`, lit by the spine crossing it in `--accent` at
+**6.06:1**. There is no new palette here, only
 this one turned over. Its `--muted` is remapped to `--rule`, because
 `#6B6963` measures only **3.40:1** on `#111110`.
 
