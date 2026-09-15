@@ -75,3 +75,48 @@
 - [x] 10.6 Verify the bridge page's behaviours survive the rewrite: a sample runs, `Enter` submits, the arrow keys recall and restore a draft, a long reply scrolls with the newest line in view, and the offline state states itself and offers a retry
 - [x] 10.7 Verify the mobile floor on the bridge page: one column of samples, the note as the control's name, and every tappable control at or above 44px
 - [x] 10.8 Verify the landing panel is otherwise unchanged by this group: seven menu rows in two columns, the strip carrying the state and the badge and nothing else, and the panel still bounded
+
+## 11. Revision: every feature sampled, every call timed, the transcript tokenised
+
+- [x] 11.1 Grow the menu to the whole permitted surface, in two groups — `REPLY FORMS` (the float bytes, the typed envelope, the multi-model call, both presets) and `THE SERVER` (models, info, stats, ready, help, ping, info) — and verify twelve rows numbered `01`–`12` across the groups on both surfaces, with the two preset rows still derived from the server's digests
+- [x] 11.2 Drop the notes from the seven server reads, which are one word each and say what they do, and lay that group out in a single row of seven columns above 834px and two columns below, and verify no row wraps at 1440px and no cell is clipped at 390px
+- [x] 11.3 Time every call in `terminal.js` from the moment of submit rather than from each retry, appending it as its own line in the form `(42 ms)` or `(23.51 s)`, and verify a reply carries it as its last line and that a waking sandbox reports the whole wait
+- [x] 11.4 Add `highlight(text, command)` to `terminal.js` and use it from both pages' line builders, and verify a command line comes back with its command word and format keywords, its string literals, and its numbers marked, and that the marked-up line reassembles the original text exactly
+- [x] 11.5 Verify the tokeniser's refusals: `sst2` stays a model name, a 40-character digest stays one run, a labelled `POSITIVE` is not dressed as a command, `FLOATs` is not a dtype, and dim and error lines are left whole
+- [x] 11.6 Verify the site's hand-marked specimens are all still complete — every `code__body` specimen carries its token classes and no Lua keyword is left unmarked on the landing, the documentation surface or the not-found page — so the console's new treatment matches what the pages already do
+- [x] 11.7 Re-measure the panel: 518px at rest at 1440px and 941px at 390px with twelve samples, against 488px and 757px with seven, and confirm the transcript stays bounded at 96–216px either way
+- [x] 11.8 Re-run the site's checks and the bridge's tests, and verify the bridge page still fits the viewport at both widths with all twelve rows, no page scroll and the prompt on screen
+
+## 12. Revision: the ledger leaves the plate, the disclaimer becomes a badge
+
+- [x] 12.1 Move the twelve demonstrations out of the plate into their own led on the paper ground between the block's captions and the console, and verify from the rendered DOM that the plate contains no demonstration row and the ledger sits above it
+- [x] 12.2 Verify the plate is three bands and nothing else — strip, transcript, prompt — and that the ledger still runs a command in it, survives the reply, and is never replaced by output
+- [x] 12.3 Remove the paragraph under the plate and let the strip's `SANDBOX · MAY RESET` badge be the whole disclosure, and verify the badge is visible at every width and the strip is one line at 390px
+- [x] 12.4 Give the console an empty state rather than a void: one dim line in its own voice stating how the prompt works, verified present at rest, replaced by the first command, and identical on both surfaces
+- [x] 12.5 Restyle the ledger from the poster's paper vocabulary — ruled numbered rows, the muted voice for numbers and notes, hover and focus carrying three signals rather than the accent alone, and every control at the 44px floor below 834px — and verify the contrast of every state: rows, notes, numbers, hints and the accent-ink hover
+- [x] 12.6 Apply the same discipline to the bridge page: the five-line paragraph becomes a one-line sentence in the terminal's voice, the group heading carries the hint, and the space it gives up goes to the transcript
+- [x] 12.7 Verify the whole path again at 1440px and at 390px on both surfaces — the ledger's columns, no clipping, no horizontal scroll, the idle line giving way, a reply timed, recall and its draft, the offline state and its retry, and a long reply scrolling inside its ceiling
+- [x] 12.8 Re-run `published-tree`, the preset and version checks, `openspec validate --strict`, the ink probe on both surfaces, and the detector, and record what it finds
+
+## 13. Revision: the demo leads, on the sandbox's own ground, and says what it is
+
+- [x] 13.1 Move the console and its ledger out of the protocol block into a block of their own placed before *THE PROTOCOL IS THE INTEGRATION*, and verify from the rendered DOM that the ledger and the plate are that block's children and the protocol block contains neither
+- [x] 13.2 Give the block the sandbox's own ground (`block--dark`, #111110), invert the ledger for it (`--rule-dark` rules, paper ink, `--accent` hover) and take the plate's paper border down to a `--rule-dark` hairline, and verify at 1440px and at 390px that every label, rule and hover clears the thresholds the paper surface held and that the page does not scroll sideways
+- [x] 13.3 Write the explanation the panel cannot carry about itself — what answers, what the bridge refuses, what a command costs, and how to drive the panel (`Enter`, the arrows, the timing line) — as the block's deck and a facts list, and verify every claim against `website/repl/allowlist.go`, `limits.go` and `sandbox.yaml`
+- [x] 13.4 Re-index the block sequence (1–4) and the reveal order (ledger `--i: 1`, plate `--i: 2`), and verify the entrance ripples in the new order with no element waiting out another block's delay
+- [x] 13.5 Re-run the checks over the changed tree: the ink probe at all 24 widths, `published-tree.py`, the preset and version stamps, and `openspec validate --strict`
+
+## 14. Revision: the ledger clears the spine, and the window holds a reply
+
+- [x] 14.1 Hold the ledger clear of the lane at every fold the page has — the reply forms and both group headings at `calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap))` above 1000px, the `.topviz` band's inset at 641–1000px, and the `.block__grid` width at 640px and below — and verify from the rendered DOM at 1440, 1280, 1001, 1000 and 390px that no cell, note or heading glyph overlaps the spine's rect and that nothing scrolls sideways
+- [x] 14.2 Split the server's row of seven around the lane — four cells to it, `--spine-w` as the lane track, `--fold-gap` as the row's own column gap, and the fifth cell placed by `grid-column-start` — and verify all seven stay in one row with the line in the gap at 1440px and that the ≤1000px blocks still lay them two to a row
+- [x] 14.3 Raise the transcript from `clamp(88px, 7vw, 110px)`/`clamp(190px, 15vw, 236px)` to `clamp(132px, 9.5vw, 158px)`/`clamp(264px, 21vw, 336px)`, and verify at 1280px that the panel at rest is 225px against 183px, that a thirty-line reply scrolls inside a 269px window against 192px instead of lengthening the panel, and that the newest line is still followed
+- [x] 14.4 Re-run the checks over the changed tree: the ink probe at all 24 widths, `published-tree.py`, the version and preset stamps, and `openspec validate --strict`
+
+## 15. Revision: the demo and cli.emb.is are one object in two frames
+
+- [x] 15.1 Print the same prompt mark on both surfaces — `emb>` in `website/index.html`'s label and in `main.js`'s echoed caret, where the panel had `EMB ›` — and verify the prompt row and an echoed line both read `emb>` on the served page
+- [x] 15.2 Draw the panel's chrome in the terminal's own hairline: the strip's rule, the prompt row's rule and the input's underline move from `--rule` (9.22:1 on #111110) to `--rule-dark`, the value the standalone page uses for the same three, and verify no internal rule on the plate is brighter than its own edge
+- [x] 15.3 Drop the chrome the terminal does not have — the border box around the `↵` and the underline beneath the input — keeping the 44px target floor below 834px, and verify the row still submits by pointer and by keyboard on the served page
+- [x] 15.4 Make the panel's group headings the terminal's paper bars — `--bg` ground, `--fg` label, the hint inside, at the content box's width so the bar covers the spine where it crosses — and verify the bar's hint keeps the paper's muted ink inside the dark block, where `--muted` is remapped to `--rule`
+- [x] 15.5 Re-run the checks over the changed tree: the ink probe at all 24 widths, `published-tree.py`, the version and preset stamps, `openspec validate --strict`, and the detector (20 findings before this revision's files and 20 after, with the strip's entry gone and the plate's reworded)

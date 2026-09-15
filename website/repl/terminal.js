@@ -159,6 +159,53 @@
     out.push({ t: pad + '(unknown reply kind)', k: 'err' });
   }
 
+  /* highlight splits one line of a console into the token classes the site
+     already uses for its specimens: a command or a reply's own keyword, a
+     quoted string, a number. It is deliberately small -- it is not a shell
+     parser and not a Lua one, and it marks only what it can recognise without
+     ambiguity, so anything it does not understand comes back as one plain run.
+
+     `command` says the line is something a reader submitted rather than a
+     reply. Only a command has a command word at its head and only a command
+     carries the reply-format keywords; a reply is matched against the value
+     words it can actually contain, so a labelled `POSITIVE` is left alone
+     rather than dressed as a command.
+
+     A run is matched whole before it is classified, which is what keeps `sst2`
+     a model name and a 40-character digest a digest instead of a shower of
+     numbers. */
+  var RUN = /("[^"]*"|'[^']*')|([A-Za-z0-9_][A-Za-z0-9_.-]*)/g;
+  var NUMBER = /^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/;
+  var COMMAND_HEAD = /^[A-Z][A-Z0-9]*(?:\.[A-Z0-9]+)*$/;
+  var FORMAT_WORD = /^(VALUES|BLOB)$/;
+  var VALUE_WORD = /^(FLOAT64|FLOAT32|FLOAT|INT64|INT|UINT8|STRING|NIL|BOOL|OK|PONG)$/;
+
+  function highlight(text, command) {
+    var line = String(text == null ? '' : text);
+    var out = [];
+    var last = 0;
+    var m;
+    RUN.lastIndex = 0;
+    while ((m = RUN.exec(line)) !== null) {
+      if (m.index > last) { out.push({ t: line.slice(last, m.index) }); }
+      var run = m[0];
+      var kind = null;
+      if (m[1]) {
+        kind = 'str';
+      } else if (NUMBER.test(run)) {
+        kind = 'num';
+      } else if (m.index === 0 && command && COMMAND_HEAD.test(run)) {
+        kind = 'cmd';
+      } else if (command ? FORMAT_WORD.test(run) : VALUE_WORD.test(run)) {
+        kind = 'cmd';
+      }
+      out.push(kind ? { t: run, c: kind } : { t: run });
+      last = m.index + run.length;
+    }
+    if (last < line.length) { out.push({ t: line.slice(last) }); }
+    return out;
+  }
+
   /* create wires a console to the sandbox. onState(name, detail) and
      onLines(transcript) are the whole rendering surface; the page owns the
      DOM. onLines always receives the complete transcript, so a transient line
@@ -184,6 +231,27 @@
     var retryDelay = opts.retryDelay === undefined ? 1000 : opts.retryDelay;
     var transcript = [];
     var transientStart = -1;
+    /* When the reader's command left. It is set at submit rather than at each
+       attempt, so a sandbox that has to wake up reports the wait it actually
+       cost rather than the last retry's slice of it. */
+    var startedAt = 0;
+
+    function nowMs() {
+      return global.performance && global.performance.now
+        ? global.performance.now()
+        : Date.now();
+    }
+
+    /* The speed the panel is boasting about, in the form redis-cli prints it.
+       Sub-millisecond and second-scale are both real here: a warm reply is a
+       few milliseconds and a cold sandbox is tens of seconds. */
+    function timing() {
+      var ms = nowMs() - startedAt;
+      var text = ms < 10 ? (Math.round(ms * 10) / 10) + ' ms'
+        : ms < 1000 ? Math.round(ms) + ' ms'
+        : (ms / 1000).toFixed(2) + ' s';
+      return { t: '(' + text + ')', k: 'time' };
+    }
 
     function emit() { onLines(transcript.slice()); }
 
@@ -237,7 +305,7 @@
           set('offline', env);
           return;
         }
-        push(format(env));
+        push(format(env).concat([timing()]));
         set(env && env.kind === 'error' ? 'error' : 'result', env);
       }, function () {
         push([{ t: 'offline — the sandbox could not be reached', k: 'dim' }]);
@@ -280,6 +348,7 @@
         if (!args.length) { return; }
         attempts = 0;
         last = args;
+        startedAt = nowMs();
         var line = String(text).trim().replace(/\s+/g, ' ');
         /* A command chosen from the examples is submitted, not run, so it lands
            in the history the same way a typed one does. Consecutive repeats are
@@ -298,12 +367,13 @@
       retry: function () {
         if (!last) { set('idle'); return; }
         attempts = 0;
+        startedAt = nowMs();
         run(last);
       }
     };
   }
 
-  var api = { origin: ORIGIN, tokenize: tokenize, format: format, create: create };
+  var api = { origin: ORIGIN, tokenize: tokenize, format: format, highlight: highlight, create: create };
   global.embTerminal = api;
   if (typeof module === 'object' && module.exports) { module.exports = api; }
 })(typeof window !== 'undefined' ? window : globalThis);

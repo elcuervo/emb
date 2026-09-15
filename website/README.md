@@ -676,10 +676,13 @@ owns only the DOM. Which host the module came from is captured from its own
 `src`, so no page hardcodes the sandbox address in its copy — the console
 presents no endpoint, host, or hosted-service affordance.
 
-**The badge says what it is.** `SANDBOX · MAY RESET`, and the note under the
-panel says the same in a sentence: a real `emb` process, a sandbox that may
-reset, refusing anything that would change its configuration or shared state.
-There is no pricing, account, uptime, or support affordance.
+**The badge says what it is, and it is the whole disclaimer.** `SANDBOX · MAY
+RESET` sat above a paragraph that repeated it in a sentence — the same claim
+twice, in two voices, the second a wall of text under a terminal. The paragraph
+is gone; the badge shows at every width, where it used to be hidden below 834px
+on the argument that the paragraph said more there. That argument died with the
+paragraph, and the badge fits on one strip line now that the protocol selector
+does not share it. There is no pricing, account, uptime, or support affordance.
 
 **The console is a REPL with a menu.** There is no mode selector: the two
 special functions the panel exists to show are two rows in a list of six
@@ -695,13 +698,39 @@ under the transcript an untouched console shows a tall empty field between the
 strip and the menu, and over it the row below the strip is the menu and the empty
 space is the output area directly above the prompt.
 
-**The reply forms are two rows, not a setting.** `EMB` shows the bytes and
-`EMB … VALUES` shows the envelope, `EMB.MULTI` answers several models in one
-call, and one row calls a preloaded preset by its digest for a labelled,
-non-embedding reply. There is no protocol selector: the flat and the typed
-forms are both reachable from the menu, so there is nothing to set before either
-can be read. `terminal.js` still carries `proto` in its request — that is the
-module's contract with the bridge, not the panel's furniture.
+**The ledger of twelve is beside the plate, not inside it.** The plate is the
+terminal — a strip, a transcript and a prompt, three bands and nothing else — and
+the ledger above it is what to put in it. It is the poster's ruled numbered entry
+on the paper ground, so it reads as a page of the manual rather than as chrome
+around a widget, and its hover and focus states are the paper's button language
+rather than the plate's.
+
+`REPLY FORMS` is what comes back and is the reason the panel exists: the float
+bytes, the typed envelope, one call across two models, and the two preloaded
+presets by digest. `THE SERVER` is what the server knows: `EMB.MODELS`,
+`EMB.INFO`, `EMB.STATS`, `EMB.READY`, `EMB.HELP`, `PING`, `INFO` — one word
+each, so they carry no notes and fit in a single row of seven, closed by one rule
+rather than ruled inside itself. Between them the twelve rows are every command
+the sandbox permits, so nothing the panel can do is left to be guessed at.
+
+The heading of the first group carries `click one to run it below`, which is the
+whole connection between the two objects and is stated once.
+
+The second group's notes are dropped rather than shortened: a note on
+`EMB.STATS` would be a second line inside a cell for every one of the seven, to
+say what the command's own name already says. The reply forms keep theirs,
+because "384 float32s, as bytes" is not in the command.
+
+There is no protocol selector: the flat and the typed forms are two rows, so
+there is nothing to set before either can be read. `terminal.js` still carries
+`proto` in its request — that is the module's contract with the bridge, not the
+panel's furniture.
+
+**Every reply states what it cost.** The client times the call from the moment
+the reader submitted it, not from the last retry, so a sandbox that has to wake
+up reports the wait it actually cost; the reply ends with `(42 ms)`, or `(23.51
+s)` when it was that kind of morning. It is the panel's answer to the only
+question a reader has about an embedding server and cannot see from a reply.
 
 **The strip names the console's own condition**, and it is now only that: the
 state on the left, `SANDBOX · MAY RESET` on the right. Its colour is read from
@@ -716,8 +745,13 @@ the reader was already at the end — so a long reply neither grows the panel no
 interrupts a reader who has scrolled back through one. Whether to follow is read
 *before* the transcript grows: read after, a batch of lines arrives with the
 panel already past its own threshold and the reader is left at the top of output
-they never saw. At 1440px the panel is **467px** at rest and never past **600px**,
-against 467px and unbounded before this pass.
+they never saw.
+
+At rest the transcript is not empty: one dim line in the panel's own voice says
+the one thing the ledger above cannot — that the arrow keys walk what you have
+run — and the first command replaces it. The plate is **205px** at 1440px and
+**192px** at 390px, against 467px and 941px for the version that carried the menu
+and the paragraph, and it never passes **320px** however long the reply is.
 
 **A menu row is a label, not the command.** Where a command and its note cannot
 share a row, the drawn label elides the digest — `EMB.EVSHA sst2 51ae48b3… 1 …` —
@@ -753,11 +787,25 @@ Every control clears the 44px target floor at 320–834px. The smallest text in 
 
 **Code is typeset as code.** Every specimen — the shell invocation, the Lua
 source, the `model(fn(input))` shift, and the `<noscript>` console specimen —
-carries four token classes, marked up by hand. Replies in the live console are
-plain text, because they are data rather than a specimen: the transcript-era
-pattern highlighter is gone with the transcript. Emphasis is weight and
-colour-role, never a second hue — the page has one accent and this does not
-spend it twice. Measured on both grounds:
+carries four token classes, marked up by hand. The live console's transcript
+carries the same four, from `embTerminal.highlight`: a command or a reply's own
+keyword, a quoted string literal, a number. The console had been the one place
+that was *not* typeset as code, which the site's own requirement does not allow
+— "the console's replayed commands and replies" are named in it — so the
+highlighter is back, in the client module rather than in either page, and the
+two surfaces mark up identically.
+
+It marks only what it can recognise without ambiguity, and it is told whether a
+line is a command or a reply. Only a command has a command word at its head and
+only a command carries the reply-format keywords; a reply is matched against the
+value words it can actually contain, so a labelled `POSITIVE` is left alone
+instead of being dressed as a command. A *run* is matched whole before it is
+classified, which is what keeps `sst2` a model name and a 40-character digest a
+digest rather than a shower of numbers. Dim and error lines are left whole:
+those are the panel's voice, not code.
+
+Emphasis is weight and colour-role, never a second hue — the page has one accent
+and this does not spend it twice. Measured on both grounds:
 
 | Class | Paper | Ratio | Dark | Ratio |
 |---|---|---|---|---|

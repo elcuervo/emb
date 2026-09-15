@@ -2,13 +2,20 @@
 
 ### Requirement: The console's examples demonstrate the two special functions
 
-The console SHALL demonstrate both of the product's special functions — an
-embedding reply as raw bytes and as a typed envelope, and a preloaded script
-returning a structured, non-embedding reply — without requiring the visitor to
-select a mode first. Each demonstration MUST be a command the visitor can submit
-as it stands, and the commands MUST be derived from the digests the server
-preloaded rather than transcribed, so the console cannot offer a command the
-sandbox refuses.
+The console SHALL demonstrate the product's special functions — an embedding
+reply as raw bytes and as a typed envelope, one call answered for several models,
+a preloaded script returning a structured non-embedding reply, and the server's
+own readouts — without requiring the visitor to select a mode first. Each
+demonstration MUST be a command the visitor can submit as it stands, and every
+command the sandbox permits MUST be reachable from the demonstrations, so no part
+of the demonstrable surface is left to be guessed at. The preset commands MUST be
+derived from the digests the server preloaded rather than transcribed, so the
+console cannot offer a command the sandbox refuses.
+
+The demonstrations MUST be shown as a ledger beside the console rather than as
+part of it: the console is the terminal, and the ledger is what to put in it.
+Choosing a demonstration MUST run it in the console, and the ledger MUST NOT be
+replaced by a command's output.
 
 #### Scenario: The byte reply and the typed reply are both demonstrable
 
@@ -34,6 +41,11 @@ sandbox refuses.
 
 - **WHEN** the visitor submits the offered preset call
 - **THEN** it shows a script the server loaded once being evaluated by digest to produce a labelled reply
+
+#### Scenario: The server's own readouts are demonstrable
+
+- **WHEN** the console is at rest
+- **THEN** the commands that describe the server — the loaded models, one model's info, its statistics, its readiness probe, its help, and a ping — are offered alongside the reply forms, and none of them needs a mode or a setting to reach
 
 #### Scenario: The multi-model call is demonstrable
 
@@ -65,12 +77,17 @@ the condition.
 #### Scenario: The idle state teaches by being runnable
 
 - **WHEN** the console is at rest and has not yet run a command
-- **THEN** the panel carries the demonstration commands as operable controls, and one of them is a request for the sandbox's own help
+- **THEN** the demonstration commands are shown as operable controls beside it, and one of them is a request for the sandbox's own help
+
+#### Scenario: The console opens on a line, not a void
+
+- **WHEN** the console is at rest with nothing run yet
+- **THEN** its transcript carries one line of its own that states how the prompt works, and the first command replaces it
 
 #### Scenario: A command does not take the demonstration away
 
 - **WHEN** a command has been run
-- **THEN** the demonstration commands are still shown and still operable, so a second one can be run without reloading the page
+- **THEN** the demonstration commands are still shown and still operable, so a second one can be run without reloading the page, and the ledger is untouched by the reply it produced
 
 #### Scenario: A long reply does not grow the panel
 
@@ -178,10 +195,50 @@ target floor.
 - **WHEN** the console is navigated by keyboard alone
 - **THEN** every control is reachable and operable, each has an accessible name that states what it does, and none is smaller than the committed target floor
 
+#### Scenario: The reply states what it cost
+
+- **WHEN** a command is answered
+- **THEN** the reply states how long the call took, measured from the moment the reader submitted it rather than from the last attempt, so a sandbox that had to wake up reports the wait it cost
+
 #### Scenario: The console is not a mode picker
 
 - **WHEN** the console is rendered
 - **THEN** it presents no mode selector and no control whose only purpose is to change what the transcript is about
+
+### Requirement: The demo says what answers it and how to drive it
+
+The landing page SHALL state, before the console, what answers a command — a real
+`emb` process behind the sandbox bridge, carrying the sandbox's own models — what
+the bridge permits and refuses, what a command costs, and how a reader runs one:
+a row from the ledger or a typed command, `Enter` to submit, the arrow keys to
+recall what has been run, and the round trip printed under each reply. The
+explanation MUST be the page's own copy rather than only the console's, and MUST
+NOT claim more than the sandbox does: where it is read-only, rate-bounded, or may
+reset, the page MUST say so.
+
+The console SHALL be presented on the page's dark ground rather than as a panel
+framed in paper, and the ledger beside it MUST invert with that ground, so what
+answers is visibly made of the same material as the terminal page itself.
+
+#### Scenario: The page names what answers
+
+- **WHEN** the demo block is read before the console
+- **THEN** it states that a real `emb` process answers, and which models the sandbox has loaded
+
+#### Scenario: The page states the refusals
+
+- **WHEN** the reader reads the demo block's facts
+- **THEN** the commands the bridge refuses are named as families — configuration, raw Lua, images, writes — rather than left to be discovered by a refusal
+
+#### Scenario: The page states how to drive the panel
+
+- **WHEN** the reader reads the demo block's prose
+- **THEN** it states that a ledger row runs a command, that `Enter` submits a typed one, that the arrows recall what has been run, and that each reply is followed by the time it took
+
+#### Scenario: The panel is not framed as an exhibit
+
+- **WHEN** the demo block is rendered at any width
+- **THEN** the console and its ledger sit on the block's dark ground under the same hairline rules the rest of that ground uses, and no paper border separates the panel from it
 
 ### Requirement: The documentation surface carries the `emb-top` plate in the run's own colours, without unsolicited motion
 

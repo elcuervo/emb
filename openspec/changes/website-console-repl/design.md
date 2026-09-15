@@ -62,12 +62,183 @@ roving-`tabindex` handler, and `setMode` plumbing on the landing page.
 The rows are built at runtime from the two digests already stamped into the
 section (`data-emb-preset-embed`, `data-emb-preset-classify`), so a preset whose
 bytes change cannot leave the page suggesting a digest the sandbox refuses.
-Seven rows: `EMB.HELP`, the raw `EMB` call, the same call with `VALUES`, an
-`EMB.MULTI` call naming two models, the `embed` preset (dimension, norm,
-similarity), the `classify` preset, and `EMB.MODELS`.
+Twelve rows, in two groups. `REPLY FORMS` is the product: the raw `EMB` call,
+the same call with `VALUES`, an `EMB.MULTI` call naming two models, and the
+`embed` (dimension, norm, similarity) and `classify` presets. `THE SERVER` is
+the readouts: `EMB.MODELS`, `EMB.INFO`, `EMB.STATS`, `EMB.READY`, `EMB.HELP`,
+`PING`, `INFO`. Between them they are every command the sandbox permits — a
+panel that demonstrates four of the eleven things it can do is a panel that
+leaves the other seven to be discovered by reading the docs.
+
+Two groups rather than one list because they are two different things to a
+reader: the reply forms need their notes, and the server reads are one word each
+whose names say what they do. A note on `EMB.STATS` would be a second line inside
+a cell for every one of the seven, to say what the command already says, so the
+second group carries none and fits in a single row of seven columns — which is
+what keeps twelve samples from costing twelve rows.
 
 *Alternative considered:* keep the tabs and add examples inside each. Rejected —
 it keeps the thing being removed and doubles the content in the panel.
+
+### The ledger is beside the console, not inside it
+
+The demonstrations began inside the plate, above the transcript. That made the
+plate two things at once: a terminal, and a menu. The menu has left, and the
+plate is three bands — the strip, the transcript, the prompt — with nothing in it
+that is not the terminal.
+
+What it left behind is the poster's ruled numbered entry, outside the plate. It
+keeps every property the menu had: the rows are real controls, they are never
+replaced by output, the numbers run across the groups, and a row submits the
+command it draws. It gains the ones a ledger has: it can be read as a page of
+the manual, its hover and focus states belong to the button language of the
+ground it sits on rather than the plate's, and it no longer competes with the
+transcript for the plate's ceiling. That ground is no longer the paper: the
+ledger and the plate moved together into a block of their own (see *The demo
+leads, on the sandbox's own ground*), and both inverted with it.
+
+Its first group heading carries the one line the plate cannot: *click one to run
+it below*. That is the whole connection between the two objects, and it is
+stated once.
+
+### The ledger is held clear of the spine
+
+The ledger ran the full width of the body, and the spine crossed whatever column
+it landed in: at 1280px the line fell 162px inside the reply forms' second
+column, through `EMB minilm VALUES "hello world"`, and through `EMB.HELP` in the
+server's row of seven. The site's own requirement says the spine never carries
+text, and the block grid was already built so that it cannot: its first column
+ends at the lane and its second begins after it.
+
+The ledger now does the same, by the same arithmetic, at every fold the page has:
+
+- **Above 1000px** (fold at 65.31%) the reply forms and both group headings take
+  `calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap))`, which puts their
+  right edge — and with it the right-aligned column of notes — against the lane.
+  The server's seven keep the single row they were: four cells wide to the lane,
+  a track of `--spine-w` for the line itself, three cells after it. Seven equal
+  columns cannot be made to land on a 65.31% fold (5/7 is 71%, 4/7 is 57%), so
+  the fifth cell takes the column after the lane by `grid-column-start` and the
+  sixth and seventh follow it by auto-placement. The row's own column gap is
+  `--fold-gap` rather than the list's, so the air either side of the line is the
+  block grid's air and the line sits in this row where it sits in the grid above.
+- **641–1000px** the fold is 25% and the lane is the left gutter, so both lists
+  and both headings take the inset the `.topviz` band already takes for the same
+  reason.
+- **640px and below** the fold is 90% and the lane is inside the content, so they
+  take the width `.block__grid` takes there.
+
+*Alternative considered:* two columns of reply forms, one on each side of the
+line, which is what "columns alongside the spine" reads as at its most literal.
+Rejected — the fold leaves the second column 391px at 1280, and
+`EMB.EVSHA minilm 31ae7054… 1 "hello world" "hello there"` is 400px of label
+before its note, so the longest row would wrap to three lines where it had one.
+That trades legibility for a shape, which is the wrong way round. *Alternative
+considered:* hold the whole ledger to the lane's left, the server's row included.
+Rejected — seven commands in 848px is 121px a cell, which wraps every one of them,
+and laying them two to a row instead would cost four ruled rows where the
+straddle costs one.
+
+### The demo leads, on the sandbox's own ground, and says what it is
+
+The console was the tail of the protocol block, on paper and framed in paper: it
+read as evidence for an argument made above it. It is now the first block after
+the hero, and the page's second dark band, because it is the one thing on the
+page that is not an argument -- a real `emb` process answers in it. The material
+is the sandbox's own (#111110 with `--rule-dark` hairlines, the pair the
+standalone terminal page uses), so the plate stops reading as a framed exhibit
+and becomes the thing the band is about.
+
+Three consequences, all deliberate:
+
+- **The plate's edge becomes a hairline.** Its paper border was its edge against
+  paper; against the material the plate is itself made of, the same border is a
+  16.59:1 outline. On the dark band it takes the `--rule-dark` every other rule
+  on that ground takes, and the strip is what still marks the terminal's top.
+- **The ledger inverts with its ground**, as every other surface here does:
+  `--rule-dark` for its rules, the paper for its ink, and `--accent` for the
+  hover and the focus ring that `--accent-ink` cannot carry on #111110.
+- **The page has two inversions now, not one.** The rhythm is paper, dark, paper,
+  dark, paper: the demo and the scripts block are the plate's material, the
+  protocol and operations blocks are the page's. The scripts block's "single
+  inversion" note is retired rather than defended.
+
+The band carries the explanation the panel cannot carry about itself: what
+answers (a real process, the sandbox's models, over RESP through a bridge that
+may ask and may not change), what it refuses (configuration, raw Lua, images,
+writes), what one command costs (a rate, a text count, a text size), and how to
+drive it (a ledger row or a typed command, `Enter`, the arrows, and the round
+trip printed under every reply). None of it was on the page before: the strip's
+badge said `sandbox · may reset`, and the rest was left to be inferred from a
+terminal that happened to answer.
+
+*Alternative considered:* leave the console where it was and only expand the
+copy around it. Rejected -- an explanation of the demo placed after two blocks of
+argument is a caption for something the reader met four screens ago, and the
+paper ground would have kept the plate framed as an illustration of the sandbox
+rather than as the sandbox.
+
+### The disclaimer is a badge, not a paragraph
+
+The plate used to end in a paragraph: a real `emb` process, a sandbox that may
+reset, refusing anything that would change its configuration or shared state, run
+the same commands against your own server. The strip above it already said
+`sandbox · may reset`, in four words, at the top of the same object — so the
+paragraph was the same claim twice, in two voices, one of them a wall of text
+under a terminal.
+
+The paragraph is gone and the badge is the disclosure, which is what the
+requirement asks for ("it describes itself as a sandbox that may reset"). The
+badge was hidden below 834px on the argument that the paragraph said it in full
+there; that argument died with the paragraph, so the badge now shows at every
+width — and it fits on one strip line, because the protocol selector that used to
+share that line is gone too.
+
+The bridge page had the same paragraph at its top, in five lines on a phone. It
+is now a sentence in the terminal's own voice, one line on a desktop and two or
+three on a phone, and the space it gave up went to the transcript.
+
+*Alternative considered:* keeping the longer sentence somewhere on the page —
+the hero's install ledger, the docs surface. Rejected: the refusals explain
+themselves when they happen ("the sandbox does not expose server configuration"),
+and a warning about a demo's limits belongs at the demo, in four words.
+
+### The two surfaces are one object in two frames
+
+`website/repl/index.html` is served at cli.emb.is, and the landing's plate is the
+same client in a panel. A reader who runs a command on one and then opens the
+other must not be able to tell the chrome was drawn twice. Four things disagreed:
+
+- **The prompt mark.** The panel printed `EMB ›` where the terminal prints
+  `emb>`, in the one place the reader is looking, and the echoed line carried the
+  same wrong mark. Both surfaces print `emb>` now, in the label and in the echo.
+- **The rules inside the plate.** The panel drew its strip's rule, its prompt
+  row's rule and its input's underline in `--rule` — the paper's hairline, 9.22:1
+  on #111110 — which is three bright lines across a black terminal. The terminal
+  draws the same three in `#292823`. The panel takes the dark hairline for all of
+  them, which is also what its own plate edge took when it moved to the band.
+- **The submit control and the input.** The panel boxed its `↵` in a bordered
+  button and underlined its input; the terminal does neither. The box and the
+  underline are gone, the `↵` is the bare glyph the terminal prints, and the 44px
+  target floor is still held below 834px.
+- **The group headings.** The terminal's `REPLY FORMS` / `THE SERVER` are paper
+  bars with black ink and the hint inside them; the panel's were plain labels on
+  the plate. The panel's are bars now, at the content box's width — opaque, so
+  they cover the spine where it crosses, which is what `.block__head` already
+  does, and which is why the heading needs no lane arithmetic of its own.
+
+The bar is a paper surface inside a dark block, and `--muted` is remapped to
+`--rule` for everything in that block, so the bar takes the paper's muted ink back
+for itself: `--rule` on paper is a hairline, not a text colour.
+
+What is still different is the frame, not the object: the terminal page is the
+viewport and the panel is a window with a floor and a ceiling; the page opens on
+its own sentence where the panel opens on a state strip; the page has no spine to
+clear. *Alternative considered:* move the ledger inside the plate so both
+surfaces have the same parts in the same order. Rejected — the panel's own
+argument is that the ledger is what to put in and the plate is what answers, and
+folding one into the other would make the landing a smaller copy of a page
+instead of a panel that says the same thing.
 
 ### The menu sits above the output and stays there
 
@@ -116,6 +287,18 @@ from. The transcript is bounded at 216px and the commands are permanently
 clickable, where the version it started from had a 262px unbounded transcript and
 a menu that disappeared on first use.
 
+That ceiling was then raised, because the thing the window is a window onto is
+the reply: a labelled reply is eight lines, and a floor of 88–110px handed the
+reader less than one reply before it began scrolling. The floor is now
+`clamp(132px, 9.5vw, 158px)` and the ceiling `clamp(264px, 21vw, 336px)` — about
+nine lines at 1280px, and twelve at 1440px. The ceiling still holds a reply of
+any size: thirty lines arrive inside a 269px window at 1280px and scroll there,
+and the panel keeps the height it had.
+
+**The ledger clears the spine, and the window is taller** — measured at 1280px:
+the panel at rest is 225px against 183px before, and 361px with a reply at the
+ceiling against 285px before.
+
 ### The protocol selector is not on the panel
 
 The `RESP 2|3` selector was the last setting on the console, and it earned its
@@ -156,6 +339,46 @@ Two things did not move with the rest:
   indicator in a bar said the same thing twice. The one thing the bar carried
   that the transcript does not — `sandbox · may reset` — moved into the line
   above the samples, where it is always in view.
+
+### Every reply is timed, from the submit
+
+The panel's whole subject is how fast a call comes back, and nothing in a reply
+says it. The client times each command and appends `(42 ms)` — or `(23.51 s)`,
+because a cold sandbox really does take tens of seconds and pretending otherwise
+would hide the most interesting number the panel can show.
+
+The clock starts at `submit`, not at each attempt. The client retries while the
+sandbox reports that it is waking, so a per-attempt timer would report the last
+slice of a twenty-second wait as though it were the wait. It is emitted as its
+own line rather than as a suffix on the echoed command, because the echo line is
+already painted by the time the reply arrives and rewriting it would repaint the
+whole transcript — the stepping animation would replay under the reader.
+
+*Alternative considered:* a right-aligned column of times, or a time on the
+prompt line. Rejected — the timing is about the reply above it, and it belongs
+where redis-cli puts it, at the end of the output it measured.
+
+### The transcript is tokenised, which the site already required
+
+The site's own requirement says the token treatment covers "the console's
+replayed commands and replies", and the console was the one surface that did not
+do it — the design note even argued the exemption, on the grounds that replies
+are data rather than specimens. That argument does not survive a reader asking
+what `FLOAT` is or where the `384` came from, and it was the site disagreeing
+with its own contract.
+
+The highlighter lives in `terminal.js`, not in either page, for the same reason
+the reply renderer does: two surfaces, one treatment. It is told whether a line
+is a command or a reply, which is what keeps a labelled `POSITIVE` from being
+dressed as a command — only a command has a command word at its head and only a
+command carries the reply-format keywords. It matches a whole run before
+classifying it, which is what keeps `sst2` a model name and a 40-character digest
+a digest instead of a shower of numbers. Dim and error lines are left whole: they
+are the panel's voice, not code.
+
+*Alternative considered:* a real syntax highlighter (Prism, highlight.js).
+Rejected — 30 KB and a grammar per language to mark four token classes on lines
+the site itself constructs.
 
 ### History lives in the client module
 
@@ -263,6 +486,32 @@ Neither is suppressed. Suppressing them would need a project-scoped ignore rule
 in the detector's own config, which is a durable change to the repository's
 tooling and belongs to whoever decides the rule does not apply here — not to this
 change as a side effect.
+
+### The revision that moved the demo
+
+Run again over this revision's three changed files (`website/index.html`,
+`website/assets/css/styles.css`, `website/repl/index.html`) against the same three
+at `HEAD`, with `--no-design-system` so both runs are judged by the same rules:
+20 findings at `HEAD`, 20 now, with two of them moved:
+
+- **`cramped-padding` on `<section> "block"`, one more instance.** The rule fires
+  once per block because `.block`'s own padding is zero and the gutters live on
+  the `.shell` it wraps, whose `padding-inline` is a custom property the static
+  pass cannot resolve to a length. The protocol, scripts and operations blocks
+  each carry it at `HEAD`; the demo block is a fourth block, so it carries it
+  too. Its children are inset by `.shell`'s `--pad-l`/`--pad-r` gutters, which is
+  the 22px floor the site's own type check holds at 320px, so no text touches a
+  block's background.
+- **`cramped-padding` on `<div> "console__bar"`, one fewer instance.** The rule
+  read the strip's `#292823` ground as a container its children sit flush
+  against; the strip is the plate's own ground now and the finding went with the
+  background.
+
+`cramped-padding` on `<section> "console"` is still one finding and still the same
+false positive — the plate's children each carry their own padding — with its
+wording moved from `border+bg` to `border` as the plate's border colour changed.
+The strip's own entry is gone rather than worked around: it was reading a ground
+that is no longer there.
 
 ## Risks / Trade-offs
 

@@ -240,38 +240,67 @@
         classify: root.getAttribute('data-emb-preset-classify') || ''
       };
 
-      /* The demonstration list is built from the digests the section carries
-         rather than typed here: a preset whose bytes change cannot leave the
-         console offering a digest the sandbox answers `no such script` to.
-         Each row is a submitted command, not a special path, so running one is
+      /* The demonstration menu, in the order a reader wants it: the reply forms
+         first, because those are the product, then the server reads, because
+         those are one word each. Between them they cover the whole surface the
+         sandbox permits, so nothing the panel can do is left to be discovered
+         by guessing.
+
+         The preset rows are built from the digests the section carries rather
+         than typed here: a preset whose bytes change cannot leave the console
+         offering a digest the sandbox answers `no such script` to. Each row is
+         a submitted command, not a special path, so running one is
          indistinguishable from typing it — including for the history the arrow
-         keys walk. */
-      /* `t` is the command that is submitted; `d` is the label drawn on the row
+         keys walk.
+
+         `t` is the command that is submitted; `d` is the label drawn on the row
          when the command is too long to sit on one line beside its note. The
          digest is elided on the row and printed in full the moment the command
          runs: the row is something to click, and a 40-character SHA spent in a
          menu is a row that wraps for no reader's benefit. */
-      var EXAMPLES = [
-        { t: 'EMB.HELP', n: 'what it permits' },
-        { t: 'EMB minilm "hello world"', n: '384 float32s, as bytes' },
-        { t: 'EMB minilm VALUES "hello world"', n: 'the same vector, typed' },
-        { t: 'EMB.MULTI minilm "hello world" sst2 "this film is great"', n: 'two models, one call' }
+      var GROUPS = [
+        {
+          h: 'REPLY FORMS',
+          hint: 'click one to run it below',
+          cols: 2,
+          items: [
+            { t: 'EMB minilm "hello world"', n: '384 float32s, as bytes' },
+            { t: 'EMB minilm VALUES "hello world"', n: 'the same vector, typed' },
+            { t: 'EMB.MULTI minilm "hello world" sst2 "this film is great"', n: 'two models, one call' }
+          ]
+        },
+        {
+          /* No notes here on purpose: these are one word each and their names
+             say what they do, so a note would be a second line inside a cell
+             for every row -- seven rows of two lines to say nothing the command
+             does not. They fit in one row of seven instead. */
+          h: 'THE SERVER',
+          cols: 7,
+          items: [
+            { t: 'EMB.MODELS' },
+            { t: 'EMB.INFO minilm' },
+            { t: 'EMB.STATS' },
+            { t: 'EMB.READY' },
+            { t: 'EMB.HELP' },
+            { t: 'PING' },
+            { t: 'INFO' }
+          ]
+        }
       ];
       if (PRESETS.embed) {
-        EXAMPLES.push({
+        GROUPS[0].items.push({
           t: 'EMB.EVSHA minilm ' + PRESETS.embed + ' 1 "hello world" "hello there"',
           d: 'EMB.EVSHA minilm ' + PRESETS.embed.slice(0, 8) + '… 1 "hello world" "hello there"',
           n: 'dim · norm · cosine'
         });
       }
       if (PRESETS.classify) {
-        EXAMPLES.push({
+        GROUPS[0].items.push({
           t: 'EMB.EVSHA sst2 ' + PRESETS.classify + ' 1 "this film is great" NEGATIVE POSITIVE',
           d: 'EMB.EVSHA sst2 ' + PRESETS.classify.slice(0, 8) + '… 1 "this film is great" NEGATIVE POSITIVE',
           n: 'labelled reply'
         });
       }
-      EXAMPLES.push({ t: 'EMB.MODELS', n: 'what is loaded' });
 
       /* The strip names the console's own condition. The label is the state's
          name in the reader's vocabulary; the attribute is what the styles read,
@@ -293,19 +322,42 @@
 
       /* Lines are plain {t, k} pairs produced by the shared client, so both
          surfaces paint the same thing: the console here, the terminal page
-         there. Code highlighting was a transcript-era device and is gone. */
+         there. A line carries its tokens from `embTerminal.highlight`, which is
+         the same treatment the page's hand-marked specimens get — a command or
+         a reply's keyword, a string literal, a number — so what a reader runs
+         and what the page shows about the server are typeset alike. Dim and
+         error lines are left whole: they are the panel's own voice, not code. */
+      function appendTokens(el, text, command) {
+        if (!window.embTerminal || !window.embTerminal.highlight) {
+          el.appendChild(document.createTextNode(text));
+          return;
+        }
+        window.embTerminal.highlight(text, command).forEach(function (token) {
+          if (!token.c) { el.appendChild(document.createTextNode(token.t)); return; }
+          var span = document.createElement('span');
+          span.className = 't-' + token.c;
+          span.textContent = token.t;
+          el.appendChild(span);
+        });
+      }
+
       function lineEl(line) {
         var el = document.createElement('span');
         el.className = 'console__line' + (line.k ? ' console__line--' + line.k : '');
         if (line.k === 'echo') {
           var caret = document.createElement('span');
           caret.className = 'console__caret';
-          caret.textContent = 'EMB ›';
+          caret.textContent = 'emb>';
           el.appendChild(caret);
-          el.appendChild(document.createTextNode(' ' + line.t));
-        } else {
-          el.textContent = line.t;
+          el.appendChild(document.createTextNode(' '));
+          appendTokens(el, line.t, true);
+          return el;
         }
+        if (line.k === 'dim' || line.k === 'err') {
+          el.textContent = line.t;
+          return el;
+        }
+        appendTokens(el, line.t, line.k === 'echo');
         return el;
       }
 
@@ -356,55 +408,78 @@
         return screen.scrollHeight - screen.scrollTop - screen.clientHeight < 4;
       }
 
-      /* The example rows are the poster's ruled numbered entry, made operable:
-         the row's number is the page's own `01` / `02` ladder, and the button
+      /* The rows are the poster's ruled numbered entry, made operable: the
+         row's number is the page's own `01` / `02` ladder, and the button
          carries the command as its accessible name, with the note that says
-         what the command returns as part of the same name. */
+         what the command returns as part of the same name. The numbers run
+         across the groups rather than restarting in each, so one number always
+         names one command. */
       function examplesEl() {
         /* The heading and the list go straight into the band: a wrapper here
            would carry the band's own class and its padding twice. */
         var box = document.createDocumentFragment();
-        var head = document.createElement('p');
-        head.className = 'console__examples-h';
-        head.textContent = 'EXAMPLES';
-        box.appendChild(head);
-        var list = document.createElement('ol');
-        list.className = 'console__examples-list';
-        EXAMPLES.forEach(function (ex, i) {
-          var li = document.createElement('li');
-          li.className = 'console__example';
-          var num = document.createElement('span');
-          num.className = 'console__example-n';
-          num.textContent = (i + 1 < 10 ? '0' : '') + (i + 1);
-          var cmd = document.createElement('button');
-          cmd.type = 'button';
-          cmd.className = 'console__example-cmd';
-          /* The row is the command, and what it returns, in one name: the two
-             texts sit in separate flex boxes, so without this the name would
-             be read as one run-on word. */
-          cmd.setAttribute('aria-label', ex.t + ' — ' + ex.n);
-          /* The command sits in its own box so a long digest can be broken:
-             beside the note it is a flex item whose minimum is its longest
-             word, and a 40-character SHA is wider than a phone. */
+        var n = 0;
+        GROUPS.forEach(function (group) {
+          if (!group.items.length) { return; }
+          var head = document.createElement('p');
+          head.className = 'examples__group';
           var label = document.createElement('span');
-          label.className = 'console__example-t';
-          label.textContent = ex.d || ex.t;
-          cmd.appendChild(label);
-          var note = document.createElement('span');
-          note.className = 'console__example-note';
-          note.setAttribute('aria-hidden', 'true');
-          note.textContent = ex.n;
-          cmd.appendChild(note);
-          cmd.addEventListener('click', function () { submitCommand(ex.t); });
-          li.appendChild(num);
-          li.appendChild(cmd);
-          list.appendChild(li);
+          label.className = 'examples__label';
+          label.textContent = group.h;
+          head.appendChild(label);
+          /* Only the first group says it: the rows below are the same kind of
+             thing, and a second "click one" is the page repeating itself. */
+          if (group.hint) {
+            var hint = document.createElement('span');
+            hint.className = 'examples__hint';
+            hint.textContent = group.hint;
+            head.appendChild(hint);
+          }
+          box.appendChild(head);
+          var list = document.createElement('ol');
+          list.className = 'examples__list examples__list--' + group.cols;
+          group.items.forEach(function (ex) {
+            n += 1;
+            var li = document.createElement('li');
+            li.className = 'examples__i';
+            var num = document.createElement('span');
+            num.className = 'examples__n';
+            num.textContent = (n < 10 ? '0' : '') + n;
+            num.setAttribute('aria-hidden', 'true');
+            var cmd = document.createElement('button');
+            cmd.type = 'button';
+            cmd.className = 'examples__cmd';
+            /* The row is the command, and what it returns, in one name: the two
+               texts sit in separate flex boxes, so without this the name would
+               be read as one run-on word. */
+            cmd.setAttribute('aria-label', (n < 10 ? '0' : '') + n + '. ' + (ex.n ? ex.t + ' — ' + ex.n : ex.t));
+            /* The command sits in its own box so a long digest can be broken:
+               beside the note it is a flex item whose minimum is its longest
+               word, and a 40-character SHA is wider than a phone. */
+            var text = document.createElement('span');
+            text.className = 'examples__t';
+            text.textContent = ex.d || ex.t;
+            cmd.appendChild(text);
+            if (ex.n) {
+              var note = document.createElement('span');
+              note.className = 'examples__note';
+              note.setAttribute('aria-hidden', 'true');
+              note.textContent = ex.n;
+              cmd.appendChild(note);
+            }
+            cmd.addEventListener('click', function () { submitCommand(ex.t); });
+            li.appendChild(num);
+            li.appendChild(cmd);
+            list.appendChild(li);
+          });
+          box.appendChild(list);
         });
-        box.appendChild(list);
         return box;
       }
 
-      var examplesBox = root.querySelector('#console-examples');
+      /* The ledger is beside the plate rather than inside it, so it is found
+         from the document: the console's own subtree no longer contains it. */
+      var examplesBox = document.querySelector('#console-examples');
       if (examplesBox) {
         examplesBox.appendChild(examplesEl());
         examplesBox.hidden = false;
@@ -473,8 +548,13 @@
         });
 
         /* The live region is armed after the panel is built, so loading the
-           page does not announce the example list. Replies are announced. */
+           page does not announce the idle line. Replies are announced. */
         if (term) {
+          /* A terminal that opens on nothing is a terminal the reader has to
+             guess at. One dim line, in the panel's own voice, states the one
+             thing about it the ledger above cannot: that the arrow keys walk
+             what you have already run. It is replaced by the first command. */
+          paint([{ t: '↑ and ↓ recall what you have run · Enter sends', k: 'dim' }]);
           screen.scrollTop = screen.scrollHeight;
         } else {
           paint([{ t: 'offline — the sandbox client could not be loaded', k: 'dim' }]);

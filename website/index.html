@@ -488,11 +488,130 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
   </div>
 </section>
 
+    <!-- ══════════════════════════════════════════════════════ BLOCK · DEMO -->
+    <!-- Block 1 of 4. The page turns over early, into the plate's own material
+         (#111110), because the panel below is not an illustration of the
+         sandbox -- it is the sandbox. The prose says what answers and what the
+         bridge refuses; the ledger says what to type; the plate is the
+         terminal. The spine crosses this ground in plain sight, and the plate
+         is still the thing that covers it. -->
+    <section class="block block--dark" id="demo" aria-labelledby="demo-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="demo-h">THE SERVER IS THE DEMO</h2>
+
+        <div class="block__grid">
+          <div class="block__main">
+
+            <p class="block__deck">
+              A real <span class="t-cmd">emb</span> process answers every
+              command below. It is the same binary you would run locally,
+              loaded with the sandbox's own models, reached over RESP through
+              a bridge that may ask it questions and may not change it: no
+              configuration, no script loaded from this page, nothing written
+              to shared state.
+            </p>
+
+            <p class="block__deck">
+              Run a row from the ledger, or type your own command and press
+              Enter. <span class="t-cmd">↑</span> and
+              <span class="t-cmd">↓</span> walk what you have already run, and
+              every reply is followed by the round trip that produced it,
+              measured here at the page. Nothing below is replayed from a
+              recording: the bytes are what this server sent, this time.
+            </p>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>ANSWERS</dt><dd>emb v<span data-emb-version>0.4.0.pre5</span> · minilm · sst2</dd>
+              <dt>RUNS</dt><dd><span class="t-cmd">EMB</span> · <span class="t-cmd">EMB.MULTI</span> · the read commands</dd>
+              <dt>REFUSES</dt><dd>config · raw Lua · images · writes</dd>
+              <dt>BOUNDS</dt><dd>2 commands/s · 8 texts · 2 KB per text</dd>
+              <dt>MEASURED</dt><dd>the round trip, printed under each reply</dd>
+              <dt>RESETS</dt><dd>the sandbox may restart between visits</dd>
+            </dl>
+          </div>
+        </div>
+
+        <!-- The live console. Its executor is `window.embTerminal`, loaded from
+             the sandbox origin by the script tag below this document's own
+             script. When that module cannot be reached the console renders its
+             offline state; it never falls back to a transcript. The two
+             digests are stamped from the preset bytes by
+             `website/tools/stamp-presets.py`, and `EMB.EVSHA` here names only
+             those bytes: the console's example commands are built from them,
+             so it cannot offer a digest the sandbox refuses. -->
+        <!-- The commands the console takes, as a ledger above it rather than
+             as part of it: the plate below is the REPL, and this says what to
+             put in it. `main.js` fills it from the two digests the section
+             carries; it ships empty and `hidden`, so a reader without
+             scripting sees the specimen below instead of an empty box. -->
+        <section class="examples" aria-label="Example commands" data-reveal>
+          <div class="examples__band" id="console-examples" hidden></div>
+        </section>
+
+        <section class="console" id="console" data-console="live" data-state="idle"
+                 data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445"
+                 data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32"
+                 aria-labelledby="console-h" data-reveal>
+          <h3 class="sr-only" id="console-h">Console</h3>
+
+          <div class="console__bar">
+            <p class="console__status" id="console-status">
+              <span class="console__dot" id="console-dot" aria-hidden="true"></span><span class="console__status-t" id="console-status-t">IDLE</span>
+            </p>
+            <p class="console__badge">SANDBOX · MAY RESET</p>
+          </div>
+
+          <div class="console__screen" id="console-screen">
+            <div class="console__out" id="console-out" aria-live="off"></div>
+            <noscript>
+              <!-- The specimen is complete without JavaScript: it is a static
+                   capture, labelled as one, so the section is never empty. -->
+              <pre class="console__out console__out--static">SPECIMEN · CAPTURED FROM THE SANDBOX
+
+EMB minilm VALUES "hello world"
+  dtype       FLOAT
+  shape       [1 384]
+  values      [-0.19744610786437988, 0.17766517400741577, …]
+
+EMB minilm "hello world"
+  \x7c\x8e\x80\xbd…   384 float32s × 4 bytes · 1.5 KB bulk string
+
+EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
+  label       POSITIVE
+  confidence  0.99
+  scores      […]
+
+Run these on a local server; this panel is a specimen without JavaScript.</pre>
+            </noscript>
+          </div>
+
+          <p class="console__state" id="console-state" hidden></p>
+
+          <form class="console__form" id="console-form" autocomplete="off">
+            <label class="console__prompt" for="console-in">emb&gt;</label>
+            <input class="console__input" id="console-in" name="command" type="text"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   spellcheck="false" enterkeyhint="go"
+                   placeholder='EMB minilm "hello world"'>
+            <button class="console__run" type="submit" aria-label="Run the command"
+                    title="Run (Enter)"><span aria-hidden="true">↵</span></button>
+          </form>
+        </section>
+
+        </div>
+      </div>
+    </section>
+
     <!-- ════════════════════════════════════════════════════ BLOCK · PROTOCOL -->
-    <!-- Block 1 of 3. Paper ground, the spine in an explicit lane, and the
-         console plate covering the lane where it crosses: the same rule the
-         hero's plates follow. Facts sit right of the fold in the annotation
-         strip; body text never touches the line. -->
+    <!-- Block 2 of 4. Paper ground, the spine in an explicit lane. Facts sit
+         right of the fold in the annotation strip; body text never touches the
+         line. -->
     <section class="block block--paper" id="protocol" aria-labelledby="protocol-h">
       <div class="shell block__inner">
         <div class="block__body">
@@ -544,90 +663,14 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           </div>
         </div>
 
-                <!-- The live console. Its executor is `window.embTerminal`,
-                     loaded from the sandbox origin by the script tag below
-                     this document's own script. When that module cannot be
-                     reached the console renders its offline state; it never
-                     falls back to a transcript. The two digests are stamped
-                     from the preset bytes by `website/tools/stamp-presets.py`,
-                     and `EMB.EVSHA` here names only those bytes: the console's
-                     example commands are built from them, so it cannot offer a
-                     digest the sandbox refuses. -->
-                <section class="console" id="console" data-console="live" data-state="idle"
-                         data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445"
-                         data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32"
-                         aria-labelledby="console-h" data-reveal>
-          <h3 class="sr-only" id="console-h">Console</h3>
-
-          <div class="console__bar">
-            <p class="console__status" id="console-status">
-              <span class="console__dot" id="console-dot" aria-hidden="true"></span><span class="console__status-t" id="console-status-t">IDLE</span>
-            </p>
-            <p class="console__badge">SANDBOX · MAY RESET</p>
-          </div>
-
-          <!-- The demonstration commands belong to the panel, not to a state,
-               and they sit above the output rather than inside it: the reader
-               who has just run one can run the next without reloading the page,
-               and at rest the row under the strip is what the eye lands on
-               instead of an empty transcript. `main.js` fills this from the two
-               digests the section carries; it ships empty and `hidden`, so a
-               reader without scripting sees the specimen below instead of an
-               empty box. -->
-          <div class="console__examples" id="console-examples" hidden></div>
-
-          <div class="console__screen" id="console-screen">
-            <div class="console__out" id="console-out" aria-live="off"></div>
-            <noscript>
-              <!-- The specimen is complete without JavaScript: it is a static
-                   capture, labelled as one, so the section is never empty. -->
-              <pre class="console__out console__out--static">SPECIMEN · CAPTURED FROM THE SANDBOX
-
-EMB minilm VALUES "hello world"
-  dtype       FLOAT
-  shape       [1 384]
-  values      [-0.19744610786437988, 0.17766517400741577, …]
-
-EMB minilm "hello world"
-  \x7c\x8e\x80\xbd…   384 float32s × 4 bytes · 1.5 KB bulk string
-
-EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
-  label       POSITIVE
-  confidence  0.99
-  scores      […]
-
-Run these on a local server; this panel is a specimen without JavaScript.</pre>
-            </noscript>
-          </div>
-
-          <p class="console__state" id="console-state" hidden></p>
-
-          <form class="console__form" id="console-form" autocomplete="off">
-            <label class="console__prompt" for="console-in">EMB ›</label>
-            <input class="console__input" id="console-in" name="command" type="text"
-                   autocomplete="off" autocapitalize="off" autocorrect="off"
-                   spellcheck="false" enterkeyhint="go"
-                   placeholder='EMB minilm "hello world"' aria-describedby="console-note">
-            <button class="console__run" type="submit" aria-label="Run the command"
-                    title="Run (Enter)"><span aria-hidden="true">↵</span></button>
-          </form>
-          <p class="console__note" id="console-note">
-            A real <code>emb</code> process answers these commands over RESP. It
-            is a sandbox that may reset, and it refuses anything that would
-            change its configuration or shared state — run the same commands
-            against your own server.
-          </p>
-        </section>
-
         </div>
       </div>
     </section>
 
     <!-- ═══════════════════════════════════════════════════ BLOCK · SCRIPTS -->
-    <!-- Block 2 of 3. The page's single inversion: full-bleed #111110, the
-         plates' own material, and the one place the spine crosses a dark
-         ground in plain sight. Code is the content here, not an illustration
-         of it. -->
+    <!-- Block 3 of 4. Full-bleed #111110, the plates' own material, and the
+         place the spine crosses a dark ground in plain sight. Code is the
+         content here, not an illustration of it. -->
     <section class="block block--dark" id="scripts" aria-labelledby="scripts-h">
       <div class="shell block__inner">
         <div class="block__body">
@@ -701,7 +744,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
     </section>
 
     <!-- ══════════════════════════════════════════════════ BLOCK · OPERATIONS -->
-    <!-- Block 3 of 3. Back to paper, and the densest measure on the page: a
+    <!-- Block 4 of 4. Back to paper, and the densest measure on the page: a
          ledger of the commands an operator already knows, with the emb-top
          capture as the dark plate that proves it. -->
     <section class="block block--paper" id="operations" aria-labelledby="operations-h">

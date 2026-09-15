@@ -972,6 +972,178 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .facts dt{ color: var(--muted); letter-spacing: .05em; }
 .facts dd{ min-width: 0; overflow-wrap: anywhere; }
 
+/* ── 07a the console's ledger ──────────────────────────────────────── */
+/* The commands the console takes, kept out of the plate on purpose: the plate
+   below is the REPL, and this is what to put in it. It is the poster's ruled
+   numbered entry -- the same atom as `.uses` on the dark block and the `01
+   INPUT` ladder in the hero -- so a reader already knows how to read it, and
+   every row is a real control rather than a caption that looks clickable.
+
+   Two groups, because they are two different things: the reply forms need the
+   note that says what comes back, and the server reads are one word each whose
+   names say what they do. The second group carries no notes for that reason,
+   which is what lets it be one row of seven instead of seven rows. */
+.examples{
+  margin-top: clamp(24px, 2.6vw, 38px);
+  /* The ledger and the plate are two objects: the ledger is what to put in,
+     the plate is what answers. Tight inside each, generous between them. */
+  margin-bottom: clamp(18px, 2vw, 28px);
+  border-top: 1px solid var(--rule);
+  padding-top: clamp(10px, 1.2vw, 14px);
+}
+.examples__band[hidden]{ display: none; }
+/* The group heading is the same bar the standalone terminal draws: paper with
+   black ink, full width, with the hint inside it. The bar is opaque and it is
+   what covers the spine where it crosses, the same way `.block__head` does, so
+   the heading needs no lane arithmetic of its own. */
+.examples__group{
+  /* A paper bar inside the dark block, so it takes the paper's ink back:
+     `--muted` is remapped to `--rule` for everything inside `.block--dark`, and
+     `--rule` on paper is a hairline, not a text colour. The literal is
+     `:root`'s own value -- 4.82:1 on --bg -- and is the colour the standalone
+     terminal's own bar uses for the same hint. */
+  --muted: #6B6963;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 20px;
+  flex-wrap: wrap;
+  margin: 0 0 4px;
+  padding: 2px clamp(14px, 1.5vw, 22px);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  letter-spacing: .05em;
+}
+.examples__label{ color: var(--fg); font-weight: 500; }
+.examples__hint{ color: var(--muted); font-weight: 400; }
+.examples__list{
+  display: grid;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  column-gap: clamp(20px, 2.6vw, 48px);
+  border-top: 1px solid var(--rule);
+}
+.examples__list + .examples__group{ margin-top: clamp(18px, 2vw, 26px); }
+.examples__list--2{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.examples__list--7{
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* One row, so it is closed by one rule instead of ruled inside itself: a
+     border under each cell stops at the column gap and reads as dashes. */
+  border-bottom: 1px solid var(--rule);
+}
+.examples__list--7 .examples__i{ border-bottom: 0; }
+/* The ledger is divided by the spine rather than run across it. It used to
+   span the full width of the body with the line crossing whatever column it
+   landed in, which is how a reply form's command ended up with the spine
+   through it. Its rows are now held clear of the lane at every width, by the
+   measure the block grid above already uses at this fold: the reply forms in
+   one column to the left of the line, and the server's seven split four and
+   three around it, still in the one row they were.
+
+   Above 1000px the fold is 65.31% of the content box, which is the case
+   below; below that the lane moves -- into the left gutter at 641-1000px and
+   to 90% on phones -- and the media blocks hold the same rows by an inset or a
+   width instead. */
+@media (min-width: 1001px){
+  /* One column, not two. Two would have to straddle the lane -- 65.31% of the
+     body on one side and the rest on the other -- and the narrow side cannot
+     hold a command and its note on one line: `EMB.EVSHA minilm … 1 "hello
+     world" "hello there"` is 400px of label against a 391px column at 1280, so
+     the longest row would wrap to three lines where it had one. One column
+     puts every note in a right-aligned column against the line, which is the
+     ruled entry the ledger already is. A width rather than a lone grid track,
+     so the row rules stop at the lane as well as the text. */
+  .examples__list--2{
+    grid-template-columns: minmax(0, 1fr);
+    width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap));
+  }
+  /* Seven equal columns cannot be made to land on a 65.31% fold -- 5/7 of the
+     body is 71%, 4/7 is 57% -- so the row is four cells wide to the lane, the
+     lane itself at --spine-w, and three cells after it. The fifth cell takes
+     the column after the lane explicitly and the sixth and seventh follow it
+     by auto-placement, which is what keeps all seven in one row.
+
+     Its own column gap is --fold-gap rather than the list's, so that the air
+     either side of the lane is the block grid's air (gap + spine + gap) and the
+     line sits in this row exactly where it sits in the grid above. The three
+     internal gaps those four cells carry are what --fold-gap * 4 subtracts. */
+  .examples__list--7{
+    column-gap: var(--fold-gap);
+    grid-template-columns:
+      repeat(4, calc((var(--fold) - var(--spine-w) / 2 - var(--fold-gap) * 4) / 4))
+      var(--spine-w)
+      repeat(3, minmax(0, 1fr));
+  }
+  .examples__list--7 > :nth-child(5){ grid-column-start: 6; }
+}
+.examples__i{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 clamp(10px, 1.2vw, 16px);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.examples__n{
+  padding-block: 8px;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.examples__cmd{
+  appearance: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 16px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.5;
+  color: var(--fg);
+  cursor: pointer;
+  transition: color .12s ease;
+}
+.examples__t{ min-width: 0; overflow-wrap: anywhere; }
+.examples__note{ color: var(--muted); transition: color .12s ease; }
+/* Three signals, because the accent may not be the only one: the rule, the
+   note and the underline all move together. */
+.examples__cmd:hover,
+.examples__cmd:focus-visible{ color: var(--accent-ink); }
+.examples__cmd:hover .examples__t,
+.examples__cmd:focus-visible .examples__t{
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.examples__cmd:hover .examples__note,
+.examples__cmd:focus-visible .examples__note{ color: var(--fg); }
+/* The ledger moved to the dark band with the plate, so it inverts with its
+   ground the way every other surface here does: its rules take --rule-dark (the
+   light --rule is 9.22:1 on #111110 and reads as a bright line, not as a
+   hairline), the ink is the paper, and the hover leaves --accent-ink -- a
+   paper-tuned 4.66:1 -- for the --accent the dark grounds already use. The
+   numbers and the hint need no rule of their own: --muted is remapped to --rule
+   for the whole block. */
+.block--dark .examples,
+.block--dark .examples__list,
+.block--dark .examples__list--7{ border-color: var(--rule-dark); }
+.block--dark .examples__i{ border-bottom-color: var(--rule-dark); }
+.block--dark .examples__cmd{ color: var(--bg); }
+.block--dark .examples__cmd:hover,
+.block--dark .examples__cmd:focus-visible{ color: var(--accent); }
+.block--dark .examples__cmd:hover .examples__note,
+.block--dark .examples__cmd:focus-visible .examples__note{ color: var(--bg); }
+
 /* ── 07b code ─────────────────────────────────────────────────────── */
 /* Code is a material, not an illustration of one. It is typeset in the mono
    face with four token classes, and its container is a rule above and below
@@ -1211,8 +1383,16 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
    The fourth plate, laid flat, and now a live one: the executor is the
    sandbox's own client module (served at cli.emb.is/terminal.js), so the
    replies below are the server's. The starting and offline states are the
-   failure paths the withheld placeholder used to cover. */
+   failure paths the withheld placeholder used to cover.
+   The plate sits in the page's dark band, on the material it is made of: its
+   own #111110 is the band's ground, and the paper border is the cut -- the
+   terminal's edge drawn in the light the dark block's own header is drawn in. */
 .console[hidden]{ display: none; }
+/* On the page's dark band the plate's edge is a hairline like every other rule
+   on that ground: the paper border was the plate's edge against paper, and
+   against the material the plate is made of it is a 16.59:1 outline instead of
+   a separation. */
+.block--dark .console{ border-color: var(--rule-dark); }
 .console{
   min-width: 0;
   /* above the spine: the line passes behind this plate and re-emerges below
@@ -1224,6 +1404,11 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   color: var(--bg);
   font-family: var(--mono);
 }
+/* The strip is the plate's own top line, not a bar laid on it: the ground is
+   the plate's ground and a hairline closes it, which is what the standalone
+   terminal's own header line is (`.cli__head` in website/repl/index.html). The
+   two surfaces are one object in two frames, so the chrome is drawn from the
+   same pair on both: #111110 for a surface, #292823 for every rule inside it. */
 .console__bar{
   display: flex;
   align-items: center;
@@ -1231,8 +1416,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   gap: 10px 16px;
   flex-wrap: wrap;
   padding: 4px clamp(12px, 1.5vw, 18px);
-  background: #292823;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule-dark);
 }
 /* The strip is the bar's own bar: it names the console's condition, carries
    the one real choice, and says what the panel is. The indicator's colour is
@@ -1286,16 +1470,17 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   text-decoration: underline;
   cursor: pointer;
 }
-.console__note code{ font-family: inherit; color: var(--bg); }
 /* The transcript is the one part of the plate that grows with its content, so
    it is the one part with a ceiling: the panel is a window onto the sandbox's
    output, not a page that lengthens every time a reply arrives. It scrolls
    without a visible bar, the rule every scroller on this page follows, and
-   `main.js` keeps the newest line in view. The floor is deliberately low so an
-   empty panel is not a black field, and the examples below are the content. */
+   `main.js` keeps the newest line in view. The floor was deliberately low so an
+   empty panel was not a black field; it is now tall enough to hold the reply
+   the ledger's own rows return -- a labelled reply is eight lines -- without the
+   reader scrolling a window that is smaller than what the panel is for. */
 .console__screen{
-  min-height: clamp(96px, 7.5vw, 122px);
-  max-height: clamp(190px, 15vw, 236px);
+  min-height: clamp(132px, 9.5vw, 158px);
+  max-height: clamp(264px, 21vw, 336px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: clamp(14px, 1.6vw, 22px) clamp(12px, 1.5vw, 18px);
@@ -1312,89 +1497,26 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
 .console__line--key{ color: var(--bg); }
 .console__line--err{ color: var(--accent); }
 .console__line--echo{ color: var(--bg); }
+/* The speed the panel is boasting about, in the form redis-cli prints it: a
+   footer to the reply rather than a column, so it is read after the value. */
+.console__line--time{ color: var(--rule); }
+.console__line--time .t-num{ color: var(--bg); }
 .console__caret{ color: var(--accent); }
 
 /* The examples are the poster's ruled numbered entry made operable. The row's
    number is the page's own 01 / 02 ladder; the note is inside the button, so
    the control's accessible name is the command and what it returns. */
-/* The demonstration commands are a band under the transcript, not a transient
-   state: they stay put, so the reader who has just run one can run the next.
-   Two columns above 640px keeps the commands to four ruled rows, which is what
-   keeps the panel from growing to fit its own menu. */
-.console__examples{
-  margin: 0;
-  padding: 12px clamp(12px, 1.5vw, 18px) 10px;
-  border-bottom: 1px solid #292823;
-}
-.console__examples[hidden]{ display: none; }
-.console__examples-h{
-  margin: 0 0 2px;
-  font-size: clamp(12px, 1.02vw, 13px);
-  font-weight: 500;
-  letter-spacing: .1em;
-  color: var(--rule);
-}
-.console__examples-list{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: clamp(16px, 2.2vw, 36px);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.console__example{
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0 clamp(10px, 1.2vw, 16px);
-  border-top: 1px solid #292823;
-}
-.console__example:nth-child(1),
-.console__example:nth-child(2){ border-top: 0; }
-.console__example-n{
-  padding: 7px 0;
-  font-size: clamp(12px, 1.02vw, 13px);
-  font-weight: 500;
-  letter-spacing: .1em;
-  color: var(--rule);
-}
-.console__example-cmd{
-  appearance: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0 clamp(10px, 1.2vw, 16px);
-  width: 100%;
-  min-width: 0;
-  min-height: 36px;
-  padding: 7px 0;
-  border: 0;
-  background: none;
-  text-align: left;
-  font-family: var(--mono);
-  font-size: clamp(12px, 1.02vw, 13px);
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--bg);
-  cursor: pointer;
-  transition: color .12s ease;
-}
-.console__example-t{ min-width: 0; overflow-wrap: anywhere; }
-.console__example-note{
-  color: var(--rule);
-  font-weight: 400;
-  transition: color .12s ease;
-}
-.console__example-cmd:hover{ color: var(--accent); }
-.console__example-cmd:hover .console__example-note{ color: var(--bg); }
-
+/* The prompt row is the terminal's last line, so it is the same row on both
+   surfaces: an accent `emb>` mark, a bare input with no underline of its own,
+   and a bare `↵` with no box around it. Anything a panel adds here -- a rule
+   under the input, a border on the submit -- is chrome the real terminal does
+   not have, and the demo is a picture of the real terminal. */
 .console__form{
   display: none; /* without JavaScript the static transcript stands in */
   align-items: center;
   gap: 10px;
-  padding: 8px clamp(12px, 1.5vw, 18px) 12px;
-  border-top: 1px solid var(--rule);
+  padding: 6px clamp(12px, 1.5vw, 18px) 10px;
+  border-top: 1px solid var(--rule-dark);
 }
 html.js .console__form{
   display: grid;
@@ -1409,9 +1531,8 @@ html.js .console__form{
 .console__input{
   width: 100%;
   min-width: 0;
-  padding: 12px 0 10px;
+  padding: 2px 0;
   border: 0;
-  border-bottom: 1px solid var(--rule);
   background: transparent;
   color: var(--bg);
   font-family: var(--mono);
@@ -1427,38 +1548,32 @@ html.js .console__form{
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 12px;
-  min-width: 38px;
-  min-height: 38px;
-  border: 1px solid var(--rule);
-  background: transparent;
-  color: var(--bg);
+  padding: 2px 6px;
+  min-width: 26px;
+  min-height: 26px;
+  border: 0;
+  background: none;
+  color: var(--rule);
   font-family: var(--mono);
   font-size: clamp(12px, 1.02vw, 13px);
   font-weight: 700;
   letter-spacing: .1em;
   line-height: 1;
   cursor: pointer;
-  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+  transition: color .12s ease;
 }
-.console__run:hover{ background: var(--accent); border-color: var(--accent); color: var(--fg); }
+.console__run:hover{ color: var(--accent); }
 .console__run[disabled]{
-  background: #292823;
-  border-color: var(--rule);
-  color: var(--rule);
+  background: none;
+  border-color: transparent;
+  color: var(--rule-dark);
   cursor: progress;
 }
-.console__note{
-  padding: 10px clamp(12px, 1.5vw, 18px) 12px;
-  border-top: 1px solid #292823;
-  font-size: clamp(12px, .95vw, 12.5px);
-  line-height: 1.55;
-  color: var(--rule);
-}
 
-/* the accent is the focus ring on this surface: 5.98:1 there vs 3.52:1 for
+/* the accent is the focus ring on these surfaces: 5.98:1 there vs 3.52:1 for
    --accent-ink, which is tuned for the paper and would fail here */
 .console :focus-visible,
+.block--dark .examples :focus-visible,
 .topviz :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ── 10 the emb-top panel ───────────────────────────────────────────────
@@ -1609,7 +1724,9 @@ html.js .console__form{
 .block .code{ --i: 2; }
 .block .shift{ --i: 1; }
 .block .uses{ --i: 3; }
-.block .console{ --i: 4; }
+/* the demo band ripples on its own order: the ledger, then the plate it fills */
+.block .examples{ --i: 1; }
+.block .console{ --i: 2; }
 
 html.js [data-reveal]{ opacity: 0; translate: 0 14px; }
 html.js [data-reveal].in{
@@ -1805,29 +1922,25 @@ html.js.is-ready .hero__prose{
   .console__badge{ font-size: 14px; letter-spacing: .05em; }
   .console__status{ font-size: 14px; }
   .console__out{ font-size: 14px; line-height: 1.7; }
-  .console__examples-h,
-  .console__example-n,
-  .console__example-cmd{ font-size: 14px; }
-  .console__example-cmd{ min-height: 44px; padding: 11px 0; }
-  .console__example-n{ padding: 11px 0; }
-  /* one command per row once the rows are big enough to be tapped, and the
-     rule that was a row divider in the two-column grid becomes the first one
-     of the list again */
-  .console__examples-list{ grid-template-columns: minmax(0, 1fr); }
-  .console__example:nth-child(2){ border-top: 1px solid #292823; }
-  /* At this width the command fills the row on its own, so the note would be
-     the thing that wrapped -- and a menu that is seven rows of one line is
-     worth more on a phone than seven rows of two. The note is not lost: it is
-     the button's own accessible name, and it is on the row again above 834px. */
-  .console__example-note{ display: none; }
-  /* The badge wraps onto its own row here, where the note under the panel says
-     the same sentence in full and the strip reads better as one line. */
-  .console__badge{ display: none; }
   .console__state{ font-size: 14px; }
   .console__prompt{ font-size: 14px; }
   .console__input{ font-size: 14px; padding-block: 14px 12px; }
   .console__run{ min-height: 44px; min-width: 44px; padding: 12px 14px; font-size: 14px; }
-  .console__note{ font-size: 14px; line-height: 1.6; }
+  /* The reply forms take one row each once the rows are big enough to be
+     tapped; the server's one-word commands still fit two to a row, which is
+     what keeps twelve of them off a phone-length scroll. */
+  .examples__list--2{ grid-template-columns: minmax(0, 1fr); }
+  .examples__list--7{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .examples__group,
+  .examples__n,
+  .examples__cmd{ font-size: 14px; }
+  .examples__cmd{ min-height: 44px; padding-block: 11px; }
+  .examples__n{ padding-block: 11px; }
+  /* At this width the command fills the row on its own, so the note would be
+     the thing that wrapped -- and a ledger of twelve rows of one line is worth
+     more on a phone than twelve rows of two. The note is not lost: it is the
+     button's own accessible name, and it is on the row again above 834px. */
+  .examples__note{ display: none; }
   /* The frame cannot reflow on a phone without wrapping box-drawing art into
      nonsense, and this region must never scroll sideways. Below this width the
      plate carries the run's figures as a sentence instead: the same run, at the
@@ -1944,7 +2057,10 @@ html.js.is-ready .hero__prose{
      massif and nothing is ever knocked out of it */
   .block__grid,
   .block__body > .block__head,
-  .block .topviz{ width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap)); }
+  .block .topviz,
+  /* the ledger takes the same measure: at 90% the lane is inside the content,
+     and a ruled row that ran past it put the spine through the commands */
+  .examples__list{ width: calc(var(--fold) - var(--spine-w) / 2 - var(--fold-gap)); }
   .block__grid{ grid-template-columns: minmax(0, 1fr); column-gap: 0; }
   .block__body{ padding-block: 46px; }
   .block__aside{ margin-top: 26px; }
@@ -2019,6 +2135,11 @@ html.js.is-ready .hero__prose{
      sheet's left edge is the content's, the lane here is at 25%, so this is
      a left inset rather than a width. */
   .block .topviz{
+    margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap));
+  }
+  /* the ledger is a sibling of the grid too, for the same reason and by the
+     same inset: at 25% the lane is the left gutter */
+  .examples__list{
     margin-left: calc(var(--fold) + var(--spine-w) / 2 + var(--fold-gap));
   }
 }
