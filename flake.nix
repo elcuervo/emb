@@ -85,6 +85,9 @@
         #                  `nixpkgs-wrangler` pin, because the main pin's copy
         #                  is not in the binary cache and would build from
         #                  source. See that input's comment.
+        #   flyctl         the Fly.io CLI for deploying the sandbox
+        #                  (`just sandbox-deploy`), which lives under
+        #                  `website/repl/` and so belongs to the website half.
         #
         # `firefox` is deliberately absent: on aarch64-darwin the nixpkgs we
         # pin builds it from source, which is hours, not minutes. Check any
@@ -103,6 +106,7 @@
           jpegoptim
           libwebp
           html-tidy
+          flyctl
         ]) ++ [ pkgsWrangler.wrangler ];
 
         # The CGo/runtime environment the server binary needs. Everything
@@ -125,6 +129,7 @@
             export PATH="$PWD/website/node_modules/.bin:$PATH"
           fi
           echo "website: \`just website\` serves website/ on :8080;" \
+               "\`just website-dev\` serves it with a local sandbox behind the console;" \
                "\`just website-browser\` fetches Chrome for Testing once."
         '';
       in
@@ -151,6 +156,11 @@
         # The Cloudflare CLI on its own, from the dedicated pin above:
         #   nix profile install .#wrangler
         packages.wrangler = pkgsWrangler.wrangler;
+
+        # The Fly.io CLI on its own, for deploying the sandbox
+        # (`just sandbox-deploy`):
+        #   nix profile install .#flyctl
+        packages.flyctl = pkgs.flyctl;
 
         devShells = {
           # Both halves. This is the shell AGENTS.md points at, so it keeps

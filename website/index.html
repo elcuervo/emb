@@ -141,7 +141,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
             <span class="hero__install-key">INSTALL</span><code class="hero__install-cmd">curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | sh</code>
           </p>
           <dl class="facts hero__facts">
-            <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0.pre4</span> · MIT</dd>
+            <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0.pre5</span> · MIT</dd>
             <dt>BUILDS</dt><dd>macOS arm64 · Linux amd64/arm64</dd>
             <dt>MEASURED</dt><dd><span class="t-num">2010.05 req/s</span> · minilm, 16 clients, Apple M4 · <a class="hero__link" href="https://github.com/elcuervo/emb/blob/main/BENCHMARK.md#multi-threaded">reproduce</a></dd>
           </dl>
@@ -543,14 +543,17 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           </div>
         </div>
 
-                <!-- HIDDEN for the first ship. The live runtime is not wired
-                     yet, so the panel is kept here, inert and out of the
-                     accessibility tree, rather than deleted. Removing the one
-                     `hidden` attribute below restores the placeholder
-                     transcript client exactly; pointing `window.embConsole.exec`
-                     at a RESP client then makes it live. See
-                     `website/README.md` § the console. -->
-                <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal hidden>
+                <!-- The live console. Its executor is `window.embTerminal`,
+                     loaded from the sandbox origin by the script tag below
+                     this document's own script. When that module cannot be
+                     reached the console renders its offline state; it never
+                     falls back to a transcript. The two digests are stamped
+                     from the preset bytes by `website/tools/stamp-presets.py`,
+                     and `EMB.EVSHA` here names only those bytes. -->
+                <section class="console" id="console" data-console="live"
+                         data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445"
+                         data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32"
+                         aria-labelledby="console-h" data-reveal>
           <h3 class="sr-only" id="console-h">Console</h3>
 
           <div class="console__bar">
@@ -562,42 +565,56 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
                       aria-controls="console-screen" aria-selected="false" data-mode="scripts"
                       data-tab="1" tabindex="-1">SCRIPTS</button>
             </div>
-            <p class="console__badge">DEMO · NOT A LIVE SERVER</p>
+            <div class="console__proto">
+              <label for="console-proto">RESP</label>
+              <select class="console__proto-select" id="console-proto">
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            <p class="console__badge">SANDBOX · MAY RESET</p>
           </div>
 
           <div class="console__screen" id="console-screen" role="tabpanel"
                aria-labelledby="tab-redis" tabindex="-1">
             <pre class="console__out" id="console-out" aria-live="off"></pre>
             <noscript>
-              <pre class="console__out console__out--static">EMB minilm "hello world"
-  \x7c\x8e\x80\xbd…   (384 float32s × 4 bytes)
+              <!-- The specimen is complete without JavaScript: it is a static
+                   capture, labelled as one, so the section is never empty. -->
+              <pre class="console__out console__out--static">SPECIMEN · CAPTURED FROM THE SANDBOX
 
-  EMB minilm VALUES "hello world"
-  dtype  FLOAT
-  shape  [1 384]
-  values [-0.19744610786437988, 0.17766517400741577, …]
+EMB minilm VALUES "hello world"
+  dtype       FLOAT
+  shape       [1 384]
+  values      [-0.19744610786437988, 0.17766517400741577, …]
 
-  EMB.SCRIPT LOAD sst2 "…sst2.lua…"
-  "77c1e0c01d3c43e8f07b262869d13c21b93b28f9"
+EMB minilm "hello world"
+  \x7c\x8e\x80\xbd…   384 float32s × 4 bytes · 1.5 KB bulk string
 
-  EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
+EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
   label       POSITIVE
   confidence  0.99
-  scores      […]</pre>
+  scores      […]
+
+Run these on a local server; this panel is a specimen without JavaScript.</pre>
             </noscript>
           </div>
+
+          <p class="console__state" id="console-state" hidden></p>
 
           <form class="console__form" id="console-form" autocomplete="off">
             <label class="console__prompt" for="console-in">EMB ›</label>
             <input class="console__input" id="console-in" name="command" type="text"
                    autocomplete="off" autocapitalize="off" autocorrect="off"
                    spellcheck="false" enterkeyhint="go"
-                   placeholder='EMB minilm "hello world"'>
+                   placeholder='EMB minilm VALUES "hello world"'>
             <button class="console__run" type="submit">RUN</button>
           </form>
           <p class="console__note">
-            Placeholder transcript from the reference server. The live client
-            is not wired yet.
+            A real <code>emb</code> process answers these commands over RESP.
+            It is a sandbox that may reset, and it refuses anything that would
+            change its configuration or shared state. Run the same commands
+            against your own server from the install line above.
           </p>
         </section>
 
@@ -753,7 +770,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
                but never inside one, so at the widths where the render cannot
                hold a line no value is split from its unit. Every character
                of the capture is unchanged. -->
-          <pre class="topviz__screen"> <span class="tf">emb-top v<span data-emb-version>0.4.0.pre4</span> ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
+          <pre class="topviz__screen"> <span class="tf">emb-top v<span data-emb-version>0.4.0.pre5</span> ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
 <span class="tf">minilm</span>        <span class="tf tf--bar">████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████</span>  <span class="tf">280 r/s</span>  <span class="tf">11.8k t/s</span>  <span class="tf">p50 6.5ms</span>  <span class="tf">p95 68.0ms</span>  <span class="tf">err 0</span>
    <span class="tf">dim 384 ·</span> <span class="tf">mean ·</span> <span class="tf">int8 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
 <span class="tf">bge-small-en…</span> <span class="tf tf--bar">▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████</span>  <span class="tf">151 r/s</span>   <span class="tf">5.7k t/s</span>  <span class="tf">p50 8.8ms</span>  <span class="tf">p95 77.0ms</span>  <span class="tf">err 18 ↑</span>
@@ -809,6 +826,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
   </div>
 </footer>
 
+<script src="https://cli.emb.is/terminal.js" defer></script>
 <script src="assets/js/main.js" defer onerror="document.documentElement.classList.remove('js')"></script>
 </body>
 </html>

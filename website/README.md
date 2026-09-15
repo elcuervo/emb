@@ -45,12 +45,23 @@ website/
 │   ├── png_lib.py          dependency-free PNG reader/writer for the above
 │   ├── ink-probe.html      asserts no text ink crosses the viewport, 24 widths
 │   ├── published-tree.py   what ships, the canonical origin, the cache rules
-│   └── stamp-version.py    writes VERSION into every `data-emb-version` element
+│   ├── stamp-version.py    writes VERSION into every `data-emb-version` element
+│   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
+│   ├── dev-server.py       serves this tree with the console's module origin
+│   │                       pointed at a local bridge (`just website-dev`)
+├── repl/                   the sandbox: NOT the site (see § the sandbox)
+│   ├── *.go                the bridge — the sandbox's only public surface
+│   ├── terminal.js         the one client module; both surfaces load it
+│   ├── index.html          the standalone terminal served at cli.emb.is/
+│   ├── presets/*.lua       the preloaded scripts, called by digest
+│   ├── sandbox.yaml        the server config the bridge reads for its manifest
+│   ├── Dockerfile, run.sh, fly.toml   the one-machine deployment
+│   └── (all excluded by `.assetsignore`, asserted by published-tree.py)
 └── README.md
 ```
 
 This list is two populations, and the difference is not visible in `ls`. The
-pages and `assets/` ship; `tools/`, this README, `PRODUCT.md`, the
+pages and `assets/` ship; `tools/`, `repl/`, this README, `PRODUCT.md`, the
 generation sources, and `.impeccable/` do not. [What ships](#what-ships) is
 the contract and `tools/published-tree.py` is the check.
 
@@ -175,6 +186,11 @@ Two other measurement traps worth knowing before trusting a number:
 `emb-top` capture shipped a hand-typed `v0.4.0` against a `0.4.0.pre4` VERSION,
 which is the drift this exists to stop. Run the stamper after bumping `VERSION`.
 
+The same idea covers the sandbox's preset digests: `just website-presets`
+stamps `data-emb-preset-*` from the SHA1 of `website/repl/presets/*.lua`, and
+`just website-presets-check` fails when a preset byte changes under a stamped
+digest. `ci.yml` and `site.yml` both run the check.
+
 ## What ships
 
 The site is served at **https://emb.is** from a Cloudflare Worker with static
@@ -199,7 +215,7 @@ the same two commands on every pull request:
 | Set | Members |
 |---|---|
 | **Served** | `index.html`, `404.html`, `docs/index.html`, `styles.css`, `docs.css`, `main.js`, three WOFF2 subsets, `terrain-matte.png`, `og.png`, `speckle.svg` |
-| **Ignored** | `tools/`, `.impeccable/`, `PRODUCT.md`, `README.md`, `terrain-v2.png`, `terrain-v2.md` |
+| **Ignored** | `tools/`, `repl/`, `.impeccable/`, `PRODUCT.md`, `README.md`, `terrain-v2.png`, `terrain-v2.md` |
 | **Platform config** | `.assetsignore`, `_headers` — read, never served |
 
 The check fails both ways: a file that would ship without being expected, and an
@@ -273,6 +289,78 @@ separate from the server's, and browser tooling lives there rather than in the
 Go shell. `firefox` is deliberately not on it: nixpkgs builds it from source on
 `aarch64-darwin`, which is hours. The check that catches that is in
 [`../AGENTS.md`](../AGENTS.md).
+
+## The sandbox
+
+The console and the standalone terminal are driven by a real `emb` process — a
+small Go bridge under `website/repl/` that forwards an allowlisted command
+surface to a server bound to loopback on the same Fly machine. The bridge is
+the only public surface, so no credential reaches a browser and a
+misconfigured public route cannot reach the server.
+
+```
+browser ──HTTPS──▶ bridge (cli.emb.is) ──RESP on 127.0.0.1──▶ emb ──▶ /data/models
+```
+
+**The boundary.** `website/repl/` is a program that happens to live under the
+site directory. It is excluded from the published tree by a `/repl/` entry in
+`.assetsignore`, and `published-tree.py` asserts that every file under it was
+excluded — so a deleted ignore line fails `just website-published` instead of
+publishing service source or presets. CI classifies it as code: a change under
+`website/repl/` runs the bridge's Go tests even though the rest of `website/`
+would skip the server and gem jobs.
+
+The local loop needs the site, the bridge and a server, and the bridge reads
+the server's config to learn the preset digests it will accept. One command
+starts all three and points the console at the local bridge:
+
+```bash
+just website-dev        # site :8080, bridge :8081, emb :6379 — Ctrl-C stops all three
+```
+
+`website/tools/dev-server.py` is what makes that possible: it serves this tree
+with exactly one substitution in HTML responses, the console's module origin
+(`https://cli.emb.is` → the local bridge). The published page keeps a single
+source, and the page under test differs from production in that one respect.
+`just website` still serves the tree untouched — use it for the ink probe and
+anything else that must measure what ships.
+
+The pieces are also runnable on their own:
+
+```bash
+just website                                               # the static tree
+just dev                                                   # the server alone
+just sandbox-run config=website/repl/sandbox.yaml          # the bridge alone
+just sandbox-test                                          # the bridge's tests
+```
+
+**One client, two surfaces.** `website/repl/terminal.js` is the canonical
+client: a quote-aware tokenizer, the `POST /api/exec {args, proto}` request, the
+reply renderer for every envelope kind, and the idle / running / result /
+error / starting / offline states. The sandbox serves it at `/terminal.js`, its
+standalone terminal page loads it, and the landing page loads the same file
+from `cli.emb.is`. Nothing renders a reply twice, so a change to the contract
+cannot land on one surface only. The landing page presents no host or endpoint:
+the module captures the origin it was served from.
+
+**The preset digests are checked.** A preset is called by the SHA1 of the bytes
+the server preloaded, so the digest the site shows must be that value:
+
+```bash
+just website-presets          # stamp website/repl/presets/*.lua into index.html
+just website-presets-check    # fail if a preset byte changed under a digest
+```
+
+`stamp-presets.py` also asserts that `website/repl/sandbox.yaml` preloads each
+preset, so the site cannot name a digest the server was never told to load.
+Both `ci.yml` and `site.yml` run the check.
+
+**Nothing here is a hosted offering.** The machine stays running and the
+sandbox may reset; it refuses `CONFIG`, `AUTH`, `MONITOR`, `EMB.SAVE`,
+`EMB.CACHE.FLUSH`, `EMB.SCRIPT *`, and `EMB.IMG*` at the bridge, and bounds
+what a visitor can spend with per-client and global rate limits, a concurrency
+cap, request and text caps, and a rolling work ceiling. See
+[`repl/`](repl/) and `PRODUCT.md`.
 
 ## Design notes
 
@@ -493,29 +581,45 @@ at **6.06:1**. `--accent-ink` is the one token that does *not* travel: it is
 tuned for the paper (4.66:1) and measures only **3.52:1** here, so the console
 overrides the global focus ring back to `--accent`.
 
-**It is hidden for the first ship, and one attribute brings it back.** The
-live runtime is not wired yet, so `<section class="console" … hidden>` keeps
-the markup, the styles and the transcript client in the tree while taking the
-panel out of the rendered page and the accessibility tree; `main.js` only
-boots a console that is not `hidden`. Removing that single attribute restores
-the placeholder exactly, and the `window.embConsole.exec` seam below is what a
-live RESP client replaces. Everything the panel does is described here as the
-artifact it is, not as what a reader sees today.
+**It runs a live executor.** The panel is rendered, not withheld: the executor
+is `window.embTerminal`, the client module the sandbox serves at
+`cli.emb.is/terminal.js`, and `main.js` drives the markup with it. The panel
+never fabricates a reply — if the module cannot be loaded, or the sandbox
+cannot be reached, the panel states that condition and offers a retry. There
+is no transcript behind the seam.
 
-**It is a placeholder, and it says so.** The bar reads `DEMO · NOT A LIVE
-SERVER`, the note under the panel says the live client is not wired, and there
-is no endpoint anywhere. The controls are real — a `<form>`, a labelled input
-and a `<pre aria-live>` — so the live version is not a rewrite: replacing
-`window.embConsole.exec` with a RESP client drives the same markup, modes and
-states. Two modes are the two special functions: `REDIS` shows the bytes and
-the `VALUES` envelope, `SCRIPTS` shows a script loaded once and called by SHA
-to answer as a classifier. Every line is copied from `README.md` or
-`examples/scripts/`, and the SHA1 in the scripts transcript is a real
-`sha1()` of `examples/scripts/snippets/sst2.lua` — the same value the server's
-`scriptSHA()` returns. The executor never touches the network, playback is
-line-by-line rather than per character, and `prefers-reduced-motion` collapses
-it to one frame. Without JavaScript the form is hidden and a `<noscript>`
-transcript stands in.
+**One client, two surfaces.** The same module drives the sandbox's own
+standalone terminal at `cli.emb.is/`, so a command and its reply render the
+same way on both. The module owns the tokenizer (quote-aware), the request
+(`POST /api/exec {args, proto}`), the reply renderer for every envelope kind,
+and the idle / running / result / error / starting / offline states; the page
+owns only the DOM. Which host the module came from is captured from its own
+`src`, so no page hardcodes the sandbox address in its copy — the console
+presents no endpoint, host, or hosted-service affordance.
+
+**The badge says what it is.** `SANDBOX · MAY RESET`, and the note under the
+panel says the same in a sentence: a real `emb` process, a sandbox that may
+reset, refusing anything that would change its configuration or shared state.
+There is no pricing, account, uptime, or support affordance.
+
+**The protocol is a real choice.** The `RESP` selector sends `HELLO 2` or
+`HELLO 3` on the sandbox's own connection, so the flat and the typed forms of
+the same command are the server's encodings rather than a client-side
+reformat. Two modes are the two special functions: `REDIS` shows the bytes and
+the `VALUES` envelope, `SCRIPTS` calls a preloaded preset by its digest and
+shows a labelled, non-embedding reply.
+
+**The digests are derived, not typed.** `just website-presets` stamps
+`data-emb-preset-embed` and `data-emb-preset-classify` from the SHA1 of
+`website/repl/presets/*.lua` — the same `sha1(bytes)` the server computes for
+the script it preloaded — and `--check` fails when a preset byte changes under
+a stamped digest. Without that, editing a preset would leave the site naming a
+digest the sandbox answers `no such script` to.
+
+Playback is line-by-line rather than per character, and
+`prefers-reduced-motion` collapses it to one frame. Without JavaScript the
+form is hidden and a labelled `<noscript>` specimen stands in, so the section
+is never empty.
 
 The panel is a real `role="tablist"` with roving `tabindex` and arrow-key
 navigation, and the live region is armed *after* the idle line is painted, so
@@ -524,14 +628,12 @@ loading the page does not announce a console hint. Every control clears the
 1086** and **14px at 390**, which is the committed floor.
 
 **Code is typeset as code.** Every specimen — the shell invocation, the Lua
-source, the `model(fn(input))` shift, and the console's replayed commands and
-replies — carries four token classes. The specs in the markup are marked by
-hand; the console's plain-string transcripts get the identical classes from a
-small pattern-based highlighter in `main.js` (four rules, no library), which
-is why `sst2` is not mangled into `sst` + `2`: the numeric rule is
-word-bounded. Emphasis is weight and colour-role, never a second hue — the
-page has one accent and this does not spend it twice. Measured on both
-grounds:
+source, the `model(fn(input))` shift, and the `<noscript>` console specimen —
+carries four token classes, marked up by hand. Replies in the live console are
+plain text, because they are data rather than a specimen: the transcript-era
+pattern highlighter is gone with the transcript. Emphasis is weight and
+colour-role, never a second hue — the page has one accent and this does not
+spend it twice. Measured on both grounds:
 
 | Class | Paper | Ratio | Dark | Ratio |
 |---|---|---|---|---|

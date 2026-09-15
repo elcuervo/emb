@@ -1,0 +1,37 @@
+# The sandbox's emb server configuration.
+#
+# emb listens on loopback only: the bridge is the single public surface and the
+# only party that speaks to it, so no credential ever reaches a browser and a
+# misconfigured public route cannot reach the server.
+#
+# Models live on the mounted volume (`/data`), so the first boot downloads once
+# and every later boot loads from disk. Model names match the site's copy.
+#
+# The request caps bound one command's inference work; the bridge bounds the
+# rate, the concurrency, and the total work.
+
+listen: "127.0.0.1:6379"
+
+max_texts: 8
+max_pairs: 8
+max_command_bytes: 262144
+
+models:
+  minilm:
+    model_repo: Xenova/all-MiniLM-L6-v2
+    onnx: /data/models/minilm/model.onnx
+    tokenizer: /data/models/minilm/tokenizer.json
+    max_length: 256
+    # Sentence-transformers semantics: the pooled vector must be L2-normalized,
+    # or `emb.embed`'s documented norm of 1 and cosine similarity are wrong.
+    normalize: true
+    scripts:
+      - presets/embed.lua
+
+  sst2:
+    model_repo: Xenova/distilbert-base-uncased-finetuned-sst-2-english
+    onnx: /data/models/sst2/model.onnx
+    tokenizer: /data/models/sst2/tokenizer.json
+    max_length: 256
+    scripts:
+      - presets/classify.lua

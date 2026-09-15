@@ -213,113 +213,50 @@
       });
     }
 
-    /* ── 6. the console (placeholder) ───────────────────────────────
-       Deterministic transcripts, no network, no endpoint. Every line is
-       copied from the repository, and each entry names its source so a
-       server change has a defined update path:
+    /* ── 6. the console (live) ──────────────────────────────────────
+       The executor is `window.embTerminal`: the module the sandbox serves
+       at cli.emb.is/terminal.js, and the same module its own terminal page
+       loads. A reply is therefore rendered once, for both surfaces.
 
-         README.md §intro          EMB, and EMB ... VALUES
-         README.md §Reply formats  the VALUES envelope fields
-         README.md §EMB.MULTI      the multi-model reply
-         README.md §Example 2      the sst2 classifier reply
-         README.md §Operations     EMB.READY
-         examples/scripts/snippets/sst2.lua the SHA1 below, which is sha1() of that
-                                   file's exact bytes -- the same value the
-                                   server's scriptSHA() returns
+       Nothing here fabricates a reply. When the module is missing or the
+       sandbox cannot be reached, the console says so and offers a retry:
+       there is no transcript behind this seam.
 
-       The executor is the seam. Replace `window.embConsole.exec` with a
-       RESP client and the same markup, modes and states drive it.
-
-       The panel ships hidden while that client is unwired: the section
-       carries `hidden` and this selector skips it, so none of the below
-       boots and the transcript is never reachable. Drop the attribute to
-       bring the placeholder back, byte-for-byte. */
-    var root = document.querySelector('[data-console="transcript"]:not([hidden])');
+       The two preset digests are stamped into the section's attributes by
+       `website/tools/stamp-presets.py` from the bytes the server preloaded,
+       so a command here cannot name a digest the sandbox does not have. */
+    var root = document.querySelector('[data-console="live"]');
     if (root) {
       var out = root.querySelector('#console-out');
       var form = root.querySelector('#console-form');
       var input = root.querySelector('#console-input') || root.querySelector('#console-in');
       var runBtn = root.querySelector('.console__run');
       var screen = root.querySelector('#console-screen');
+      var stateEl = root.querySelector('#console-state');
+      var protoEl = root.querySelector('#console-proto');
       var tabs = [].slice.call(root.querySelectorAll('.console__mode'));
 
-      var TRANSCRIPTS = {
-        redis: {
-          hint: 'EMB minilm "hello world"',
-          idle: 'Type a command. Try EMB minilm "hello world".',
-          entries: [
-            { match: /^EMB\s+\S+\s+VALUES(\s|$)/i, lines: [
-              { t: '\"dtype\"   FLOAT' },
-              { t: '\"shape\"   [1 384]' },
-              { t: '\"values\"  [-0.19744610786437988, 0.17766517400741577, …]', k: 'dim' },
-              { t: 'self-describing envelope · 384 decimals', k: 'dim' }
-            ] },
-            { match: /^EMB\s+\S+(\s|$)/i, lines: [
-              { t: '\\x7c\\x8e\\x80\\xbd…' },
-              { t: '384 float32s × 4 bytes · 1.5 KB bulk string', k: 'dim' }
-            ] },
-            { match: /^EMB\.MULTI(\s|$)/i, lines: [
-              { t: '1) \\x7c\\x8e\\x80\\xbd…   minilm · 384 floats' },
-              { t: '2) \\x4a\\x9f\\x31\\xc2…   siglip2 · 768 floats' },
-              { t: 'one round trip · MGET-style partial failures', k: 'dim' }
-            ] },
-            { match: /^EMB\.READY(\s|$)/i, lines: [ { t: 'OK' } ] },
-            { match: /^PING(\s|$)/i, lines: [ { t: 'PONG' } ] },
-            { match: /^EMB\.HELP(\s|$)|^HELP(\s|$)/i, lines: [
-              { t: 'EMB  EMB.MULTI  EMB.MODELS  EMB.INFO  EMB.STATS  MONITOR' },
-              { t: 'EMB.READY  EMB.EVAL  EMB.EVSHA  EMB.SCRIPT  EMB.CACHE.FLUSH', k: 'dim' }
-            ] }
-          ]
-        },
-        scripts: {
-          hint: 'EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE',
-          idle: 'Load a script once, then call it by SHA. Try EMB.SCRIPT LOAD sst2.',
-          entries: [
-            { match: /^EMB\.SCRIPT\s+LOAD(\s|$)/i, lines: [
-              { t: '"77c1e0c01d3c43e8f07b262869d13c21b93b28f9"' },
-              { t: 'compiled, cached per model', k: 'dim' }
-            ] },
-            { match: /^EMB\.EVSHA(\s|$)/i, lines: [
-              { t: 'label       POSITIVE' },
-              { t: 'confidence  0.99' },
-              { t: 'scores      […]', k: 'dim' },
-              { t: 'model(fn(input)) → model output', k: 'dim' }
-            ] },
-            { match: /^EMB\.SCRIPT\s+EXISTS(\s|$)/i, lines: [ { t: '1' } ] }
-          ]
-        }
+      var PRESETS = {
+        classify: root.getAttribute('data-emb-preset-classify') || ''
+      };
+      var HINTS = {
+        redis: 'EMB minilm VALUES "hello world"',
+        scripts: 'EMB.EVSHA sst2 ' + PRESETS.classify + ' 1 "this film is great" NEGATIVE POSITIVE'
+      };
+      var IDLE = {
+        redis: 'Type a command. Try EMB minilm "hello world".',
+        scripts: 'Call the preloaded classifier by its digest.'
       };
 
-      var state = { mode: 'redis' };
+      var painted = [];
       var timers = [];
 
-      /* Code highlighting. The specimens in the markup are marked up by hand;
-         these transcripts are plain strings, so the identical four token
-         classes are applied by pattern. It marks what a token IS -- a string,
-         a command, a number -- and never colours text for emphasis. */
-      var HL = /("(?:[^"\\]|\\.)*")|(\bEMB(?:\.[A-Z]+)*\b|\bHELLO\b|\bVALUES\b|\bBLOB\b|\bPING\b|\bLOAD\b|\bEXISTS\b|\bFLUSH\b)|(\b\d+(?:\.\d+)?\b|\\x[0-9a-f]{2})/g;
+      function sameLine(a, b) { return a && b && a.t === b.t && a.k === b.k; }
+      function clearTimers() { timers.forEach(window.clearTimeout); timers = []; }
 
-      function highlight(text) {
-        var frag = document.createDocumentFragment();
-        var last = 0;
-        var m;
-        HL.lastIndex = 0;
-        while ((m = HL.exec(text)) !== null) {
-          if (m.index > last) {
-            frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-          }
-          var sp = document.createElement('span');
-          sp.className = m[1] ? 't-str' : m[2] ? 't-cmd' : 't-num';
-          sp.textContent = m[0];
-          frag.appendChild(sp);
-          last = m.index + m[0].length;
-        }
-        if (last < text.length) {
-          frag.appendChild(document.createTextNode(text.slice(last)));
-        }
-        return frag;
-      }
-
+      /* Lines are plain {t, k} pairs produced by the shared client, so both
+         surfaces paint the same thing: the console here, the terminal page
+         there. Code highlighting was a transcript-era device and is gone. */
       function lineEl(line) {
         var el = document.createElement('span');
         el.className = 'console__line' + (line.k ? ' console__line--' + line.k : '');
@@ -328,113 +265,102 @@
           caret.className = 'console__caret';
           caret.textContent = 'EMB ›';
           el.appendChild(caret);
-          el.appendChild(document.createTextNode(' '));
-          el.appendChild(highlight(line.t));
-        } else if (line.k) {
-          el.textContent = line.t;
+          el.appendChild(document.createTextNode(' ' + line.t));
         } else {
-          el.appendChild(highlight(line.t));
+          el.textContent = line.t;
         }
         return el;
       }
 
-      function clearTimers() {
-        timers.forEach(window.clearTimeout);
-        timers = [];
-      }
-
-      /* Playback is line-by-line, not per character: the panel is a console,
-         and a 40-character line typing itself out is noise, not information.
-         Reduced motion collapses it to one frame. */
-      function play(lines) {
-        clearTimers();
-        out.textContent = '';
-        if (reduceMotion.matches) {
-          lines.forEach(function (l) { out.appendChild(lineEl(l)); });
-          setBusy(false);
+      /* Paint the complete transcript, stepping only the lines that arrived
+         since the last frame. A transcript that is not an extension of the
+         painted one (the client replaced a transient line) repaints whole.
+         Reduced motion collapses the step to one frame. */
+      function paint(lines) {
+        var prefix = painted.length <= lines.length;
+        for (var i = 0; prefix && i < painted.length; i++) {
+          if (!sameLine(painted[i], lines[i])) prefix = false;
+        }
+        if (!prefix) {
+          clearTimers();
+          out.textContent = '';
+          painted = [];
+        }
+        if (painted.length === lines.length) return;
+        var fresh = lines.slice(painted.length);
+        painted = lines.slice();
+        if (reduceMotion.matches || fresh.length > 8) {
+          fresh.forEach(function (l) { out.appendChild(lineEl(l)); });
           return;
         }
-        lines.forEach(function (l, i) {
+        fresh.forEach(function (l, i) {
           if (i === 0) { out.appendChild(lineEl(l)); return; }
-          timers.push(window.setTimeout(function () {
-            out.appendChild(lineEl(l));
-            if (i === lines.length - 1) setBusy(false);
-          }, i * 110));
+          timers.push(window.setTimeout(function () { out.appendChild(lineEl(l)); }, i * 90));
         });
       }
 
-      function setBusy(busy) {
-        if (input) input.disabled = busy;
-        if (runBtn) runBtn.disabled = busy;
-        screen.setAttribute('aria-busy', busy ? 'true' : 'false');
-      }
-
-      function respond(mode, command) {
-        var spec = TRANSCRIPTS[mode] || TRANSCRIPTS.redis;
-        var cmd = String(command).trim().replace(/\s+/g, ' ');
-        var head = cmd.split(' ')[0] || '';
-        var lines = [{ k: 'echo', t: cmd }];
-        for (var i = 0; i < spec.entries.length; i++) {
-          if (spec.entries[i].match.test(cmd)) {
-            return lines.concat(spec.entries[i].lines);
+      var term = null;
+      if (window.embTerminal) {
+        term = window.embTerminal.create({
+          base: window.embTerminal.origin,
+          proto: Number(protoEl && protoEl.value) || 2,
+          onLines: paint,
+          onState: function (state, detail) {
+            var busy = state === 'running' || state === 'starting';
+            if (input) input.disabled = busy;
+            if (runBtn) runBtn.disabled = busy;
+            screen.setAttribute('aria-busy', busy ? 'true' : 'false');
+            if (!stateEl) return;
+            stateEl.hidden = true;
+            stateEl.textContent = '';
+            if (state === 'offline') {
+              stateEl.hidden = false;
+              var retry = document.createElement('button');
+              retry.type = 'button';
+              retry.textContent = 'Retry';
+              retry.addEventListener('click', function () { term.retry(); });
+              stateEl.appendChild(document.createTextNode((detail && detail.text ? detail.text : 'offline') + ' '));
+              stateEl.appendChild(retry);
+            }
           }
-        }
-        return lines.concat([
-          { t: "-ERR unknown command '" + head + "'", k: 'err' },
-          { t: 'Try: ' + spec.hint, k: 'dim' }
-        ]);
+        });
+      } else {
+        /* The module did not load, so the sandbox is unreachable: disable
+           the controls rather than answer from a transcript. The offline
+           line is painted below, after the idle paint that would otherwise
+           overwrite it. */
+        if (input) input.disabled = true;
+        if (runBtn) runBtn.disabled = true;
       }
 
       function idle(mode) {
-        var spec = TRANSCRIPTS[mode] || TRANSCRIPTS.redis;
-        clearTimers();
-        out.textContent = '';
-        out.appendChild(lineEl({ t: spec.idle, k: 'dim' }));
-        setBusy(false);
+        paint([{ t: IDLE[mode] || IDLE.redis, k: 'dim' }]);
         if (input) {
-          input.placeholder = spec.hint;
+          input.placeholder = HINTS[mode] || HINTS.redis;
           input.value = '';
         }
       }
 
-      function submit(command) {
-        setBusy(true);
-        out.textContent = '';
-        out.appendChild(lineEl({ k: 'echo', t: command }));
-        var result;
-        try {
-          result = window.embConsole.exec(command, state.mode);
-        } catch (err) {
-          play([{ t: '-ERR executor failed', k: 'err' }]);
-          return;
-        }
-        Promise.resolve(result).then(function (lines) {
-          play(Array.isArray(lines) ? lines : []);
-        }, function () {
-          play([{ t: '-ERR executor failed', k: 'err' }]);
+      function select(i, focus) {
+        var mode = tabs[i].getAttribute('data-mode');
+        tabs.forEach(function (tab, j) {
+          var on = j === i;
+          tab.setAttribute('aria-selected', on ? 'true' : 'false');
+          tab.tabIndex = on ? 0 : -1;
         });
+        if (term) term.setMode(mode);
+        screen.setAttribute('aria-labelledby', tabs[i].id);
+        idle(mode);
+        if (focus) tabs[i].focus();
       }
-
-      /* The default executor. It never touches the network: the transcripts
-         above are the whole server. Called as exec(command, mode) so a live
-         client knows which command surface it is answering. */
-      window.embConsole = window.embConsole || {
-        exec: function (command, mode) {
-          return new Promise(function (resolve) {
-            window.setTimeout(function () {
-              resolve(respond(mode || state.mode, command));
-            }, reduceMotion.matches ? 0 : 140);
-          });
-        }
-      };
 
       if (form && input && out) {
         form.addEventListener('submit', function (event) {
           event.preventDefault();
           var command = input.value.trim();
-          if (!command) return;
+          if (!command || !term) return;
           input.value = '';
-          submit(command);
+          term.submit(command);
         });
 
         tabs.forEach(function (tab, i) {
@@ -442,19 +368,6 @@
         });
 
         var tablist = root.querySelector('.console__modes');
-        function select(i, focus) {
-          var mode = tabs[i].getAttribute('data-mode');
-          tabs.forEach(function (tab, j) {
-            var on = j === i;
-            tab.setAttribute('aria-selected', on ? 'true' : 'false');
-            tab.tabIndex = on ? 0 : -1;
-          });
-          state.mode = mode;
-          screen.setAttribute('aria-labelledby', tabs[i].id);
-          idle(mode);
-          if (focus) tabs[i].focus();
-        }
-
         if (tablist) {
           tablist.addEventListener('keydown', function (event) {
             var current = tabs.indexOf(document.activeElement);
@@ -470,10 +383,19 @@
           });
         }
 
-        /* Idle is painted before the live region is armed, so loading the page
-           does not announce a console hint. Results and mode hints after that
-           are announced. */
-        idle('redis');
+        if (protoEl) {
+          protoEl.addEventListener('change', function () {
+            if (term) term.setProto(protoEl.value);
+          });
+        }
+
+        /* Idle is painted before the live region is armed, so loading the
+           page does not announce a hint. Replies after that are announced. */
+        if (term) {
+          idle('redis');
+        } else {
+          paint([{ t: 'offline — the sandbox client could not be loaded', k: 'dim' }]);
+        }
         out.setAttribute('aria-live', 'polite');
       }
     }

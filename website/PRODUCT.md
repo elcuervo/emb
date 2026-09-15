@@ -87,6 +87,13 @@ Constraints and facts future work must preserve:
   disposable warm-start optimization, not a durable database.
 - **No hosted or managed cloud offering exists.** There is no pricing, tier, or
   account system to describe.
+- **The sandbox at `cli.emb.is` is a demonstration, not an offering.** It runs a
+  real `emb` process behind a read-only bridge so a visitor can run commands and
+  read the real replies (`website/repl/`). It has no account, no pricing, no
+  tier, no uptime commitment, and no support path, and it may reset at any time;
+  it refuses every command that would change configuration or shared state. The
+  sandbox does not qualify the line above: `emb` remains self-hosted, and the
+  sandbox is not a hosted or managed service.
 
 ## Brand Commitments
 

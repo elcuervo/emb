@@ -31,3 +31,11 @@
 /README.md
 /assets/img/terrain-v2.png
 /assets/img/terrain-v2.md
+
+# The sandbox service. `website/` is both the working tree and the publish
+# source, and this is Go service code that happens to live here: its source,
+# its server configuration, its preset Lua, its image build, and its terminal
+# page must never be reachable at any path on the deployed origin. The whole
+# directory is excluded, and `published-tree.py` asserts that it was — so a
+# deleted line here fails the check rather than publishing the service.
+/repl/

@@ -40,7 +40,7 @@ permissions:
 
 jobs:
   # Both published revisions must pass the site's own checks. These are the same
-  # two commands `ci.yml`'s `site` job runs; they are repeated here rather than
+  # commands `ci.yml`'s `site` job runs; they are repeated here rather than
   # depended upon so that no publication can happen because another workflow was
   # skipped, disabled, or edited.
   checks:
@@ -55,6 +55,9 @@ jobs:
 
       - name: Version stamps match VERSION
         run: python3 website/tools/stamp-version.py --check
+
+      - name: Preset digests match the preloaded bytes
+        run: python3 website/tools/stamp-presets.py --check
 
       - name: Served tree, canonical origin, and cache rules
         run: python3 website/tools/published-tree.py

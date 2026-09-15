@@ -430,6 +430,44 @@ version:
 website port="8080":
     python3 -m http.server {{port}} --directory website
 
+# Serve the site AND the sandbox behind its console, for testing the live panel
+# locally instead of against the deployed cli.emb.is.
+#
+# Three processes, one terminal:
+#   * emb         on 127.0.0.1:{{upstream}}, with a generated config whose model
+#                 paths point at ./models (the sandbox config's own paths are
+#                 the deployment's /data/models)
+#   * the bridge  on 127.0.0.1:{{bridge}}, reading that same config for its
+#                 preset digest manifest
+#   * the site    on :{{port}}, with the console's module origin rewritten from
+#                 https://cli.emb.is to the local bridge
+#
+# Open http://localhost:{{port}} and the console runs real commands. Ctrl-C
+# stops all three. `just website` still serves the published tree untouched —
+# use it for the ink probe, which must measure what ships.
+#
+#   just website-dev                             # site :8080, bridge :8081, emb :6379
+#   just website-dev port=9000 bridge=9001 upstream=16399
+website-dev port="8080" bridge="8081" upstream="6379": sandbox-build
+    @set -eu; \
+    cfg=website/repl/.sandbox-dev.yaml; \
+    sed -e 's|^listen: .*|listen: "127.0.0.1:{{upstream}}"|' \
+        -e "s|/data/models|$PWD/models|" \
+        website/repl/sandbox.yaml > "$cfg"; \
+    echo "website-dev: emb 127.0.0.1:{{upstream}} · bridge 127.0.0.1:{{bridge}} · site http://localhost:{{port}}"; \
+    emb=; repl=; \
+    cleanup() { \
+        if [ -n "$emb" ]; then kill "$emb" 2>/dev/null || true; fi; \
+        if [ -n "$repl" ]; then kill "$repl" 2>/dev/null || true; fi; \
+        rm -f "$cfg"; \
+    }; \
+    trap cleanup EXIT INT TERM; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" & emb=$!; \
+    ./bin/repl -listen 127.0.0.1:{{bridge}} -upstream 127.0.0.1:{{upstream}} \
+        -config "$cfg" \
+        -origins "http://localhost:{{port}},http://127.0.0.1:{{port}}" & repl=$!; \
+    python3 website/tools/dev-server.py {{port}} --sandbox http://127.0.0.1:{{bridge}}
+
 # One-time browser fetch for the site's checks (needs `nix develop .#website`).
 # agent-browser drives Chrome for Testing; nixpkgs ships the CLI only. Set
 # AGENT_BROWSER_EXECUTABLE_PATH to an existing Chromium to skip the download.
@@ -499,6 +537,53 @@ website-published:
 # or (`--check`) fail if any stamped value has drifted. Run after bumping VERSION.
 website-version:
     python3 website/tools/stamp-version.py
+
+# Stamp the sandbox preset digests into the site, or (`--check`) fail when a
+# preset byte changed under a stamped digest. `EMB.EVSHA` calls a preset by the
+# SHA1 of the bytes the server preloaded, so a stale digest is a command the
+# site presents as working that the sandbox answers "no such script" to.
+website-presets:
+    python3 website/tools/stamp-presets.py
+
+website-presets-check:
+    python3 website/tools/stamp-presets.py --check
+
+# ── the sandbox (website/repl) ───────────────────────────────────────────
+#
+# A small Go bridge in front of an emb server that listens on loopback. It is
+# the only public surface the sandbox has, so it lives under the site directory
+# without being part of the site: `website/.assetsignore` keeps it out of the
+# published tree and `published-tree.py` asserts that it did.
+
+# Build the bridge beside the server (`bin/repl`).
+sandbox-build: build
+    CGO_ENABLED=0 go build -o ./bin/repl ./website/repl
+
+# The bridge's contract tests: no ONNX, no model, no server.
+sandbox-test:
+    CGO_ENABLED=0 go test ./website/repl/
+
+# Run the bridge in front of an emb instance. It reads the server's config for
+# the preset digests it will accept EMB.EVSHA for, so both processes must agree
+# on one config file:
+#
+#     just dev                                        # in another shell
+#     just sandbox-run config=website/repl/sandbox.yaml
+#
+# The sandbox config names /data/models/...; use config.yaml or a copy with
+# local model paths when running against a local server.
+sandbox-run upstream="127.0.0.1:6379" config="website/repl/sandbox.yaml" port="8080" origins="https://emb.is":
+    go run ./website/repl -listen 127.0.0.1:{{port}} -upstream {{upstream}} -config {{config}} -origins {{origins}}
+
+# Build the sandbox image (context is the repository root: the image needs the
+# Go module and the server's build inputs).
+sandbox-image:
+    docker buildx build --load -f website/repl/Dockerfile -t {{docker_user}}/emb-sandbox:{{image_tag}} .
+
+# Deploy the sandbox to Fly (requires flyctl and an authenticated account).
+# The app, region, volume, and hostname are declared in website/repl/fly.toml.
+sandbox-deploy:
+    fly deploy . -c website/repl/fly.toml
 
 # Verify the stamped versions match VERSION. This is what a CI job or pre-commit
 # hook runs; the emb-top capture once shipped `v0.4.0` against a `0.4.0.pre4`
