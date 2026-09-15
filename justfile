@@ -526,31 +526,73 @@ website-ink url="http://localhost:8080" target="":
     agent-browser wait --fn "window.__inkProbe" --timeout 120000
     agent-browser eval "window.__inkProbe.assert()"
 
+# Re-vendor the asciinema player the landing plate replays the take with.
+#
+# The player is not packaged in nixpkgs, so its release is pinned in `flake.nix`
+# as an npm tarball and copied verbatim out of it here, into two committed files
+# the site links by name. The site has no build step: these bytes ship, and the
+# `check` variant re-derives them without writing, so a version bump is verified
+# rather than trusted.
+#
+# Only two files of the package are taken -- the monolithic bundle, which embeds
+# the terminal emulator, so the plate needs no worker and no second request.
+#
+# Run inside `nix develop`, which is what exports `$ASCIIINEMA_PLAYER_TARBALL`.
+website-player:
+    @set -eu; \
+    ver="${ASCIIINEMA_PLAYER_VERSION:?run inside 'nix develop'}"; \
+    tmp=$(mktemp -d /tmp/asciinema-player.XXXXXX); \
+    trap 'rm -rf "$tmp"' EXIT; \
+    tar xzf "$ASCIIINEMA_PLAYER_TARBALL" -C "$tmp"; \
+    cp "$tmp/package/dist/bundle/asciinema-player.min.js" "website/assets/js/asciinema-player-$ver.min.js"; \
+    cp "$tmp/package/dist/bundle/asciinema-player.css" "website/assets/css/asciinema-player-$ver.css"; \
+    python3 -c 'import hashlib, sys; [print(hashlib.sha256(open(p, "rb").read()).hexdigest(), p) for p in sys.argv[1:]]' \
+      "website/assets/js/asciinema-player-$ver.min.js" "website/assets/css/asciinema-player-$ver.css"
+
+# Assert the committed player is exactly the pinned release, byte for byte.
+website-player-check:
+    @set -eu; \
+    ver="${ASCIIINEMA_PLAYER_VERSION:?run inside 'nix develop'}"; \
+    tmp=$(mktemp -d /tmp/asciinema-player.XXXXXX); \
+    trap 'rm -rf "$tmp"' EXIT; \
+    tar xzf "$ASCIIINEMA_PLAYER_TARBALL" -C "$tmp"; \
+    cmp "$tmp/package/dist/bundle/asciinema-player.min.js" "website/assets/js/asciinema-player-$ver.min.js"; \
+    cmp "$tmp/package/dist/bundle/asciinema-player.css" "website/assets/css/asciinema-player-$ver.css"; \
+    echo "website-player-check: the vendored player is asciinema-player $ver, byte for byte"
+
 # Assert that the set of files this folder publishes is the set we mean.
 #
-# Record the site's emb-top plate from a real run (see
-# website/tools/topviz/README.md and
+# Record the site's emb-top plate and the documentation's capture from a real
+# run (see website/tools/topviz/README.md and
 # openspec/changes/website-emb-top-recording).
 #
 # Builds the binaries, starts one node on :16379 with the models in
 # models.yaml, waits for EMB.READY, records the dashboard headlessly against a
-# scripted load, trims the take to the dashboard's own screen, renders it in
-# the site's palette, and publishes the result (name, placement, provenance and
-# the served set). The raw recording, the trim, the traffic log and a
-# machine-readable sample log of the same run land in
-# website/tools/topviz/runs/ -- unserved, and the only way to check what the
-# animation shows.
+# scripted load, and publishes three things from that one take: the trimmed
+# take itself into the landing page's plate, replayed there as text by the
+# vendored player (see `just website-player`); the dashboard's own text frame
+# into the same plate as its still state -- what a reader with scripting off or
+# a reduced-motion preference gets; and an animated GIF of the same run into
+# docs/assets/ for docs/operations.md. The raw recording, the trims, the
+# frame, the traffic log and a machine-readable sample log of the same run land
+# in website/tools/topviz/runs/ -- unserved, and the only way to check what the
+# artifacts show.
+#
+# The documented capture is rendered at font-size 12: the frame comes out 881px
+# wide, near enough to the width docs/operations.md is read at that GitHub shows
+# it about 1:1, and it is ~100 KiB smaller than a 14px render that would only be
+# downscaled to the same apparent size.
 #
 # Needs the full dev shell: it builds emb from Go+CGo, drives load with
-# redis-cli, and takes its recorder and image tools from the website half.
-# Nothing else in the site build depends on any of them.
+# redis-cli, and takes its recorder from the website half. Nothing else in the
+# site build depends on any of it.
 website-topviz: build
     @set -eu; \
     cfg=website/tools/topviz/models.yaml; \
     runs=website/tools/topviz/runs; \
     port=16379; \
     theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
-    for tool in redis-cli asciinema agg img2webp magick pngquant; do \
+    for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-topviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
     done; \
     if [ -z "{{ort_lib}}" ]; then echo "website-topviz: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
@@ -579,17 +621,11 @@ website-topviz: build
       -c website/tools/topviz/run.sh $runs/raw.cast; \
     kill $sampler 2>/dev/null || true; \
     python3 website/tools/topviz/trim.py $runs/raw.cast $runs/take.cast; \
-    agg --quiet --theme "$theme" --font-size 16 --line-height 1.4 \
+    python3 website/tools/topviz/trim.py --until-pct 65 $runs/raw.cast $runs/frame.cast; \
+    asciinema convert -f txt --overwrite $runs/frame.cast $runs/frame.txt >/dev/null; \
+    agg --quiet --theme "$theme" --font-size 12 --line-height 1.4 \
       --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/take.cast $tmp/take.gif; \
-    magick $tmp/take.gif -coalesce $tmp/f-%03d.png; \
-    frames=''; i=-1; \
-    for ticks in $(magick identify -format '%T ' $tmp/take.gif); do \
-      i=$(( i + 1 )); frames="$frames -d $(( ticks * 10 )) $(printf "$tmp/f-%03d.png" $i)"; \
-    done; \
-    img2webp -loop 0 -q 80 -m 6 $frames -o $tmp/take.webp; \
-    mid=$(( (i + 1) * 65 / 100 )); \
-    pngquant -f --quality=70-95 --strip -o $tmp/poster.png $(printf "$tmp/f-%03d.png" $mid); \
-    python3 website/tools/topviz/publish.py --anim $tmp/take.webp --poster $tmp/poster.png \
+    python3 website/tools/topviz/publish.py --frame $runs/frame.txt --cast $runs/take.cast --gif $tmp/take.gif \
       --samples $runs/samples.txt \
       --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port; \
     python3 website/tools/published-tree.py

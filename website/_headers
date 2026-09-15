@@ -1,11 +1,13 @@
-# Cache policy for a site that has no content hashes.
+# Cache policy for a site that has no build step.
 #
-# The site ships no build step, so `styles.css`, `main.js`, and the HTML keep
-# stable names while their bytes change. They must revalidate, and they must
-# never be marked immutable. Fonts and generated images are content-stable under
-# their names — a font subset is versioned by its file, and the images are
-# build-artifacts whose names change when the artwork does — so they can be
-# pinned for a year.
+# Nothing here is named from its bytes by a bundler, so `styles.css`, `main.js`,
+# the player's vendored script and stylesheet, and the HTML keep stable names
+# while their bytes change. They must revalidate, and they must never be marked
+# immutable. Fonts, generated images, and the recorded take the `emb-top` plate
+# plays are content-stable under their names — a font subset is versioned by its
+# file, the images are build-artifacts whose names change when the artwork does,
+# and the take is named from its own digest by `just website-topviz` — so they
+# can be pinned for a year.
 #
 # The platform's own default for every static asset is
 #   Cache-Control: public, max-age=0, must-revalidate
@@ -33,3 +35,13 @@
 
 /assets/img/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The recorded take the emb-top plate plays is asciicast: UTF-8 JSON, one event
+# per line, so `text/plain` is true of it — and it is the type that matters here.
+# Pages infers the type from the extension, and an extension it does not know
+# ships with no Content-Type at all, which is not on Cloudflare's list of
+# compressible types. These bytes are ~850 KiB of terminal output that gzip to
+# ~16 KiB, so the type is declared rather than inferred.
+/assets/cast/*
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Type: text/plain; charset=utf-8

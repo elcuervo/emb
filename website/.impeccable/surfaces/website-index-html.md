@@ -129,64 +129,97 @@ finish review, the verdict, DESIGN.md, and every shipping raster carrying its
 provenance.
 
 ---
-
-## Amendment — the `emb-top` plate is a capture (change `website-emb-top-recording`)
+## Amendment — the `emb-top` plate plays the dashboard's own recording (change `website-emb-top-recording`)
 
 **Scope: the plate in the operations block, and nothing else.** The ledger, the
-facts list and the section's other captions do not move. Where this section
-above said the `emb-top` figures live on the docs surface, this amendment
-supersedes it: the landing keeps a plate, but it is a measured capture rather
-than a hand-built render.
+facts list and the section's other captions do not move. Where the brief above
+said the `emb-top` figures live on the docs surface, this amendment supersedes
+it: the landing keeps a plate, and the plate is a capture — of the dashboard's
+recording, replayed in the dashboard's own text.
 
 **What changes.** `.topviz__screen` — a `<pre>` of spans whose own caption read
-"Illustrative render · not a measured run" — becomes a captured recording of the
-dashboard under load, taken by `just website-topviz`. The caption becomes a
-receipt: `Measured run · <date> · emb-top v<version> · <n> models · <addr>`.
+"Illustrative render · not a measured run" — keeps its element and its measure.
+It carries a real frame of a real run as its still state, written by
+`just website-topviz`, and that frame is replaced by the player replaying the
+same take's cast wherever the reader's motion preference allows it. The caption
+becomes a receipt: `Measured run · <date> · emb-top v<version> · <n> models ·
+<addr>`. The documentation keeps the animated capture it already carries.
 
 **Direction contract for the plate**
 
-THESIS: The plate is evidence, not decoration. It is one real run of one real
-node, recorded against a scripted load and captioned with when and what, and it
-refuses the category default of UI b-roll by being rendered in the page's own
-material rather than a vendor's dark theme — the same plate colour, the same
-paper ink, and the page's accent carrying the request-rate stream.
+THESIS: The plate is evidence, and evidence here is a terminal. It is one real
+run of one real node, replayed from the dashboard's own recording at the plate's
+own type size, captioned with when and what. It refuses both category defaults —
+a drawing of a dashboard nobody ran, and a downscaled screenshot of one — and it
+refuses the third one the previous revision settled for: a still frame standing
+in for a thing whose whole point is that it moves. Motion and legibility were
+treated as a trade; the recording's own text makes them the same choice.
 
-OWN-WORLD: Nothing new enters the world. The capture's palette is `#111110`,
-`#F3F0E8` and `#FF5A1F` (mapped onto the dashboard's own ANSI slots), so the
-"no new asset, colour, font or dependency" constraint is met by an asset *made
-of* the page's material. No script, no player, no second runtime.
+OWN-WORLD: One new kind of thing enters the world, and it is admitted on
+purpose: a vendored player, drawn in the plate's colours, sized to the plate's
+grid, and served from this origin. Nothing else is added — no third-party
+request, no raster, no second animation policy. The plate is still made of the
+page's own mono at the page's own measure.
 
-STORY: A reader who has just read the operations ledger sees the same claims
-moving — per-model rates, a latency heatmap, cache, CPU and memory — and can
-read the numbers off the frame.
+STORY: A reader who has just read the operations ledger watches the same claims
+the dashboard renders — per-model rates, an activity heatmap, two stream charts,
+cache, CPU and memory — move under load, and can stop them and read the numbers.
 
-FINISH: `prefers-reduced-motion` serves the still frame of the same run, so the
-page's motion rule now covers the one element that would otherwise animate
-without consent. Because the gate is in `<picture>`, this also holds with
-JavaScript disabled, which the old `<pre>` did not need to prove.
+FINISH: The plate animates, so it is gated the way the rest of the page is gated:
+`prefers-reduced-motion` decides whether it plays, a control stops it, and with
+scripting disabled it is a complete still frame rather than an empty plate. The
+run's figures are also written into the page as a sentence for the narrow layout
+and for screen readers.
 
 **Constraints carried over, and how each is met**
 
-- *Type floor (12px desktop / 14px mobile) on every ground.* The capture is 16px
-  type in a 1175px frame, so the plate scrolls horizontally below the width that
-  would take it under 12px rather than shrinking the type with it — the same
-  treatment the `<pre>` had, and the reason the plate carries no visible
-  scrollbar.
-- *Every ground reads with JavaScript disabled.* The still frame is the `<img>`;
-  the animation is a `<source media>` that simply does not match.
-- *No invented number, model, receipt or reply.* Every figure in the frame comes
-  from the run; the dashboard's figures are additionally written into the page as
-  text by the capture tool, so the plate's numbers are not image-only.
-- *Every version string is generated.* The plate's version is frozen in the
-  recording and written into the caption by the same tool, so it is stated as
-  the version the run *showed* rather than as the current release.
+- *Type floor (12px desktop / 14px mobile) on every ground.* The plate keeps
+  `clamp(12px, 1.02vw, 13px)`. It is a terminal replay, so its cells are the
+  page's type at that size, sharp at any zoom.
+- *Every ground reads with JavaScript disabled.* The frame is markup and paints
+  first; the player replaces it only where it can run.
+- *No invented number, model, receipt or reply.* Every character the plate shows
+  is the recording's own output, and the caption, the frame and the played take
+  are written by the capture tool, not by hand.
+- *Every version string is generated.* The plate's version is frozen in the take
+  and written into the caption by the same tool, so it is stated as the version
+  the run *showed* rather than as the current release. The player's own version
+  lives in its filename, not in the page's copy.
+- *Inherit the world.* One deliberate departure, recorded here: the plate's
+  `line-height` is one cell, not the page's leading. A terminal's frame borders
+  and chart axes are drawn with box characters that only meet when a line box is
+  one cell tall; at the page's 1.7 the verticals arrive as dashes and each
+  model's meta line drifts from its row. The player is themed to keep that grid
+  rather than to fight it.
+- *Motion is a choice, not a default.* The plate autoplays only under
+  `prefers-reduced-motion: no-preference` and always offers a pause.
+
+**What the page pays, and what it gains.** The plate is no longer free: 181 KB of
+player script, 19 KB of player stylesheet and ~850 KiB of asciicast, all from
+this origin, against a still frame's nothing. The take is the one number worth
+knowing — it is escape sequences and per-cell colour, so it gzips to ~16 KiB, and
+`_headers` declares its type so that is what a reader downloads; the scripts are
+`defer`red and the plate is not created at all below the narrow breakpoint, where
+there is nothing on screen for it to animate. What the plate gains is the motion
+and the heatmap's colour the previous revision sent away to the docs, at the
+plate's own measure — and it still costs the page no image of the dashboard.
 
 **Detector.** `impeccable detect --json website/index.html
 website/assets/css/styles.css` was run once after the build, in place, and its
-output compared against the same run over the files at `HEAD`: 16 findings
-before, the same 16 after, none introduced by this change. The run over the new
-markup first reported two of its own, both now fixed: the caption sat inside the
-dark plate, putting `--muted` on `#111110` at 3.4:1, and the mobile figures used
-`--rule` (a hairline token) as body text at 1.8:1 on paper. The caption is a
-paragraph beside the plate again — where it was before the change — and the
-figures use `--muted`.
+output compared, finding by finding, against the same run in a worktree of
+`HEAD`: 18 findings there, 20 here, and every one of the two is accounted for.
+`tight-leading` (1.05) is the frame's one-cell leading — the deliberate departure
+recorded above, which the still-frame revision introduced and this one keeps,
+and now hands to the player as an option so both states share the grid.
+`cramped-padding` names `.topviz__play`, the plate's new wrapper: the finding is
+the page's existing `clamp()`-padding false positive (it is reported for
+`.console`, `.block`, `.uses`, `.shift` and `.hero__start` at `HEAD` too), the
+measured inset is 18px at 1280, and writing that padding as a literal makes the
+finding disappear — checked by running the detector over a copy with
+`padding: 18px`. The responsive step is worth more than the silence, so it is
+accepted and recorded rather than flattened away. An earlier run over the
+image-plate revision reported two findings of its own, both fixed: the caption
+sat inside the dark plate, putting `--muted` on `#111110` at 3.4:1, and the
+mobile figures used `--rule` (a hairline token) as body text at 1.8:1 on paper.
+The caption is a paragraph beside the plate — where it was before the change —
+and the figures use `--muted`.

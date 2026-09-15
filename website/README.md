@@ -22,8 +22,24 @@ website/
 │   ├── css/styles.css      the shared world: tokens → primitives → sections
 │   │                       → responsive (both surfaces link it)
 │   ├── css/docs.css        documentation-only rules; declares no token
-│   ├── js/main.js          entrance sequencing, reveals, pipeline, route
-│   │                       (the landing only — docs ships no JavaScript)
+│   ├── css/asciinema-player-3.17.0.css
+│   │                       the player's own sheet, verbatim (see below)
+│   ├── js/main.js          entrance sequencing, reveals, pipeline, route,
+│   │                       and the emb-top plate (the landing only — docs
+│   │                       ships no JavaScript)
+│   ├── js/asciinema-player-3.17.0.min.js
+│   │                       the player, verbatim: the landing plate replays
+│   │                       the recorded take with it, from this origin — no
+│   │                       CDN, and no build step to re-derive it. Both files
+│   │                       come from the release tarball pinned in
+│   │                       `flake.nix` and are written by `just website-player`
+│   │                       (sha256 a13c3763… for the script, f619fe17… for
+│   │                       the sheet); `just website-player-check` compares
+│   │                       what is committed against that tarball
+│   ├── cast/               the recorded take the plate plays, named from its
+│   │                       own bytes by `just website-topviz`. ~850 KiB of
+│   │                       asciicast that compresses to ~16 KiB, which is why
+│   │                       `_headers` declares its content type
 │   ├── fonts/              self-hosted Archivo, Inter and JetBrains Mono
 │   └── img/
 │       ├── terrain-matte.png  the cut-out the page ships (2172×724, alpha)
@@ -50,12 +66,18 @@ website/
 │   ├── dev-server.py       serves this tree with the console's module origin
 │   │                       pointed at a local bridge (`just website-dev`)
 │   ├── topviz/             the rig behind the emb-top plate: one command
-│   │                       records a real dashboard, trims it to its own
-│   │                       screen, renders it in this page's palette and
-│   │                       publishes it (`just website-topviz`, see its
-│   │                       README). Its `runs/` hold the last take's cast
-│   │                       and logs — gitignored, and the only way to check
-│   │                       what the plate shows
+│   │                       records a real dashboard and publishes three
+│   │                       things from that one take — the take itself into
+│   │                       the plate, where the vendored player replays it;
+│   │                       the dashboard's own text frame into the same
+│   │                       plate, as the still state a reader with scripting
+│   │                       off or a reduced-motion preference keeps; and an
+│   │                       animated capture into `docs/assets/` for
+│   │                       `docs/operations.md`
+│   │                       (`just website-topviz`, see its README). Its
+│   │                       `runs/` hold the last take's recordings, frame and
+│   │                       logs — gitignored, and the only way to check what
+│   │                       the plate shows
 ├── repl/                   the sandbox: NOT the site (see § the sandbox)
 │   ├── *.go                the bridge — the sandbox's only public surface
 │   ├── terminal.js         the one client module; both surfaces load it
@@ -136,6 +158,7 @@ just website-published                # what ships, the origin, the cache rules
 just website-ink                      # no text ink crosses the viewport
 just website-ink http://localhost:8080 docs   # …on the docs surface
 just website-ink http://localhost:8080 404    # …on the not-found page
+just website-player-check             # the vendored player is the pinned release
 ```
 
 ### The ink check

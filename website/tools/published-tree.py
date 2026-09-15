@@ -61,15 +61,16 @@ SERVED = frozenset(
         "docs/index.html",
         "assets/css/styles.css",
         "assets/css/docs.css",
+        "assets/css/asciinema-player-3.17.0.css",
         "assets/js/main.js",
+        "assets/cast/emb-top-dd60083b.cast",
+        "assets/js/asciinema-player-3.17.0.min.js",
         "assets/fonts/archivo-var-latin.woff2",
         "assets/fonts/inter-900-latin.woff2",
         "assets/fonts/jetbrains-mono-var-latin.woff2",
         "assets/img/terrain-matte.png",
         "assets/img/og.png",
         "assets/img/speckle.svg",
-        "assets/img/emb-top-e3d87330.webp",
-        "assets/img/emb-top-e3d87330.png",
     }
 )
 

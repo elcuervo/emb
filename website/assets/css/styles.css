@@ -252,12 +252,12 @@ button{ font: inherit; color: inherit; }
    keeps working; it simply stops advertising itself with a bar painted inside
    the black panel. Listed together so a new scroller is one line away from the
    others rather than a scrollbar someone finds on a phone. */
-.topviz__plate,
+.topviz__screen,
 .console__screen,
 .mobile-nav nav{
   scrollbar-width: none;
 }
-.topviz__plate::-webkit-scrollbar,
+.topviz__screen::-webkit-scrollbar,
 .console__screen::-webkit-scrollbar,
 .mobile-nav nav::-webkit-scrollbar{ width: 0; height: 0; }
 
@@ -1409,31 +1409,81 @@ html.js .console__form{
   font-size: clamp(13px, 1.25vw, 16px);
   line-height: 1.45;
 }
-/* One plate: a capture of the dashboard under load, taken by
-   `just website-topviz`. The dark ground, the type and the colours in the frame
-   are the dashboard's own, rendered from this page's tokens, so the CSS here is
-   a frame and nothing else -- no padding and no second background, which would
-   only double the margin the capture already carries around the dashboard.
+/* The plate: the dashboard's own recording, taken by `just website-topviz` and
+   replayed in the page by the vendored player, with the same run's frame behind
+   it as the still state. `.topviz__play` is the plate and the player's mount
+   point; `.topviz__screen` inside it is the frame — what a reduced-motion
+   reader, a reader with scripting off, or a take that will not load, keeps. It
+   is text either way and no image of the dashboard is served, so the panel
+   stays selectable and sharp at any zoom.
 
-   `min-width` is the type floor, not a layout preference: the frame is 16px
-   type across 1175px, so 12px needs 881px. Below that the plate scrolls (with
-   no visible bar, like every other scroller here) instead of shrinking the
-   dashboard's own numbers into illegibility. */
-.topviz__plate{
+   The frame is 116 columns: it fits the plate at desktop widths and scrolls
+   inside it (with no visible bar, the rule every scroller on this page
+   follows) just below that. The player is fitted to the plate's width instead,
+   so its 120 columns always land inside it. Under the narrow breakpoint the
+   whole plate is hidden and the run's figures are shown — see the media query
+   below.
+
+   `line-height` is the one value that is not the page's: a terminal's cell grid
+   is what makes its frame borders and chart axes meet each other, so the frame
+   and the player both use one cell (main.js passes the same value to the
+   player). At the page's 1.7 the verticals arrive as dashes and each model's
+   meta line drifts away from the row it belongs to. */
+.topviz__play{
   position: relative;
   z-index: 1;
   margin: 12px 0 0;
+  padding: clamp(12px, 1.4vw, 18px);
   background: #111110;
   border: 1px solid var(--bg);
+  color: var(--bg);
+  overflow: hidden;
+}
+.topviz__screen{
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  line-height: 1.05;
+  white-space: pre;
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
-.topviz__plate img{
-  display: block;
-  width: 100%;
-  min-width: 881px;
-  height: auto;
+
+/* The take is drawn in the plate's own material: the plate colour, the paper's
+   ink, and the accent on the request-rate stream — the mapping the take's GIF
+   is rendered with (`agg --theme` in the justfile), with all sixteen entries
+   because the dashboard's heatmap cells and gauges are backgrounds, not text.
+   The player puts this class on its own `.ap-player` element, which is why it
+   has to win against that element's own defaults: this sheet is linked after
+   the player's. */
+.asciinema-player-theme-plate{
+  --term-color-background: #111110;
+  --term-color-foreground: #F3F0E8;
+  --term-color-0:  #111110;
+  --term-color-1:  #A8442A;
+  --term-color-2:  #6E8B7B;
+  --term-color-3:  #B08C4F;
+  --term-color-4:  #FF5A1F;
+  --term-color-5:  #B4736A;
+  --term-color-6:  #8C8880;
+  --term-color-7:  #F3F0E8;
+  --term-color-8:  #6B6963;
+  --term-color-9:  #C23D00;
+  --term-color-10: #7FA37A;
+  --term-color-11: #C9A227;
+  --term-color-12: #6B7F8C;
+  --term-color-13: #C9C4B8;
+  --term-color-14: #8FA9A0;
+  --term-color-15: #F3F0E8;
 }
+/* The player brings its own window chrome; the plate already is one. Its edge
+   is left alone on purpose: the player draws it in the terminal's own
+   background colour (so it reads as inner padding) and measures the fitted
+   terminal against it, so removing it here would leave a phantom band the
+   height of the frame it thinks is there. Its control bar is not decoration
+   and is not hidden: it is the pause the motion contract promises, and the only
+   control a reader has over what the plate plays. */
+.topviz__play .ap-control-bar{ font-family: var(--mono); }
 .topviz__src{
   margin-top: 8px;
   font-family: var(--mono);
@@ -1692,11 +1742,12 @@ html.js.is-ready .hero__prose{
   .console__input{ font-size: 14px; padding-block: 14px 12px; }
   .console__run{ min-height: 44px; padding: 12px 16px; font-size: 14px; }
   .console__note{ font-size: 14px; line-height: 1.6; }
-  /* The capture cannot wrap the way the render it replaced did, and this
-     region must never scroll sideways on a phone. Below this width the plate
-     carries the run's figures as text instead: the same numbers the frame
-     shows, at the size floor, with nothing to scroll. */
-  .topviz__plate{ display: none; }
+  /* The frame cannot reflow on a phone without wrapping box-drawing art into
+     nonsense, and this region must never scroll sideways. Below this width the
+     plate carries the run's figures as a sentence instead: the same run, at the
+     size floor, with nothing to scroll. The sentence is `sr-only` above this
+     width, so the two forms never appear at once. */
+  .topviz__play{ display: none; }
   .topviz__metrics{
     position: static;
     width: auto;
@@ -1940,7 +1991,8 @@ html.js.is-ready .hero__prose{
   .console,
   .console__bar,
   .console__screen,
-  .topviz__plate,
+  .topviz__play,
+  .topviz__screen,
   .footer,
   .btn--dark,
   .block__head,

@@ -1,35 +1,44 @@
 #!/usr/bin/env python3
-"""Publish one `emb-top` take into the site: name it, place it, stamp it.
+"""Publish one `emb-top` take: the page's plate, the documentation's capture.
 
-The site has no build step, so a take's asset names and its provenance line are
-hand-typed copies of a run that happened elsewhere and drift silently. This makes
-them derived instead: the assets are named from their own bytes (so the existing
-`/assets/img/*` immutable cache rule stays honest, and `_headers` needs no
-exception), the previous take is removed, and the values are written into the one
-place the page consumes them.
+One run produces the take and both of its renderings, and this writes them so
+they cannot disagree:
 
-    python3 publish.py --anim take.webp --poster take.png \\
+* **The landing page's plate** *plays* the take. The trimmed recording is copied
+  into the served tree under a name made of its own bytes, and the plate points
+  at it; the page replays it with the vendored asciinema player. The page's
+  script is what starts it, so the plate also carries the dashboard's own text
+  frame from the middle of the run — that is what a reader with scripting off,
+  or with a reduced-motion preference, gets.
+* **`docs/operations.md`** carries the animated capture of the same run, in
+  colour, at a size where it can be read: the one place the dashboard's motion
+  and its palette can be shown without a script.
+
+    python3 publish.py --frame frame.txt --cast take.cast --gif take.gif \\
+        --samples samples.txt \\
         --version 0.4.0.pre5 --models 4 --addr 127.0.0.1:16379
 
 What it rewrites, by marker, in `website/index.html`:
 
-    <source ... srcset="assets/img/emb-top-<sha8>.webp" data-topviz-anim>
-    <img ... src="assets/img/emb-top-<sha8>.png" data-topviz-poster>
-    <span data-topviz-run>…</span>
-    <p data-topviz-metrics>…</p>
+    <pre … data-topviz-frame>…</pre>
+    <div … data-topviz-cast="assets/cast/emb-top-<sha8>.cast">
+    <p …><span data-topviz-run>…</span></p>
+    <p … data-topviz-metrics>…</p>
 
-From the same run's headless sample log it also writes the dashboard's figures as
-text, so the plate's numbers are not image-only: the animated capture is
-decorative to a screen reader, the sentence is not. The figures come from the
-run's busiest poll, and are labelled as that rather than as the whole run.
+and the block between the two HTML comments in `docs/operations.md` (the only
+marker form markdown has):
 
-and the two `emb-top-*` lines in `published-tree.py`'s served set, which is a
-frozenset of exact names: a re-record changes them, and the check would fail on
-an orphaned take. Both files must agree on the names, so one tool owns both
-writes rather than a `sed` in the recipe.
+    <!-- topviz:begin -->
+    <!-- topviz:end -->
+
+Both artifacts are named from their own bytes, and both references — the page's
+attribute and `published-tree.py`'s served set — are written here, so a re-record
+replaces them and deletes the previous files rather than leaving a second take
+behind. This also removes the site assets the plate's image revision wrote, so
+that revision cannot leave bytes in the served tree.
 
 Fails — rather than writing half of it — when a marker is missing, when the
-animation is empty, or when the two artifacts disagree on their take.
+frame is empty, or when the figures cannot be read out of the sample log.
 """
 
 from __future__ import annotations
@@ -44,47 +53,28 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SITE = REPO_ROOT / "website"
 IMG_DIR = SITE / "assets" / "img"
+CAST_DIR = SITE / "assets" / "cast"
 INDEX = SITE / "index.html"
-SERVED_SET = SITE / "tools" / "published-tree.py"
+TREE = SITE / "tools" / "published-tree.py"
+OPERATIONS = REPO_ROOT / "docs" / "operations.md"
+DOC_ASSETS = REPO_ROOT / "docs" / "assets"
 
-TAKE_PREFIX = "emb-top-"
-
-# One element carrying a marker attribute, with room for the attribute's value.
-MARKED_TAG = r"<(?P<tag>[a-zA-Z][\w-]*)[^<>]*\s{marker}(?=[\s>/])[^<>]*>"
-
-
-def mark(marker: str) -> re.Pattern[str]:
-    return re.compile(MARKED_TAG.format(marker=re.escape(marker)))
+CAPTURE_PREFIX = "emb-top-"
+CAST_PREFIX = "emb-top-"
+BLOCK_BEGIN = "<!-- topviz:begin -->"
+BLOCK_END = "<!-- topviz:end -->"
 
 
-def set_attribute(tag: str, attribute: str, value: str) -> str:
-    """Replace `attribute="…"` inside one tag, which must already carry it."""
-    pattern = re.compile(rf'(\b{re.escape(attribute)}\s*=\s*")([^"]*)(")')
-    if not pattern.search(tag):
-        raise SystemExit(f"publish: marked element has no {attribute}= to set: {tag}")
-    return pattern.sub(lambda m: m.group(1) + value + m.group(3), tag, count=1)
-
-
-def stamp_assets(html: str, anim: str, poster: str) -> str:
-    anim_tag = mark("data-topviz-anim")
-    poster_tag = mark("data-topviz-poster")
-    if not anim_tag.search(html):
-        raise SystemExit("publish: no element carries data-topviz-anim in index.html")
-    if not poster_tag.search(html):
-        raise SystemExit("publish: no element carries data-topviz-poster in index.html")
-
-    html = anim_tag.sub(lambda m: set_attribute(m.group(0), "srcset", anim), html, count=1)
-    return poster_tag.sub(lambda m: set_attribute(m.group(0), "src", poster), html, count=1)
-
-
-def stamp_run(html: str, label: str) -> str:
-    """Rewrite the text of the element carrying data-topviz-run."""
-    return stamp_text(html, "data-topviz-run", label)
+def escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def stamp_text(html: str, marker: str, text: str) -> str:
+    """Replace the inner text of the element carrying `marker`."""
     marked = re.compile(
-        r"(?P<open><(?P<tag>[a-zA-Z][\w-]*)[^<>]*\s" + re.escape(marker) + r"(?=[\s>/])[^<>]*>)"
+        r"(?P<open><(?P<tag>[a-zA-Z][\w-]*)[^<>]*\s"
+        + re.escape(marker)
+        + r"(?=[\s>/])[^<>]*>)"
         r"(?P<inner>[^<>]*)"
         r"(?P<close></(?P=tag)>)"
     )
@@ -95,11 +85,55 @@ def stamp_text(html: str, marker: str, text: str) -> str:
     )
 
 
+def stamp_block(markdown: str, body: str) -> str:
+    """Replace everything between the block markers, markers themselves kept."""
+    pattern = re.compile(
+        re.escape(BLOCK_BEGIN) + r".*?" + re.escape(BLOCK_END), re.DOTALL
+    )
+    if not pattern.search(markdown):
+        raise SystemExit(f"publish: no {BLOCK_BEGIN} block in docs/operations.md")
+    return pattern.sub(f"{BLOCK_BEGIN}\n{body}\n{BLOCK_END}", markdown, count=1)
+
+
+def stamp_attr(html: str, marker: str, value: str) -> str:
+    """Replace the value of the attribute `marker` on the element carrying it."""
+    marked = re.compile(
+        r'(?P<open><[a-zA-Z][\w-]*[^<>]*\s'
+        + re.escape(marker)
+        + r'=")(?P<value>[^"]*)(?P<close>")'
+    )
+    if not marked.search(html):
+        raise SystemExit(f"publish: no element carries {marker} in index.html")
+    return marked.sub(
+        lambda m: m.group("open") + value + m.group("close"), html, count=1
+    )
+
+
+def stamp_served(source: str, name: str) -> str:
+    """Point `published-tree.py`'s served set at the take this run wrote.
+
+    The take's name is content, so it is written rather than typed — the two
+    places that must agree on it are the page and this check, and a half-write
+    of either is the class of defect the check exists to catch. First runs
+    insert the line (there is no previous one to replace).
+    """
+    line = f'        "assets/cast/{name}",'
+    previous = re.compile(r'^\s*"assets/cast/emb-top-[0-9a-f]+\.cast",$', re.MULTILINE)
+    if previous.search(source):
+        return previous.sub(line, source, count=1)
+    anchor = '        "assets/js/main.js",\n'
+    if anchor not in source:
+        raise SystemExit(
+            "publish: published-tree.py has no assets/js/main.js entry to anchor the cast to"
+        )
+    return source.replace(anchor, anchor + line + "\n", 1)
+
+
 # ---- the run's figures, as text ----
 #
 # One line per poll, e.g.
 #   t=… total_requests=3799 req_rate=138.0 lat_p95_us=148300 cache_hit_rate=59.1
-#     model:minilm dim=384 reqs=1285 req_rate=43.0 pooled… quant=fp32
+#     model:minilm dim=384 reqs=1285 req_rate=43.0 pooling=mean quant=fp32
 # See internal/embtop/once.go and docs/operations.md. Keys carry digits
 # (`lat_p95_us`), so the key pattern is not `[a-z_]+` — which silently skips
 # them and leaves the sentence below missing its latency.
@@ -114,10 +148,9 @@ def ms(us: str) -> str:
 def busiest(samples: Path) -> str:
     """Describe the figures of the run's busiest poll, as one sentence.
 
-    "Busiest" is measured as *models active first*, then requests: the
-    aggregate peak lands while the last model is still ramping, so ranking on
-    the aggregate alone would caption the plate with a poll in which half the
-    node reads zero.
+    "Busiest" is measured as *models active first*, then requests: the aggregate
+    peak lands while the last model is still ramping, so ranking on the aggregate
+    alone would describe a poll in which half the node reads zero.
     """
     peak, best = None, (0, -1.0)
     for line in samples.read_text(encoding="utf-8").splitlines():
@@ -134,6 +167,7 @@ def busiest(samples: Path) -> str:
             best, peak = score, line
     if peak is None:
         raise SystemExit(f"publish: no req_rate in {samples}")
+
     # The aggregate fields live before the first per-model group; every key worth
     # reading is repeated inside it, and a dict built from the whole line would
     # quietly take the last model's numbers for the run's.
@@ -158,84 +192,81 @@ def busiest(samples: Path) -> str:
     return head + (" Per model: " + "; ".join(models) + "." if models else "")
 
 
-def stamp_served_set(source: str, names: list[str]) -> str:
-    """Swap the take's two lines in published-tree.py's served set.
-
-    Tolerant of a first publish, when there is nothing yet to replace: the
-    anchor (the asset the take's lines belong beside) is what must be present.
-    """
-    # The needle is the *path*, not the name: the served set quotes
-    # `"assets/img/emb-top-…"`, so a leading quote never matches and every take
-    # would pile up instead of being replaced.
-    needle = f"assets/img/{TAKE_PREFIX}"
-    kept = [
-        line for line in source.splitlines(keepends=True) if needle not in line
-    ]
-
-    anchor = next(
-        (i for i, line in enumerate(kept) if "assets/img/speckle.svg" in line),
-        None,
-    )
-    if anchor is None:
-        raise SystemExit(
-            "publish: cannot find where the take's served-set lines belong"
-        )
-
-    kept[anchor + 1 : anchor + 1] = [f'        "assets/img/{name}",\n' for name in names]
-    return "".join(kept)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--anim", type=Path, required=True, help="animated WebP")
-    parser.add_argument("--poster", type=Path, required=True, help="still frame PNG")
-    parser.add_argument("--samples", type=Path, required=True, help="headless sample log")
+    parser.add_argument("--frame", type=Path, required=True, help="page's text frame")
+    parser.add_argument("--cast", type=Path, required=True, help="take the page plays")
+    parser.add_argument("--gif", type=Path, required=True, help="animated capture")
+    parser.add_argument("--samples", type=Path, required=True, help="sample log")
     parser.add_argument("--version", required=True, help="captured emb-top version")
     parser.add_argument("--models", required=True, help="model count of the node")
-    parser.add_argument("--addr", required=True, help="node the take was recorded against")
+    parser.add_argument("--addr", required=True, help="node the take came from")
     parser.add_argument("--date", default=date.today().isoformat())
     args = parser.parse_args()
 
-    for path in (args.anim, args.poster, args.samples):
+    for path in (args.frame, args.cast, args.gif, args.samples):
         if not path.is_file() or path.stat().st_size == 0:
             sys.exit(f"publish: missing or empty artifact {path}")
 
-    digest = hashlib.sha256(args.anim.read_bytes()).hexdigest()[:8]
-    anim_name = f"{TAKE_PREFIX}{digest}.webp"
-    poster_name = f"{TAKE_PREFIX}{digest}.png"
+    frame = args.frame.read_text(encoding="utf-8").strip("\n")
+    if not frame:
+        sys.exit(f"publish: {args.frame} has no frame in it")
 
-    IMG_DIR.mkdir(parents=True, exist_ok=True)
-    previous = sorted(IMG_DIR.glob(f"{TAKE_PREFIX}*"))
-    for old in previous:
-        old.unlink()
+    digest = hashlib.sha256(args.gif.read_bytes()).hexdigest()[:8]
+    capture_name = f"{CAPTURE_PREFIX}{digest}.gif"
+    cast_name = f"{CAST_PREFIX}{hashlib.sha256(args.cast.read_bytes()).hexdigest()[:8]}.cast"
 
-    (IMG_DIR / anim_name).write_bytes(args.anim.read_bytes())
-    (IMG_DIR / poster_name).write_bytes(args.poster.read_bytes())
+    DOC_ASSETS.mkdir(parents=True, exist_ok=True)
+    for previous in DOC_ASSETS.glob(f"{CAPTURE_PREFIX}*.gif"):
+        previous.unlink()
+    (DOC_ASSETS / capture_name).write_bytes(args.gif.read_bytes())
+
+    CAST_DIR.mkdir(parents=True, exist_ok=True)
+    for previous in CAST_DIR.glob(f"{CAST_PREFIX}*.cast"):
+        previous.unlink()
+    (CAST_DIR / cast_name).write_bytes(args.cast.read_bytes())
+
+    # The plate's image revision shipped its take in the served tree. Nothing
+    # references those files now, and leaving them would fail published-tree.py.
+    for orphan in IMG_DIR.glob(f"{CAPTURE_PREFIX}*"):
+        orphan.unlink()
 
     label = f"{args.date} · emb-top v{args.version} · {args.models} models · {args.addr}"
-    html = stamp_run(
-        stamp_assets(
-            INDEX.read_text(encoding="utf-8"),
-            f"assets/img/{anim_name}",
-            f"assets/img/{poster_name}",
-        ),
-        label,
-    )
-    html = stamp_text(html, "data-topviz-metrics", busiest(args.samples))
+    figures = busiest(args.samples)
+
+    html = INDEX.read_text(encoding="utf-8")
+    for marker, text in (
+        ("data-topviz-frame", escape(frame)),
+        ("data-topviz-run", escape(label)),
+        ("data-topviz-metrics", escape(figures)),
+    ):
+        html = stamp_text(html, marker, text)
+    html = stamp_attr(html, "data-topviz-cast", f"assets/cast/{cast_name}")
     INDEX.write_text(html, encoding="utf-8")
 
-    SERVED_SET.write_text(
-        stamp_served_set(
-            SERVED_SET.read_text(encoding="utf-8"), [anim_name, poster_name]
-        ),
-        encoding="utf-8",
+    TREE.write_text(
+        stamp_served(TREE.read_text(encoding="utf-8"), cast_name), encoding="utf-8"
     )
 
-    for name in (anim_name, poster_name):
-        if name not in html and name not in SERVED_SET.read_text(encoding="utf-8"):
-            sys.exit(f"publish: {name} was written but not referenced")
+    # One line for the image: markdown allows a wrapped link text, but a renderer
+    # that does not is a broken image in the repository's own documentation.
+    body = (
+        f"![The emb-top dashboard under load: four models with their request, token"
+        f" and latency rates, an activity heatmap, request-rate and p95-latency"
+        f" streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
+        f"\n"
+        f"*Captured {label}.*"
+    )
+    OPERATIONS.write_text(
+        stamp_block(OPERATIONS.read_text(encoding="utf-8"), body), encoding="utf-8"
+    )
 
-    print(f"publish: {anim_name} ({args.anim.stat().st_size / 1024:.0f} KiB), {poster_name}")
+    print(f"publish: {len(frame.splitlines())}-line frame into the page")
+    print(
+        f"publish: website/assets/cast/{cast_name}"
+        f" ({args.cast.stat().st_size / 1024:.0f} KiB)"
+    )
+    print(f"publish: docs/assets/{capture_name} ({args.gif.stat().st_size / 1024:.0f} KiB)")
     print(f"publish: {label}")
     return 0
 

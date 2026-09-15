@@ -32,6 +32,17 @@
 
         ltInfo = builtins.getAttr system archMap;
 
+        # The landing plate replays the take with the asciinema player, which
+        # nixpkgs does not package: the release the site serves is pinned here
+        # as its npm tarball and re-vendored into `website/assets/` by
+        # `just website-player`. The version is pinned with it — the filenames
+        # the page links carry it, so a bump is a hash and a re-vendor.
+        asciinemaPlayerVersion = "3.17.0";
+        asciinemaPlayer = pkgs.fetchurl {
+          url = "https://registry.npmjs.org/asciinema-player/-/asciinema-player-${asciinemaPlayerVersion}.tgz";
+          hash = "sha256-0D72f8LzKnqlF3wLZGUMfI/SNO8tPks0iGYyuz3VjFw=";
+        };
+
         libtokenizers = pkgs.stdenv.mkDerivation {
           pname = "libtokenizers";
           version = "1.27.0";
@@ -136,6 +147,10 @@
           if [ -d website/node_modules/.bin ]; then
             export PATH="$PWD/website/node_modules/.bin:$PATH"
           fi
+          # The pinned player tarball `just website-player` vendors from. The
+          # site itself never needs this shell: it serves committed bytes.
+          export ASCIIINEMA_PLAYER_TARBALL="${asciinemaPlayer}"
+          export ASCIIINEMA_PLAYER_VERSION="${asciinemaPlayerVersion}"
           echo "website: \`just website\` serves website/ on :8080;" \
                "\`just website-dev\` serves it with a local sandbox behind the console;" \
                "\`just website-browser\` fetches Chrome for Testing once."

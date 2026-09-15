@@ -56,7 +56,9 @@ def absolute(events: list[list]) -> list[list]:
     return out
 
 
-def trim(header: dict, events: list[list]) -> list[list]:
+def trim(
+    header: dict, events: list[list], until_pct: float | None = None
+) -> list[list]:
     events = absolute(events)
     start = next(
         (
@@ -84,6 +86,16 @@ def trim(header: dict, events: list[list]) -> list[list]:
     base = keep[0][0]
     rebased = [[event[0] - base, *event[1:]] for event in keep]
 
+    # A frame for the page is taken from the middle of the run, not its end: the
+    # last frame of a take is the drain, where every rate reads zero. `--until-pct`
+    # cuts the take at a fraction of its own length, and the cast is then replayed
+    # to that moment to dump the screen as text (see the rig's README).
+    if until_pct is not None:
+        horizon = rebased[-1][0] * until_pct / 100
+        rebased = [event for event in rebased if event[0] <= horizon]
+        if not rebased:
+            raise SystemExit(f"trim: --until-pct {until_pct} kept no events")
+
     # Back to v3's relative timing.
     out = []
     previous = 0.0
@@ -97,13 +109,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("raw", type=Path, help="recording as asciinema left it")
     parser.add_argument("take", type=Path, help="trimmed recording to write")
+    parser.add_argument(
+        "--until-pct",
+        type=float,
+        default=None,
+        metavar="PERCENT",
+        help="keep only the take's first PERCENT percent (a frame for the page)",
+    )
     args = parser.parse_args()
+
+    if args.until_pct is not None and not 0 < args.until_pct <= 100:
+        sys.exit("trim: --until-pct must be above 0 and at most 100")
 
     if not args.raw.exists():
         sys.exit(f"trim: no recording at {args.raw}")
 
     header, events = read_cast(args.raw)
-    kept = trim(header, events)
+    kept = trim(header, events, args.until_pct)
 
     with args.take.open("w", encoding="utf-8") as fh:
         fh.write(json.dumps(header) + "\n")
@@ -111,10 +133,12 @@ def main() -> int:
             fh.write(json.dumps(event) + "\n")
 
     duration = sum(event[0] for event in kept)
-    print(
-        f"trim: {len(events)} -> {len(kept)} events, "
-        f"{duration:.1f}s from the first painted frame, {args.take}"
+    note = (
+        f"cut to {args.until_pct:g}%"
+        if args.until_pct is not None
+        else "from the first painted frame"
     )
+    print(f"trim: {len(events)} -> {len(kept)} events {note} ({duration:.1f}s) -> {args.take}")
     return 0
 
 

@@ -94,28 +94,11 @@ and renders:
 - `AUTH` / TLS support, auto-reconnect with a connection-lost banner, and a
   headless `-once` mode for scripts and CI.
 
-```
- emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
-╭ req/s · models × recent polls ───────────────────────────────────────────────╮
-│ minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████                                      │
-│ bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████                                       │
-│ e5-base       ▂▂▃▃▃▄▅▅▆▆▇▇███████▇▆▆▅▅▄▄                                       │
-│ gte-tiny      ▃▅█████████▅▅▃▃▃                                                 │
-╰────────────────────────────────────────────────────────────────────────────────╯
-╭ req/s ──────────────────────────╮╭ p95 latency ────────────────────╮
-│       ╭──╮                     ││    ╭╮    ╭─╮                   │
-│ ╭─────╯  ╰──╮                  ││   ╯ ╰────╯ ╰──╮                │
-│ ╯            ╰──╮              ││ ╯              ╰               │
-╰────────────────────────────────╯╰────────────────────────────────╯
-minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████  280 r/s  11.8k t/s  p50 6.5ms  p95 68.0ms  err 0
-   dim 384 · mean · int8 · batch 32/16384 workers 2
-bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████  151 r/s   5.7k t/s  p50 8.8ms  p95 77.0ms  err 18 ↑
-   dim 384 · cls · fp32 · batch 32/16384 workers 2
-cache 93.6% ██████████  cpu 50.3% ██████  mem 552MB ████████████
-conns 7 · active 1 · goroutines 22 · truncated 0/0
-event bge-small-en-… · 2 texts · 12.7ms ✓
-q quit · p pause · r reset · j/k scroll · ? help
-```
+<!-- topviz:begin -->
+![The emb-top dashboard under load: four models with their request, token and latency rates, an activity heatmap, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-74d0848f.gif)
+
+*Captured 2026-09-15 · emb-top v0.4.0.pre5 · 4 models · 127.0.0.1:16379.*
+<!-- topviz:end -->
 
 ```bash
 # watch a node

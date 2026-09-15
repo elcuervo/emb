@@ -23,6 +23,7 @@
 <link rel="preload" href="assets/fonts/inter-900-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/asciinema-player-3.17.0.css">
 <link rel="stylesheet" href="assets/css/styles.css">
 <script>document.documentElement.classList.add('js');
 /* The class above hides the hero for its entrance, and only main.js can bring
@@ -766,21 +767,58 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
             Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
             trip, over the same protocol you already speak.
           </p>
-          <!-- A capture, not a drawing: this is the dashboard's own screen
-               recording, taken by `just website-topviz` against a scripted
-               load. The animation is gated on motion, so a reader who asked
-               for less gets the still frame of the same run, and a reader with
-               no JavaScript gets it too. The two asset names, the provenance
-               line and the figures below are written by
-               website/tools/topviz/publish.py -- do not hand-edit them. -->
-          <figure class="topviz__plate">
-            <picture>
-              <source srcset="assets/img/emb-top-e3d87330.webp" media="(prefers-reduced-motion: no-preference)" data-topviz-anim>
-              <img src="assets/img/emb-top-e3d87330.png" width="1175" height="739" loading="lazy" decoding="async" alt="The emb-top dashboard during a recorded run: four models with their request and token rates, a per-model activity heatmap, request-rate and p95-latency streams, and cache, CPU and memory gauges." data-topviz-poster>
-            </picture>
-          </figure>
+          <!-- A capture, not a drawing — and it plays. `.topviz__live` is the
+               player's mount point and it is deliberately empty: the player
+               builds its terminal into the element it is given, so nothing this
+               page needs to keep can live inside it. The take's URL is written
+               into `data-topviz-cast` by website/tools/topviz/publish.py — do
+               not hand-edit it.
+
+               The `<pre>` beside the mount is that run's own frame, taken from
+               the middle of it, and it is not a fallback to be tidied away: it
+               is what a reader with scripting off or a reduced-motion
+               preference keeps. It paints before any script runs, so the plate
+               is never empty and never shifts under the player, and it comes
+               back if the take will not load. The player draws the same
+               recording's own characters as text, so the plate stays selectable
+               and sharp either way; there is still no image of the dashboard on
+               this page. The frame, the caption and the figures below are
+               written by `publish.py` — do not hand-edit them. -->
+          <div class="topviz__play">
+          <div class="topviz__live" data-topviz-cast="assets/cast/emb-top-dd60083b.cast"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.0.pre5 · 127.0.0.1:16379 · uptime 29s · 4 models · poll 1s · 85.6 r/s · p95 12.2ms · ● connected
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  req/s · models × recent polls  ████████                                                                     │
+│ e5-small      ██████████████████████████████████████████████████████████████████████████████████████████████ │
+│ minilm        ██████████████████████████████████████████████████████████████████████████████████████████████ │
+│ jina-small    ██████████████████████████████████████████████████████████████████████████████████████████████ │
+│ bge-small     ██████████████████████████████████████████████████████████████████████████████████████████████ │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
+│     │                                 ╭─╮ ╭──╮│ ╰─╮    ││       │                                  ╭────────╯    │
+│  136│                                 │ ╰─╯  ╰╯   ╰╮   ││  8.1ms│                               ╭──╯             │
+│     │                             ╭───╯            ╰── ││       │                           ╭───╯                │
+│ 67.8│                             │                    ││  4.1ms│                          ╭╯                    │
+│     │                            ╭╯                    ││       │                          │                     │
+│  0.0│                          ──╯                     ││   0µs │                        ──╯                     │
+╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
+e5-small                       ▂██▆▆▅▃▄▃ 34.8 r/s 419 t/s p50 4.9ms p95 14.2ms err 0
+   dim 384 · mean · fp32 · batch 32/16384 workers 1
+minilm             ▂▇██▆▇▇▅▅▆▄▅▃▄▄▃▃▃▃▂▂ 26.9 r/s 245 t/s p50 2µs p95 5.5ms err 0
+   dim 384 · mean · fp32 · batch 32/16384 workers 1
+jina-small                 ▃▆█▆▅▅▃▃▃▂▃▂▂ 15.9 r/s 145 t/s p50 2µs p95 5.7ms err 0
+   dim 512 · mean · fp32 · batch 32/16384 workers 1
+bge-small              ▁▇█▆▅▅▄▄▃▂▃▁▃▁▁ ▁ 8.0 r/s 72.7 t/s p50 2µs p95 9.5ms err 0
+   dim 384 · cls · fp32 · batch 32/16384 workers 1
+cache   54.1%                          cpu     90.9%                          mem     1.1kMB
+█████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
+█████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
+  conns 2 · active 0 · goroutines 25 · truncated texts/pairs/images 0/0/0
+  event e5-small · 1 texts · 5.9ms ✓
+q quit · p pause · r reset · j/k scroll · ? help</pre>
+          </div>
           <p class="topviz__src">Measured run · <span data-topviz-run>2026-09-15 · emb-top v0.4.0.pre5 · 4 models · 127.0.0.1:16379</span></p>
-          <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 218 requests/s, 2.3k tokens/s, p95 latency 7.2ms, cache hit rate 38%, CPU 172%, 1047MB resident. Per model: minilm 54/s (avg 1.1ms, dim 384, mean, fp32); bge-small 20/s (avg 2.2ms, dim 384, cls, fp32); jina-small 33/s (avg 1.8ms, dim 512, mean, fp32); e5-small 111/s (avg 2.5ms, dim 384, mean, fp32).</p>
+          <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 224 requests/s, 2.4k tokens/s, p95 latency 8.6ms, cache hit rate 37%, CPU 174%, 1050MB resident. Per model: minilm 47/s (avg 1.3ms, dim 384, mean, fp32); bge-small 18/s (avg 2.4ms, dim 384, cls, fp32); jina-small 44/s (avg 1.8ms, dim 512, mean, fp32); e5-small 115/s (avg 2.4ms, dim 384, mean, fp32).</p>
         </section>
 
         </div>
@@ -829,6 +867,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
   </div>
 </footer>
 
+<script src="assets/js/asciinema-player-3.17.0.min.js" defer></script>
 <script src="https://cli.emb.is/terminal.js" defer></script>
 <script src="assets/js/main.js" defer onerror="document.documentElement.classList.remove('js')"></script>
 </body>

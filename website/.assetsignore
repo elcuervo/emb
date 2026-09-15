@@ -20,7 +20,8 @@
 # platform reads config after applying the ignore list rather than before.
 #
 # Note what is NOT here: `404.html` and `_headers` are configuration that ships,
-# and `index.html`, `docs/index.html`, `assets/css/*`, `assets/js/main.js`,
+# and `index.html`, `docs/index.html`, `assets/css/*`, `assets/js/main.js`, the
+# player vendored beside it, the recorded take under `assets/cast/`,
 # `assets/fonts/*`, `assets/img/terrain-matte.png`, `assets/img/og.png`, and
 # `assets/img/speckle.svg` are the site itself.
 

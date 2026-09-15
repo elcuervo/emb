@@ -399,6 +399,59 @@
         out.setAttribute('aria-live', 'polite');
       }
     }
+
+    /* ── 7. the emb-top plate (live) ────────────────────────────────
+       The plate plays the recorded take of a real run. `data-topviz-cast`
+       carries that take's URL — written by `website/tools/topviz/publish.py` —
+       and the player is the vendored one this page serves itself.
+
+       The player builds its terminal into the element it is given, so its
+       mount is an empty div of its own and the frame sits beside it. The frame
+       is not a fallback to be replaced: it is the still state, and it is what a
+       reduced-motion reader, a reader with scripting off, or a plate whose take
+       cannot be read, keeps. So this enhancement only swaps the two when it can
+       actually play something, and puts the frame back when it cannot. */
+    var live = document.querySelector('.topviz__live[data-topviz-cast]');
+    var plate = live && live.closest('.topviz__play');
+    var still = plate && plate.querySelector('[data-topviz-frame]');
+    if (live && !reduceMotion.matches) {
+      var cast = live.getAttribute('data-topviz-cast');
+      var play = function () {
+        /* Below the narrow breakpoint the plate is hidden and the run's figures
+           stand in for it: there is nothing on screen to animate, so the take
+           is not fetched at all. */
+        if (!live.offsetWidth) return;
+        if (!window.AsciinemaPlayer || !cast) return;
+        var player = window.AsciinemaPlayer.create(cast, live, {
+          autoplay: true,
+          loop: true,
+          controls: true,
+          speed: 1.8,
+          fit: 'width',
+          theme: 'plate',
+          poster: 'npt:0:20',
+          terminalFontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+          terminalLineHeight: 1.05
+        });
+        if (still) still.hidden = true;
+        /* A take that will not load or parse must not leave an empty plate: the
+           player has already emptied its mount by now, so hand the plate back
+           to the frame. */
+        player.addEventListener('error', function () {
+          player.dispose();
+          live.hidden = true;
+          if (still) still.hidden = false;
+        });
+      };
+      /* The terminal's grid is measured from the type, so the face has to be
+         in place before the player is created; until then, and if the font
+         never settles, the frame is what the plate shows. */
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(play, play);
+      } else {
+        play();
+      }
+    }
   }
 
   /* The enhancement class is set INLINE in the document, before this file
