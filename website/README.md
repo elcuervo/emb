@@ -232,6 +232,13 @@ depended on from `ci.yml`, so no publication can happen because another workflow
 was skipped. `versions upload` creates a version and its preview URLs **without**
 touching the production deployment, so a preview cannot disturb `emb.is`.
 
+A deploy is not reported successful until the origin confirms it: the deploy job
+requests the landing, `/docs/`, and a path the site does not serve, and diffs the
+served bytes against the tree that was just deployed. The not-found probe is what
+holds `assets.not_found_handling: "404-page"` in place — a 404 status alone would
+pass against a platform default, but only the configured handler answers the miss
+with the committed `404.html`.
+
 The alias is what makes a reviewer's link survive: each upload repoints
 `pr-<number>-emb-site.<subdomain>.workers.dev`, so it always serves the newest
 commit on that branch, while the versioned URL is unique per upload and dies on

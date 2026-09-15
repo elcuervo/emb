@@ -128,7 +128,7 @@
       </figure>
 
       <p class="doc-prose">
-        Start it with a model. The server auto-downloads from HuggingFace when
+        Start it with a model. The server auto-downloads from Hugging Face when
         given a repository id, and auto-detects the embedding dimension, maximum
         length, output tensor and pooling strategy from the ONNX graph and
         <code>config.json</code>.
@@ -155,7 +155,7 @@
         <dt>config</dt>
         <dd>a YAML file via <code>-config</code>, or the same settings as inline flags. See <a href="#configuration">Configuration</a>.</dd>
         <dt>model source</dt>
-        <dd>a local ONNX path, or a HuggingFace repository id that is downloaded and cached.</dd>
+        <dd>a local ONNX path, or a Hugging Face repository id that is downloaded and cached.</dd>
       </dl>
     </section>
 
@@ -174,7 +174,7 @@
         <dd>Embed one or more texts. With <code>BLOB</code> (the default), one text returns a bulk string and several return an array of bulk strings of float32 bytes. With <code>VALUES</code>, a <code>dtype</code>/<code>shape</code>/<code>values</code> envelope with decimal values.</dd>
 
         <dt>EMB.MULTI [BLOB|VALUES] &lt;model&gt; &lt;text&gt; [&lt;model&gt; &lt;text&gt;…]</dt>
-        <dd>Embed texts across different models in one round trip. Each reply is the vector for its model; a failed pair yields an error in its own slot without failing the call. Under <code>VALUES</code> each envelope also carries its <code>model</code> key, since per-pair dimensions differ.</dd>
+        <dd>Embed texts across different models in one round trip. Each reply is the vector for its model; a failed pair returns null in its own slot without failing the call. Under <code>VALUES</code> each envelope also carries its <code>model</code> key, since per-pair dimensions differ.</dd>
 
         <dt>EMB.MODELS</dt>
         <dd>List the loaded models with their dimensions and status.</dd>
@@ -186,7 +186,7 @@
         <dd>Server statistics: uptime, total requests, live connections, active requests, a per-model breakdown, and process resources — RSS in MB, CPU user/system microseconds, goroutines.</dd>
 
         <dt>MONITOR [seq] [limit]</dt>
-        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, texts, latency in µs, error. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
+        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, text count, latency in µs, error. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
 
         <dt>EMB.READY</dt>
         <dd>Health check. <code>+OK</code> when ready, otherwise <code>-ERR</code> with a reason: <code>loading</code>, <code>draining</code>, <code>no models</code>.</dd>
@@ -242,7 +242,7 @@
 <span class="t-num">1</span>) \x7c\x8e\x80\xbd…   <span class="t-dim">(minilm, 384 floats)</span>
 <span class="t-num">2</span>) \x4a\x9f\x31\xc2…   <span class="t-dim">(siglip2, 768 floats)</span></pre>
         <figcaption class="code__cap">
-          <span class="t-cmd">EMB.MULTI</span> is MGET-shaped: an error in one
+          <span class="t-cmd">EMB.MULTI</span> is MGET-shaped: a null in one
           position does not fail the others.
         </figcaption>
       </figure>
@@ -352,7 +352,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <h3 class="doc-h3">Model options</h3>
       <dl class="doc-cmds">
         <dt>onnx / tokenizer</dt>
-        <dd>A local ONNX path and tokenizer file, or <code>repo</code> to download both from HuggingFace.</dd>
+        <dd>A local ONNX path and tokenizer file, or <code>repo</code> to download both from Hugging Face.</dd>
         <dt>normalize</dt>
         <dd>Default <code>false</code>. L2-normalizes the output.</dd>
         <dt>output_tensor</dt>
@@ -401,7 +401,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <p class="doc-note">
         <strong>A snapshot contains the original input text and the embedding
         bytes.</strong> Treat the file as sensitive, and treat it as a warm-start
-        optimisation rather than a durable database — it is disposable, and a
+        optimization rather than a durable database — it is disposable, and a
         restore that does not fit the configured budget is simply skipped.
       </p>
     </section>
