@@ -2,137 +2,263 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>emb sandbox</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb · sandbox</title>
 <meta name="robots" content="noindex">
-<!-- The sandbox terminal. It speaks the same contract as the landing page's
-     console through the same module (`/terminal.js`), so a reply renders the
-     same way on both. Tokens are the site's own; the fonts are not shipped
-     here, so a system monospace stack stands in. -->
+<meta name="theme-color" content="#111110">
+<!-- The sandbox's own terminal, and the whole of it: the viewport is the
+     terminal, the way a CLI is. There is no page around it -- no masthead, no
+     card, no footer, no status bar -- because there is nothing this page does
+     that the terminal does not do. What it says about itself it says in the
+     line above the samples, in the same voice as the replies.
+
+     It speaks the same contract as the landing page's console through the same
+     module (`/terminal.js`), so a command and its reply render the same way on
+     both. Tokens are the site's own; the fonts are not shipped here, so a
+     system monospace stack stands in. -->
 <style>
   :root{
     --bg:#F3F0E8; --fg:#0B0B0B; --accent:#FF5A1F; --muted:#6B6963;
-    --rule:#B8B5AC; --plate:#111110; --plate-bar:#292823;
+    --rule:#B8B5AC; --plate:#111110; --hair:#292823;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
   *{ box-sizing:border-box; }
-  body{ margin:0; min-height:100vh; background:var(--bg); color:var(--fg); font-family:var(--mono); }
-  main{ width:min(920px, 100% - 44px); margin:clamp(28px, 6vw, 72px) auto; }
-  h1{ margin:0 0 6px; font-size:clamp(15px, 2vw, 19px); letter-spacing:.1em; }
-  .note{ margin:0 0 22px; max-width:64ch; font-size:13px; line-height:1.6; color:var(--muted); }
-  .term{ background:var(--plate); border:1px solid var(--bg); color:var(--bg); }
-  .term__bar{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
-             gap:10px 16px; padding:6px 16px; background:var(--plate-bar); border-bottom:1px solid var(--rule); }
-  .term__modes{ display:flex; gap:18px; }
-  .term__mode{ appearance:none; background:none; border:0; border-bottom:2px solid transparent;
-               padding:8px 1px; min-height:36px; font:inherit; font-size:13px; letter-spacing:.1em;
-               color:var(--rule); cursor:pointer; }
-  .term__mode[aria-selected="true"]{ color:var(--bg); border-bottom-color:var(--accent); }
-  .term__proto{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--rule); }
-  .term__proto select{ font:inherit; font-size:13px; padding:6px 8px; min-height:36px;
-                       background:var(--plate); color:var(--bg); border:1px solid var(--rule); }
-  .term__out{ min-height:220px; margin:0; padding:18px 16px; font:inherit; font-size:13px;
-              line-height:1.75; white-space:pre-wrap; overflow-wrap:anywhere; }
-  .term__line{ display:block; }
-  .term__line--dim{ color:var(--rule); }
-  .term__line--err{ color:var(--accent); }
-  .term__line--key{ color:var(--bg); }
-  .term__line--echo{ color:var(--bg); }
-  .term__caret{ color:var(--accent); }
-  form{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px;
-        padding:10px 16px 14px; border-top:1px solid var(--rule); }
-  label{ color:var(--accent); font-size:13px; letter-spacing:.1em; }
-  input{ width:100%; min-width:0; padding:12px 0 10px; border:0; border-bottom:1px solid var(--rule);
-         background:transparent; color:var(--bg); font:inherit; font-size:13px; caret-color:var(--accent); }
-  input::placeholder{ color:var(--rule); opacity:1; }
-  button[type=submit]{ appearance:none; min-height:38px; padding:10px 14px; background:transparent;
-        border:1px solid var(--rule); color:var(--bg); font:inherit; font-size:13px; font-weight:700;
-        letter-spacing:.1em; cursor:pointer; }
-  button[type=submit]:hover{ background:var(--accent); border-color:var(--accent); color:var(--fg); }
-  button[type=submit][disabled]{ background:var(--plate-bar); color:var(--rule); cursor:progress; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--plate);
+    color:var(--bg);
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.6;
+    overscroll-behavior:none;
+  }
+  .cli{
+    display:flex;
+    flex-direction:column;
+    height:100dvh;
+    max-height:100dvh;
+  }
+
+  /* ── what the terminal says about itself, and the commands it takes ── */
+  .cli__head{
+    flex:0 0 auto;
+    padding:10px clamp(12px, 1.6vw, 20px) 0;
+    border-bottom:1px solid var(--hair);
+  }
+  .cli__about{
+    margin:0 0 8px;
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--rule);
+    text-wrap:pretty;
+  }
+  .cli__about b{ font-weight:500; color:var(--bg); }
+  .cli__about a{ color:var(--rule); text-underline-offset:2px; }
+  .cli__about a:hover{ color:var(--accent); }
+
+  /* The samples are the terminal's opening message, and they stay: a reader who
+     has just run one should not have to find the others again. They are drawn
+     as the terminal's own numbered rows -- no boxes, no buttons' costume --
+     and every row is a real control. */
+  .cli__examples{ padding-bottom:8px; }
+  .cli__examples[hidden]{ display:none; }
+  .cli__examples-list{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    column-gap:clamp(16px, 2.4vw, 40px);
+    margin:0;
+    padding:0;
+    list-style:none;
+  }
+  .cli__example{
+    display:grid;
+    grid-template-columns:2.4em minmax(0, 1fr);
+    align-items:baseline;
+    gap:0 10px;
+  }
+  .cli__example-n{ color:var(--rule); }
+  .cli__example-cmd{
+    appearance:none;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:0 14px;
+    width:100%;
+    min-width:0;
+    min-height:26px;
+    padding:1px 0;
+    border:0;
+    background:none;
+    text-align:left;
+    font:inherit;
+    color:var(--bg);
+    cursor:pointer;
+  }
+  .cli__example-t{ min-width:0; overflow-wrap:anywhere; }
+  .cli__example-note{ color:var(--rule); }
+  .cli__example-cmd:hover{ color:var(--accent); }
+  .cli__example-cmd:hover .cli__example-note{ color:var(--bg); }
+
+  /* ── the transcript: the one part that grows, and the one that scrolls ── */
+  .cli__out{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding:10px clamp(12px, 1.6vw, 20px);
+    scrollbar-width:none;
+  }
+  .cli__out::-webkit-scrollbar{ width:0; height:0; }
+  .cli__line{ display:block; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .cli__line--dim{ color:var(--rule); }
+  .cli__line--err{ color:var(--accent); }
+  .cli__line--key{ color:var(--bg); }
+  .cli__line--echo{ color:var(--bg); }
+  .cli__prompt-mark{ color:var(--accent); }
+
+  .cli__state{
+    flex:0 0 auto;
+    margin:0;
+    padding:0 clamp(12px, 1.6vw, 20px) 6px;
+    color:var(--rule);
+  }
+  .cli__state[hidden]{ display:none; }
+  .cli__state button{
+    appearance:none;
+    padding:0;
+    border:0;
+    background:none;
+    color:var(--accent);
+    font:inherit;
+    text-decoration:underline;
+    cursor:pointer;
+  }
+
+  /* ── the prompt, which is the last line of the terminal ── */
+  .cli__form{
+    flex:0 0 auto;
+    display:grid;
+    grid-template-columns:auto minmax(0, 1fr) auto;
+    align-items:center;
+    gap:10px;
+    padding:6px clamp(12px, 1.6vw, 20px) 10px;
+    border-top:1px solid var(--hair);
+  }
+  .cli__prompt{ color:var(--accent); }
+  .cli__input{
+    width:100%;
+    min-width:0;
+    padding:2px 0;
+    border:0;
+    background:transparent;
+    color:var(--bg);
+    font:inherit;
+    caret-color:var(--accent);
+  }
+  .cli__input::placeholder{ color:var(--rule); opacity:1; }
+  .cli__input[disabled]{ color:var(--rule); cursor:progress; }
+  .cli__run{
+    appearance:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-width:26px;
+    min-height:26px;
+    padding:2px 6px;
+    border:0;
+    background:none;
+    color:var(--rule);
+    font:inherit;
+    cursor:pointer;
+  }
+  .cli__run:hover{ color:var(--accent); }
+  .cli__run[disabled]{ color:var(--hair); cursor:progress; }
+
   :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-  .term__state{ padding:0 16px 12px; font-size:13px; color:var(--rule); }
-  .term__state[hidden]{ display:none; }
-  .term__state button{ appearance:none; background:none; border:0; padding:2px 0; color:var(--accent);
-        font:inherit; font-size:13px; text-decoration:underline; cursor:pointer; }
-  footer{ margin-top:18px; font-size:12.5px; color:var(--muted); }
-  footer a{ color:var(--muted); }
+
+  /* one command per row once the rows are the width of a phone, and the
+     sample that the row cannot show is the note, which stays as the control's
+     own name. Everything a finger has to hit keeps the 44px floor here. */
+  @media (max-width:760px){
+    .cli__examples-list{ grid-template-columns:minmax(0, 1fr); }
+    .cli__example-note{ display:none; }
+    .cli__example-cmd{ min-height:44px; }
+    .cli__prompt,
+    .cli__input{ min-height:44px; }
+    .cli__run{ min-width:44px; min-height:44px; }
+    .cli__form{ padding-bottom:6px; }
+  }
+  @media (max-width:420px){
+    body{ font-size:12.5px; }
+    .cli__about{ font-size:12px; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>EMB · SANDBOX</h1>
-  <p class="note">
-    A real <code>emb</code> process answers these commands over RESP. It is a
-    sandbox for trying the protocol, not a hosted service: it may reset, and it
-    refuses anything that would change its configuration or shared state.
-  </p>
 
-  <section class="term" aria-labelledby="term-h">
-    <h2 class="sr-only" id="term-h" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Terminal</h2>
-    <div class="term__bar">
-      <div class="term__modes" role="tablist" aria-label="Console mode">
-        <button class="term__mode" type="button" role="tab" id="tab-redis" aria-selected="true"
-                aria-controls="term-out" data-mode="redis" data-tab="0">REDIS</button>
-        <button class="term__mode" type="button" role="tab" id="tab-scripts" aria-selected="false"
-                aria-controls="term-out" data-mode="scripts" data-tab="1" tabindex="-1">SCRIPTS</button>
-      </div>
-      <span class="term__proto">
-        <label for="proto">RESP</label>
-        <select id="proto">
-          <option value="2">2</option>
-          <option value="3">3</option>
-        </select>
-      </span>
-    </div>
+<main class="cli">
+  <!-- The terminal's opening message, and the page's whole chrome. A reader
+       without scripting gets this line and nothing to type into, which is the
+       honest state: there is no reply this page can produce on its own. -->
+  <header class="cli__head">
+    <p class="cli__about">
+      A real <b>emb</b> process answers these commands over RESP. It is a sandbox
+      that may reset, and it refuses anything that would change its
+      configuration or shared state — run the same commands against your own
+      server. <a href="https://emb.is/">emb.is&nbsp;&#8599;</a>
+    </p>
+    <div class="cli__examples" id="term-examples" hidden></div>
+  </header>
 
-    <pre class="term__out" id="term-out" role="tabpanel" aria-labelledby="tab-redis" tabindex="-1" aria-live="polite"></pre>
+  <div class="cli__out" id="term-out" aria-live="off"></div>
 
-    <p class="term__state" id="term-state" hidden></p>
+  <p class="cli__state" id="term-state" hidden></p>
 
-    <form id="term-form" autocomplete="off">
-      <label for="term-in">EMB ›</label>
-      <input id="term-in" name="command" type="text" autocomplete="off" autocapitalize="off"
-             autocorrect="off" spellcheck="false" enterkeyhint="go"
-             placeholder='EMB minilm VALUES "hello world"'>
-      <button type="submit">RUN</button>
-    </form>
-  </section>
-
-  <footer>Same module, same replies as <a href="https://emb.is/#console">emb.is</a>.</footer>
+  <form class="cli__form" id="term-form" autocomplete="off">
+    <label class="cli__prompt" for="term-in">emb&gt;</label>
+    <input class="cli__input" id="term-in" name="command" type="text"
+           autocomplete="off" autocapitalize="off" autocorrect="off"
+           spellcheck="false" enterkeyhint="send" value=""
+           aria-label="Command" placeholder="EMB minilm &quot;hello world&quot;">
+    <button class="cli__run" type="submit" aria-label="Run the command"
+            title="Run (Enter)"><span aria-hidden="true">&#8629;</span></button>
+  </form>
 </main>
 
 <script src="/terminal.js" defer></script>
 <script defer>
 (function () {
   'use strict';
+
+  /* The sandbox's own models, as `sandbox.yaml` preloads them. The two preset
+     rows are appended from the manifest this page fetches, so the digests are
+     the server's rather than transcribed here. */
+  var EXAMPLES = [
+    { t: 'EMB.HELP', n: 'what it permits' },
+    { t: 'EMB minilm "hello world"', n: '384 float32s, as bytes' },
+    { t: 'EMB minilm VALUES "hello world"', n: 'the same vector, typed' },
+    { t: 'EMB.MULTI minilm "hello world" sst2 "this film is great"', n: 'two models, one call' }
+  ];
+
   function boot() {
-    if (!window.embTerminal) return;
+    if (!window.embTerminal) { return; }
     var out = document.getElementById('term-out');
+    var band = document.getElementById('term-examples');
+    var stateEl = document.getElementById('term-state');
     var form = document.getElementById('term-form');
     var input = document.getElementById('term-in');
-    var runBtn = form.querySelector('button[type=submit]');
-    var stateEl = document.getElementById('term-state');
-    var protoEl = document.getElementById('proto');
-    var tabs = [].slice.call(document.querySelectorAll('.term__mode'));
-
-    var HINTS = {
-      redis: 'EMB minilm VALUES "hello world"',
-      scripts: 'EMB.EVSHA <model> <digest> 1 "this film is great" NEGATIVE POSITIVE'
-    };
-    var IDLE = {
-      redis: 'Type a command. Try EMB minilm "hello world".',
-      scripts: 'Call a preloaded preset by digest. Loading the digest list…'
-    };
+    var runBtn = form.querySelector('.cli__run');
 
     function lineEl(line) {
       var el = document.createElement('span');
-      el.className = 'term__line' + (line.k ? ' term__line--' + line.k : '');
+      el.className = 'cli__line' + (line.k ? ' cli__line--' + line.k : '');
       if (line.k === 'echo') {
-        var caret = document.createElement('span');
-        caret.className = 'term__caret';
-        caret.textContent = 'EMB ›';
-        el.appendChild(caret);
+        var mark = document.createElement('span');
+        mark.className = 'cli__prompt-mark';
+        mark.textContent = 'emb>';
+        el.appendChild(mark);
         el.appendChild(document.createTextNode(' ' + line.t));
       } else {
         el.textContent = line.t;
@@ -140,15 +266,92 @@
       return el;
     }
 
+    /* The samples are what the terminal opens with. A wrapper here would carry
+       the band's own class and its padding twice, so the heading and the list
+       go straight into it. */
+    function examplesEl() {
+      var box = document.createDocumentFragment();
+      var list = document.createElement('ol');
+      list.className = 'cli__examples-list';
+      EXAMPLES.forEach(function (ex, i) {
+        var li = document.createElement('li');
+        li.className = 'cli__example';
+        var num = document.createElement('span');
+        num.className = 'cli__example-n';
+        num.textContent = (i + 1 < 10 ? '0' : '') + (i + 1);
+        var cmd = document.createElement('button');
+        cmd.type = 'button';
+        cmd.className = 'cli__example-cmd';
+        /* The row is the command, and what it returns, in one name: the two
+           texts sit in separate flex boxes, so without this the name would be
+           read as one run-on word. */
+        cmd.setAttribute('aria-label', ex.t + ' — ' + ex.n);
+        /* The command sits in its own box so a long digest can be broken: beside
+           the note it is a flex item whose minimum is its longest word, and a
+           40-character SHA is wider than a phone. */
+        var label = document.createElement('span');
+        label.className = 'cli__example-t';
+        label.textContent = ex.d || ex.t;
+        cmd.appendChild(label);
+        var note = document.createElement('span');
+        note.className = 'cli__example-note';
+        note.setAttribute('aria-hidden', 'true');
+        note.textContent = ex.n;
+        cmd.appendChild(note);
+        cmd.addEventListener('click', function () { submitCommand(ex.t); });
+        li.appendChild(num);
+        li.appendChild(cmd);
+        list.appendChild(li);
+      });
+      box.appendChild(list);
+      return box;
+    }
+
+    /* The transcript is bounded by the viewport rather than by itself, so a
+       long reply scrolls instead of growing the terminal. Whether to follow the
+       output is read before the transcript is replaced: a reader who has
+       scrolled back through a reply is not yanked to the end by the next one. */
+    function atEnd() {
+      return out.scrollHeight - out.scrollTop - out.clientHeight < 4;
+    }
+
     function paint(lines) {
+      var follow = atEnd();
       out.textContent = '';
       lines.forEach(function (l) { out.appendChild(lineEl(l)); });
+      if (follow) { out.scrollTop = out.scrollHeight; }
+    }
+
+    /* This page is served by the same bridge that owns the manifest, so the
+       commands it suggests are ones the sandbox will accept. */
+    function loadExamples() {
+      return fetch('/api/presets').then(function (res) { return res.json(); }).then(function (body) {
+        var presets = (body && body.presets) || [];
+        var seen = {};
+        presets.forEach(function (p) {
+          if (!p || !p.model || !p.sha || seen[p.name]) { return; }
+          seen[p.name] = true;
+          var short = p.sha.slice(0, 8) + '\u2026';
+          if (p.name === 'embed') {
+            EXAMPLES.push({
+              t: 'EMB.EVSHA ' + p.model + ' ' + p.sha + ' 1 "hello world" "hello there"',
+              d: 'EMB.EVSHA ' + p.model + ' ' + short + ' 1 "hello world" "hello there"',
+              n: 'dim · norm · cosine'
+            });
+          } else if (p.name === 'classify') {
+            EXAMPLES.push({
+              t: 'EMB.EVSHA ' + p.model + ' ' + p.sha + ' 1 "this film is great" NEGATIVE POSITIVE',
+              d: 'EMB.EVSHA ' + p.model + ' ' + short + ' 1 "this film is great" NEGATIVE POSITIVE',
+              n: 'labelled reply'
+            });
+          }
+        });
+      }, function () {});
     }
 
     var term = window.embTerminal.create({
       base: window.embTerminal.origin,
-      proto: Number(protoEl.value),
-      onLines: function (lines) { paint(lines); },
+      onLines: paint,
       onState: function (state, detail) {
         var busy = state === 'running' || state === 'starting';
         input.disabled = busy;
@@ -168,61 +371,43 @@
       }
     });
 
-    protoEl.addEventListener('change', function () {
-      term.setProto(protoEl.value);
-    });
-
-    tabs.forEach(function (tab, i) {
-      tab.addEventListener('click', function () { select(i, false); });
-    });
-    function select(i, focus) {
-      tabs.forEach(function (tab, j) {
-        var on = j === i;
-        tab.setAttribute('aria-selected', on ? 'true' : 'false');
-        tab.tabIndex = on ? 0 : -1;
-      });
-      term.setMode(tabs[i].getAttribute('data-mode'));
-      out.setAttribute('aria-labelledby', tabs[i].id);
-      input.placeholder = HINTS[term.mode] || HINTS.redis;
-      paint([{ t: IDLE[term.mode] || IDLE.redis, k: 'dim' }]);
-      if (focus) tabs[i].focus();
+    function submitCommand(text) {
+      input.value = '';
+      term.submit(text);
     }
-
-    document.querySelector('.term__modes').addEventListener('keydown', function (event) {
-      var current = tabs.indexOf(document.activeElement);
-      if (current < 0) { current = 0; }
-      var next = null;
-      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { next = (current + 1) % tabs.length; }
-      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { next = (current - 1 + tabs.length) % tabs.length; }
-      else if (event.key === 'Home') { next = 0; }
-      else if (event.key === 'End') { next = tabs.length - 1; }
-      if (next === null) { return; }
-      event.preventDefault();
-      select(next, true);
-    });
 
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       var command = input.value.trim();
       if (!command) { return; }
-      input.value = '';
-      term.submit(command);
+      submitCommand(command);
     });
 
-    paint([{ t: IDLE.redis, k: 'dim' }]);
+    input.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') { return; }
+      if (!term.recall) { return; }
+      var next = term.recall(event.key === 'ArrowUp' ? -1 : 1, input.value);
+      if (next === null) { return; }
+      event.preventDefault();
+      input.value = next;
+      input.setSelectionRange(next.length, next.length);
+    });
 
-    /* The digests are the server's, fetched from the sandbox rather than
-       transcribed here: this page is served by the same bridge that owns the
-       manifest, so the command it suggests is one the sandbox will accept. */
-    fetch('/api/presets').then(function (res) { return res.json(); }).then(function (body) {
-      var presets = (body && body.presets) || [];
-      var classify = presets.filter(function (p) { return p.name === 'classify'; })[0] || presets[0];
-      if (!classify) { return; }
-      HINTS.scripts = 'EMB.EVSHA ' + classify.model + ' ' + classify.sha + ' 1 "this film is great" NEGATIVE POSITIVE';
-      IDLE.scripts = 'Call the preloaded ' + classify.name + ' preset on ' + classify.model + ' by its digest.';
-      if (term.mode === 'scripts') { select(1, false); }
-    }, function () {});
+    /* The samples are drawn before the live region is armed, so arriving on the
+       page does not announce a list of commands. Replies after that are. */
+    band.appendChild(examplesEl());
+    band.hidden = false;
+    out.setAttribute('aria-live', 'polite');
+
+    /* The manifest arrives after the first draw, so the two preset rows are
+       appended once it does. The band is an opening message, not a state:
+       nothing already on screen is disturbed by it. */
+    loadExamples().then(function () {
+      band.textContent = '';
+      band.appendChild(examplesEl());
+    });
   }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {

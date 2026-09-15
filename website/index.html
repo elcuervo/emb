@@ -550,35 +550,34 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
                      reached the console renders its offline state; it never
                      falls back to a transcript. The two digests are stamped
                      from the preset bytes by `website/tools/stamp-presets.py`,
-                     and `EMB.EVSHA` here names only those bytes. -->
-                <section class="console" id="console" data-console="live"
+                     and `EMB.EVSHA` here names only those bytes: the console's
+                     example commands are built from them, so it cannot offer a
+                     digest the sandbox refuses. -->
+                <section class="console" id="console" data-console="live" data-state="idle"
                          data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445"
                          data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32"
                          aria-labelledby="console-h" data-reveal>
           <h3 class="sr-only" id="console-h">Console</h3>
 
           <div class="console__bar">
-            <div class="console__modes" role="tablist" aria-label="Console mode">
-              <button class="console__mode" type="button" role="tab" id="tab-redis"
-                      aria-controls="console-screen" aria-selected="true" data-mode="redis"
-                      data-tab="0">REDIS</button>
-              <button class="console__mode" type="button" role="tab" id="tab-scripts"
-                      aria-controls="console-screen" aria-selected="false" data-mode="scripts"
-                      data-tab="1" tabindex="-1">SCRIPTS</button>
-            </div>
-            <div class="console__proto">
-              <label for="console-proto">RESP</label>
-              <select class="console__proto-select" id="console-proto">
-                <option value="2">2</option>
-                <option value="3">3</option>
-              </select>
-            </div>
+            <p class="console__status" id="console-status">
+              <span class="console__dot" id="console-dot" aria-hidden="true"></span><span class="console__status-t" id="console-status-t">IDLE</span>
+            </p>
             <p class="console__badge">SANDBOX · MAY RESET</p>
           </div>
 
-          <div class="console__screen" id="console-screen" role="tabpanel"
-               aria-labelledby="tab-redis" tabindex="-1">
-            <pre class="console__out" id="console-out" aria-live="off"></pre>
+          <!-- The demonstration commands belong to the panel, not to a state,
+               and they sit above the output rather than inside it: the reader
+               who has just run one can run the next without reloading the page,
+               and at rest the row under the strip is what the eye lands on
+               instead of an empty transcript. `main.js` fills this from the two
+               digests the section carries; it ships empty and `hidden`, so a
+               reader without scripting sees the specimen below instead of an
+               empty box. -->
+          <div class="console__examples" id="console-examples" hidden></div>
+
+          <div class="console__screen" id="console-screen">
+            <div class="console__out" id="console-out" aria-live="off"></div>
             <noscript>
               <!-- The specimen is complete without JavaScript: it is a static
                    capture, labelled as one, so the section is never empty. -->
@@ -608,14 +607,15 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
             <input class="console__input" id="console-in" name="command" type="text"
                    autocomplete="off" autocapitalize="off" autocorrect="off"
                    spellcheck="false" enterkeyhint="go"
-                   placeholder='EMB minilm VALUES "hello world"'>
-            <button class="console__run" type="submit">RUN</button>
+                   placeholder='EMB minilm "hello world"' aria-describedby="console-note">
+            <button class="console__run" type="submit" aria-label="Run the command"
+                    title="Run (Enter)"><span aria-hidden="true">↵</span></button>
           </form>
-          <p class="console__note">
-            A real <code>emb</code> process answers these commands over RESP.
-            It is a sandbox that may reset, and it refuses anything that would
-            change its configuration or shared state. Run the same commands
-            against your own server from the install line above.
+          <p class="console__note" id="console-note">
+            A real <code>emb</code> process answers these commands over RESP. It
+            is a sandbox that may reset, and it refuses anything that would
+            change its configuration or shared state — run the same commands
+            against your own server.
           </p>
         </section>
 
@@ -785,7 +785,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
                this page. The frame, the caption and the figures below are
                written by `publish.py` — do not hand-edit them. -->
           <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="assets/cast/emb-top-dd60083b.cast"></div>
+          <div class="topviz__live" data-topviz-cast="assets/cast/emb-top-dd60083b.cast" data-topviz-autoplay="1" data-topviz-loop="1" data-topviz-speed="1.8" data-topviz-poster="npt:0:20"></div>
           <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.0.pre5 · 127.0.0.1:16379 · uptime 29s · 4 models · poll 1s · 85.6 r/s · p95 12.2ms · ● connected
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │  req/s · models × recent polls  ████████                                                                     │
@@ -869,6 +869,7 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
 
 <script src="assets/js/asciinema-player-3.17.0.min.js" defer></script>
 <script src="https://cli.emb.is/terminal.js" defer></script>
+<script src="assets/js/topviz.js" defer></script>
 <script src="assets/js/main.js" defer onerror="document.documentElement.classList.remove('js')"></script>
 </body>
 </html>

@@ -18,7 +18,9 @@ they cannot disagree:
         --samples samples.txt \\
         --version 0.4.0.pre5 --models 4 --addr 127.0.0.1:16379
 
-What it rewrites, by marker, in `website/index.html`:
+What it rewrites, by marker, in `website/index.html` (relative cast URL) and in
+`website/docs/index.html` (the same file, spelled `../assets/cast/…` because the
+two pages live at different depths):
 
     <pre … data-topviz-frame>…</pre>
     <div … data-topviz-cast="assets/cast/emb-top-<sha8>.cast">
@@ -58,6 +60,7 @@ INDEX = SITE / "index.html"
 TREE = SITE / "tools" / "published-tree.py"
 OPERATIONS = REPO_ROOT / "docs" / "operations.md"
 DOC_ASSETS = REPO_ROOT / "docs" / "assets"
+DOC_PAGE = SITE / "docs" / "index.html"
 
 CAPTURE_PREFIX = "emb-top-"
 CAST_PREFIX = "emb-top-"
@@ -69,7 +72,7 @@ def escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def stamp_text(html: str, marker: str, text: str) -> str:
+def stamp_text(html: str, marker: str, text: str, page: Path) -> str:
     """Replace the inner text of the element carrying `marker`."""
     marked = re.compile(
         r"(?P<open><(?P<tag>[a-zA-Z][\w-]*)[^<>]*\s"
@@ -79,7 +82,8 @@ def stamp_text(html: str, marker: str, text: str) -> str:
         r"(?P<close></(?P=tag)>)"
     )
     if not marked.search(html):
-        raise SystemExit(f"publish: no element carries {marker} in index.html")
+        where = page.relative_to(REPO_ROOT)
+        raise SystemExit(f"publish: no element carries {marker} in {where}")
     return marked.sub(
         lambda m: m.group("open") + text + m.group("close"), html, count=1
     )
@@ -95,7 +99,7 @@ def stamp_block(markdown: str, body: str) -> str:
     return pattern.sub(f"{BLOCK_BEGIN}\n{body}\n{BLOCK_END}", markdown, count=1)
 
 
-def stamp_attr(html: str, marker: str, value: str) -> str:
+def stamp_attr(html: str, marker: str, value: str, page: Path) -> str:
     """Replace the value of the attribute `marker` on the element carrying it."""
     marked = re.compile(
         r'(?P<open><[a-zA-Z][\w-]*[^<>]*\s'
@@ -103,10 +107,29 @@ def stamp_attr(html: str, marker: str, value: str) -> str:
         + r'=")(?P<value>[^"]*)(?P<close>")'
     )
     if not marked.search(html):
-        raise SystemExit(f"publish: no element carries {marker} in index.html")
+        where = page.relative_to(REPO_ROOT)
+        raise SystemExit(f"publish: no element carries {marker} in {where}")
     return marked.sub(
         lambda m: m.group("open") + value + m.group("close"), html, count=1
     )
+
+
+def stamp_plate(page: Path, take: str, frame: str, label: str, figures: str) -> str:
+    """Return `page`'s source with its emb-top plate rewritten from this run.
+
+    Both surfaces that show the take are written from the one run, so the page
+    and the documentation cannot describe different recordings. `take` is the
+    cast URL as *that page* must spell it: the two live in different
+    directories, so the same file is referenced two ways.
+    """
+    html = page.read_text(encoding="utf-8")
+    for marker, text in (
+        ("data-topviz-frame", escape(frame)),
+        ("data-topviz-run", escape(label)),
+        ("data-topviz-metrics", escape(figures)),
+    ):
+        html = stamp_text(html, marker, text, page)
+    return stamp_attr(html, "data-topviz-cast", take, page)
 
 
 def stamp_served(source: str, name: str) -> str:
@@ -208,6 +231,12 @@ def main() -> int:
         if not path.is_file() or path.stat().st_size == 0:
             sys.exit(f"publish: missing or empty artifact {path}")
 
+    # The published artifacts are deleted before the new ones are written, so
+    # naming one of them as the source deletes it and then fails to read it.
+    for source, published in ((args.gif, DOC_ASSETS), (args.cast, CAST_DIR)):
+        if source.resolve().parent == published.resolve():
+            sys.exit(f"publish: {source} is a published artifact, not a run's input")
+
     frame = args.frame.read_text(encoding="utf-8").strip("\n")
     if not frame:
         sys.exit(f"publish: {args.frame} has no frame in it")
@@ -215,6 +244,28 @@ def main() -> int:
     digest = hashlib.sha256(args.gif.read_bytes()).hexdigest()[:8]
     capture_name = f"{CAPTURE_PREFIX}{digest}.gif"
     cast_name = f"{CAST_PREFIX}{hashlib.sha256(args.cast.read_bytes()).hexdigest()[:8]}.cast"
+
+    label = f"{args.date} · emb-top v{args.version} · {args.models} models · {args.addr}"
+    figures = busiest(args.samples)
+
+    # Both pages are stamped before anything is written, so a missing marker
+    # fails the run rather than leaving a new cast beside an old plate.
+    landing = stamp_plate(INDEX, f"assets/cast/{cast_name}", frame, label, figures)
+    documentation = stamp_plate(
+        DOC_PAGE, f"../assets/cast/{cast_name}", frame, label, figures
+    )
+    tree = stamp_served(TREE.read_text(encoding="utf-8"), cast_name)
+
+    # One line for the image: markdown allows a wrapped link text, but a renderer
+    # that does not is a broken image in the repository's own documentation.
+    body = (
+        f"![The emb-top dashboard under load: four models with their request, token"
+        f" and latency rates, an activity heatmap, request-rate and p95-latency"
+        f" streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
+        f"\n"
+        f"*Captured {label}.*"
+    )
+    markdown = stamp_block(OPERATIONS.read_text(encoding="utf-8"), body)
 
     DOC_ASSETS.mkdir(parents=True, exist_ok=True)
     for previous in DOC_ASSETS.glob(f"{CAPTURE_PREFIX}*.gif"):
@@ -231,37 +282,13 @@ def main() -> int:
     for orphan in IMG_DIR.glob(f"{CAPTURE_PREFIX}*"):
         orphan.unlink()
 
-    label = f"{args.date} · emb-top v{args.version} · {args.models} models · {args.addr}"
-    figures = busiest(args.samples)
+    INDEX.write_text(landing, encoding="utf-8")
+    DOC_PAGE.write_text(documentation, encoding="utf-8")
+    TREE.write_text(tree, encoding="utf-8")
+    OPERATIONS.write_text(markdown, encoding="utf-8")
 
-    html = INDEX.read_text(encoding="utf-8")
-    for marker, text in (
-        ("data-topviz-frame", escape(frame)),
-        ("data-topviz-run", escape(label)),
-        ("data-topviz-metrics", escape(figures)),
-    ):
-        html = stamp_text(html, marker, text)
-    html = stamp_attr(html, "data-topviz-cast", f"assets/cast/{cast_name}")
-    INDEX.write_text(html, encoding="utf-8")
-
-    TREE.write_text(
-        stamp_served(TREE.read_text(encoding="utf-8"), cast_name), encoding="utf-8"
-    )
-
-    # One line for the image: markdown allows a wrapped link text, but a renderer
-    # that does not is a broken image in the repository's own documentation.
-    body = (
-        f"![The emb-top dashboard under load: four models with their request, token"
-        f" and latency rates, an activity heatmap, request-rate and p95-latency"
-        f" streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
-        f"\n"
-        f"*Captured {label}.*"
-    )
-    OPERATIONS.write_text(
-        stamp_block(OPERATIONS.read_text(encoding="utf-8"), body), encoding="utf-8"
-    )
-
-    print(f"publish: {len(frame.splitlines())}-line frame into the page")
+    print(f"publish: {len(frame.splitlines())}-line frame into the landing page")
+    print(f"publish: the same frame into {DOC_PAGE.relative_to(REPO_ROOT)}")
     print(
         f"publish: website/assets/cast/{cast_name}"
         f" ({args.cast.stat().st_size / 1024:.0f} KiB)"

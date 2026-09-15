@@ -19,7 +19,6 @@
    left here -- the two headers used to diverge in brand scale, tagline,
    nav items and the missing CTA, which made the reference surface open
    differently from the page it belongs to. */
-
 /* ── page head ───────────────────────────────────────────────────────── */
 .doc-head{ margin-top: clamp(36px, 4.4vw, 72px); }
 .doc-head h1{
@@ -191,3 +190,27 @@
 @media (max-width: 640px){
   .doc-toc ol{ grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   emb — documentation surface · the emb-top plate
+
+   The plate's own material, palette and player theme all come from
+   `styles.css`, which both surfaces link; what is here is its placement inside
+   the reference measure and nothing else. This file still declares NO custom
+   property, and it adds no control: the surface's one control is the player's
+   own start overlay, which `topviz.js` creates the plate around.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* The plate is a figure in the prose, not a band: it takes the reference
+   measure and its own ground, and the prose above and below it keeps the
+   measure it had. `overflow: hidden` on the plate is what keeps a 116-column
+   frame from widening the page -- the frame scrolls inside it instead. */
+.topviz--doc{
+  margin: clamp(20px, 2.4vw, 32px) 0 clamp(16px, 2vw, 26px);
+  min-width: 0;
+}
+
+/* The frame is the plate's own type at the plate's own measure. It scrolls
+   sideways rather than wrapping, exactly as it does on the landing: box-drawing
+   art wrapped mid-run is not the dashboard. */
+.topviz--doc .topviz__screen{ padding-bottom: 2px; }

@@ -169,9 +169,16 @@
     var onState = opts.onState || function () {};
     var onLines = opts.onLines || function () {};
     var proto = opts.proto === 3 ? 3 : 2;
-    var mode = opts.mode || 'redis';
     var state = 'idle';
     var last = null;
+    /* The command history is the REPL half of the client: both surfaces own an
+       input, so recall lives here rather than being implemented twice. It is a
+       bounded list because a page is open for a long time and nothing prunes
+       it. */
+    var history = [];
+    var maxHistory = 50;
+    var cursor = -1; /* one past the end while walking; -1 when not walking */
+    var draft = '';
     var attempts = 0;
     var maxAttempts = opts.maxAttempts === undefined ? 8 : opts.maxAttempts;
     var retryDelay = opts.retryDelay === undefined ? 1000 : opts.retryDelay;
@@ -241,9 +248,24 @@
     return {
       get state() { return state; },
       get proto() { return proto; },
-      get mode() { return mode; },
       setProto: function (v) { proto = Number(v) === 3 ? 3 : 2; },
-      setMode: function (m) { mode = m; },
+      /* recall walks the history one entry at a time: -1 is older, +1 is newer.
+         It stops at both ends rather than wrapping, and the line the reader was
+         typing is held as `draft` for the whole walk, so walking away and back
+         does not lose it. `current` is the page's input text at the start of
+         the walk; the return value is what the page should put in the input. */
+      recall: function (dir, current) {
+        if (!history.length) { return null; }
+        if (cursor < 0) {
+          cursor = history.length;
+          draft = String(current == null ? '' : current);
+        }
+        var next = cursor + (dir < 0 ? -1 : 1);
+        if (next < 0) { next = 0; }
+        if (next > history.length) { next = history.length; }
+        cursor = next;
+        return cursor === history.length ? draft : history[cursor];
+      },
       submit: function (text) {
         var args;
         try {
@@ -258,7 +280,17 @@
         if (!args.length) { return; }
         attempts = 0;
         last = args;
-        transcript = [{ t: String(text).trim().replace(/\s+/g, ' '), k: 'echo' }];
+        var line = String(text).trim().replace(/\s+/g, ' ');
+        /* A command chosen from the examples is submitted, not run, so it lands
+           in the history the same way a typed one does. Consecutive repeats are
+           stored once, as in readline: a second identical command immediately
+           after the first would otherwise cost two keystrokes to walk past. */
+        if (history[history.length - 1] !== line) {
+          history.push(line);
+          if (history.length > maxHistory) { history.shift(); }
+        }
+        cursor = -1;
+        transcript = [{ t: line, k: 'echo' }];
         transientStart = transcript.length;
         emit();
         run(args);

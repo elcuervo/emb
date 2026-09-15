@@ -233,19 +233,56 @@
       var runBtn = root.querySelector('.console__run');
       var screen = root.querySelector('#console-screen');
       var stateEl = root.querySelector('#console-state');
-      var protoEl = root.querySelector('#console-proto');
-      var tabs = [].slice.call(root.querySelectorAll('.console__mode'));
+      var statusEl = root.querySelector('#console-status-t');
 
       var PRESETS = {
+        embed: root.getAttribute('data-emb-preset-embed') || '',
         classify: root.getAttribute('data-emb-preset-classify') || ''
       };
-      var HINTS = {
-        redis: 'EMB minilm VALUES "hello world"',
-        scripts: 'EMB.EVSHA sst2 ' + PRESETS.classify + ' 1 "this film is great" NEGATIVE POSITIVE'
-      };
-      var IDLE = {
-        redis: 'Type a command. Try EMB minilm "hello world".',
-        scripts: 'Call the preloaded classifier by its digest.'
+
+      /* The demonstration list is built from the digests the section carries
+         rather than typed here: a preset whose bytes change cannot leave the
+         console offering a digest the sandbox answers `no such script` to.
+         Each row is a submitted command, not a special path, so running one is
+         indistinguishable from typing it — including for the history the arrow
+         keys walk. */
+      /* `t` is the command that is submitted; `d` is the label drawn on the row
+         when the command is too long to sit on one line beside its note. The
+         digest is elided on the row and printed in full the moment the command
+         runs: the row is something to click, and a 40-character SHA spent in a
+         menu is a row that wraps for no reader's benefit. */
+      var EXAMPLES = [
+        { t: 'EMB.HELP', n: 'what it permits' },
+        { t: 'EMB minilm "hello world"', n: '384 float32s, as bytes' },
+        { t: 'EMB minilm VALUES "hello world"', n: 'the same vector, typed' },
+        { t: 'EMB.MULTI minilm "hello world" sst2 "this film is great"', n: 'two models, one call' }
+      ];
+      if (PRESETS.embed) {
+        EXAMPLES.push({
+          t: 'EMB.EVSHA minilm ' + PRESETS.embed + ' 1 "hello world" "hello there"',
+          d: 'EMB.EVSHA minilm ' + PRESETS.embed.slice(0, 8) + '… 1 "hello world" "hello there"',
+          n: 'dim · norm · cosine'
+        });
+      }
+      if (PRESETS.classify) {
+        EXAMPLES.push({
+          t: 'EMB.EVSHA sst2 ' + PRESETS.classify + ' 1 "this film is great" NEGATIVE POSITIVE',
+          d: 'EMB.EVSHA sst2 ' + PRESETS.classify.slice(0, 8) + '… 1 "this film is great" NEGATIVE POSITIVE',
+          n: 'labelled reply'
+        });
+      }
+      EXAMPLES.push({ t: 'EMB.MODELS', n: 'what is loaded' });
+
+      /* The strip names the console's own condition. The label is the state's
+         name in the reader's vocabulary; the attribute is what the styles read,
+         so the indicator's colour is a rule rather than a second string here. */
+      var STATUS = {
+        idle: 'IDLE',
+        running: 'RUNNING',
+        starting: 'WAKING',
+        result: 'READY',
+        error: 'ERROR',
+        offline: 'OFFLINE'
       };
 
       var painted = [];
@@ -281,6 +318,12 @@
         for (var i = 0; prefix && i < painted.length; i++) {
           if (!sameLine(painted[i], lines[i])) prefix = false;
         }
+        /* Whether to follow is decided before the transcript grows: a reader at
+           the end of a full panel stays there, and a reader who has scrolled
+           back through a long reply is not yanked away by the next line. A
+           repaint that is not an extension of what is on screen is a new
+           command, and its output is followed. */
+        var follow = !prefix || atEnd();
         if (!prefix) {
           clearTimers();
           out.textContent = '';
@@ -291,25 +334,94 @@
         painted = lines.slice();
         if (reduceMotion.matches || fresh.length > 8) {
           fresh.forEach(function (l) { out.appendChild(lineEl(l)); });
+          if (follow) { screen.scrollTop = screen.scrollHeight; }
           return;
         }
         fresh.forEach(function (l, i) {
-          if (i === 0) { out.appendChild(lineEl(l)); return; }
-          timers.push(window.setTimeout(function () { out.appendChild(lineEl(l)); }, i * 90));
+          if (i === 0) {
+            out.appendChild(lineEl(l));
+            if (follow) { screen.scrollTop = screen.scrollHeight; }
+            return;
+          }
+          timers.push(window.setTimeout(function () {
+            out.appendChild(lineEl(l));
+            if (follow) { screen.scrollTop = screen.scrollHeight; }
+          }, i * 90));
         });
+      }
+
+      /* A terminal shows its newest line, and this one has a bounded height, so
+         a reply longer than the panel scrolls instead of growing the plate. */
+      function atEnd() {
+        return screen.scrollHeight - screen.scrollTop - screen.clientHeight < 4;
+      }
+
+      /* The example rows are the poster's ruled numbered entry, made operable:
+         the row's number is the page's own `01` / `02` ladder, and the button
+         carries the command as its accessible name, with the note that says
+         what the command returns as part of the same name. */
+      function examplesEl() {
+        /* The heading and the list go straight into the band: a wrapper here
+           would carry the band's own class and its padding twice. */
+        var box = document.createDocumentFragment();
+        var head = document.createElement('p');
+        head.className = 'console__examples-h';
+        head.textContent = 'EXAMPLES';
+        box.appendChild(head);
+        var list = document.createElement('ol');
+        list.className = 'console__examples-list';
+        EXAMPLES.forEach(function (ex, i) {
+          var li = document.createElement('li');
+          li.className = 'console__example';
+          var num = document.createElement('span');
+          num.className = 'console__example-n';
+          num.textContent = (i + 1 < 10 ? '0' : '') + (i + 1);
+          var cmd = document.createElement('button');
+          cmd.type = 'button';
+          cmd.className = 'console__example-cmd';
+          /* The row is the command, and what it returns, in one name: the two
+             texts sit in separate flex boxes, so without this the name would
+             be read as one run-on word. */
+          cmd.setAttribute('aria-label', ex.t + ' — ' + ex.n);
+          /* The command sits in its own box so a long digest can be broken:
+             beside the note it is a flex item whose minimum is its longest
+             word, and a 40-character SHA is wider than a phone. */
+          var label = document.createElement('span');
+          label.className = 'console__example-t';
+          label.textContent = ex.d || ex.t;
+          cmd.appendChild(label);
+          var note = document.createElement('span');
+          note.className = 'console__example-note';
+          note.setAttribute('aria-hidden', 'true');
+          note.textContent = ex.n;
+          cmd.appendChild(note);
+          cmd.addEventListener('click', function () { submitCommand(ex.t); });
+          li.appendChild(num);
+          li.appendChild(cmd);
+          list.appendChild(li);
+        });
+        box.appendChild(list);
+        return box;
+      }
+
+      var examplesBox = root.querySelector('#console-examples');
+      if (examplesBox) {
+        examplesBox.appendChild(examplesEl());
+        examplesBox.hidden = false;
       }
 
       var term = null;
       if (window.embTerminal) {
         term = window.embTerminal.create({
           base: window.embTerminal.origin,
-          proto: Number(protoEl && protoEl.value) || 2,
           onLines: paint,
           onState: function (state, detail) {
             var busy = state === 'running' || state === 'starting';
             if (input) input.disabled = busy;
             if (runBtn) runBtn.disabled = busy;
             screen.setAttribute('aria-busy', busy ? 'true' : 'false');
+            root.setAttribute('data-state', state);
+            if (statusEl) statusEl.textContent = STATUS[state] || STATUS.idle;
             if (!stateEl) return;
             stateEl.hidden = true;
             stateEl.textContent = '';
@@ -333,123 +445,41 @@
         if (runBtn) runBtn.disabled = true;
       }
 
-      function idle(mode) {
-        paint([{ t: IDLE[mode] || IDLE.redis, k: 'dim' }]);
-        if (input) {
-          input.placeholder = HINTS[mode] || HINTS.redis;
-          input.value = '';
-        }
-      }
-
-      function select(i, focus) {
-        var mode = tabs[i].getAttribute('data-mode');
-        tabs.forEach(function (tab, j) {
-          var on = j === i;
-          tab.setAttribute('aria-selected', on ? 'true' : 'false');
-          tab.tabIndex = on ? 0 : -1;
-        });
-        if (term) term.setMode(mode);
-        screen.setAttribute('aria-labelledby', tabs[i].id);
-        idle(mode);
-        if (focus) tabs[i].focus();
+      function submitCommand(text) {
+        if (input) input.value = '';
+        if (term) term.submit(text);
       }
 
       if (form && input && out) {
         form.addEventListener('submit', function (event) {
           event.preventDefault();
           var command = input.value.trim();
-          if (!command || !term) return;
-          input.value = '';
-          term.submit(command);
+          if (!command) return;
+          submitCommand(command);
         });
 
-        tabs.forEach(function (tab, i) {
-          tab.addEventListener('click', function () { select(i, false); });
+        /* Recall is the REPL's other half. It is feature-detected because the
+           client module is served from the sandbox's own origin: a page can be
+           newer than the module it loads, and it must still submit a command
+           when it is. */
+        input.addEventListener('keydown', function (event) {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+          if (!term || !term.recall) return;
+          var next = term.recall(event.key === 'ArrowUp' ? -1 : 1, input.value);
+          if (next === null) return;
+          event.preventDefault();
+          input.value = next;
+          input.setSelectionRange(next.length, next.length);
         });
 
-        var tablist = root.querySelector('.console__modes');
-        if (tablist) {
-          tablist.addEventListener('keydown', function (event) {
-            var current = tabs.indexOf(document.activeElement);
-            if (current < 0) current = tabs.indexOf(root.querySelector('[aria-selected="true"]'));
-            var next = null;
-            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
-            else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
-            else if (event.key === 'Home') next = 0;
-            else if (event.key === 'End') next = tabs.length - 1;
-            if (next === null) return;
-            event.preventDefault();
-            select(next, true);
-          });
-        }
-
-        if (protoEl) {
-          protoEl.addEventListener('change', function () {
-            if (term) term.setProto(protoEl.value);
-          });
-        }
-
-        /* Idle is painted before the live region is armed, so loading the
-           page does not announce a hint. Replies after that are announced. */
+        /* The live region is armed after the panel is built, so loading the
+           page does not announce the example list. Replies are announced. */
         if (term) {
-          idle('redis');
+          screen.scrollTop = screen.scrollHeight;
         } else {
           paint([{ t: 'offline — the sandbox client could not be loaded', k: 'dim' }]);
         }
         out.setAttribute('aria-live', 'polite');
-      }
-    }
-
-    /* ── 7. the emb-top plate (live) ────────────────────────────────
-       The plate plays the recorded take of a real run. `data-topviz-cast`
-       carries that take's URL — written by `website/tools/topviz/publish.py` —
-       and the player is the vendored one this page serves itself.
-
-       The player builds its terminal into the element it is given, so its
-       mount is an empty div of its own and the frame sits beside it. The frame
-       is not a fallback to be replaced: it is the still state, and it is what a
-       reduced-motion reader, a reader with scripting off, or a plate whose take
-       cannot be read, keeps. So this enhancement only swaps the two when it can
-       actually play something, and puts the frame back when it cannot. */
-    var live = document.querySelector('.topviz__live[data-topviz-cast]');
-    var plate = live && live.closest('.topviz__play');
-    var still = plate && plate.querySelector('[data-topviz-frame]');
-    if (live && !reduceMotion.matches) {
-      var cast = live.getAttribute('data-topviz-cast');
-      var play = function () {
-        /* Below the narrow breakpoint the plate is hidden and the run's figures
-           stand in for it: there is nothing on screen to animate, so the take
-           is not fetched at all. */
-        if (!live.offsetWidth) return;
-        if (!window.AsciinemaPlayer || !cast) return;
-        var player = window.AsciinemaPlayer.create(cast, live, {
-          autoplay: true,
-          loop: true,
-          controls: true,
-          speed: 1.8,
-          fit: 'width',
-          theme: 'plate',
-          poster: 'npt:0:20',
-          terminalFontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-          terminalLineHeight: 1.05
-        });
-        if (still) still.hidden = true;
-        /* A take that will not load or parse must not leave an empty plate: the
-           player has already emptied its mount by now, so hand the plate back
-           to the frame. */
-        player.addEventListener('error', function () {
-          player.dispose();
-          live.hidden = true;
-          if (still) still.hidden = false;
-        });
-      };
-      /* The terminal's grid is measured from the type, so the face has to be
-         in place before the player is created; until then, and if the font
-         never settles, the frame is what the plate shows. */
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(play, play);
-      } else {
-        play();
       }
     }
   }

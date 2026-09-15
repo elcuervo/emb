@@ -25,8 +25,10 @@ website/
 │   ├── css/asciinema-player-3.17.0.css
 │   │                       the player's own sheet, verbatim (see below)
 │   ├── js/main.js          entrance sequencing, reveals, pipeline, route,
-│   │                       and the emb-top plate (the landing only — docs
-│   │                       ships no JavaScript)
+│   │                       and the console's REPL (the landing only)
+│   ├── js/topviz.js        the emb-top plate, written once and loaded by
+│   │                       both surfaces: the landing plays it on its own,
+│   │                       /docs holds the frame until the reader asks
 │   ├── js/asciinema-player-3.17.0.min.js
 │   │                       the player, verbatim: the landing plate replays
 │   │                       the recorded take with it, from this origin — no
@@ -371,12 +373,33 @@ just sandbox-test                                          # the bridge's tests
 
 **One client, two surfaces.** `website/repl/terminal.js` is the canonical
 client: a quote-aware tokenizer, the `POST /api/exec {args, proto}` request, the
-reply renderer for every envelope kind, and the idle / running / result /
-error / starting / offline states. The sandbox serves it at `/terminal.js`, its
-standalone terminal page loads it, and the landing page loads the same file
-from `cli.emb.is`. Nothing renders a reply twice, so a change to the contract
-cannot land on one surface only. The landing page presents no host or endpoint:
-the module captures the origin it was served from.
+reply renderer for every envelope kind, the recall over submitted commands, and
+the idle / running / result / error / starting / offline states. The sandbox
+serves it at `/terminal.js`, its standalone terminal page loads it, and the
+landing page loads the same file from `cli.emb.is`. Nothing renders a reply
+twice, so a change to the contract cannot land on one surface only. The landing
+page presents no host or endpoint: the module captures the origin it was served
+from.
+
+**`cli.emb.is/` is the terminal and nothing else.** The standalone page is the
+viewport: `100dvh`, one column, three bands — what the terminal says about
+itself and the commands it takes, the scrolling transcript, the prompt as the
+last line — with no heading, card, status strip, footer or page scroll. The
+model is `redis.io/cli`: the disclosure is written in the same monospace voice as
+the replies instead of in a paragraph above them, and the state is expressed by
+the transcript itself (`offline — …` and its retry) rather than by a second
+indicator in a bar.
+
+Two things differ from that model on purpose. The **samples stay pinned** above
+the transcript, because they are the only clickable thing on the page and a
+reader who has just run one command should not have to find the list again. And
+the **`SANDBOX · MAY RESET` line is permanent** — it sits above the samples
+rather than scrolling away in a banner, because it is the one thing on the page
+that has to stay true for as long as the page is open.
+
+Above 760px the samples are two columns of one line; below it they are one
+column, the note drops out of the drawn row and stays as the control's name, and
+every control a finger has to hit keeps the 44px floor.
 
 **The preset digests are checked.** A preset is called by the SHA1 of the bytes
 the server preloaded, so the digest the site shows must be that value:
@@ -602,6 +625,25 @@ repeated one, made of material already on the page** — the SERVE plate's own
 this one turned over. Its `--muted` is remapped to `--rule`, because
 `#6B6963` measures only **3.40:1** on `#111110`.
 
+**Direction contract (console REPL pass).** The console is a *terminal*, not a
+*demonstrator*. One prompt, one transcript, one status strip, and a menu that
+stays: no mode selector and no control whose only purpose is to change what the
+transcript is about. The menu is seven commands the sandbox permits, rendered as
+ruled numbered rows, each one click to run, always on screen — so the panel
+teaches by being runnable instead of by carrying a hint sentence, and it stays
+worth clicking after the first click. A
+command that is run is a command that is in history, whether it was typed or
+chosen, and `Enter` and `↑`/`↓` are the whole interaction. The one choice left
+(`RESP 2|3`) is a real one the spec requires to stay observable, and it stays a
+native `<select>` because a segmented control would cost new markup, new state
+and new focus rules to look right in a two-item strip. Nothing here introduces a
+colour, an atom or a motion that the plate did not already have: the status strip
+is the bar's own bar, the example rows are the poster's ruled numbered entry, and
+the `↵` is the `RUN` button with its label removed rather than a control deleted.
+Target: a first-time reader holds a reply after one click and a second one after
+one keypress, and a keyboard reader tabs into six operable commands rather than a
+dead box.
+
 **The console is the SERVE plate, laid flat.** It reuses that plate's own
 faces plus the same 1px `--bg` stroke every other plate carries, and it sits
 *above* the spine: the line passes behind it and re-emerges below, which is
@@ -625,7 +667,9 @@ is no transcript behind the seam.
 
 **One client, two surfaces.** The same module drives the sandbox's own
 standalone terminal at `cli.emb.is/`, so a command and its reply render the
-same way on both. The module owns the tokenizer (quote-aware), the request
+same way on both — and so does the panel around them: the same prompt, the same
+example rows, the same status strip, and the same recall over submitted
+commands, because the history lives in the module rather than in either page. The module owns the tokenizer (quote-aware), the request
 (`POST /api/exec {args, proto}`), the reply renderer for every envelope kind,
 and the idle / running / result / error / starting / offline states; the page
 owns only the DOM. Which host the module came from is captured from its own
@@ -637,12 +681,59 @@ panel says the same in a sentence: a real `emb` process, a sandbox that may
 reset, refusing anything that would change its configuration or shared state.
 There is no pricing, account, uptime, or support affordance.
 
-**The protocol is a real choice.** The `RESP` selector sends `HELLO 2` or
-`HELLO 3` on the sandbox's own connection, so the flat and the typed forms of
-the same command are the server's encodings rather than a client-side
-reformat. Two modes are the two special functions: `REDIS` shows the bytes and
-the `VALUES` envelope, `SCRIPTS` calls a preloaded preset by its digest and
-shows a labelled, non-embedding reply.
+**The console is a REPL with a menu.** There is no mode selector: the two
+special functions the panel exists to show are two rows in a list of six
+commands, each one click to run, each one a real submission that lands in the
+history the arrow keys walk. The rows are built from the two digests the section
+carries, so the console cannot offer a command the sandbox refuses.
+
+The menu is part of the panel, not of a state. It sits *above* the transcript and
+nothing replaces it, so the reader who has just run one command can run the next
+one without reloading the page — which is the only way a menu of commands
+earns its place. Above rather than below because of what is on screen at rest:
+under the transcript an untouched console shows a tall empty field between the
+strip and the menu, and over it the row below the strip is the menu and the empty
+space is the output area directly above the prompt.
+
+**The reply forms are two rows, not a setting.** `EMB` shows the bytes and
+`EMB … VALUES` shows the envelope, `EMB.MULTI` answers several models in one
+call, and one row calls a preloaded preset by its digest for a labelled,
+non-embedding reply. There is no protocol selector: the flat and the typed
+forms are both reachable from the menu, so there is nothing to set before either
+can be read. `terminal.js` still carries `proto` in its request — that is the
+module's contract with the bridge, not the panel's furniture.
+
+**The strip names the console's own condition**, and it is now only that: the
+state on the left, `SANDBOX · MAY RESET` on the right. Its colour is read from
+one `data-state` attribute rather than from a second list that can disagree with
+the label — `--rule` while idle and `--bg` once there is something to read,
+`--accent` while the sandbox is working, waking or gone, with the indicator
+pulsing only in the two states that are actually in progress.
+
+**The transcript is a window, not a page.** `.console__screen` has a floor and a
+ceiling and scrolls between them, and `main.js` follows the newest line only when
+the reader was already at the end — so a long reply neither grows the panel nor
+interrupts a reader who has scrolled back through one. Whether to follow is read
+*before* the transcript grows: read after, a batch of lines arrives with the
+panel already past its own threshold and the reader is left at the top of output
+they never saw. At 1440px the panel is **467px** at rest and never past **600px**,
+against 467px and unbounded before this pass.
+
+**A menu row is a label, not the command.** Where a command and its note cannot
+share a row, the drawn label elides the digest — `EMB.EVSHA sst2 51ae48b3… 1 …` —
+while the button submits the command in full and keeps it in full in its
+accessible name. A 40-character SHA spent in a menu is a row that wraps for no
+reader's benefit, and the digest is printed in full the moment the command runs.
+Below 834px the rows are one column of one line: the note is dropped from the
+drawn row and kept as the button's name, and the badge is dropped from the strip,
+where the note under the panel says the same sentence in full.
+
+**Enter submits, and the arrow keys recall.** Recall stops at both ends rather
+than wrapping, holds the line being typed for the whole walk, and is
+feature-detected, because the module is served from the sandbox's own origin
+and a page can be newer than the client it loads. `RUN` survives as a `↵`
+beside the prompt: it is not a second way to submit so much as the touch target
+a soft keyboard needs.
 
 **The digests are derived, not typed.** `just website-presets` stamps
 `data-emb-preset-embed` and `data-emb-preset-classify` from the SHA1 of
@@ -651,16 +742,14 @@ the script it preloaded — and `--check` fails when a preset byte changes under
 a stamped digest. Without that, editing a preset would leave the site naming a
 digest the sandbox answers `no such script` to.
 
-Playback is line-by-line rather than per character, and
-`prefers-reduced-motion` collapses it to one frame. Without JavaScript the
-form is hidden and a labelled `<noscript>` specimen stands in, so the section
-is never empty.
+The panel paints its examples before the live region is armed, so loading the
+page does not announce a list of commands. Playback of replies is line-by-line
+rather than per character, and `prefers-reduced-motion` collapses it to one
+frame. Without JavaScript the form is hidden and a labelled `<noscript>`
+specimen stands in, so the section is never empty.
 
-The panel is a real `role="tablist"` with roving `tabindex` and arrow-key
-navigation, and the live region is armed *after* the idle line is painted, so
-loading the page does not announce a console hint. Every control clears the
-44px target floor at 320–834px. The smallest text in the region is **12px at
-1086** and **14px at 390**, which is the committed floor.
+Every control clears the 44px target floor at 320–834px. The smallest text in the region is
+**12px at 1086** and **14px at 390**, which is the committed floor.
 
 **Code is typeset as code.** Every specimen — the shell invocation, the Lua
 source, the `model(fn(input))` shift, and the `<noscript>` console specimen —
@@ -681,6 +770,40 @@ spend it twice. Measured on both grounds:
 A code block's only container is a rule above and below it. It never uses a
 coloured side border, which the craft floor refuses and the poster's own
 language does not use.
+
+**The same take is on `/docs`, and it does not move until asked.** The
+documentation surface's plate is a figure in the reference measure rather than
+a band, and it is written by the same `publish.py` from the same run: the frame,
+the cast URL, the caption and the figures are stamped by data attribute on both
+pages, so the two cannot describe different recordings.
+
+The one real difference is declared on the mount. The landing page's plate
+autoplays and loops because it is the section's argument; the reference page's
+player is created at once and **held** — `autoplay: false` at the run's poster
+frame — so the plate shows the recording drawn in the dashboard's own colours,
+stopped at zero, and starts only when the reader asks. That is the difference
+between a page arguing and a page explaining, and it is why the documentation
+plate is the player rather than the `<pre>` beside it: the frame is
+`asciinema convert -f txt` output and carries no ANSI at all, so resting on it
+would draw the dashboard in one flat colour while the GIF in
+`docs/operations.md` showed the same run in its real palette. The frame is what a
+reader the player cannot reach keeps, not this surface's picture of the run.
+
+**The held plate carries no control of its own.** The player draws a start
+overlay over a poster frame, so the `PLAY THE RECORDING` button an earlier
+revision added was a second control, in a second place, for the same action —
+deleted with its markup and its rules. The plate's one control is the player's
+own transport, which is also the pause the motion contract promises.
+
+That retires this file's earlier rule that `/docs` ships no JavaScript. The page
+now links the vendored player and one small module (`assets/js/topviz.js`, the
+same file the landing loads), and its no-scripting state is the whole plate minus
+the picture: the frame, the caption and the run's figures are all static markup,
+and there is no control to be left inert, because the control is the player's
+own. The plate's `restore()` path — a take that will not load — puts the frame
+back and hides the emptied mount. At widths where the plate is not drawn the
+player is never built and the recording is never fetched; the run's figures
+stand in, as they do on the landing.
 
 **`emb-top` is a full-width band.** Its capture's longest line is ~100
 characters; no 640px column holds that without either cutting the output or

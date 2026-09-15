@@ -1234,55 +1234,39 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   background: #292823;
   border-bottom: 1px solid var(--rule);
 }
-.console__modes{ display: flex; gap: clamp(12px, 1.4vw, 22px); }
-.console__mode{
-  appearance: none;
-  background: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 8px 1px;
-  min-height: 36px;
-  font-family: var(--mono);
+/* The strip is the bar's own bar: it names the console's condition, carries
+   the one real choice, and says what the panel is. The indicator's colour is
+   read from the console's state attribute, so the state is one string in the
+   markup and one rule here rather than two lists that can disagree. */
+.console__status{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
   font-size: clamp(12px, 1.02vw, 13px);
   font-weight: 500;
   letter-spacing: .1em;
-  line-height: 1;
   color: var(--rule);
-  cursor: pointer;
-  transition: color .12s ease, border-color .12s ease;
 }
-.console__mode:hover{ color: var(--bg); }
-.console__mode[aria-selected="true"]{
-  color: var(--bg);
-  border-bottom-color: var(--accent);
+.console__dot{
+  width: 7px;
+  height: 7px;
+  background: var(--rule);
 }
+.console[data-state="running"] .console__dot,
+.console[data-state="starting"] .console__dot,
+.console[data-state="error"] .console__dot,
+.console[data-state="offline"] .console__dot{ background: var(--accent); }
+.console[data-state="running"] .console__dot,
+.console[data-state="starting"] .console__dot{ animation: console-pulse 1.2s ease-in-out infinite; }
+.console[data-state="running"] .console__status-t,
+.console[data-state="starting"] .console__status-t{ color: var(--bg); }
+@keyframes console-pulse{ 50%{ opacity: .25; } }
 .console__badge{
   font-size: clamp(12px, .95vw, 12.5px);
   font-weight: 500;
   letter-spacing: .1em;
   color: var(--rule);
-}
-/* The protocol selector is the visitor's real choice: the reply's shape
-   comes from the version negotiated on the sandbox's own connection. */
-.console__proto{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: clamp(12px, 1.02vw, 13px);
-  letter-spacing: .1em;
-  color: var(--rule);
-}
-.console__proto-select{
-  appearance: none;
-  padding: 7px 8px;
-  min-height: 36px;
-  border: 1px solid var(--rule);
-  background: #111110;
-  color: var(--bg);
-  font-family: var(--mono);
-  font-size: clamp(12px, 1.02vw, 13px);
-  line-height: 1;
-  cursor: pointer;
 }
 .console__state{
   margin: 0;
@@ -1303,8 +1287,17 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   cursor: pointer;
 }
 .console__note code{ font-family: inherit; color: var(--bg); }
+/* The transcript is the one part of the plate that grows with its content, so
+   it is the one part with a ceiling: the panel is a window onto the sandbox's
+   output, not a page that lengthens every time a reply arrives. It scrolls
+   without a visible bar, the rule every scroller on this page follows, and
+   `main.js` keeps the newest line in view. The floor is deliberately low so an
+   empty panel is not a black field, and the examples below are the content. */
 .console__screen{
-  min-height: clamp(206px, 17vw, 262px);
+  min-height: clamp(96px, 7.5vw, 122px);
+  max-height: clamp(190px, 15vw, 236px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: clamp(14px, 1.6vw, 22px) clamp(12px, 1.5vw, 18px);
 }
 .console__out{
@@ -1312,16 +1305,89 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   font-family: inherit;
   font-size: clamp(12px, 1.02vw, 13px);
   line-height: 1.75;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .console__out + .console__out{ margin-top: 18px; }
-.console__line{ display: block; }
+.console__line{ display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 .console__line--dim{ color: var(--rule); }
 .console__line--key{ color: var(--bg); }
 .console__line--err{ color: var(--accent); }
 .console__line--echo{ color: var(--bg); }
 .console__caret{ color: var(--accent); }
+
+/* The examples are the poster's ruled numbered entry made operable. The row's
+   number is the page's own 01 / 02 ladder; the note is inside the button, so
+   the control's accessible name is the command and what it returns. */
+/* The demonstration commands are a band under the transcript, not a transient
+   state: they stay put, so the reader who has just run one can run the next.
+   Two columns above 640px keeps the commands to four ruled rows, which is what
+   keeps the panel from growing to fit its own menu. */
+.console__examples{
+  margin: 0;
+  padding: 12px clamp(12px, 1.5vw, 18px) 10px;
+  border-bottom: 1px solid #292823;
+}
+.console__examples[hidden]{ display: none; }
+.console__examples-h{
+  margin: 0 0 2px;
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  color: var(--rule);
+}
+.console__examples-list{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(16px, 2.2vw, 36px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console__example{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 clamp(10px, 1.2vw, 16px);
+  border-top: 1px solid #292823;
+}
+.console__example:nth-child(1),
+.console__example:nth-child(2){ border-top: 0; }
+.console__example-n{
+  padding: 7px 0;
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  letter-spacing: .1em;
+  color: var(--rule);
+}
+.console__example-cmd{
+  appearance: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 clamp(10px, 1.2vw, 16px);
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 13px);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--bg);
+  cursor: pointer;
+  transition: color .12s ease;
+}
+.console__example-t{ min-width: 0; overflow-wrap: anywhere; }
+.console__example-note{
+  color: var(--rule);
+  font-weight: 400;
+  transition: color .12s ease;
+}
+.console__example-cmd:hover{ color: var(--accent); }
+.console__example-cmd:hover .console__example-note{ color: var(--bg); }
 
 .console__form{
   display: none; /* without JavaScript the static transcript stands in */
@@ -1358,7 +1424,11 @@ html.js .console__form{
 .console__input[disabled]{ color: var(--rule); cursor: progress; }
 .console__run{
   appearance: none;
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  min-width: 38px;
   min-height: 38px;
   border: 1px solid var(--rule);
   background: transparent;
@@ -1732,15 +1802,31 @@ html.js.is-ready .hero__prose{
   .uses{ font-size: 14px; }
   .topviz__claim{ font-size: 15px; max-width: 54ch; }
   /* every console control clears the 44px touch floor at these widths */
-  .console__mode{ min-height: 44px; font-size: 14px; }
   .console__badge{ font-size: 14px; letter-spacing: .05em; }
-  .console__proto{ font-size: 14px; }
-  .console__proto-select{ min-height: 44px; font-size: 14px; }
+  .console__status{ font-size: 14px; }
   .console__out{ font-size: 14px; line-height: 1.7; }
+  .console__examples-h,
+  .console__example-n,
+  .console__example-cmd{ font-size: 14px; }
+  .console__example-cmd{ min-height: 44px; padding: 11px 0; }
+  .console__example-n{ padding: 11px 0; }
+  /* one command per row once the rows are big enough to be tapped, and the
+     rule that was a row divider in the two-column grid becomes the first one
+     of the list again */
+  .console__examples-list{ grid-template-columns: minmax(0, 1fr); }
+  .console__example:nth-child(2){ border-top: 1px solid #292823; }
+  /* At this width the command fills the row on its own, so the note would be
+     the thing that wrapped -- and a menu that is seven rows of one line is
+     worth more on a phone than seven rows of two. The note is not lost: it is
+     the button's own accessible name, and it is on the row again above 834px. */
+  .console__example-note{ display: none; }
+  /* The badge wraps onto its own row here, where the note under the panel says
+     the same sentence in full and the strip reads better as one line. */
+  .console__badge{ display: none; }
   .console__state{ font-size: 14px; }
   .console__prompt{ font-size: 14px; }
   .console__input{ font-size: 14px; padding-block: 14px 12px; }
-  .console__run{ min-height: 44px; padding: 12px 16px; font-size: 14px; }
+  .console__run{ min-height: 44px; min-width: 44px; padding: 12px 14px; font-size: 14px; }
   .console__note{ font-size: 14px; line-height: 1.6; }
   /* The frame cannot reflow on a phone without wrapping box-drawing art into
      nonsense, and this region must never scroll sideways. Below this width the
