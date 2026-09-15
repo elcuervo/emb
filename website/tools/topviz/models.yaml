@@ -1,0 +1,50 @@
+# The node `just website-topviz` records.
+#
+# Four models, each preloaded from a local file, so the recording never waits on
+# a lazy load or a download. Every alias is at most 13 characters: emb-top
+# truncates longer model names in its panel, and a truncated name in the plate
+# would read as a defect rather than as a long model name.
+#
+# Fetch a model that is missing with the command named in the error:
+#   just download-model Xenova/bge-small-en-v1.5 ./models/bge-small
+#
+# Port 16379 rather than 6379: the repo's test/batch configs already own 16379,
+# and `just website-dev` can be pointing a console at 6379 at the same time.
+listen: "127.0.0.1:16379"
+
+# A size, not "auto": the recorded cache gauge should be a property of the
+# scenario, not of the machine's RAM.
+cache: "256MB"
+
+# Four sessions with the default (cores-2) intra-op threads apiece oversubscribe
+# a 10-core box three times over once they are all busy: the recorded latency
+# then climbs monotonically to the top of the chart and stays there, and the
+# take stops reproducing on a machine that is busy with anything else. Three
+# threads each keeps all four models working, keeps the latency chart
+# responsive, and is a configuration an operator would actually run.
+models:
+  minilm: # 384d · mean · fp32
+    onnx: ./models/minilm/model.onnx
+    intra_op_threads: 3
+    preload: true
+
+  # BGE is a CLS-pooled model; the server would auto-detect `mean` from its
+  # 3-D output, which is both wrong for this model and a meta line that
+  # misstates what is running.
+  bge-small: # 384d · cls · fp32
+    onnx: ./models/bge-small/model.onnx
+    pooling: cls
+    intra_op_threads: 3
+    preload: true
+
+  # The one model of a different width, so the per-model identity line varies.
+  jina-small: # 512d · mean · fp32
+    onnx: ./models/jina-small/model.onnx
+    max_length: 512
+    intra_op_threads: 3
+    preload: true
+
+  e5-small: # 384d · mean · fp32
+    onnx: ./models/e5-small/model.onnx
+    intra_op_threads: 3
+    preload: true

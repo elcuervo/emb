@@ -127,3 +127,66 @@ deliberately skipped and the open work — the block designs — is resolved in
 FINISH: unreviewed and undocumented is unfinished; this build ends with the
 finish review, the verdict, DESIGN.md, and every shipping raster carrying its
 provenance.
+
+---
+
+## Amendment — the `emb-top` plate is a capture (change `website-emb-top-recording`)
+
+**Scope: the plate in the operations block, and nothing else.** The ledger, the
+facts list and the section's other captions do not move. Where this section
+above said the `emb-top` figures live on the docs surface, this amendment
+supersedes it: the landing keeps a plate, but it is a measured capture rather
+than a hand-built render.
+
+**What changes.** `.topviz__screen` — a `<pre>` of spans whose own caption read
+"Illustrative render · not a measured run" — becomes a captured recording of the
+dashboard under load, taken by `just website-topviz`. The caption becomes a
+receipt: `Measured run · <date> · emb-top v<version> · <n> models · <addr>`.
+
+**Direction contract for the plate**
+
+THESIS: The plate is evidence, not decoration. It is one real run of one real
+node, recorded against a scripted load and captioned with when and what, and it
+refuses the category default of UI b-roll by being rendered in the page's own
+material rather than a vendor's dark theme — the same plate colour, the same
+paper ink, and the page's accent carrying the request-rate stream.
+
+OWN-WORLD: Nothing new enters the world. The capture's palette is `#111110`,
+`#F3F0E8` and `#FF5A1F` (mapped onto the dashboard's own ANSI slots), so the
+"no new asset, colour, font or dependency" constraint is met by an asset *made
+of* the page's material. No script, no player, no second runtime.
+
+STORY: A reader who has just read the operations ledger sees the same claims
+moving — per-model rates, a latency heatmap, cache, CPU and memory — and can
+read the numbers off the frame.
+
+FINISH: `prefers-reduced-motion` serves the still frame of the same run, so the
+page's motion rule now covers the one element that would otherwise animate
+without consent. Because the gate is in `<picture>`, this also holds with
+JavaScript disabled, which the old `<pre>` did not need to prove.
+
+**Constraints carried over, and how each is met**
+
+- *Type floor (12px desktop / 14px mobile) on every ground.* The capture is 16px
+  type in a 1175px frame, so the plate scrolls horizontally below the width that
+  would take it under 12px rather than shrinking the type with it — the same
+  treatment the `<pre>` had, and the reason the plate carries no visible
+  scrollbar.
+- *Every ground reads with JavaScript disabled.* The still frame is the `<img>`;
+  the animation is a `<source media>` that simply does not match.
+- *No invented number, model, receipt or reply.* Every figure in the frame comes
+  from the run; the dashboard's figures are additionally written into the page as
+  text by the capture tool, so the plate's numbers are not image-only.
+- *Every version string is generated.* The plate's version is frozen in the
+  recording and written into the caption by the same tool, so it is stated as
+  the version the run *showed* rather than as the current release.
+
+**Detector.** `impeccable detect --json website/index.html
+website/assets/css/styles.css` was run once after the build, in place, and its
+output compared against the same run over the files at `HEAD`: 16 findings
+before, the same 16 after, none introduced by this change. The run over the new
+markup first reported two of its own, both now fixed: the caption sat inside the
+dark plate, putting `--muted` on `#111110` at 3.4:1, and the mobile figures used
+`--rule` (a hairline token) as body text at 1.8:1 on paper. The caption is a
+paragraph beside the plate again — where it was before the change — and the
+figures use `--muted`.

@@ -2,13 +2,15 @@
 """Stamp the repository VERSION into the site's version-bearing elements.
 
 The site has no build step, so a version string in the markup is a hand-typed
-copy of VERSION and drifts silently -- the `emb-top` capture in
-`website/index.html` shipped `v0.4.0` against a VERSION of `0.4.0.pre4`.
+copy of VERSION and drifts silently -- the `emb-top` plate in
+`website/index.html` shipped `v0.4.0` against a VERSION of `0.4.0.pre4`, before
+it was recomposed into a real capture whose version is frozen in its frames and
+written into its caption by `tools/topviz/publish.py`.
 
 This tool makes the value derived instead of typed. Any element carrying the
 `data-emb-version` attribute has its text content rewritten from `VERSION`:
 
-    emb-top v<span data-emb-version>0.4.0.pre4</span> ·
+    v<span data-emb-version>0.4.0.pre4</span> · MIT
 
 Run it after bumping VERSION:
 

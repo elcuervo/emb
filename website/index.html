@@ -766,18 +766,21 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
             Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
             trip, over the same protocol you already speak.
           </p>
-          <!-- Field spans, not decoration: a line may break between these
-               but never inside one, so at the widths where the render cannot
-               hold a line no value is split from its unit. Every character
-               of the capture is unchanged. -->
-          <pre class="topviz__screen"> <span class="tf">emb-top v<span data-emb-version>0.4.0.pre5</span> ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
-<span class="tf">minilm</span>        <span class="tf tf--bar">████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████</span>  <span class="tf">280 r/s</span>  <span class="tf">11.8k t/s</span>  <span class="tf">p50 6.5ms</span>  <span class="tf">p95 68.0ms</span>  <span class="tf">err 0</span>
-   <span class="tf">dim 384 ·</span> <span class="tf">mean ·</span> <span class="tf">int8 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
-<span class="tf">bge-small-en…</span> <span class="tf tf--bar">▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████</span>  <span class="tf">151 r/s</span>   <span class="tf">5.7k t/s</span>  <span class="tf">p50 8.8ms</span>  <span class="tf">p95 77.0ms</span>  <span class="tf">err 18 ↑</span>
-   <span class="tf">dim 384 ·</span> <span class="tf">cls ·</span> <span class="tf">fp32 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
-<span class="tf">cache 93.6% <span class="tf--bar">██████████</span></span>  <span class="tf">cpu 50.3% <span class="tf--bar">██████</span></span>  <span class="tf">mem 552MB <span class="tf--bar">████████████</span></span>
-<span class="tf">conns 7 ·</span> <span class="tf">active 1 ·</span> <span class="tf">goroutines 22 ·</span> <span class="tf">truncated 0/0</span></pre>
-          <p class="topviz__src">Illustrative render · not a measured run</p>
+          <!-- A capture, not a drawing: this is the dashboard's own screen
+               recording, taken by `just website-topviz` against a scripted
+               load. The animation is gated on motion, so a reader who asked
+               for less gets the still frame of the same run, and a reader with
+               no JavaScript gets it too. The two asset names, the provenance
+               line and the figures below are written by
+               website/tools/topviz/publish.py -- do not hand-edit them. -->
+          <figure class="topviz__plate">
+            <picture>
+              <source srcset="assets/img/emb-top-e3d87330.webp" media="(prefers-reduced-motion: no-preference)" data-topviz-anim>
+              <img src="assets/img/emb-top-e3d87330.png" width="1175" height="739" loading="lazy" decoding="async" alt="The emb-top dashboard during a recorded run: four models with their request and token rates, a per-model activity heatmap, request-rate and p95-latency streams, and cache, CPU and memory gauges." data-topviz-poster>
+            </picture>
+          </figure>
+          <p class="topviz__src">Measured run · <span data-topviz-run>2026-09-15 · emb-top v0.4.0.pre5 · 4 models · 127.0.0.1:16379</span></p>
+          <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 218 requests/s, 2.3k tokens/s, p95 latency 7.2ms, cache hit rate 38%, CPU 172%, 1047MB resident. Per model: minilm 54/s (avg 1.1ms, dim 384, mean, fp32); bge-small 20/s (avg 2.2ms, dim 384, cls, fp32); jina-small 33/s (avg 1.8ms, dim 512, mean, fp32); e5-small 111/s (avg 2.5ms, dim 384, mean, fp32).</p>
         </section>
 
         </div>

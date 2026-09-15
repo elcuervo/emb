@@ -49,6 +49,13 @@ website/
 │   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
 │   ├── dev-server.py       serves this tree with the console's module origin
 │   │                       pointed at a local bridge (`just website-dev`)
+│   ├── topviz/             the rig behind the emb-top plate: one command
+│   │                       records a real dashboard, trims it to its own
+│   │                       screen, renders it in this page's palette and
+│   │                       publishes it (`just website-topviz`, see its
+│   │                       README). Its `runs/` hold the last take's cast
+│   │                       and logs — gitignored, and the only way to check
+│   │                       what the plate shows
 ├── repl/                   the sandbox: NOT the site (see § the sandbox)
 │   ├── *.go                the bridge — the sandbox's only public surface
 │   ├── terminal.js         the one client module; both surfaces load it
@@ -324,13 +331,11 @@ loopback. Pass `bind=127.0.0.1` to keep the loop to this machine.
 
 `website/tools/dev-server.py` is what makes that possible: it serves this tree
 with exactly one substitution in HTML responses, the console's module origin
-(`https://cli.emb.is` → this machine). The origin is derived per request from
-the address the browser used, so a phone loads the module from the same LAN
-address it loaded the page from rather than from its own loopback, and the
-bridge accepts that host on its own port. The published page keeps a single
-source, and the page under test differs from production in that one respect.
-`just website` still serves the tree untouched — use it for the ink probe and
-anything else that must measure what ships.
+(`https://cli.emb.is` → this machine, derived from the request's own Host). The
+published page keeps a single source, and the page under test differs from
+production in that one respect. `just website` still serves the tree
+untouched — use it for the ink probe and anything else that must measure what
+ships.
 
 The pieces are also runnable on their own:
 

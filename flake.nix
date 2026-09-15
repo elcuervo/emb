@@ -88,6 +88,12 @@
         #   flyctl         the Fly.io CLI for deploying the sandbox
         #                  (`just sandbox-deploy`), which lives under
         #                  `website/repl/` and so belongs to the website half.
+        #   asciinema/agg  the recorder and renderer behind `just website-topviz`
+        #                  (see openspec/changes/website-emb-top-recording).
+        #                  Both are headless — no browser — unlike `vhs`,
+        #                  whose runtime Chromium this flake deliberately avoids.
+        #                  NB: the binary is `agg`, the attribute is
+        #                  `asciinema-agg`; plain `agg` is the AGG 2D library.
         #
         # `firefox` is deliberately absent: on aarch64-darwin the nixpkgs we
         # pin builds it from source, which is hours, not minutes. Check any
@@ -107,6 +113,8 @@
           libwebp
           html-tidy
           flyctl
+          asciinema
+          asciinema-agg
         ]) ++ [ pkgsWrangler.wrangler ];
 
         # The CGo/runtime environment the server binary needs. Everything

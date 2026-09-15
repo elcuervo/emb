@@ -469,8 +469,7 @@ website-dev port="8080" bridge="8081" upstream="6379" bind="0.0.0.0": sandbox-bu
     trap cleanup EXIT INT TERM; \
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" & emb=$!; \
     ./bin/repl -listen {{bind}}:{{bridge}} -upstream 127.0.0.1:{{upstream}} \
-        -config "$cfg" \
-        -origins "http://localhost:{{port}},http://127.0.0.1:{{port}}" & repl=$!; \
+        -config "$cfg" & repl=$!; \
     python3 website/tools/dev-server.py {{port}} --bind {{bind}} --sandbox-port {{bridge}}
 
 # One-time browser fetch for the site's checks (needs `nix develop .#website`).
@@ -529,6 +528,72 @@ website-ink url="http://localhost:8080" target="":
 
 # Assert that the set of files this folder publishes is the set we mean.
 #
+# Record the site's emb-top plate from a real run (see
+# website/tools/topviz/README.md and
+# openspec/changes/website-emb-top-recording).
+#
+# Builds the binaries, starts one node on :16379 with the models in
+# models.yaml, waits for EMB.READY, records the dashboard headlessly against a
+# scripted load, trims the take to the dashboard's own screen, renders it in
+# the site's palette, and publishes the result (name, placement, provenance and
+# the served set). The raw recording, the trim, the traffic log and a
+# machine-readable sample log of the same run land in
+# website/tools/topviz/runs/ -- unserved, and the only way to check what the
+# animation shows.
+#
+# Needs the full dev shell: it builds emb from Go+CGo, drives load with
+# redis-cli, and takes its recorder and image tools from the website half.
+# Nothing else in the site build depends on any of them.
+website-topviz: build
+    @set -eu; \
+    cfg=website/tools/topviz/models.yaml; \
+    runs=website/tools/topviz/runs; \
+    port=16379; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    for tool in redis-cli asciinema agg img2webp magick pngquant; do \
+      command -v $tool >/dev/null 2>&1 || { echo "website-topviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
+    done; \
+    if [ -z "{{ort_lib}}" ]; then echo "website-topviz: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
+    for onnx in $(grep -E '^[[:space:]]+onnx:' $cfg | awk '{print $2}'); do \
+      if [ ! -f "$onnx" ]; then \
+        echo "website-topviz: missing $onnx"; \
+        echo "  fetch it with: just download-model <repo> $(dirname $onnx)"; \
+        exit 1; \
+      fi; \
+    done; \
+    if redis-cli -p $port ping >/dev/null 2>&1; then echo "website-topviz: something already answers on :$port"; exit 1; fi; \
+    mkdir -p $runs; \
+    tmp=$(mktemp -d /tmp/emb-topviz.XXXXXX); \
+    trap 'kill $(cat $runs/node.pid) 2>/dev/null || true; rm -rf $tmp' EXIT; \
+    echo "website-topviz: starting the node"; \
+    ./bin/emb -config $cfg > $runs/node.log 2>&1 & echo $! > $runs/node.pid; \
+    deadline=$(( $(date +%s) + 300 )); \
+    until redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK; do \
+      kill -0 $(cat $runs/node.pid) 2>/dev/null || { echo "website-topviz: emb exited during startup"; tail -20 $runs/node.log; exit 1; }; \
+      if [ $(date +%s) -ge $deadline ]; then echo "website-topviz: not ready within 300s"; tail -20 $runs/node.log; exit 1; fi; \
+      sleep 1; \
+    done; \
+    echo "website-topviz: recording (about a minute)"; \
+    ./bin/emb-top -addr 127.0.0.1:$port -once -samples 44 -interval 1s > $runs/samples.txt 2>&1 & sampler=$!; \
+    EMB_TOPVIS_LOG=$runs/traffic.log asciinema record --headless --quiet --overwrite --window-size 120x32 \
+      -c website/tools/topviz/run.sh $runs/raw.cast; \
+    kill $sampler 2>/dev/null || true; \
+    python3 website/tools/topviz/trim.py $runs/raw.cast $runs/take.cast; \
+    agg --quiet --theme "$theme" --font-size 16 --line-height 1.4 \
+      --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/take.cast $tmp/take.gif; \
+    magick $tmp/take.gif -coalesce $tmp/f-%03d.png; \
+    frames=''; i=-1; \
+    for ticks in $(magick identify -format '%T ' $tmp/take.gif); do \
+      i=$(( i + 1 )); frames="$frames -d $(( ticks * 10 )) $(printf "$tmp/f-%03d.png" $i)"; \
+    done; \
+    img2webp -loop 0 -q 80 -m 6 $frames -o $tmp/take.webp; \
+    mid=$(( (i + 1) * 65 / 100 )); \
+    pngquant -f --quality=70-95 --strip -o $tmp/poster.png $(printf "$tmp/f-%03d.png" $mid); \
+    python3 website/tools/topviz/publish.py --anim $tmp/take.webp --poster $tmp/poster.png \
+      --samples $runs/samples.txt \
+      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port; \
+    python3 website/tools/published-tree.py
+
 # `website/` is edited and `website/` is published, so `.assetsignore` is the
 # only thing between an authoring file and a public URL -- which makes this
 # check load-bearing rather than a convenience. It fails both ways: a file that

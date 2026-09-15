@@ -68,6 +68,8 @@ SERVED = frozenset(
         "assets/img/terrain-matte.png",
         "assets/img/og.png",
         "assets/img/speckle.svg",
+        "assets/img/emb-top-e3d87330.webp",
+        "assets/img/emb-top-e3d87330.png",
     }
 )
 
