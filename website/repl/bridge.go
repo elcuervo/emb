@@ -330,7 +330,7 @@ func (b *Bridge) probe() bool {
 // request (a refused origin, or a completed preflight).
 func (b *Bridge) allowCORS(w http.ResponseWriter, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	if origin != "" && !b.origins[origin] && origin != requestOrigin(r) && !sameHostOrigin(origin, r) {
+	if origin != "" && !b.origins[origin] && !sameHostOrigin(origin, r) {
 		writeJSON(w, http.StatusForbidden, errorEnvelope(codeRefused, "origin not allowed"))
 		return false
 	}
@@ -346,20 +346,6 @@ func (b *Bridge) allowCORS(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
-}
-
-// requestOrigin is the origin this request was addressed to, as the browser
-// would spell it. Behind the platform proxy the TLS terminates upstream, so the
-// forwarded scheme is what the browser saw.
-func requestOrigin(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	}
-	return scheme + "://" + r.Host
 }
 
 // sameHostOrigin reports whether origin names the same host as the request,
