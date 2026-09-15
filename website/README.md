@@ -34,10 +34,11 @@ website/
 │                           a locked brand composition — never a page screenshot,
 │                           so landing changes cannot rot it)
 ├── tools/
-│   ├── og-card.html      the locked source of assets/img/og.png: masthead,
-│   │                     timeless mono strip, the logo's own outlines, the
-│   │                     fold spine, and the positioning line. Regenerate at
-│   │                     viewport 1200x630 after `just website` (see the file
+│   ├── og-card.html      the locked source of assets/img/og.png: the
+│   │                     masthead, and the massif with the spine dripping
+│   │                     into its fork (no middle band — the artwork takes
+│   │                     the rest of the card). Regenerate at viewport
+│   │                     1200x630 after `just website` (see the file
 │   │                     header), capture exactly 1200×630
 │   ├── gen-isometric.py    regenerates the pipeline SVG
 │   ├── gen-terrain-matte.py derives the terrain cut-out from terrain-v2.png

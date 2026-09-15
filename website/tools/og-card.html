@@ -2,8 +2,25 @@
 <!-- og-card.html — the locked source of assets/img/og.png (1200×630).
      A standalone composition from brand tokens, NOT a screenshot of the
      landing page: nav items, numbers and sections come and go, the card
-     must not rot with them. The giant word reuses the landing's optical
-     outlines (copied from index.html) so it always matches the logo.
+     must not rot with them.
+
+     The card is the page's one-sentence thesis, compressed: the small `emb`
+     wordmark in the masthead, and the orange signal dripping from the
+     masthead's rule down onto the massif, where it forks across the ridge. It
+     replaces an earlier card whose mid band was the giant wordmark; the giant
+     word lives on the landing, the massif is what this card leads with.
+     Nothing sits between the rule and the rock: one band of chrome, then the
+     artwork.
+
+     The massif, the fold axis and the route are derived from the same
+     constants and the same formulas the landing uses, so the two surfaces
+     cannot drift apart:
+       fold = pad + .6531 × (1200 - 2 × pad)          → the spine's x
+       art-w = 1.005 × max(card, fold/fork, (card-fold)/(1-fork))
+       art   left = fold - fork × art-w               → the fork lands on the spine
+     The artwork covers the card edge to edge (its own crop never enters the
+     frame) and the route shares the art box, so the line is glued to the rock.
+
      Regenerate: serve website/ (`just website`), then
        agent-browser open http://localhost:8080/tools/og-card.html
        agent-browser set viewport 1200 630
@@ -29,102 +46,138 @@
     src: url("../assets/fonts/jetbrains-mono-var-latin.woff2") format("woff2");
     font-weight: 100 800; font-style: normal; font-display: swap;
   }
+  :root{
+    /* the landing's tokens, at card scale */
+    --paper: #F3F0E8; --ink: #0B0B0B;
+    --accent: #FF5A1F;          /* surface only: the line */
+    --accent-ink: #C23D00;      /* 4.66:1 on paper: text */
+    --rule: #B8B5AC;
+    --pad: 48px;
+
+    /* the page's derived axis, resolved for a 1200-wide card (see the head) */
+    --fold-n: .6531;
+    --fold-x: calc(var(--pad) + var(--fold-n) * (1200px - 2 * var(--pad)));
+    --fork: .6417706;
+    --fork-rest: .3582294;
+    --art-ratio: .3546;
+    --art-w: calc(1.005 * max(1200px,
+      var(--fold-x) / var(--fork),
+      (1200px - var(--fold-x)) / var(--fork-rest)));
+    --art-h: calc(var(--art-w) * var(--art-ratio));
+    /* one weight for the CSS segment and the route: the stroke is drawn with
+       vector-effect, so it does not scale with the stretched viewBox */
+    --spine-w: 5px;
+  }
   *{ margin: 0; padding: 0; box-sizing: border-box; }
   html, body{ width: 1200px; height: 630px; }
   body{
-    background: #F3F0E8; color: #0B0B0B;
+    background: var(--paper); color: var(--ink);
     font-family: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
     overflow: hidden; position: relative;
     -webkit-font-smoothing: antialiased;
     font-synthesis-weight: none;
   }
-  /* spine at the page fold (--fold-n .6531): 1200 × .6531 ≈ 784 */
-  .spine{
-    position: absolute; top: 0; bottom: 120px; left: 781px; width: 6px;
-    background: #FF5A1F; z-index: 3;
-  }
+
+  /* ── the masthead, then the massif ───────────────────────────────── */
   .top{
-    position: relative; z-index: 4; height: 100px;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 48px; border-bottom: 2px solid #0B0B0B;
-    background: #F3F0E8;
+    height: 88px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 var(--pad);
+    border-bottom: 2px solid var(--ink);
   }
   .top__brand{ display: flex; align-items: center; gap: 20px; }
-  .mark{ width: 30px; height: 30px; background: #F3F0E8;
-    border: 2px solid #0B0B0B; position: relative; flex: none; }
-  .mark::after{ content: ""; position: absolute; top: 0; bottom: 0; left: 11px;
-    width: 4px; background: #FF5A1F; }
   .word{ font-family: "Inter", "Archivo", sans-serif; font-weight: 900;
     font-size: 48px; letter-spacing: -.04em; line-height: 1; }
-  .vrule{ width: 1px; height: 30px; background: #B8B5AC; }
+  .vrule{ width: 1px; height: 30px; background: var(--rule); }
   .tag{ font-family: "JetBrains Mono", monospace; font-size: 15px;
     font-weight: 500; letter-spacing: .18em; line-height: 1.5; }
   .top__meta{ font-family: "JetBrains Mono", monospace; font-size: 14px;
     font-weight: 600; letter-spacing: .14em; text-align: right; line-height: 1.9; }
-  .strip{
-    position: relative; z-index: 4; height: 96px; background: #F3F0E8;
-    border-bottom: 2px solid #0B0B0B;
-    display: flex; align-items: center; padding: 0 48px; gap: 48px;
-    font-family: "JetBrains Mono", monospace; font-size: 15px; font-weight: 500;
-    letter-spacing: .14em; line-height: 1.8;
+
+  /* ── the massif ──────────────────────────────────────────────────── */
+  /* the band is the whole card below the masthead, and it is taller than the
+     artwork: the extra is sky, the same way the landing's --band outgrows
+     --art-h above the massif on a narrow screen. Nothing is restated here. */
+  .massif{ position: relative; height: 542px; overflow: hidden; }
+  /* the drip: from the masthead's rule down to where the artwork begins, so the
+     CSS segment hands over to the route's own trunk with no gap and no step */
+  .spine{
+    position: absolute; top: 0; bottom: var(--art-h);
+    left: calc(var(--fold-x) - var(--spine-w) / 2);
+    width: var(--spine-w); background: var(--accent);
   }
-  .strip__c{ text-align: left; }
-  .strip__r{ margin-left: auto; text-align: right; }
-  .mid{ position: relative; height: 310px; overflow: hidden; }
-  .giant{
-    position: absolute; left: 35px; top: -95px; width: 1150px; height: auto;
-    color: #0B0B0B; z-index: 1;
+  .art{
+    position: absolute; bottom: 0;
+    left: calc(var(--fold-x) - var(--fork) * var(--art-w));
+    width: var(--art-w); aspect-ratio: 2172 / 770.2;
   }
-  .giant svg{ display: block; width: 100%; height: auto; }
-  .bottom{
-    position: relative; z-index: 4; height: 120px; background: #111110;
-    color: #F3F0E8; border-top: 2px solid #0B0B0B;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 48px;
+  .art__photo{
+    position: absolute; inset: auto 0 0 0;
+    width: 100%; height: 94%; object-fit: fill; display: block;
   }
-  .claim{ font-family: "Archivo", sans-serif; font-weight: 750;
-    font-size: 27px; letter-spacing: -.01em; white-space: nowrap; }
-  .claim em{ font-style: normal; color: #FF5A1F; }
-  .domain{ font-family: "JetBrains Mono", monospace; font-size: 16px;
+  .art__route{
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    color: var(--accent);
+  }
+  .route{ fill: none; stroke: currentColor; stroke-width: var(--spine-w);
+    stroke-linecap: square; stroke-linejoin: miter; }
+  /* the 269.64-unit nudge puts the fork on the ridge crest above the spine */
+  .art__route path{ transform: translateX(269.64px); }
+
+  /* the sky above the massif's left slope. The measure keeps every line's ink
+     inside the paper: the rock's silhouette is still ~100px below the last
+     line where it ends, so nothing here needs a knockout. */
+  .massif__text{ position: absolute; left: var(--pad); top: 52px; width: 500px; }
+  .claim{
+    font-family: "Archivo", sans-serif; font-weight: 750;
+    font-size: 48px; line-height: .98; letter-spacing: -.005em;
+  }
+  .claim span{ display: block; }
+  /* --accent-ink, never --accent: #FF5A1F is 2.74:1 on paper and a surface
+     colour only, so it cannot carry the one line of this size */
+  .claim em{ font-style: normal; color: var(--accent-ink); }
+  .domain{
+    display: inline-block; margin-top: 30px;
+    font-family: "JetBrains Mono", monospace; font-size: 16px;
     font-weight: 600; letter-spacing: .14em;
-    border: 1px solid #F3F0E8; padding: 10px 16px; }
+    border: 2px solid var(--ink); padding: 9px 15px;
+  }
 </style>
 </head>
 <body>
-  <div class="spine"></div>
-
   <header class="top">
     <div class="top__brand">
-      <span class="mark"></span>
       <span class="word">emb</span>
       <span class="vrule"></span>
       <span class="tag">BYTES IN.<br>VECTORS OUT.</span>
     </div>
-    <p class="top__meta">REDIS PROTOCOL<br>OPEN SOURCE · MIT</p>
+    <p class="top__meta">REDIS PROTOCOL<br>ONNX RUNTIME</p>
   </header>
 
-  <div class="strip">
-    <p>SAME PROTOCOL.<br>A MORE SEMANTIC WORLD.</p>
-    <p class="strip__c">OPEN SOURCE<br>EMBEDDING SERVER</p>
-    <p class="strip__r">ONNX RUNTIME<br>RESP2 / RESP3</p>
-  </div>
+  <div class="massif">
+    <span class="spine" aria-hidden="true"></span>
 
-  <div class="mid">
-    <div class="giant">
-      <!-- Optical outlines follow the reference lockup (from index.html). -->
-      <svg viewBox="0 0 1086 480">
-        <g fill="currentColor" fill-rule="evenodd">
-          <path d="M319 334H121C120 375 132 393 162 393C184 393 199 384 207 365H316C297 436 243 479 165 479C58 479-5 416-5 310C-5 203 63 131 168 131C269 131 319 197 319 296ZM123 269H203C203 236 191 219 166 219C142 219 127 235 123 269Z"/>
-          <path d="M321 467V140H433V162C450 140 470 131 495 131C531 131 552 147 564 177C581 147 608 131 645 131C705 131 737 164 737 225V461H619V263C619 244 614 237 603 237C589 237 580 250 580 274V461H463V266C463 245 459 237 448 237C435 237 430 250 430 274V467Z"/>
-          <path d="M747 463V0H865V164C887 142 914 131 947 131C1035 131 1091 198 1091 305C1091 415 1035 480 947 480C906 480 876 470 851 447V463ZM852 315C852 369 870 393 907 393C944 393 962 369 962 315C962 261 945 236 909 236C872 236 852 263 852 315Z"/>
-        </g>
+    <div class="massif__text">
+      <p class="claim">
+        <span>A fast embedding</span>
+        <span>server that speaks</span>
+        <span>the <em>Redis protocol.</em></span>
+      </p>
+      <p class="domain">emb.is</p>
+    </div>
+
+    <!-- The cut-out and the route share one box, anchored by its left edge so
+         the fork lands on the spine by construction. -->
+    <div class="art">
+      <img class="art__photo" src="../assets/img/terrain-matte.png"
+           width="2172" height="722" alt="">
+      <svg class="art__route" viewBox="0 0 2172 770.2" preserveAspectRatio="none"
+           aria-hidden="true" focusable="false">
+        <path class="route" vector-effect="non-scaling-stroke"
+          d="M1124.3 0 L1124.3 243.5 L1056.9 288.8 L995 337 L930.4 379.4 L865.7 399.3 L820.7 419.1 L772.9 470 L739.2 504 L680.2 552.2 L632.4 574.8 L573.4 597.5 L514.3 645.6 L438.4 705.1 L320.4 744.7 L236 770.2"/>
+        <path class="route" vector-effect="non-scaling-stroke"
+          d="M1124.3 243.5 L1177.7 274.7 L1217.1 274.7 L1262.1 305.8 L1278.9 337 L1298.6 359.6 L1312.7 399.3 L1354.8 453.1 L1385.8 467.2 L1433.6 504 L1537.6 557.8 L1664.1 606 L1796.2 659.8 L1970.5 739.1 L2094.2 770.2"/>
       </svg>
     </div>
   </div>
-
-  <footer class="bottom">
-    <p class="claim">A fast embedding server that speaks <em>the Redis protocol.</em></p>
-    <p class="domain">emb.is</p>
-  </footer>
 </body>
 </html>
