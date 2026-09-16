@@ -45,3 +45,23 @@
 /assets/cast/*
   Cache-Control: public, max-age=31536000, immutable
   Content-Type: text/plain; charset=utf-8
+
+# The query engine the demos gallery loads: a pinned, vendored build of SQLite
+# and sqlite-vec. The directory name carries the release (`sqlite-wasm-vec-<v>`),
+# so its bytes cannot change under a name a reader has cached; a bump is a new
+# directory and a re-vendor. `just website-demos-vendor` writes it and
+# `just website-demos-vendor-check` proves it is that release byte for byte.
+/assets/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The gallery's index carries its corpus's digest in its filename, for the same
+# reason the recorded take does: a rebuild must not be served stale. The manifest
+# beside it keeps a stable name and names the index, so it revalidates instead.
+# `website/tools/published-tree.py` asserts that no unhashed `.html`, `.css` or
+# `.js` path falls under an immutable rule, and this pair is why that check has
+# to read the manifest rather than a constant.
+/assets/demo/poe-*.db
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/demo/manifest.json
+  Cache-Control: public, max-age=0, must-revalidate

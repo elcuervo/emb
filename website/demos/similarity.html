@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the similarity — one number between two texts</title>
+<link rel="canonical" href="https://emb.is/demos/similarity.html">
+<meta name="description" content="Two passages through the sandbox's own preloaded Lua preset: the dimension, the norm, and the cosine similarity, with the script's source and digest beside the reply.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the similarity — one number between two texts">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Similarity as a single number, computed by the server's own script and shown with the script's bytes.">
+<meta property="og:url" content="https://emb.is/demos/similarity.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the similarity — one number between two texts">
+<meta name="twitter:description" content="Similarity as a single number, computed by the server's own script and shown with the script's bytes.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The similarity</h1>
+          <p class="plate__teaches">Everything retrieval does is this number, sorted. One cosine over two vectors, not 384 additions you have to read.</p>
+        </div>
+        <div><p class="fig"><b>FIG. 2 — THE SIMILARITY</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b>one cosine</b> per pair
+            · <b>scripted</b> server-side
+            · <b>no vector</b> on the wire</p></div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        
+            <p class="block__deck">
+              Two vectors and one cosine. Because the model normalizes what it
+              returns, cosine similarity is the dot product, and the result is a
+              single number with a real meaning: 1 is the same direction, 0 is
+              unrelated, and negative is opposed. A passage and a paraphrase of
+              it sit above 0.6; a passage and an unrelated one sit near 0.1.
+            </p>
+            <p class="block__deck">
+              The number is computed by the sandbox, not here: the plate calls
+              one of the server's preloaded Lua scripts by its SHA1 and renders
+              the reply. The script's source is printed below the reply, and the
+              digest beside it is the digest of exactly those bytes — a script
+              the sandbox was not told to load is a call it refuses, so the page
+              cannot describe one it does not have.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        
+            <div data-live class="rig" data-rig="similarity" data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445">
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="s-a">First passage</label>
+                <input class="rig__input" id="s-a" autocomplete="off" spellcheck="false"
+                       value="The thousand injuries of Fortunato I had borne as I best could.">
+                <label class="sr-only" for="s-b">Second passage</label>
+                <input class="rig__input" id="s-b" autocomplete="off" spellcheck="false"
+                       value="I had endured as best I could the many wrongs Fortunato had done me.">
+                <button class="rig__go" type="submit">Compare</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+                <div class="shape__body" data-source></div>
+                <p class="shape__sha" data-sha></p>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        
+            <p class="block__deck">
+              The script calls <span class="t-cmd">emb.embed</span> twice — the
+              same embedding path, the same batcher and the same cache as
+              <span class="t-cmd">EMB</span> — and then
+              <span class="t-cmd">emb.similarity</span>. It returns a hash rather
+              than 768 floats, because the point is the number: a page does not
+              need the vector to answer <em>how close are these</em>.
+            </p>
+            <p class="block__deck">
+              Doing it in Lua rather than in the page is the product's own
+              argument. The arithmetic runs next to the model, in the server's
+              process, over the same packed float32 buffers the model produced —
+              so a rerank costs one round trip and no bytes on the wire.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        
+            <p class="block__deck">
+              This is the floor of every vector feature. Deduplication,
+              clustering, retrieval, recommendations, anomaly detection: each is
+              a similarity, an ordering, and a threshold chosen to suit the
+              consequences of being wrong. The next plate sorts this number over
+              2 782 passages instead of two.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        
+            <p class="block__deck">
+              One command. The count before the texts is the number of
+              <em>texts</em> the script will see; the reference passage travels
+              as an argument, which is also what keeps the reply cacheable per
+              pair.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;first passage&quot; &quot;second passage&quot;
+# -> { dim = 384, norm = 1, similarity = 0.42 }
+
+# the script the sandbox runs, byte for byte:
+#   local packed = emb.embed(KEYS[1], { bytes = true })
+#   local out = { dim = math.floor(#packed / 4), norm = emb.math.norm(packed) }
+#   if ARGV[1] then out.similarity = emb.similarity(packed, emb.embed(ARGV[1], { bytes = true })) end
+#   return out</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'minilm';
+const root = document.querySelector('[data-rig="similarity"]');
+const form = root.querySelector('[data-form]');
+const a = root.querySelector('#s-a');
+const b = root.querySelector('#s-b');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const source = root.querySelector('[data-source]');
+const sha = root.querySelector('[data-sha]');
+const go = root.querySelector('.rig__go');
+let last = null;
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+
+async function run() {
+  last = true;
+  go.disabled = true;
+  setState('running');
+  try {
+    const digest = root.getAttribute('data-emb-preset-embed');
+    const reply = await g.preset(MODEL, digest, [a.value], [b.value]);
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'similarity ' }),
+      el('b', { text: Number(reply.similarity).toFixed(4) }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: 'dim ' }), el('b', { text: String(reply.dim) }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: 'norm ' }), el('b', { text: String(reply.norm) })
+    );
+    source.textContent = 'EMB.EVSHA minilm ' + digest + ' 1 \n  "' + a.value + '" \n  "' + b.value + '"';
+    sha.textContent = 'preset sha1 ' + digest + ' — the digest the sandbox preloaded';
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+g.manifest().then((m) => {
+  const entry = m.models.find((x) => x.name === MODEL) || m.models[0];
+  document.querySelector('[data-fig-dim]').textContent = entry.dimension;
+}).catch(() => {});
+run();
+
+</script>
+</body>
+</html>

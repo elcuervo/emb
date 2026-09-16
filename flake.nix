@@ -43,6 +43,24 @@
           hash = "sha256-0D72f8LzKnqlF3wLZGUMfI/SNO8tPks0iGYyuz3VjFw=";
         };
 
+        # The demos gallery searches its committed index in the browser with
+        # `sqlite-vec`, which nixpkgs does not package for wasm. The release is
+        # pinned here as its npm tarball and re-vendored into
+        # `website/assets/vendor/` by `just website-demos-vendor`.
+        #
+        # It is one release ahead of the native `sqlite-vec` below, because
+        # npm's oldest `sqlite-wasm-vec` is 0.1.7. That direction is the one
+        # that matters and it is checked: the build tool writes the `.db` with
+        # the native extension and the browser only reads it, and a 0.1.6-written
+        # `vec0` table opens and answers a k-NN query under 0.1.9. If a nixpkgs
+        # bump moves the native extension past this pin, re-run that check
+        # before shipping.
+        sqliteWasmVecVersion = "0.1.9";
+        sqliteWasmVec = pkgs.fetchurl {
+          url = "https://registry.npmjs.org/sqlite-wasm-vec/-/sqlite-wasm-vec-${sqliteWasmVecVersion}.tgz";
+          hash = "sha256-6uX9AQ4tvVPgrYb5Cu3wpXYy8YYP7XmS3ziQlpuhQnA=";
+        };
+
         libtokenizers = pkgs.stdenv.mkDerivation {
           pname = "libtokenizers";
           version = "1.27.0";
@@ -115,6 +133,9 @@
           python3
           python3Packages.pillow
           python3Packages.numpy
+          # The corpus index's `vec0` tables are written offline with the native
+          # extension and read in the browser with the vendored wasm build.
+          sqlite-vec
           nodejs_22
           agent-browser
           imagemagick
@@ -151,6 +172,13 @@
           # site itself never needs this shell: it serves committed bytes.
           export ASCIIINEMA_PLAYER_TARBALL="${asciinemaPlayer}"
           export ASCIIINEMA_PLAYER_VERSION="${asciinemaPlayerVersion}"
+          # The pinned sqlite-vec pair: the native extension the corpus build
+          # loads, and the npm tarball `just website-demos-vendor` re-vendors
+          # for the browser. The site itself never needs this shell: it serves
+          # committed bytes.
+          export SQLITE_VEC_LIB="${pkgs.sqlite-vec}/lib"
+          export SQLITE_WASM_VEC_TARBALL="${sqliteWasmVec}"
+          export SQLITE_WASM_VEC_VERSION="${sqliteWasmVecVersion}"
           echo "website: \`just website\` serves website/ on :8080;" \
                "\`just website-dev\` serves it with a local sandbox behind the console;" \
                "\`just website-browser\` fetches Chrome for Testing once."

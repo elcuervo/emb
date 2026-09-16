@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — the demos gallery: vectors, similarity, search, the atlas</title>
+<link rel="canonical" href="https://emb.is/demos/">
+<meta name="description" content="Six small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, and why two models produce two incomparable spaces.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="A gallery of six demos that embed real text and search a real index, over one author's public-domain corpus.">
+<meta property="og:url" content="https://emb.is/demos/">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — the demos gallery: vectors, similarity, search, the atlas">
+<meta name="twitter:description" content="A gallery of six demos that embed real text and search a real index, over one author's public-domain corpus.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h">The demos gallery</h1>
+          <p class="plate__teaches">
+            Six demonstrations of one idea, run against a real server and a real
+            index. The first three answer <em>what is a vector</em> and <em>why
+            does it help</em>; the last three answer <em>why emb</em> and <em>why
+            more than one model</em>. Read them in order, or jump to the one you
+            came for — each stands on its own.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 0 — THE ATLAS</b>
+            · <b>six plates</b>
+            · <b data-fig-count>2 782</b> passages
+            · <b data-fig-works>86</b> works
+            · <b data-fig-model>all-MiniLM-L6-v2</b>
+            · <b data-fig-dim>384</b> dimensions
+            · <b data-fig-size>6.4 MB</b> index</p>
+          <p class="fig"><b>CORPUS</b> · <span data-fig-attrib>Texts: Edgar Allan Poe (1809–1849), public domain, via Project Gutenberg.</span></p>
+        </div>
+      </div>
+
+      <section class="block block--paper sec" aria-labelledby="plan-h">
+        <div class="shell block__inner"><div class="block__body">
+          <h2 class="sec__h" id="plan-h">THE READING ORDER</h2>
+          <ol class="ord">
+        <li class="ord__i">
+          <span class="ord__n">01</span>
+          <span class="ord__t"><a href="vector.html">The vector</a></span>
+          <span class="ord__w"><b>PLATE I</b> · Text becomes 384 numbers, and the vector is the model's answer — not a hash of the text.<br>Teaches: the unit everything else is built from. <span class="ord__start" aria-hidden="true">← start here</span></span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">02</span>
+          <span class="ord__t"><a href="similarity.html">The similarity</a></span>
+          <span class="ord__w"><b>PLATE I</b> · One number between two texts. The whole retrieval story is this number, sorted.<br>Teaches: the primitive retrieval is made of.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">03</span>
+          <span class="ord__t"><a href="search.html">The search</a></span>
+          <span class="ord__w"><b>PLATE II</b> · A question phrased in words the corpus never uses, answered with the passages that mean it.<br>Teaches: the retrieval step in every RAG pipeline.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">04</span>
+          <span class="ord__t"><a href="atlas.html">The atlas</a></span>
+          <span class="ord__w"><b>PLATE II</b> · The corpus laid out by meaning. Themes are not a metaphor here — they are regions of a space.<br>Teaches: what a vector store actually looks like.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">05</span>
+          <span class="ord__t"><a href="lens.html">The model lens</a></span>
+          <span class="ord__w"><b>PLATE III</b> · One corpus, two models, two rankings that do not agree. You cannot mix models.<br>Teaches: why shipping more than one embedding is a real decision.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">06</span>
+          <span class="ord__t"><a href="function.html">The model is a function</a></span>
+          <span class="ord__w"><b>PLATE III</b> · One primitive, four answers: bytes, a typed vector, a similarity, a label.<br>Teaches: extensibility without forking the server.</span>
+        </li>
+          </ol>
+        </div></div>
+      </section>
+
+      <section class="block block--paper sec" aria-labelledby="what-h">
+        <div class="shell block__inner"><div class="block__body">
+          <h2 class="sec__h" id="what-h">WHAT THESE ARE</h2>
+          <p class="block__deck">
+            Every plate embeds real text with the sandbox's own model, searches a
+            corpus that was embedded before deployment, and shows you the exact
+            command it issued and the exact reply it got. Nothing here is a
+            screenshot and nothing is replayed: where a plate shows a number, the
+            number came from the server or from the shipped index, and where the
+            sandbox cannot be reached the plate says so and shows nothing.
+          </p>
+          <p class="block__deck">
+            The corpus is Edgar Allan Poe's collected tales and poems — 86 works,
+            public domain, fetched from Project Gutenberg and committed here. One
+            author's body of work has real thematic continents (the sea, the
+            grave, detection, grief), which is what makes a map of the space
+            legible. Your own text is used to answer your request and is not
+            stored, indexed, or shown to anyone else.
+          </p>
+          <p class="block__deck">
+            The search runs in your browser, over an index built offline and
+            shipped like any other asset: the sandbox pays one embedding per
+            query and nothing else. Nothing in the gallery writes to the
+            sandbox, and the sandbox runs only the scripts it preloaded —
+            <span class="t-cmd">EMB.EVAL</span> is refused, on purpose.
+          </p>
+        </div></div>
+      </section>
+    </section>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+<script type="module" data-sandbox="https://cli.emb.is">
+import { gallery, figure } from '../assets/js/demos.js';
+const g = gallery();
+const put = (sel, text) => { const n = document.querySelector(sel); if (n) n.textContent = text; };
+// The index reads the manifest and nothing else: no wasm, no database. Every
+// figure below is the index's own, so a rebuild cannot leave this page
+// describing the previous one.
+g.manifest().then((m) => {
+  const first = m.models[0];
+  put('[data-fig-count]', m.count.toLocaleString('en-US').replace(/,/g, ' '));
+  put('[data-fig-works]', m.corpus.works);
+  put('[data-fig-model]', first.name === 'minilm' ? 'all-MiniLM-L6-v2' : first.name);
+  put('[data-fig-dim]', first.dimension);
+  put('[data-fig-size]', (m.asset.bytes / 1048576).toFixed(1) + ' MB');
+  put('[data-fig-attrib]', m.attribution);
+}).catch(() => { /* the static figures stand; nothing is fabricated. */ });
+</script>
+</body>
+</html>

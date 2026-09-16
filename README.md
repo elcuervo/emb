@@ -173,3 +173,31 @@ docker run -v ./models:/models elcuervo/emb -config /models/config.yaml
 See [BENCHMARK.md](BENCHMARK.md) for benchmarks and
 [examples/kitchensink/](examples/kitchensink/) for a full application that
 combines `emb` with Redis vector search.
+
+## The hosted sandbox
+
+`emb.is/demos` runs against a real `emb` at `cli.emb.is` — one shared CPU and
+2 GB, always on, behind a bridge that permits reads and refuses everything else.
+Its model set is the demo, so it is spelled out here:
+
+| Model | Dimensions | Serves |
+|---|---|---|
+| `Xenova/all-MiniLM-L6-v2` | 384 | the baseline space: the atlas, the similarity, the search |
+| `Xenova/bge-small-en-v1.5` | 384 | the model lens — same dimension, **different space** |
+| `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384 | 50+ languages: a query in one, a passage in another |
+| `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | 2 | a model that returns **no vector**: a label and a score |
+
+**Every model is quantized (`quantize: auto`).** `emb` prefers the
+`model_quantized.onnx` a Xenova repo ships over the fp32 graph, which is roughly
+a quarter of the resident weight memory, a smaller first download and typically
+faster CPU inference. The sandbox writes each model under
+`/data/models/int8/<name>/` so the first boot after a config change fetches the
+quantized weights rather than short-circuiting on an fp32 file that is already
+on the volume, and `EMB.INFO <model>` reports `quantization: int8` — the
+precision is stated by the server, not claimed by the site.
+
+Local development matches the sandbox with `just download-model-quantized <repo>
+<dir>`, which fetches `onnx/model_quantized.onnx` beside the fp32 file; the
+server's own resolution prefers it whether or not the fp32 file is present.
+`website/repl/sandbox.yaml` is the deployed configuration, `just sandbox-deploy`
+ships it, and `website/README.md` documents the gallery that runs on it.

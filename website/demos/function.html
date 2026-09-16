@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the model is a function — one primitive, four answers</title>
+<link rel="canonical" href="https://emb.is/demos/function.html">
+<meta name="description" content="The same passage through the raw command and two preloaded Lua presets: bytes, a typed vector, a similarity and a label. The server runs scripts it preloaded; raw Lua stays refused.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the model is a function — one primitive, four answers">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="One primitive, four answers: raw bytes, a typed vector, a similarity and a label from the same server.">
+<meta property="og:url" content="https://emb.is/demos/function.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the model is a function — one primitive, four answers">
+<meta name="twitter:description" content="One primitive, four answers: raw bytes, a typed vector, a similarity and a label from the same server.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The model is a function</h1>
+          <p class="plate__teaches">
+            One primitive — text in, tensors out — and as many answers as you
+            have scripts. The server runs the scripts it preloaded; it does not
+            run yours.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 6 — THE FUNCTION</b>
+            · <b data-fig-works>—</b> works in the corpus
+            · <b>4</b> reply shapes
+            · <b>2</b> models
+            · <b>3</b> scripted, <b>1</b> raw
+            · <b>EMB.EVAL</b> refused</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        
+            <p class="block__deck">
+              <span class="t-cmd">emb</span> is not a product with an embeddings
+              endpoint bolted on. It is a server whose primitive is <em>run a
+              model over inputs</em>, with one command for the common case and a
+              scripting surface for everything else. This plate runs one passage
+              through four of those answers, from two different models.
+            </p>
+            <p class="block__deck">
+              The first is the raw command: a bulk string of packed float32s and
+              the metadata the bridge attaches to it. The second and third are
+              the sandbox's preloaded <span class="t-cmd">embed.lua</span>,
+              called once on its own and once with a reference text to compare
+              against: a typed <span class="t-cmd">{dim, norm}</span> and then
+              <span class="t-cmd">{dim, norm, similarity}</span>. The fourth is
+              <span class="t-cmd">classify.lua</span> against a
+              sequence-classification model, whose answer is a label and a
+              confidence. Same server, same protocol, same connection.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        
+            <div data-live class="rig" data-rig="function"
+                 data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445" data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32">
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="f-text">A passage to run through the server</label>
+                <input class="rig__input" id="f-text" autocomplete="off" spellcheck="false"
+                       value="This film is a masterpiece, and I will not hear otherwise.">
+                <button class="rig__go" type="submit">Run it</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="shapes" data-out hidden>
+                <div class="shape">
+                  <h3 class="shape__h">EMB · minilm · raw</h3>
+                  <pre class="shape__body" data-shape="raw"></pre>
+                </div>
+                <div class="shape">
+                  <h3 class="shape__h">embed.lua · minilm</h3>
+                  <pre class="shape__body" data-shape="embed"></pre>
+                  <div class="shape__src"><p class="shape__sha" data-src="embed"></p></div>
+                </div>
+                <div class="shape">
+                  <h3 class="shape__h">embed.lua + reference · minilm</h3>
+                  <pre class="shape__body" data-shape="similarity"></pre>
+                </div>
+                <div class="shape">
+                  <h3 class="shape__h">classify.lua · sst2</h3>
+                  <pre class="shape__body" data-shape="classify"></pre>
+                  <div class="shape__src"><p class="shape__sha" data-src="classify"></p></div>
+                </div>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        
+            <p class="block__deck">
+              Each scripted reply is the server's own bytes. The digest beside
+              the reply is the SHA1 of the script the server preloaded, and
+              <span class="t-cmd">EMB.EVSHA</span> accepts only the digests the
+              sandbox was configured with — so a page cannot describe a script
+              the server does not have, and a digest that drifts is a call the
+              sandbox refuses rather than a result it invents.
+            </p>
+            <p class="block__deck">
+              Nothing on this page sends Lua. <span class="t-cmd">EMB.EVAL</span>
+              — the command that would run script source from a client — is
+              refused by the sandbox's allowlist, with the refusal naming the
+              alternative. That boundary is deliberate and it is part of the
+              lesson: a public sandbox cannot safely execute a stranger's code,
+              and a demonstration of extensibility does not need it to.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        
+            <p class="block__deck">
+              The four answers are four different products. A vector store wants
+              the first. A reranker wants the third. A moderation filter or a
+              sentiment badge wants the fourth. If your embeddings server can
+              only return vectors, each of those is a separate service, a
+              separate model download and a separate deployment, and the models
+              are the expensive part, not the HTTP.
+            </p>
+            <p class="block__deck">
+              Keeping the scripting inside the server is also what keeps it
+              fast and honest. The script runs next to the model, over the same
+              buffers, sharing the same batcher and cache, so
+              <span class="t-cmd">classify.lua</span> costs one model call and
+              one round trip — not a vector out, a label back, and a second
+              service in between.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        
+            <p class="block__deck">
+              Four commands. The three scripted ones name a model and a digest;
+              the digests are stamped into this page from the script bytes, so
+              they cannot drift from what the sandbox loaded.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;This film is a masterpiece…&quot;
+# -> a 1 536-byte bulk
+
+EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;This film is a masterpiece…&quot;
+# -> { dim = 384, norm = 1 }
+
+EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;This film is a masterpiece…&quot; &quot;a different sentence entirely&quot;
+# -> { dim = 384, norm = 1, similarity = 0.36 }
+
+EMB.EVSHA sst2 &lt;classify.lua sha1&gt; 1 &quot;This film is a masterpiece…&quot; NEGATIVE POSITIVE
+# -> { label = &quot;POSITIVE&quot;, confidence = 0.99, scores = { … } }
+
+EMB.EVAL minilm &quot;return 1&quot; 1 &quot;x&quot;
+# -> refused: raw Lua is not accepted; call a preloaded preset by digest</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, showState } from '../assets/js/demos.js';
+const g = gallery();
+const EMBED_MODEL = 'minilm';
+const CLASSIFY_MODEL = 'sst2';
+const root = document.querySelector('[data-rig="function"]');
+const form = root.querySelector('[data-form]');
+const input = root.querySelector('#f-text');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const go = root.querySelector('.rig__go');
+const put = (sel, text) => { root.querySelector(sel).textContent = text; };
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+function pretty(value) {
+  return JSON.stringify(value, null, 2).replace(/\n/g, '\n');
+}
+
+async function run() {
+  const text = input.value;
+  if (!text || !text.trim()) { return; }
+  go.disabled = true;
+  setState('running');
+  try {
+    const embedSha = root.getAttribute('data-emb-preset-embed');
+    const classifySha = root.getAttribute('data-emb-preset-classify');
+    // Four calls, four reply shapes, two models. Three are scripted -- the
+    // sandbox runs its own bytes -- and one is the raw command.
+    const [raw, embed, similarity, classify] = await Promise.all([
+      g.raw(['EMB', EMBED_MODEL, 'BLOB', text]),
+      g.preset(EMBED_MODEL, embedSha, [text]),
+      g.preset(EMBED_MODEL, embedSha, [text], ['a different sentence entirely']),
+      g.preset(CLASSIFY_MODEL, classifySha, [text], ['NEGATIVE', 'POSITIVE'])
+    ]);
+    put('[data-shape="raw"]', 'kind      bulk\n' +
+      'vector    ' + (raw.vector ? raw.vector.count + ' × ' + raw.vector.dtype : '—') + '\n' +
+      'bytes     ' + Math.floor((raw.b64 || '').length * 3 / 4) + '\n' +
+      'preview   ' + (raw.b64 || '').slice(0, 28) + '…');
+    put('[data-shape="embed"]', pretty(embed));
+    put('[data-shape="similarity"]', pretty(similarity));
+    put('[data-shape="classify"]', pretty(classify));
+    put('[data-src="embed"]', 'embed.lua sha1 ' + embedSha);
+    put('[data-src="classify"]', 'classify.lua sha1 ' + classifySha);
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+g.manifest().then((m) => {
+  document.querySelector('[data-fig-works]').textContent = m.corpus.works;
+}).catch(() => {});
+run();
+
+</script>
+</body>
+</html>

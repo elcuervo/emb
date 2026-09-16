@@ -19,6 +19,8 @@
 # `_headers` would additionally be a claim this repo has not verified, that the
 # platform reads config after applying the ignore list rather than before.
 #
+/tools/demos/
+
 # Note what is NOT here: `404.html` and `_headers` are configuration that ships,
 # and `index.html`, `docs/index.html`, `assets/css/*`, `assets/js/main.js`, the
 # player vendored beside it, the recorded take under `assets/cast/`,
@@ -28,6 +30,12 @@
 # Authoring material
 /.impeccable/
 /tools/
+
+# The gallery's corpus and the pipeline that builds it: the committed
+# `poe.jsonl`, the Project Gutenberg cache beside it, and the two tools. `/tools/`
+# above already excludes them; named here so the intent is declared rather than
+# inherited, and asserted by published-tree.py. The built index is the exception:
+# `assets/demo/` ships, because the browser searches it.
 /PRODUCT.md
 /README.md
 /assets/img/terrain-v2.png

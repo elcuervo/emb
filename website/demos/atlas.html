@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the atlas — a corpus laid out by meaning</title>
+<link rel="canonical" href="https://emb.is/demos/atlas.html">
+<meta name="description" content="2 782 passages from one author's collected works, drawn as they sit in the model's space: named regions, a query that lands among its neighbours, and an order switch that separates meaning from chronology.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the atlas — a corpus laid out by meaning">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="The corpus drawn by meaning: named regions, a live query landing among its neighbours, and the space between two passages.">
+<meta property="og:url" content="https://emb.is/demos/atlas.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the atlas — a corpus laid out by meaning">
+<meta name="twitter:description" content="The corpus drawn by meaning: named regions, a live query landing among its neighbours, and the space between two passages.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">II.</span>The atlas</h1>
+          <p class="plate__teaches">
+            The corpus laid out by meaning. Every mark is a passage; nearness is
+            similarity. The regions are not decoration — they are where the
+            passages actually cluster, named after what they turned out to be.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 4 — THE ATLAS</b>
+            · <b data-fig-count>—</b> passages
+            · <b data-fig-model>—</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b data-fig-regions>—</b> regions
+            · <b data-fig-projection>—</b> at build time
+            · <b>no runtime projection</b></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        
+            <p class="block__deck">
+              A vector has a place, and places have neighbours. Draw one author's
+              collected work by that rule and the structure you get is thematic:
+              the sea stories sit together, the confessional tales sit together,
+              and the poems sit somewhere else again. Nobody labelled them. The
+              <strong>regions</strong> are a k-means clustering over the
+              embeddings, hand-named by reading what landed in each: the ship,
+              the grave, madness, detection, grief.
+            </p>
+            <p class="block__deck">
+              Two things are deliberately absent. There is no projection work at
+              runtime: the coordinates were computed once, offline, and shipped
+              in the index, so the plate draws rather than renders. And there is
+              no fabricated point: your query lands at the centroid of what it
+              actually retrieved, so if retrieval went somewhere odd the plate
+              shows it rather than tidying it away.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        
+            <div class="atlas">
+              <div class="rig__row">
+                <div data-live class="rig__pick" role="group" aria-label="Place the passages by">
+                  <button type="button" data-order="meaning" aria-pressed="true">By meaning</button>
+                  <button type="button" data-order="year" aria-pressed="false">By year</button>
+                </div>
+              </div>
+              <svg data-live class="atlas__svg" data-plot viewBox="0 0 1000 620" role="img"
+                   aria-label="The corpus drawn by meaning: 2 782 passages as marks, with named regions"></svg>
+              <div data-live class="rig" data-rig="atlas" data-emb-preset-rank="fd56d2f6f0566e232e557cadffac9bf4ac7fd810" data-emb-preset-between="6623801df0b164e0dd8c5c974aebc7c6e550cf18">
+                <form class="rig__form" data-form>
+                  <label class="sr-only" for="a-q">A query to land on the atlas</label>
+                  <input class="rig__input" id="a-q" autocomplete="off" spellcheck="false"
+                         value="the dead returning">
+                  <button class="rig__go" type="submit">Land it</button>
+                </form>
+                <p class="rig__state" data-state>ready when you are</p>
+                <div class="rig__out" data-out hidden>
+                  <p class="rig__readout" data-readout></p>
+                  <div data-hits></div>
+                </div>
+              </div>
+
+              <div data-live class="rig" data-rig="between" data-emb-preset-between="6623801df0b164e0dd8c5c974aebc7c6e550cf18">
+                <p class="rig__readout">The space between two passages: the midpoint of their
+                vectors, and the corpus passages nearest to it.</p>
+                <form class="rig__form" data-between-form>
+                  <label class="sr-only" for="b-a">First passage</label>
+                  <input class="rig__input" id="b-a" autocomplete="off" spellcheck="false" value="the sea">
+                  <label class="sr-only" for="b-b">Second passage</label>
+                  <input class="rig__input" id="b-b" autocomplete="off" spellcheck="false" value="the grave">
+                  <button class="rig__go" type="submit">Blend</button>
+                </form>
+                <p class="rig__state" data-between-state>ready when you are</p>
+                <div data-between-hits></div>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        
+            <p class="block__deck">
+              Your query was embedded by the sandbox, the index returned its
+              nearest passages, and the plate drew them where the build put them.
+              The switch re-places every passage by publication year instead of
+              by meaning, with the vertical axis left alone: the thematic shape
+              falls apart and the passages scatter by date, which is the point.
+              Meaning and chronology are different orderings of the same corpus.
+            </p>
+            <p class="block__deck">
+              The blend is the same space used as arithmetic. Two passages are
+              embedded, their vectors are added and scaled by a half, and the
+              corpus passages nearest that midpoint come back — a query built out
+              of no words at all. It is the clearest demonstration that these are
+              coordinates rather than labels.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        
+            <p class="block__deck">
+              This is what a vector store looks like before you put an API in
+              front of it: points, distances, and regions that turn out to mean
+              something. It is also the argument for keeping the corpus small and
+              legible. A million documents make a cloud; eighty-six works by one
+              author make a map, and a map is what a newcomer can read.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        
+            <p class="block__deck">
+              The plate issues the same three commands as the search, plus the
+              blend. Nothing here selects from the projection at runtime beyond
+              reading the committed rows.
+            </p>
+<div class="code"><pre class="code__body"><code>SELECT rowid, x, y FROM projection WHERE model = 'minilm';
+SELECT label, cx, cy, radius, count FROM regions WHERE model = 'minilm';
+
+EMB minilm BLOB &quot;the dead returning&quot;        # the query's vector
+SELECT rowid FROM vec_minilm WHERE embedding MATCH vec_int8(:q) AND k = 24;
+
+EMB.EVSHA minilm &lt;between.lua sha1&gt; 8 &quot;the sea&quot; &quot;the grave&quot; &quot;c1&quot; … &quot;c6&quot;
+# -> the midpoint's nearest corpus passages, ranked</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, quotation } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'minilm';
+const W = 1000, H = 620, PAD = 34;
+const plot = document.querySelector('[data-plot]');
+const root = document.querySelector('[data-rig="atlas"]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const hits = root.querySelector('[data-hits]');
+const betwixt = document.querySelector('[data-rig="between"]');
+const bState = betwixt.querySelector('[data-between-state]');
+const bHits = betwixt.querySelector('[data-between-hits]');
+let atlas = null, bounds = null, order = 'meaning', lastHit = new Set();
+
+const NS = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function extent(points) {
+  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+  const pad = 0.04;
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const dx = (x1 - x0) * pad || 1, dy = (y1 - y0) * pad || 1;
+  return { x0: x0 - dx, x1: x1 + dx, y0: y0 - dy, y1: y1 + dy };
+}
+function place(p) {
+  const b = bounds;
+  const x = order === 'year'
+    ? PAD + ((p.year - b.ymin) / Math.max(1, b.ymax - b.ymin)) * (W - 2 * PAD)
+    : PAD + ((p.x - b.x0) / (b.x1 - b.x0)) * (W - 2 * PAD);
+  const y = PAD + (1 - (p.y - b.y0) / (b.y1 - b.y0)) * (H - 2 * PAD);
+  return { x: x, y: y };
+}
+function draw() {
+  plot.replaceChildren(
+    svg('rect', { class: 'atlas__frame', x: PAD, y: PAD, width: W - 2 * PAD, height: H - 2 * PAD }));
+  for (let i = 1; i < 6; i++) {
+    const x = PAD + (i / 6) * (W - 2 * PAD);
+    const y = PAD + (i / 6) * (H - 2 * PAD);
+    plot.appendChild(svg('line', { class: 'atlas__grid', x1: x, y1: PAD, x2: x, y2: H - PAD }));
+    plot.appendChild(svg('line', { class: 'atlas__grid', x1: PAD, y1: y, x2: W - PAD, y2: y }));
+  }
+  atlas.points.forEach((p) => {
+    const at = place(p);
+    plot.appendChild(svg('circle', {
+      class: 'atlas__mark' + (lastHit.has(p.rowid) ? ' is-hit' : ''),
+      cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: lastHit.has(p.rowid) ? 2.6 : 1.4
+    }));
+  });
+  // The named regions, drawn as the ring the centroid and radius describe and
+  // labelled in the manifest's own words.
+  atlas.regions.forEach((r) => {
+    const centre = place({ x: r.cx, y: r.cy, year: r.year || 0 });
+    const edge = place({ x: r.cx + r.radius, y: r.cy, year: 0 });
+    plot.appendChild(svg('circle', {
+      class: 'atlas__frame', cx: centre.x.toFixed(1), cy: centre.y.toFixed(1),
+      r: Math.abs(edge.x - centre.x).toFixed(1)
+    }));
+    // The label rides the ring's own edge rather than its centre: the regions
+    // overlap in the dense middle, and ten labels stacked there are unreadable.
+    const radius = Math.abs(edge.x - centre.x);
+    const label = svg('text', { class: 'atlas__region', x: centre.x.toFixed(1),
+                                y: (centre.y - radius - 5).toFixed(1), 'text-anchor': 'middle' });
+    label.textContent = r.label;
+    plot.appendChild(label);
+  });
+}
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+function line(label, value) {
+  return [el('span', { class: 'k', text: label + ' ' }), el('b', { text: String(value) }), el('span', { text: ' · ' })];
+}
+
+async function land(text) {
+  const found = await g.search(MODEL, text, 24);
+  const passages = await g.passages(found.map((h) => h.rowid));
+  lastHit = new Set(found.map((h) => h.rowid));
+  // The query's own position: the centroid of what it retrieved. No projection
+  // runs here; a query lands where its neighbours are.
+  const points = atlas.points.filter((p) => lastHit.has(p.rowid));
+  const centroid = points.reduce((acc, p) => ({ x: acc.x + p.x / points.length, y: acc.y + p.y / points.length }),
+                                 { x: 0, y: 0 });
+  draw();
+  const at = place(centroid);
+  plot.appendChild(svg('circle', { class: 'atlas__query', cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: 13 }));
+  const label = svg('text', { class: 'atlas__label', x: at.x.toFixed(1), y: (at.y + 28).toFixed(1), 'text-anchor': 'middle' });
+  label.textContent = 'the query';
+  plot.appendChild(label);
+  hits.replaceChildren(...passages.slice(0, 3).map((p, i) => quotation(p, i + 1, false)));
+  readout.replaceChildren(
+    ...line('query', '"' + text + '"'),
+    ...line('neighbours', points.length + ' landed'),
+    ...line('layout', order === 'meaning' ? 'by meaning' : 'by year')
+  );
+  out.hidden = false;
+}
+
+async function run() {
+  const form = root.querySelector('[data-form]');
+  const text = root.querySelector('#a-q').value;
+  root.querySelector('.rig__go').disabled = true;
+  setState('running');
+  try {
+    const { loadAtlas } = await import('../assets/js/demos.js');
+  } catch (err) { /* noop */ }
+  try {
+    await land(text);
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    root.querySelector('.rig__go').disabled = false;
+  }
+}
+
+document.querySelectorAll('[data-order]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    order = btn.getAttribute('data-order');
+    document.querySelectorAll('[data-order]').forEach((other) =>
+      other.setAttribute('aria-pressed', String(other === btn)));
+    if (atlas) { draw(); run(); }
+  });
+});
+root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); run(); });
+
+// The blend: two passages, the midpoint of their vectors, and the corpus
+// passages nearest to it. The candidates are the two searches' own results, so
+// the instrument answers with real corpus items, not a curated list.
+betwixt.querySelector('[data-between-form]').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const a = betwixt.querySelector('#b-a').value;
+  const b = betwixt.querySelector('#b-b').value;
+  const go = betwixt.querySelector('.rig__go');
+  go.disabled = true;
+  showState(bState, 'running', null, null);
+  try {
+    const [fa, fb] = await Promise.all([g.search(MODEL, a, 4), g.search(MODEL, b, 4)]);
+    const pool = await g.passages(fa.concat(fb).map((h) => h.rowid));
+    const candidates = pool.slice(0, 6);
+    const digest = betwixt.getAttribute('data-emb-preset-between');
+    const ranked = await g.preset(MODEL, digest, [a, b].concat(candidates.map((p) => p.text)));
+    const order2 = ranked.filter((r) => r.doc > 2).sort((x, y) => x.rank - y.rank);
+    const byDoc = new Map(candidates.map((p, i) => [i + 3, p]));
+    bHits.replaceChildren(...order2.slice(0, 3).map((r, i) =>
+      quotation(byDoc.get(r.doc), i + 1, i === 0)));
+  } catch (err) {
+    bHits.replaceChildren();
+  } finally {
+    go.disabled = false;
+    showState(bState, 'ready', null, null);
+  }
+});
+
+const current = () => {
+  const form = betwixt.querySelector('[data-between-form]');
+  form.dispatchEvent(new Event('submit', { cancelable: true }));
+};
+
+g.manifest().then((m) => {
+  const entry = m.models.find((x) => x.name === MODEL) || m.models[0];
+  document.querySelector('[data-fig-count]').textContent = m.count.toLocaleString('en-US').replace(/,/g, ' ');
+  document.querySelector('[data-fig-model]').textContent = MODEL === 'minilm' ? 'all-MiniLM-L6-v2' : entry.name;
+  document.querySelector('[data-fig-dim]').textContent = entry.dimension;
+  document.querySelector('[data-fig-regions]').textContent = entry.regions.length;
+  document.querySelector('[data-fig-projection]').textContent = entry.projection;
+  return g.atlas(MODEL);
+}).then((data) => {
+  atlas = data;
+  const years = data.points.map((p) => p.rowid);
+  return g.passages(years).then((rows) => {
+    const year = new Map(rows.map((p) => [p.rowid, p.year]));
+    atlas.points.forEach((p) => { p.year = year.get(p.rowid) || 0; });
+    atlas.regions.forEach((r) => { r.year = 0; });
+    bounds = extent(atlas.points);
+    bounds.ymin = Math.min(...atlas.points.map((p) => p.year));
+    bounds.ymax = Math.max(...atlas.points.map((p) => p.year));
+    draw();
+    return run();
+  });
+}).catch((err) => { setState(err.state || 'error', err.message); });
+current();
+
+</script>
+</body>
+</html>

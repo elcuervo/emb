@@ -499,6 +499,14 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 	if _, err := os.Stat(cfg.ONNX); err == nil {
 		return nil
 	}
+	// With quantize enabled the download writes `model_quantized.onnx` next to
+	// the configured fp32 path, which is never created. Without this the model
+	// would re-download on every boot.
+	if cfg.Quantize != "off" {
+		if _, err := os.Stat(filepath.Join(dir, "model_quantized.onnx")); err == nil {
+			return nil
+		}
+	}
 	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
 	preferQuantized := cfg.Quantize != "off" && cfg.Quantize != ""
 	if err := hfhub.New().DownloadModel(cfg.ModelRepo, dir, preferQuantized); err != nil {

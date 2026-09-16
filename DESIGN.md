@@ -1544,6 +1544,67 @@ It should look like `emb`.
 
 ---
 
+# The demos gallery
+
+`emb.is/demos` is the same world used for instrumentation instead of persuasion.
+The concept is **an engraved atlas of a mind**: Poe's century is the century of
+the steel engraving, the phrenological plate and the star chart, and the site's
+poster vocabulary is already that. The gothic is in the *subject* — the
+passages, the work titles, the years — and never in the decoration.
+
+## The instrument rules
+
+1. **Paper explains, the dark plate instruments.** Each plate mirrors the
+   landing: the five teaching sections on paper, the interactive apparatus on
+   `#111110`.
+2. **One signal, spent on meaning.** Every plate has exactly one coloured
+   thing — the query, the highlighted neighbours, the similarity, the morphed
+   point set. On paper the signal is `--accent-ink`; on the plate it is
+   `--accent`. No second hue is ever spent on decoration.
+3. **The atlas is drawn, not rendered.** Marks are small filled circles — a star
+   chart, not glowing bubbles — so density reads as stipple. The graticule is a
+   ruled grid, the cluster regions are hand-named mono caps placed on their own
+   ring, and nothing animates without being asked.
+4. **Every plate is captioned with its real figures.** `FIG. 3 — THE SEARCH ·
+   2 782 PASSAGES INDEXED · all-MiniLM-L6-v2 · 384 DIMENSIONS · INT8 VECTORS ·
+   RECALL@10 0.9541` is read from the index's manifest, never typed. The
+   caption's labels are caps and its values keep their own case, because a model
+   name is a proper noun. The caption is the requirement — claims derive from
+   the index — worn as the aesthetic.
+5. **Passages are quotations.** The display face for the text, the mono voice
+   for `THE TELL-TALE HEART · 1843`. Emphasis is a rule and the accent, never a
+   second colour and never italics-as-gothic.
+6. **Numbering is part of the title.** A plate is numbered (`II. The atlas`)
+   rather than carrying a tracked-caps eyebrow above its headline: the number
+   belongs to the plate, and a kicker over a hero headline is a shape this site
+   does not use.
+
+## The teaching sections
+
+Every plate presents the same five sections in the same order, and they are the
+whole curriculum:
+
+```text
+WHAT YOU ARE LOOKING AT   — what the plate shows and why it is here
+TRY IT                    — the instrument, on the dark plate
+WHAT JUST HAPPENED        — the path from text to vector to distance
+WHY IT MATTERS            — the real-world job this stands in for
+THE EXACT COMMANDS        — the argv that ran, including the reply form
+```
+
+The section headings are identical across plates, so the gallery reads as one
+apparatus rather than six pages, and the commands shown are the commands that
+were issued — built at run time from the argv the plate sent.
+
+## Motion
+
+The site's motion contract holds unchanged: **things move because data is
+moving.** The gallery adds exactly one movement that is the argument — the model
+lens re-placing the same passages under a second model — and one short precise
+move where a query lands on the atlas. `prefers-reduced-motion` collapses both
+to a cut, no result depends on an animation having run, and no plate animates
+without being asked.
+
 # Core visual metaphor
 
 The entire site is built around one conceptual diagram:

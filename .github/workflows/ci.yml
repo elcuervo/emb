@@ -239,6 +239,13 @@ jobs:
       - name: Served tree, canonical origin, and cache rules
         run: python3 website/tools/published-tree.py
 
+      # The gallery's corpus is committed, so its invariants are checkable
+      # without the network: unique ids, every passage inside the bridge's
+      # per-text cap, no acquisition boilerplate. `--check` re-derives it from
+      # Project Gutenberg and is for a developer with the sources on disk.
+      - name: The committed corpus is well formed
+        run: python3 website/tools/demos/fetch-poe.py --verify
+
   # Real-Rails Railtie boot suite for the emb gem. `rake spec:rails` boots a
   # minimal Rails app and asserts middleware behavior against the real
   # ActionDispatch::MiddlewareStack, so it needs no emb server and no Go

@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the search — a question answered by meaning</title>
+<link rel="canonical" href="https://emb.is/demos/search.html">
+<meta name="description" content="A query phrased in words the corpus never contains, answered with the passages that mean it: an exact vector search over a committed index, reranked by the sandbox's own Lua.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the search — a question answered by meaning">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Retrieval by meaning: one query embedded live, thousands of passages searched in the browser, and the result reranked by the server.">
+<meta property="og:url" content="https://emb.is/demos/search.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the search — a question answered by meaning">
+<meta name="twitter:description" content="Retrieval by meaning: one query embedded live, thousands of passages searched in the browser, and the result reranked by the server.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">II.</span>The search</h1>
+          <p class="plate__teaches">A question the corpus cannot match word for word still finds the passages that mean it. This is the retrieval step in every RAG pipeline, with nothing hidden behind a hosted endpoint.</p>
+        </div>
+        <div><p class="fig"><b>FIG. 3 — THE SEARCH</b>
+            · <b data-fig-count>—</b> passages indexed
+            · <b data-fig-model>—</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b data-fig-precision>—</b> vectors
+            · recall@10 <b data-fig-recall>—</b>
+            · search in this page</p></div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        
+            <p class="block__deck">
+              Type a question, one the corpus does not contain and phrased the way a
+              person would phrase it, and the plate answers with passages from
+              Poe that mean it. Nothing is matched on keywords: the query becomes
+              a vector, the vector is compared with every passage's vector, and
+              the nearest ones come back.
+            </p>
+            <p class="block__deck">
+              Two things are working together. The <strong>index</strong> is a
+              vector store holding one row per passage, built before deployment
+              and shipped as a file; the <strong>rerank</strong> is the server's
+              own Lua script, which re-orders the index's candidates with the
+              model itself. The first is approximate and fast; the second is
+              exact and small. That pairing is what a production retrieval stack
+              looks like.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        
+            <div data-live class="rig" data-rig="search" data-emb-preset-rank="fd56d2f6f0566e232e557cadffac9bf4ac7fd810">
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="q-text">A question for the atlas</label>
+                <input class="rig__input" id="q-text" autocomplete="off" spellcheck="false"
+                       value="a guilty conscience that will not stay buried">
+                <button class="rig__go" type="submit">Search</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+                <div data-hits></div>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        
+            <p class="block__deck">
+              Your query went to the sandbox once, through the allowlist the
+              console uses, and came back as a vector: the same model, the same
+              normalization and the same window that embedded the corpus, which
+              is the only way the distances mean anything. The vector never left
+              this machine again.
+            </p>
+            <p class="block__deck">
+              The nearest passages came from a <span class="t-cmd">vec0</span>
+              table in a SQLite file your browser downloaded: an exact
+              k-nearest-neighbour search, your CPU, no server. Their text and
+              their work and year come from the same file. Then the seven
+              candidates were handed to the sandbox's preloaded
+              <span class="t-cmd">rank.lua</span>, which embedded all eight texts
+              and re-ordered the seven by cosine to the query.
+            </p>
+            <p class="block__deck">
+              The rerank is bounded by the sandbox, not by politeness: the bridge
+              charges one unit of work per declared text and refuses a request
+              over eight, so a rerank carries at most seven candidates. The plate
+              sends exactly seven and says so.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        
+            <p class="block__deck">
+              Retrieval is the step that turns a language model from something
+              that has read the internet into something that can read
+              <em>your</em> corpus. The pattern is always the same: embed the
+              query with the model that embedded the documents, find the nearest
+              documents, put them in the prompt. This plate is that step with the
+              prompt replaced by the page.
+            </p>
+            <p class="block__deck">
+              It is also the honest version of the arithmetic. Every layer states
+              its precision — int8 weights, int8 index vectors, a measured recall
+              of <b data-fig-recall>—</b> at ten — because a retrieval system that
+              will not tell you its recall is asking you to trust its vibes.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        
+            <p class="block__deck">
+              Three commands, in the order the plate ran them. The first is the
+              query embedding; the second is the search, which runs in your
+              browser against the shipped file; the third is the server-side
+              rerank.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;a guilty conscience that will not stay buried&quot;
+# -> 1 536 bytes: the query vector, from the sandbox
+
+SELECT rowid, distance FROM vec_minilm
+  WHERE embedding MATCH vec_int8(:query) AND k = 7
+  ORDER BY distance;
+-- -> 7 rowids, nearest first (sqlite-vec, in this page)
+
+EMB.EVSHA minilm &lt;rank.lua sha1&gt; 8 &quot;the query&quot; &quot;candidate 1&quot; … &quot;candidate 7&quot;
+# -> [{rank, doc, score} …] — the query heads it at cosine 1.000,
+#    the seven candidates follow in descending order</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, quotation } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'minilm';
+const root = document.querySelector('[data-rig="search"]');
+const form = root.querySelector('[data-form]');
+const input = root.querySelector('#q-text');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const hits = root.querySelector('[data-hits]');
+const go = root.querySelector('.rig__go');
+let last = null;
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(last); });
+}
+
+function line(label, value) {
+  return [el('span', { class: 'k', text: label + ' ' }), el('b', { text: String(value) }), el('span', { text: ' · ' })];
+}
+
+async function run(text) {
+  if (!text || !text.trim()) { return; }
+  last = text;
+  go.disabled = true;
+  setState('running');
+  try {
+    // 1. the query is embedded by the same model that embedded the corpus,
+    // 2. the index returns its nearest passages,
+    // 3. the sandbox's own script re-orders them by the model itself.
+    const found = await g.search(MODEL, text, 7);
+    const passages = await g.passages(found.map((h) => h.rowid));
+    const digest = root.getAttribute('data-emb-preset-rank');
+    const ranked = await g.preset(MODEL, digest, [text].concat(passages.map((p) => p.text)));
+    // The reply carries one entry per text, and the query is its own first
+    // entry at 1.000: the plate shows the candidates, renumbered.
+    const order = ranked.filter((r) => r.doc !== 1).sort((a, b) => a.rank - b.rank);
+    const byDoc = new Map(passages.map((p, i) => [i + 2, p]));
+    hits.replaceChildren(...order.map((r, i) =>
+      quotation(byDoc.get(r.doc), i + 1, i === 0)));
+    readout.replaceChildren(
+      ...line('query', '"' + text + '"'),
+      ...line('index', found.length + ' of ' + (await g.manifest()).count),
+      ...line('rerank', 'rank.lua · ' + Number(order[0].score).toFixed(3) + ' best')
+    );
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+form.addEventListener('submit', (e) => { e.preventDefault(); run(input.value); });
+g.manifest().then((m) => {
+  const entry = m.models.find((x) => x.name === MODEL) || m.models[0];
+  document.querySelector('[data-fig-count]').textContent = m.count.toLocaleString('en-US').replace(/,/g, ' ');
+  document.querySelector('[data-fig-model]').textContent =
+    MODEL === 'minilm' ? 'all-MiniLM-L6-v2' : entry.name;
+  document.querySelector('[data-fig-dim]').textContent = entry.dimension;
+  document.querySelector('[data-fig-precision]').textContent = m.precision;
+  document.querySelector('[data-fig-recall]').textContent = entry.recall_at_k;
+}).catch(() => {});
+run(input.value);
+
+</script>
+</body>
+</html>

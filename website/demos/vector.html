@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the vector — text becomes 384 numbers</title>
+<link rel="canonical" href="https://emb.is/demos/vector.html">
+<meta name="description" content="Watch a sentence become an embedding: the dimension, the L2 norm and the bytes of the vector a real model returned, from a real server.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the vector — text becomes 384 numbers">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="One passage through a real embeddings server, showing the vector itself: dimension, norm and bytes.">
+<meta property="og:url" content="https://emb.is/demos/vector.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the vector — text becomes 384 numbers">
+<meta name="twitter:description" content="One passage through a real embeddings server, showing the vector itself: dimension, norm and bytes.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The vector</h1>
+          <p class="plate__teaches">Text becomes a fixed-length list of numbers, and that list is the model's answer — not a hash, and not a rendering of the text.</p>
+        </div>
+        <div>          <p class="fig"><b>FIG. 1 — THE VECTOR</b>
+            · <b data-fig-model>—</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b data-fig-precision>—</b> weights
+            · <b>float32</b> reply
+            · <b>1 536 bytes</b> per vector</p></div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        
+            <p class="block__deck">
+              A model turns text into a fixed-length list of numbers. That list
+              is the <strong>embedding</strong>: the model's answer to
+              <em>what does this text mean</em>, expressed as a point. Nothing
+              about it is a hash — the same meaning written two ways lands in
+              nearly the same place, which is the whole reason the rest of this
+              gallery works.
+            </p>
+            <p class="block__deck">
+              Put a passage below and watch what comes back. The dimension and
+              the byte count are the server's; the preview is the first bytes of
+              the reply itself, so you are looking at the actual value and not a
+              rendering of it. The L2 norm comes from the sandbox's own script,
+              which reports the length of the vector it pooled.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        
+            <div data-live class="rig" data-rig="vector" data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445">
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="v-text">A passage to embed</label>
+                <input class="rig__input" id="v-text" name="text" autocomplete="off" spellcheck="false"
+                       value="The thousand injuries of Fortunato I had borne as I best could.">
+                <button class="rig__go" type="submit">Vectorise</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+                <p class="rig__readout" data-bytes></p>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        
+            <p class="block__deck">
+              Four steps, all of them inside the server: the text is
+              <strong>tokenized</strong> into the subword units the model was
+              trained on; each token becomes an <strong>encoding</strong>, a
+              vector that knows its neighbours and its position; the encodings
+              are <strong>pooled</strong> into one vector — averaged, for these
+              models — and that vector is <strong>normalized</strong> to unit
+              length. The pooling is what collapses a sentence of any length into
+              one point, and the normalization is why similarity can be a single
+              number: with <span class="t-cmd">‖v‖ = 1</span>, cosine similarity
+              and the dot product are the same thing.
+            </p>
+            <p class="block__deck">
+              Truncation is the step's own limit. The model reads a bounded
+              number of tokens, so a passage longer than that window loses its
+              tail silently. The sandbox's models are configured for passages,
+              and the corpus this gallery searches was embedded with the same
+              window and the same normalization — the query and the corpus have
+              to go through the same function or the distances mean nothing.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        
+            <p class="block__deck">
+              Every later plate is this vector plus arithmetic. Similarity is two
+              vectors and a cosine; search is one vector against thousands; a
+              vector store is an index over these points; a classifier is a
+              different graph's answer in the same reply grammar. If the vector
+              is opaque, everything above it is magic — which is why this is
+              plate one.
+            </p>
+            <p class="block__deck">
+              The bytes matter for the same reason. A vector is 1 536 bytes for
+              these models, not a sentence: an index of a hundred thousand
+              passages is tens of megabytes, and that is a number you can put in
+              a cache, a request, or a browser. The next plate spends that
+              vector on one number.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        
+            <p class="block__deck">
+              Two commands, both shown as the plate issued them. The first asks
+              for the packed bytes; the second calls the sandbox's own preloaded
+              script, which pools and normalizes and reports the dimension and
+              the norm. Neither is simulated.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;The thousand injuries of Fortunato I had borne as I best could.&quot;
+# -> a 1 536-byte bulk string: 384 little-endian float32s
+
+EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;The thousand injuries…&quot;
+# -> { dim = 384, norm = 1 }</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, figure, showState, b64Float32, hexPreview, argvLine } from '../assets/js/demos.js';
+
+const g = gallery();
+const MODEL = 'minilm';
+const root = document.querySelector('[data-rig="vector"]');
+const form = root.querySelector('[data-form]');
+const input = root.querySelector('#v-text');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const bytesLine = root.querySelector('[data-bytes]');
+const go = root.querySelector('.rig__go');
+let last = null;
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(last); });
+}
+
+function render(reply, preset) {
+  const vector = b64Float32(reply.b64);
+  const meta = reply.vector || {};
+  const dim = meta.count || vector.length;
+  const bytes = vector.byteLength;
+  readout.replaceChildren(
+    el('span', { class: 'k', text: 'dim ' }), el('b', { text: String(dim) }),
+    el('span', { text: ' · ' }),
+    el('span', { class: 'k', text: 'norm ' }), el('b', { text: String(preset.norm) }),
+    el('span', { text: ' · ' }),
+    el('span', { class: 'k', text: 'dtype ' }), el('b', { text: String(meta.dtype || 'float32') }),
+    el('span', { text: ' · ' }),
+    el('span', { class: 'k', text: 'value ' }), el('b', { text: bytes + ' bytes' })
+  );
+  const first = vector.slice(0, 6).map((v) => v.toFixed(4)).join(', ');
+  bytesLine.replaceChildren(
+    el('span', { class: 'k', text: 'bytes ' }), el('b', { text: hexPreview(new Uint8Array(vector.buffer), 8) }),
+    el('span', { text: '\n' }),
+    el('span', { class: 'k', text: 'floats ' }), el('b', { text: first + ', …' })
+  );
+}
+
+async function run(text) {
+  if (!text || !text.trim()) { return; }
+  last = text;
+  go.disabled = true;
+  setState('running');
+  try {
+    const [raw, scripted] = await Promise.all([
+      g.raw(['EMB', MODEL, 'BLOB', text]),
+      g.preset(MODEL, root.getAttribute('data-emb-preset-embed'), [text])
+    ]);
+    render(raw, scripted);
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+
+form.addEventListener('submit', (event) => { event.preventDefault(); run(input.value); });
+
+// The plate's figures come from the index and the server, never from this file.
+g.manifest().then((m) => {
+  const entry = m.models.find((x) => x.name === MODEL) || m.models[0];
+  document.querySelector('[data-fig-model]').textContent =
+    MODEL === 'minilm' ? 'all-MiniLM-L6-v2' : entry.name;
+  document.querySelector('[data-fig-dim]').textContent = entry.dimension;
+  document.querySelector('[data-fig-precision]').textContent = entry.quantization;
+}).catch(() => {});
+run(input.value);
+
+</script>
+</body>
+</html>
