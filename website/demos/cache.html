@@ -265,9 +265,9 @@ function draw(first, second, animate) {
     label('FIRST ASK', 12, 62, 'atlas__region'),
     label('SECOND ASK · CACHED', 12, 122, 'atlas__region'),
     r1,
-    label(first ? duration(first) : '—', X0 + w1 + 10, 53, 'atlas__label'),
+    label(first ? duration(first, 'us') : '—', X0 + w1 + 10, 53, 'atlas__label'),
     r2,
-    label(second ? duration(second) : '—', X0 + w2 + 10, 113, 'atlas__label')
+    label(second ? duration(second, 'us') : '—', X0 + w2 + 10, 113, 'atlas__label')
   );
   if (animate) {
     tween(650, (t) => {
@@ -310,10 +310,10 @@ async function run() {
     draw(firstUs, secondUs, true);
     readout.replaceChildren(
       el('span', { class: 'k', text: 'first ask ' }),
-      el('b', { text: duration(firstUs) }),
+      el('b', { text: duration(firstUs, 'us') }),
       el('span', { text: ' — ' + (cold ? 'miss, and it filled the entry\n' : 'already cached from an earlier ask\n') }),
       el('span', { class: 'k', text: 'second ask ' }),
-      el('b', { text: duration(secondUs) }),
+      el('b', { text: duration(secondUs, 'us') }),
       el('span', { text: ' — a hit, served without the model\n' }),
       el('span', { class: 'k', text: 'cache moved ' }),
       el('b', { text: '+' + hits + ' hit' + (hits === 1 ? '' : 's') + ' · +' + misses + ' miss' + (misses === 1 ? '' : 'es') }),

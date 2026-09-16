@@ -846,8 +846,10 @@ panel's furniture.
 its own loopback connection to `emb` — the write through the reply read — and
 carries that value in the reply, so a reader in a distant region sees how long
 the server took rather than how long their own network did; the reply ends with
-`(4.2 ms)`, or `(23.51 s)` when it was that kind of morning. A reply the bridge
-refused without asking the server carries no time, and so renders no trailer.
+`(4,190 µs)` — the console reads microseconds, not milliseconds, so a hit and a
+pass share one scale — or `(23.51 s)` when it was that kind of morning. A reply
+the bridge refused without asking the server carries no time, and so renders no
+trailer.
 It is the panel's answer to the only question a reader has about an embedding
 server and cannot see from a reply.
 

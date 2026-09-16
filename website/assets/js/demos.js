@@ -399,12 +399,17 @@ export function tween(ms, step, done) {
  * the scale of its magnitude: a 40 µs cache hit stays in microseconds, a 90 ms
  * batch becomes milliseconds instead of "90 000 µs", and a cold multi-second
  * pass becomes seconds. One function, so no two plates can disagree about the
- * unit. */
-export function duration(us) {
+ * unit.
+ *
+ * A plate whose bars are scaled in raw microseconds passes `unit: 'us'` so the
+ * number beside a bar is in the bar's own unit; that pins the reading to
+ * microseconds up to a full second (a 5.6 ms miss and a 192 µs hit then share
+ * one scale) and only switches to seconds past it. */
+export function duration(us, unit) {
   const n = Number(us) || 0;
-  if (n < 1000) { return n.toLocaleString('en-US') + ' µs'; }
-  if (n < 999500) { return (n / 1e3).toFixed(n < 1e4 ? 1 : 0) + ' ms'; }
-  return (n / 1e6).toFixed(2) + ' s';
+  if (n >= 1e6 || (unit !== 'us' && n >= 999500)) { return (n / 1e6).toFixed(2) + ' s'; }
+  if (unit === 'us' || n < 1000) { return n.toLocaleString('en-US') + ' µs'; }
+  return (n / 1e3).toFixed(n < 1e4 ? 1 : 0) + ' ms';
 }
 
 export const PROTO = 2;

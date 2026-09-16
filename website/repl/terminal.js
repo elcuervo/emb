@@ -239,16 +239,16 @@
     /* The server's own answer time, carried by the bridge in the reply. The
        visitor's round trip is not measured and not shown: the number is the
        sandbox's, so a reader far from the machine sees what the server cost
-       rather than what their network did. The unit follows the magnitude --
-       microseconds for a cache hit, milliseconds for a pass, seconds for a
-       cold start -- so the figure reads at its own scale, the way every
-       gallery plate prints it. A reply the bridge produced without asking the
-       server carries no elapsed value, and so renders no trailer at all. */
+       rather than what their network did. The console reads microseconds, not
+       milliseconds -- the same unit the gallery's cache plate pins its bars
+       to -- so a cache hit and the pass beside it are read on one scale; only
+       a full second or more switches to seconds. A reply the bridge produced
+       without asking the server carries no elapsed value, and so renders no
+       trailer at all. */
     function elapsed(us) {
       var n = Number(us) || 0;
-      if (n < 1000) { return n + ' µs'; }
-      if (n < 999500) { return (n / 1000).toFixed(n < 10000 ? 1 : 0) + ' ms'; }
-      return (n / 1000000).toFixed(2) + ' s';
+      if (n >= 1000000) { return (n / 1000000).toFixed(2) + ' s'; }
+      return n.toLocaleString('en-US') + ' µs';
     }
 
     function timing(env) {
