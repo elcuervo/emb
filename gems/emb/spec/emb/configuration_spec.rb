@@ -117,6 +117,22 @@ RSpec.describe Emb::Configuration do
     end
   end
 
+  describe 'protocol' do
+    it 'defaults to 2 (RESP2), the only mode the gem decodes' do
+      expect(Emb.configuration.protocol).to eq(2)
+    end
+
+    it 'rejects an unsupported global value at configuration time' do
+      expect { Emb.configure { |c| c.protocol = 3 } }
+        .to raise_error(ArgumentError, /protocol must be 2/)
+    end
+
+    it 'rejects an unsupported per-client value at construction' do
+      expect { Emb::Client.new(port: 16_379, protocol: 3) }
+        .to raise_error(ArgumentError, /protocol must be 2/)
+    end
+  end
+
   describe 'url as an array' do
     it 'creates one pool per instance' do
       client = Emb::Client.new(url: %w[redis://emb-a:6379 redis://emb-b:6379], pool: 2)

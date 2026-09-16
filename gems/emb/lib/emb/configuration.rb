@@ -23,6 +23,18 @@ module Emb
       @lazy = value
     end
 
+    # The gem speaks RESP2 only: its models/stats/info/config decoders assume
+    # flat RESP2 arrays and do not decode the RESP3 maps the server emits under
+    # HELLO 3. Rejecting any other value keeps a client from being created in a
+    # mode whose introspection commands silently return wrong results.
+    def protocol=(value)
+      unless value.nil? || value == 2
+        raise ArgumentError, "protocol must be 2 (RESP2 only; RESP3 is not decoded), got #{value.inspect}"
+      end
+
+      @protocol = value
+    end
+
     def initialize
       self.host = 'localhost'
       self.port = 6379

@@ -70,7 +70,10 @@ Emb::Client.new(pool: 20)  # per-call still wins
 The shipped defaults are benchmark-derived (see `BENCHMARK.md`) with secure-by-default
 network behavior: **eager execution by default** (`lazy: false` — every `Emb[:model][t]`
 sends one `EMB` round trip), pool `5`, pure-Ruby RESP driver, `protocol: 2`,
-`read_timeout`/`write_timeout` both **10s**, and `reconnect_attempts: 0`. Opt into
+`read_timeout`/`write_timeout` both **10s**, and `reconnect_attempts: 0`. `protocol: 2`
+is the only supported value: the gem speaks RESP2 and does not decode the RESP3 maps the
+server emits for `EMB.MODELS`, `EMB.STATS`, `EMB.INFO`, and `CONFIG GET`, so setting any
+other value raises `ArgumentError`. Opt into
 coalescing with `lazy: :multi` or concurrent fan-out with `lazy: :batch` — globally via
 `Emb.configure { |c| c.lazy = :batch }` or per client with `Emb.new(lazy: :batch)`.
 
@@ -215,6 +218,8 @@ Emb.info(:minilm)        # model info
 Emb.stats                # server stats (Hash of key => value)
 Emb.help                 # command reference
 Emb.ping                 # health check
+Emb.ready?               # true only when EMB.READY answers OK (false when not ready or unreachable)
+Emb.ready                # status string: "OK", or the server/connection error text
 ```
 
 These all delegate to a lazily-initialized default client. No explicit `setup` call

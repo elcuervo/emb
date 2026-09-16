@@ -183,6 +183,12 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 }
 
 func (c *Cache) Set(key string, value []byte) {
+	// Store an owned copy: callers routinely pass sub-slices of a larger buffer
+	// (for example one row of a batch-wide embedding buffer), and retaining the
+	// slice would pin the whole buffer. The cache's byte accounting and its
+	// actual retention then agree. Embedding rows are small (~1.5 KiB), so the
+	// copy is noise next to the inference that produced it.
+	value = append([]byte(nil), value...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

@@ -9,7 +9,11 @@
 #   the script tests drive directly; production goes through Compiler.Eval.
 # unreachable func: WithScriptDeadline
 #   A server option used only by the script-deadline test to shorten the bound.
+# unreachable func: Bridge.Execute
+#   The exported sandbox-bridge command seam the bridge tests drive; the HTTP
+#   handler calls the unexported execute directly.
 unreachable func: meanPoolAndNormalizeScalar
 unreachable func: extractPrePooledScalar
 unreachable func: Eval
 unreachable func: WithScriptDeadline
+unreachable func: Bridge.Execute

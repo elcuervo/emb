@@ -5,8 +5,11 @@
 --
 --   EMB.EVSHA qa <sha> 1 "when was the Mac launched" "Apple launched the Mac in 1976."
 --   -> hash {answer = "1976", start = 26, stop = 30, score = ...}
+--
+-- The question is the single KEYS element (numtexts=1, so the script returns one
+-- value, the hash below); the context travels as ARGV[1].
 
-local enc = emb.tokenize.encode_pair(KEYS[1], KEYS[2], 384)
+local enc = emb.tokenize.encode_pair(KEYS[1], ARGV[1], 384)
 
 local out = emb.run({
   input_ids      = { shape = {1, #enc.ids}, data = enc.ids },
@@ -37,7 +40,7 @@ end
 local a, b = enc.offsets[bs][1], enc.offsets[be][2]
 local answer = ""
 if b > 0 then
-  answer = string.sub(KEYS[2], a + 1, b):gsub("^%s+", ""):gsub("%s+$", "")
+  answer = string.sub(ARGV[1], a + 1, b):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 return { answer = answer, start = a, stop = b, score = best }

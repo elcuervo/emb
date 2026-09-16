@@ -66,18 +66,17 @@ module Emb
 
     def ready
       send_command('EMB.READY')
-
-      'ready'
-    rescue RedisClient::CommandError => e
+    rescue RedisClient::Error => e
       e.message
     end
 
+    # True only when the server answers EMB.READY with OK. A server that is
+    # loading/draining/empty answers with an error (ready returns that message),
+    # and an unreachable server's connection error is also folded into the
+    # message by #ready, so a Redis failure is a boolean here rather than a
+    # raised exception.
     def ready?
-      ready
-
-      true
-    rescue RedisClient::CommandError
-      false
+      ready == 'OK'
     end
 
     def reset_registry!
@@ -100,10 +99,12 @@ module Emb
       value
     end
 
-    def instance_urls(url)
-      raise ArgumentError, 'url array must not be empty' if url.is_a?(Array) && url.empty?
+    # Per-client counterpart of Configuration#protocol=: Emb.new(protocol: 3)
+    # must fail as loudly as Emb.configure { |c| c.protocol = 3 }.
+    def validate_protocol!(value)
+      return if value.nil? || value == 2
 
-      url.nil? ? [nil] : Array(url)
+      raise ArgumentError, "protocol must be 2 (the gem speaks RESP2 only), got #{value.inspect}"
     end
 
     def merged_redis_options(opts, cfg, url)
@@ -115,7 +116,16 @@ module Emb
         opts[key] = defaults[key] if opts[key].nil? && !defaults[key].nil?
       end
 
+      # Validate the per-client protocol override (or the global default) here
+      # so Emb.new(protocol: 3) fails as loudly as Configuration#protocol=.
+      validate_protocol!(opts[:protocol])
       opts
+    end
+
+    def instance_urls(url)
+      raise ArgumentError, 'url array must not be empty' if url.is_a?(Array) && url.empty?
+
+      url.nil? ? [nil] : Array(url)
     end
 
     def extract_url!(opts, cfg)
