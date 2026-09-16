@@ -57,6 +57,11 @@ primary_region = "iad"
   # RSS with both fp32 models loaded (see tasks 1.2). 2 GB leaves ~0.6 GiB of
   # headroom; if the model set grows, switch to the pre-quantized exports and
   # re-measure before widening this.
+  # One shared CPU, measured twice: at 2 shared CPUs (gomaxprocs 2, +$0.72/mo at
+  # this memory size) the same five fresh texts took 5.71 ms (minilm) and
+  # 16.35 ms (sst2) against 5.32 ms and 16.39 ms at one — a single request is
+  # one thread and the bridge serializes upstream work, so the second CPU buys
+  # nothing. Revisit only if requests ever run concurrently.
   size = "shared-cpu-1x"
   memory = "2gb"
 

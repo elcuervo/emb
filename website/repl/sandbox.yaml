@@ -12,6 +12,16 @@
 
 listen: "127.0.0.1:6379"
 
+# The demo repeats itself — the site ships fixed example commands and a visitor
+# runs one more than once — and every repeat without a cache re-runs inference
+# on one shared vCPU. 64 MB holds ~43k cached vectors, and the bridge's own work
+# ceiling (20,000 texts per window) can produce only ~29 MB of them, so the
+# budget never binds. It is written out rather than `auto` because this machine
+# is 1.92 GiB with ~0.45 GiB free once both models are warm, and `auto` (13% of
+# RAM) would claim 268 MB of that. No cache_file: this is a sandbox, so a
+# restart may start cold and nothing is written to the volume.
+cache: 64MB
+
 max_texts: 8
 max_pairs: 8
 max_command_bytes: 262144

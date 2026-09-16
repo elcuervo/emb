@@ -420,11 +420,14 @@ tag:
 release: tag
 	git push origin "v$(cat VERSION)"
 
-# Bump version: edit VERSION with $EDITOR, then update gem lockfiles
+# Bump version: edit VERSION with $EDITOR, then rewrite every copy of it
+# (site stamps, PRODUCT.md, both gem lockfiles) and fail if any copy is stale.
 version:
 	$EDITOR VERSION
+	just website-version
 	cd gems/emb && bundle
 	cd gems/emb-server && bundle
+	just website-version-check
 
 # Serve the static product site (website/) at http://localhost:8080
 website port="8080":
@@ -639,8 +642,9 @@ website-topviz: build
 website-published:
     python3 website/tools/published-tree.py
 
-# Write VERSION into every element carrying `data-emb-version` on both surfaces,
-# or (`--check`) fail if any stamped value has drifted. Run after bumping VERSION.
+# Write VERSION into every copy of it -- the `data-emb-version` elements on both
+# surfaces and the version named in PRODUCT.md -- or (`--check`) fail if any has
+# drifted. Run after bumping VERSION; `just version` does this for you.
 website-version:
     python3 website/tools/stamp-version.py
 
@@ -688,6 +692,10 @@ sandbox-image:
 
 # Deploy the sandbox to Fly (requires flyctl and an authenticated account).
 # The app, region, volume, and hostname are declared in website/repl/fly.toml.
+# Run from the repository root: `.` is the build context, and fly.toml's
+# `dockerfile` is resolved against *its own* directory. A first deploy needs
+# the app created, the ingress IPs allocated, and cli.emb.is added as a
+# certificate — see the "Deploying" note in website/README.md.
 sandbox-deploy:
     fly deploy . -c website/repl/fly.toml
 

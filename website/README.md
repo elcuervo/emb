@@ -64,6 +64,7 @@ website/
 │   ├── ink-probe.html      asserts no text ink crosses the viewport, 24 widths
 │   ├── published-tree.py   what ships, the canonical origin, the cache rules
 │   ├── stamp-version.py    writes VERSION into every `data-emb-version` element
+│   │                       and into `PRODUCT.md`
 │   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
 │   ├── dev-server.py       serves this tree with the console's module origin
 │   │                       pointed at a local bridge (`just website-dev`)
@@ -215,9 +216,11 @@ Two other measurement traps worth knowing before trusting a number:
 ### The version check
 
 `just website-version` writes the repo's `VERSION` into every element carrying
-`data-emb-version`; `just website-version-check` fails when one has drifted. The
+`data-emb-version` and the version named in the `PRODUCT.md` pre-1.0 line;
+`just website-version-check` fails when one has drifted. The
 `emb-top` capture shipped a hand-typed `v0.4.0` against a `0.4.0.pre4` VERSION,
-which is the drift this exists to stop. Run the stamper after bumping `VERSION`.
+which is the drift this exists to stop. Run the stamper after bumping `VERSION`
+(`just version` does it as part of the bump).
 
 The same idea covers the sandbox's preset digests: `just website-presets`
 stamps `data-emb-preset-*` from the SHA1 of `website/repl/presets/*.lua`, and
@@ -430,6 +433,38 @@ sandbox may reset; it refuses `CONFIG`, `AUTH`, `MONITOR`, `EMB.SAVE`,
 what a visitor can spend with per-client and global rate limits, a concurrency
 cap, request and text caps, and a rolling work ceiling. See
 [`repl/`](repl/) and `PRODUCT.md`.
+
+**Deploying.** One machine with one volume, declared in
+[`repl/fly.toml`](repl/fly.toml); `just sandbox-deploy` is
+`fly deploy . -c website/repl/fly.toml` run from the repository root, because
+the image needs the Go module and the positional `.` is the build context
+(`build.dockerfile` in that file is resolved against the file's own directory,
+not against that context).
+
+The first deploy needs three things flyctl does not do for you — create the
+app, allocate its ingress addresses, and attach the host name:
+
+```bash
+fly apps create emb-sandbox
+just sandbox-deploy                                    # --volume-initial-size 3 on a first deploy
+fly ips allocate-v6 -a emb-sandbox                     # free, dedicated
+fly ips allocate-v4 --shared -a emb-sandbox            # free, needed for IPv4 clients
+fly certs add cli.emb.is -a emb-sandbox                # after the CNAME below exists
+```
+
+A machine that is up with passing health checks is still unreachable until an
+IP is allocated: `*.fly.dev` has no address, and `fly deploy` on a new app
+prints `Failed to provision IP addresses` without failing, then ends by naming
+the `fly.dev` host as if it resolved. The `cli.emb.is` record is a **CNAME to
+`emb-sandbox.fly.dev`, DNS-only** in the `emb.is` zone — Fly issues its
+Let's Encrypt certificate over TLS-ALPN-01, which a proxied record intercepts.
+`fly certs check cli.emb.is` reports the state, and
+`fly logs -a emb-sandbox` shows the first boot downloading both models onto
+`/data` before `/api/ready` turns true.
+
+`ORIGINS` in that file is the fixed list of page origins the bridge answers.
+A Worker preview alias (`pr-<n>-emb-site.<account>.workers.dev`) is not on it,
+so the live console on a site preview refuses at the bridge; the apex is.
 
 ## Design notes
 
