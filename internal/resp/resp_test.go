@@ -272,8 +272,8 @@ func TestHelloNegotiatesProtocol(t *testing.T) {
 	// connection's negotiated version, not from reformatting a reply.
 	payload := []byte(
 		"%1\r\n$5\r\nproto\r\n:3\r\n" + // HELLO 3 reply
-		"*2\r\n$5\r\nproto\r\n:2\r\n" + // HELLO 2 reply
-		"*3\r\n$5\r\nhello\r\n$2\r\nhi\r\n_\r\n", // PING-ish under RESP2: flat array
+			"*2\r\n$5\r\nproto\r\n:2\r\n" + // HELLO 2 reply
+			"*3\r\n$5\r\nhello\r\n$2\r\nhi\r\n_\r\n", // PING-ish under RESP2: flat array
 	)
 	c := dial(t, serveOnce(t, payload, time.Second))
 	defer c.Close()

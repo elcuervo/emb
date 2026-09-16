@@ -1,7 +1,9 @@
 # Fly configuration for the sandbox: one machine, one volume, two processes
 # (emb on loopback, the bridge public) behind one entrypoint.
 #
-# Deploy from the repository root, because the image build needs the Go module:
+# Deploy from the repository root, because the image build needs the Go module.
+# The positional `.` is the build context (the repository root); `dockerfile`
+# below is resolved against *this file's* directory, not against that context:
 #
 #     fly deploy . -c website/repl/fly.toml
 #
@@ -12,7 +14,7 @@ app = "emb-sandbox"
 primary_region = "iad"
 
 [build]
-  dockerfile = "website/repl/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [env]
   EMB_CONFIG = "/etc/emb/sandbox.yaml"
@@ -35,7 +37,11 @@ primary_region = "iad"
 [[http_service.checks]]
   interval = "15s"
   timeout = "3s"
-  grace_period = "120s"
+  # Fly caps a check's grace period at one minute, so asking for more only
+  # produces a warning. The first boot downloads both models onto the volume
+  # before /api/ready turns true; if that ever exceeds a minute, raise the
+  # volume or ship the models in the image rather than this number.
+  grace_period = "60s"
   method = "GET"
   path = "/api/ready"
 
