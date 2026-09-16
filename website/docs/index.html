@@ -48,6 +48,7 @@
     <nav class="nav" aria-label="Primary">
       <a href="index.html">Docs</a>
       <a href="../demos/index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
       <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
     </nav>
 
@@ -56,6 +57,7 @@
       <nav aria-label="Mobile">
         <a href="index.html">Docs <span aria-hidden="true">&#8594;</span></a>
         <a href="../demos/index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
         <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
       </nav>
     </details>
@@ -841,7 +843,10 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         The <code>emb</code> Ruby gem wraps the same protocol with connection
         pooling, a proxy API, multi-model support and automatic float32
         decoding, and the <code>emb-server</code> gem ships the precompiled
-        binary. Neither is required — they are conveniences over the wire.
+        binary. Neither is required — they are conveniences over the wire —
+        but the client's three execution modes and the one rule that decides
+        how many commands a scope costs are <a href="../gem/index.html">explained
+        on their own surface</a>.
       </p>
     </div>
   </div>
