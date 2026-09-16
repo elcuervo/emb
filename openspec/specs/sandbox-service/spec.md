@@ -39,7 +39,12 @@ else with a legible error. The set is chosen so a visitor can embed text, run
 multiple models in one call, read model and server metadata, preload-call a
 preset script, and negotiate the protocol version. Commands that change server
 configuration, mutate shared state, load or flush scripts, persist state, stream
-other visitors' requests, decode images, or carry credentials MUST be refused.
+other visitors' requests, carry credentials, or decode images directly MUST be
+refused. The sandbox's **own preloaded image preset** is the one call that may
+receive image bytes, and only as a bounded binary argument the bridge decodes
+back to raw bytes; `EMB.IMG`/`EMB.IMGMULTI` themselves remain refused, so no
+visitor can send an image to the server except through a script the sandbox
+owns.
 
 #### Scenario: A permitted command runs
 
@@ -60,6 +65,16 @@ other visitors' requests, decode images, or carry credentials MUST be refused.
 
 - **WHEN** a permitted command is sent with a subcommand, model, or argument outside its permitted shape
 - **THEN** the bridge refuses it rather than forwarding it
+
+#### Scenario: The image preset is the only image path
+
+- **WHEN** a visitor sends `EMB.IMG` or `EMB.IMGMULTI`, or names a binary argument for any command but the sandbox's own image preset
+- **THEN** the bridge refuses it, and the server receives no image command
+
+#### Scenario: An image reaches the server only as bounded bytes
+
+- **WHEN** the image preset is called with a binary argument
+- **THEN** the bridge enforces the image count and byte caps, decodes the argument to raw bytes, and forwards the command, and the bytes are used for that request only
 
 ### Requirement: Preset scripts are owned by the sandbox and called by digest
 
