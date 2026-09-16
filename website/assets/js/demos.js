@@ -486,7 +486,7 @@ export function showState(node, state, message, onRetry) {
     refused: 'refused — ' + (message || 'the sandbox declined that command'),
     error: 'error — ' + (message || 'something went wrong'),
     ready: ''
-  }[state] || state;
+  }[state] ?? state;
   const children = [document.createTextNode(text)];
   if (onRetry && state !== 'idle' && state !== 'ready' && state !== 'running') {
     children.push(el('button', { class: 'btn btn--sm', type: 'button', text: 'retry', onclick: onRetry }));
