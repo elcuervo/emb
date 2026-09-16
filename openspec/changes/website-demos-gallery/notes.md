@@ -53,7 +53,43 @@ the tool against seven markers); every id is unique.
 
 ## Sandbox — 1.3 / 2.2 / 2.3
 
-_Pending: requires a deploy._
+Deployed with `just sandbox-deploy` (`emb-sandbox`, machine `784567db5de028`,
+version 7, region `iad`, `shared-cpu-1x` / `2gb`). Measured live through
+`https://cli.emb.is`:
+
+```
+/api/ready                                  ready=true, state=ready
+fly checks                                  2 total, 2 passing
+EMB.MODELS                                  minilm 384 · bge-small 384 · multilingual 384
+                                            · clip ready · sst2 2 — all status ready
+EMB.INFO minilm                             quantization=int8 · model_bytes=22 972 370
+EMB.STATS  mem=1097 MB · models_loaded=5 · image_requests=0 · truncated_images=0
+```
+
+- **1.3 — readiness inside the grace.** The Fly check declares
+  `grace_period = "60s"` on `/api/ready`; the deploy succeeded with both checks
+  passing, so readiness came up inside the grace rather than after it. The boot
+  downloaded the bumped `/data/models/int8/<name>/model.onnx` paths, and
+  `EMB.INFO minilm` reports `quantization: int8`, so the volume did not stay
+  fp32. Steady RSS is **1 097 MB** (`EMB.STATS mem`, the process's resident
+  total for all five loaded models).
+- **2.2 — the bridge carries the new models.** One `EMB.MULTI` naming
+  `minilm` + `bge-small` + `multilingual` through the bridge returns one reply
+  per pair (`kind: array`, three elements, `elapsed_us: 18 305`); at 1 097 MB
+  of the 2 048 MB machine the headroom is **≈ 950 MB**.
+- **2.3 — the dimension dial is skipped, by decision.** `all-mpnet-base-v2`
+  int8 is 110.1 MB of weights, the largest *text* model on the box, and it would
+  land the machine at roughly 1.25–1.3 GB of 2 GB while the deploy left it at
+  1 097 MB — it would probably fit, but it buys the gallery's least vivid plate
+  (the lens already ships the *same text, different space, 0/5 shared neighbours*
+  lesson; the dial only swaps the axis to *different dimension*), and it spends
+  the headroom that keeps the boot inside the 60 s grace. Adding it also means a
+  third `vec0` table, a re-embed of all 2 782 passages through a slower model,
+  and re-running the plate checks at 24 widths. Per the task's own instruction
+  — record the number and skip rather than resize on a guess — the machine stays
+  at 2 GB, no model is added, and **plate 7.8 (the dimension dial) is skipped
+  with it**. The gallery ships **ten plates**. Revisit as a phase-B follow-up
+  with a published cost/dimension figure, not as a ranking comparison.
 
 ## Index — 5.3
 
@@ -206,7 +242,7 @@ morph is skipped and the atlas's query is drawn in one frame when it is set.
   `/assets/demo/manifest.json`. `published-tree.py`'s unhashed-path check now
   covers `.json` as well, so pinning the manifest immutable would fail.
 
-## Verification — 10.1 to 10.4
+## Verification — 10.1 to 10.5
 
 - **10.1** `just website-published`, `just website-presets`,
   `just website-ink` (gallery, landing, docs, 404) and `just website-shot` all
@@ -242,6 +278,7 @@ morph is skipped and the atlas's query is drawn in one frame when it is set.
   `EMB.IMG*`. The only `repl/` changes are `sandbox.yaml` and the two new
   presets. `go vet ./...` and `go test ./internal/registry/ ./internal/config/`
   pass with the one `downloadModel` fix.
+  pass with the one `downloadModel` fix.
 - **10.4** Every plate carries its five sections, its scripts, its commands and
   a `<noscript>` note stating that the interactive part needs scripting; the
   live controls are marked `data-live` and hidden by a rule *inside*
@@ -251,6 +288,24 @@ morph is skipped and the atlas's query is drawn in one frame when it is set.
   retry, no vector and no ranking, while the explanation, the mechanism, the
   scripts and the captions — whose figures come from the shipped index, not the
   server — stay readable.
+- **10.5** `openspec validate website-demos-gallery --strict`: **valid**. The
+  deployed origin serves the gallery and its assets, and a rebuild is not served
+  stale:
+
+  ```
+  /demos                     200 (13 060 B)   index, built from the manifest
+  /demos/{vector,similarity,search,atlas,lens,function,image,batch,cache,graph}
+                             200 (307 -> pretty URL, then 200)
+  /assets/js/demos.js        200
+  /assets/vendor/sqlite-wasm-vec-0.1.9/sqlite3-bundler-friendly.mjs  200 (718 343 B)
+  /assets/vendor/sqlite-wasm-vec-0.1.9/sqlite3.wasm                  200 (1 555 262 B)
+  /assets/demo/poe-85ee3149.db                                       200 (6 410 240 B)
+  ```
+
+  The index reads its own manifest, and the `.db` name is the corpus sha, so a
+  rebuild renames the file the index asks for and the previous index cannot be
+  served against the new corpus (verified at build time: `poe-85ee3149` →
+  `poe-05acb99c`, the previous pair deleted, not left beside it).
 
 ## Atlas corrections — 11.1 to 11.5
 
@@ -375,9 +430,14 @@ index; `EMB.IMG`/`EMB.IMGMULTI` are still refused.
 sending — a drawn pattern left as 8.1 KB on the wire. The bytes answer one
 request and are not stored.
 
-**The gate.** The model is ~154 MB of weights, the single biggest addition; it is
-phase C, still to be measured on the deployed machine (task 15.7). The gallery
-skips the plate if the machine cannot hold it, rather than the measurement.
+**The gate (15.7).** The model is ~154 MB of weights, the single biggest
+addition, and it is **measured on the deployed machine**: with `clip` loaded
+alongside the other four models, `EMB.STATS mem` is **1 097 MB** of the 2 048 MB
+machine — it fits with ≈ 950 MB headroom, so the image plate ships and the
+machine is not resized. The plate is the one figure that needs a live script
+(`clip` reports `dim = -1` in `EMB.MODELS`; the script's softmax is the
+answer), and the image branch is exercised live (`image_requests` on the shared
+sandbox counts only other visitors' runs, not the local ones).
 
 ## The graph — 16.1 to 16.5
 

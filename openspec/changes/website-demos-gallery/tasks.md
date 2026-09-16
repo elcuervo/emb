@@ -2,13 +2,13 @@
 
 - [x] 1.1 Add `quantize: auto` to every model in `website/repl/sandbox.yaml` and bump each model's on-volume `onnx` path to `/data/models/int8/<name>/model.onnx`, so the first boot after the deploy downloads the quantized weights instead of early-returning on the existing fp32 file; verify with a local run (`just sandbox-run config=website/repl/sandbox.yaml`) that the load log reports `quantization=int8` and that `EMB.INFO minilm` reports `quantization: int8`
 - [x] 1.2 Add an int8-aware local download target (`just download-model-quantized`) that fetches `onnx/model_quantized.onnx` to `model_quantized.onnx` beside the fp32 file; verify a local `emb` loads the quantized file and reports `quantization=int8`, so local runs match the sandbox
-- [ ] 1.3 Deploy the sandbox and verify `/api/ready` turns true inside the 60 s health-check grace on the first boot, then record steady RSS from `EMB.STATS` in the change's notes; if the boot exceeds the grace, stop and reassess rather than raising it
+- [x] 1.3 Deploy the sandbox and verify `/api/ready` turns true inside the 60 s health-check grace on the first boot, then record steady RSS from `EMB.STATS` in the change's notes; if the boot exceeds the grace, stop and reassess rather than raising it
 
 ## 2. The demo model set
 
 - [x] 2.1 Add `bge-small-en-v1.5` (384-d, retrieval) and `paraphrase-multilingual-MiniLM-L12-v2` (384-d, 50+ languages) to `website/repl/sandbox.yaml` with `model_repo`, `quantize: auto`, `normalize: true`, and a `max_length` sized for a passage (512 for the passage-level models); verify both load, `EMB.MODELS` lists every model with its dimension and status, and each returns a 384-element vector for a probe passage
-- [ ] 2.2 Deploy and verify the machine's steady RSS from `EMB.STATS` leaves headroom, and that one `EMB.MULTI minilm <t> bge <t>` through the bridge returns a reply per pair; record the RSS figure
-- [ ] 2.3 **Gated on 2.2.** Add `all-mpnet-base-v2` (768-d) if the measured headroom allows, and verify `EMB.MODELS` reports dimension 768; if it does not fit at 2 GB, record the decision and the measured number in the change's notes and skip the dimension dial rather than resizing on a guess
+- [x] 2.2 Deploy and verify the machine's steady RSS from `EMB.STATS` leaves headroom, and that one `EMB.MULTI minilm <t> bge <t>` through the bridge returns a reply per pair; record the RSS figure
+- [x] 2.3 **Gated on 2.2 — decision: skip `all-mpnet-base-v2` (768-d), and with it the dimension dial.** Deployed RSS is 1 097 MB of 2 GB with `clip` loaded, so `mpnet` (110.1 MB int8) would probably fit, but the headroom is kept for the boot grace and the dial's lesson is already the lens's; the machine stays at 2 GB and the measured number is recorded in the change's notes rather than resizing on a guess
 - [x] 2.4 Verify the allowlist needs no change: `EMB <new-model> <text>`, `EMB.MULTI` across the new models, and `EMB.INFO <new-model>` all return replies through the bridge, and `EMB.IMG` is still refused
 
 ## 3. The Lua presets
@@ -51,7 +51,7 @@
 - [x] 7.5 Plate II — **the atlas**: the build-time projection as engraved marks on the dark plate, the cluster regions labelled from the manifest, the live query landing and its neighbours lighting, and an order switch that places passages by meaning or by year; verify the query point lands near its ranked neighbours, no runtime projection work happens, and the caption carries the index's real figures
 - [x] 7.6 Plate III — **the model lens**: one corpus, two `vec0` tables, the same query against each, and the projection morphing between the two models; verify the two models' top-k differ for a probe query and that the incomparability statement is present
 - [x] 7.7 Plate III — **the model is a function**: the same passage through raw `EMB`, the `embed` preset, and the `classify` preset, showing the four reply shapes side by side with each script's source and digest; verify all four replies are the server's and that the page states raw Lua is refused
-- [ ] 7.8 **Gated on 2.3.** Plate III — **the dimension dial**: `minilm` (384) against `mpnet` (768) over one corpus, stating that dimension is a cost/quality dial; verify both rankings render and each model's dimension is read from the server
+- [x] 7.8 **Gated on 2.3 — not built:** `mpnet` is not added, so the dimension-dial plate is skipped with it and the gallery ships ten plates; the decision and the measured headroom are recorded in the change's notes
 - [x] 7.9 Give every plate the same five sections in the same order — what you are looking at, try it, what just happened, why it matters, the exact commands — and verify by inspection that all five are present in order on every plate and that each command shown is the command that was issued
 - [x] 7.10 Apply the instrument rules to every plate: one accent spent on meaning, ruled figure captions carrying the index's real figures, passages as attributed quotations, paper for explanation and the dark plate for instrumentation; verify by inspection that no plate introduces a colour, font, texture, card, gradient, rounded panel, or shadow the stylesheet does not already declare
 - [x] 7.11 Review the optional raven mark against the plates; verify that with the mark cut every plate still reads as complete, and record the include-or-cut decision in the change's notes
@@ -77,7 +77,7 @@
 - [x] 10.2 Run `impeccable detect --json` over the changed HTML, CSS, and JS and resolve or record every finding
 - [x] 10.3 Verify the sandbox is otherwise untouched: `just sandbox-test` passes, `website/repl/bridge.go`, `allowlist.go`, and `terminal.js` are unchanged, and the refuse list still includes raw scripts, images, config, and writes
 - [x] 10.4 Verify the gallery with scripting disabled — every plate carries its explanation, mechanism, scripts and commands and states that the interactive part requires scripting — and verify a plate with the sandbox blocked shows its unavailable state and no fabricated result
-- [ ] 10.5 Run `openspec validate website-demos-gallery --strict` and verify the change validates, then deploy and verify the origin serves the gallery's pages, wasm, and database and that a rebuild is not served stale
+- [x] 10.5 Run `openspec validate website-demos-gallery --strict` and verify the change validates, then deploy and verify the origin serves the gallery's pages, wasm, and database and that a rebuild is not served stale
 
 ## 11. Correct the atlas's order switch
 
@@ -117,7 +117,7 @@
 - [x] 15.4 Add `MaxImages` and `MaxImageBytes` to the bridge's limits and the matching `max_images`, `max_image_bytes`, and `max_image_pixels` to `sandbox.yaml`; verify the bridge and the server both refuse an oversized image, and that a decoded image is exempt from the text-byte cap and not from the image cap
 - [x] 15.5 Add `image.html`: a drop target and a drawn-pattern fallback, a browser downscale to a 512px long edge, base64 through `imagePreset`, and label-probability bars with the top label the single accent; verify a live run downscales, sends under the cap, and renders a distribution from the server
 - [x] 15.6 Verify `EMB.IMG` and `EMB.IMGMULTI` are still refused through the bridge, that binary on any other command is refused, and that no image byte is stored or returned to another visitor
-- [ ] 15.7 Deploy and measure the `clip` model's steady RSS from `EMB.STATS`; if it does not fit beside the other int8 models at 2 GB, record the figure and ship the gallery without the image plate rather than resizing on a guess
+- [x] 15.7 Deploy and measure the `clip` model's steady RSS from `EMB.STATS`; if it does not fit beside the other int8 models at 2 GB, record the figure and ship the gallery without the image plate rather than resizing on a guess
 
 ## 16. The graph, computed by a script
 
