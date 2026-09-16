@@ -9,6 +9,7 @@ require (
 	github.com/daulet/tokenizers v1.27.0
 	github.com/docker/go-units v0.5.0
 	github.com/kelindar/simd v1.2.0
+	github.com/muesli/termenv v0.16.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/tidwall/redcon v1.6.2
 	github.com/yalue/onnxruntime_go v1.31.0
@@ -36,7 +37,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tidwall/btree v1.1.0 // indirect

@@ -2,16 +2,20 @@
 package main
 
 import (
+	"context"
 	//nolint:gosec // cache identity only, per Redis EVALSHA semantics
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/elcuervo/emb/internal/config"
@@ -23,6 +27,9 @@ func main() {
 	configPath := flag.String("config", "", "emb server config, read for the preloaded preset digests")
 	origins := flag.String("origins", "", "comma-separated CORS origin allowlist")
 	timeout := flag.Duration("timeout", 0, "per-command upstream deadline (0 = default)")
+	embTop := flag.String("emb-top", "emb-top", "path to the emb-top binary that feeds the live dashboard")
+	statsEvery := flag.Duration("stats-interval", statsInterval, "poll interval for the live dashboard")
+	statsWindowPolls := flag.Int("stats-window", statsWindow, "history window in polls for the live dashboard")
 	flag.Parse()
 
 	p, err := loadPresets(*configPath)
@@ -36,13 +43,26 @@ func main() {
 	}
 
 	b := NewBridge(*upstream, p, limits, strings.Split(*origins, ","))
+
+	// The live dashboard is a child process, so a stop signal must reach it.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	b.stats.start(ctx, *embTop, *upstream, *statsEvery, *statsWindowPolls)
+
 	srv := &http.Server{
 		Addr:              *listen,
 		Handler:           b.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
 	log.Printf("repl bridge listening on %s, upstream %s, %d preset(s)", *listen, *upstream, countPresets(p))
-	if err := srv.ListenAndServe(); err != nil {
+	err = srv.ListenAndServe()
+	stop()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }

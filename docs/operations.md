@@ -108,13 +108,19 @@ emb-top -addr localhost:6379
 emb-top -addr localhost:6379 -once -samples 10 -interval 1s
 # t=... total_requests=6 req_rate=2.0 tok_rate=11.0 cpu_pct=14.5 lat_p50_us=1139 lat_p95_us=1801 …
 
+# headless: stream the dashboard's own rendered frames (JSON lines)
+emb-top -addr localhost:6379 -frames -interval 1s
+
 # secured node
 emb-top -addr localhost:6379 -password secret -tls
 ```
 
 Keys: `q` quit · `p`/space pause · `r` reset window · `j`/`k` scroll models ·
 `?` help. Flags: `-addr`, `-interval`, `-password`, `-tls`, `-window`,
-`-once -samples N`. Prefer the `EMB_TOP_PASSWORD` environment variable over
+`-once -samples N`, `-frames`. `-frames` is the headless streaming mode: it
+prints one complete, coloured frame per interval, so another process can render
+the dashboard live without a terminal (the sandbox's read-only `/stats` view is
+built on it). Prefer the `EMB_TOP_PASSWORD` environment variable over
 `-password` (command-line arguments are visible in process listings); sending a
 password to a non-loopback address without `-tls` prints a warning. Terminal:
 UTF-8; a color-capable terminal is recommended.

@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,5 +150,138 @@ func TestResetClearsCharts(t *testing.T) {
 	p, _, _ := m.sampler.Snapshot()
 	if len(m.sampler.Window) != 0 || p.ReqRate != 0 {
 		t.Fatalf("reset did not clear sampler (window=%d)", len(m.sampler.Window))
+	}
+}
+
+func TestEmitFrameIsOneJSONLine(t *testing.T) {
+	var buf bytes.Buffer
+	frame := "line one\x1b[31m red\x1b[0m\nline two"
+	if err := emitFrame(&buf, frame); err != nil {
+		t.Fatalf("emitFrame: %v", err)
+	}
+	if got := strings.Count(buf.String(), "\n"); got != 1 {
+		t.Fatalf("want one newline (one line per frame), got %d: %q", got, buf.String())
+	}
+	var msg frameMessage
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &msg); err != nil {
+		t.Fatalf("frame is not valid JSON: %v", err)
+	}
+	if msg.ANSI != frame {
+		t.Fatalf("frame round-trip mismatch:\n got %q\nwant %q", msg.ANSI, frame)
+	}
+}
+
+// fakePoller drives runFrames without a node: it dials on calls 1 and 3,
+// loses the connection on poll 2, and returns a model on every other poll.
+type fakePoller struct {
+	mu    sync.Mutex
+	calls int
+	seqs  []uint64
+}
+
+func (f *fakePoller) Addr() string { return "fake:6379" }
+func (f *fakePoller) Close() error { return nil }
+
+func (f *fakePoller) EnsureConn() (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// A dial on the first poll and again after the drop on the second.
+	return f.calls == 0 || f.calls == 2, nil
+}
+
+func (f *fakePoller) Poll(_ []string, afterSeq uint64) (*embtop.PollResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.seqs = append(f.seqs, afterSeq)
+	n := f.calls
+	f.calls++
+	if n == 1 {
+		return nil, errors.New("connection lost")
+	}
+	res := fakePoll(int64(100*(n+1)), int64(400*(n+1)), 0, 1)
+	res.NextSeq = uint64(10 * (n + 1))
+	return res, nil
+}
+
+func (f *fakePoller) observedSeqs() []uint64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]uint64(nil), f.seqs...)
+}
+
+// cancelWriter cancels the run after max writes and keeps every frame.
+type cancelWriter struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	n, max int
+	cancel context.CancelFunc
+}
+
+func (w *cancelWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf.Write(p)
+	w.n++
+	if w.n >= w.max {
+		w.cancel()
+	}
+	return len(p), nil
+}
+
+func (w *cancelWriter) frames(t *testing.T) []string {
+	t.Helper()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var out []string
+	for _, line := range strings.Split(strings.TrimSpace(w.buf.String()), "\n") {
+		var msg frameMessage
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			t.Fatalf("frame %q is not valid JSON: %v", line, err)
+		}
+		out = append(out, msg.ANSI)
+	}
+	return out
+}
+
+func TestRunFramesEmitsColoredFramesAndReconnects(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := &cancelWriter{max: 4, cancel: cancel}
+	poll := &fakePoller{}
+
+	done := make(chan error, 1)
+	go func() { done <- runFrames(ctx, poll, time.Millisecond, 300, w) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("runFrames: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runFrames did not stop after cancellation")
+	}
+
+	frames := w.frames(t)
+	if len(frames) < 4 {
+		t.Fatalf("want at least 4 frames, got %d", len(frames))
+	}
+	frames = frames[:4] // the run may emit one more before observing the cancel
+	for i, f := range frames {
+		if !strings.Contains(f, "\x1b[") {
+			t.Errorf("frame %d carries no colour: %q", i, f)
+		}
+		if !strings.Contains(f, "emb-top") {
+			t.Errorf("frame %d is not the dashboard: %q", i, f)
+		}
+	}
+	if !strings.Contains(frames[1], "reconnecting") {
+		t.Errorf("frame after the drop does not report reconnecting: %q", frames[1])
+	}
+
+	seqs := poll.observedSeqs()
+	if len(seqs) < 4 {
+		t.Fatalf("want at least 4 polls, got %d", len(seqs))
+	}
+	if seqs[2] != 0 {
+		t.Errorf("event cursor was not reset after reconnect: seqs=%v", seqs)
 	}
 }

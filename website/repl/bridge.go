@@ -22,10 +22,11 @@ import (
 	"github.com/elcuervo/emb/internal/resp"
 )
 
-// terminalFS holds the one client module and the standalone terminal page. The
-// module is served to both surfaces, so a reply cannot be rendered two ways.
+// terminalFS holds the one client module, the standalone terminal page, and
+// the live dashboard page. The module is served to both terminal surfaces, so
+// a reply cannot be rendered two ways.
 //
-//go:embed terminal.js index.html
+//go:embed terminal.js index.html stats.html
 var terminalFS embed.FS
 
 // execRequest is the one command path: the argv a client would send to emb,
@@ -51,6 +52,8 @@ type Bridge struct {
 	now    func() time.Time
 	ready  atomic.Bool
 	everOK atomic.Bool
+
+	stats *statsService
 }
 
 // bridgeError is a legible failure the bridge itself produces, carrying the
@@ -80,6 +83,7 @@ func NewBridge(upstream string, p presets, limits Limits, origins []string) *Bri
 		client:   resp.NewClient(upstream, "", false),
 		lim:      newLimiter(limits),
 		now:      time.Now,
+		stats:    newStatsService(),
 	}
 }
 
@@ -92,6 +96,8 @@ func (b *Bridge) Handler() http.Handler {
 	mux.HandleFunc("/api/ready", b.handleReady)
 	mux.HandleFunc("/api/presets", b.handlePresets)
 	mux.HandleFunc("/api/exec", b.handleExec)
+	mux.HandleFunc("/api/stats", b.handleStatsStream)
+	mux.HandleFunc("/stats", b.handleStats)
 	mux.HandleFunc("/terminal.js", b.handleTerminalJS)
 	mux.HandleFunc("/", b.handleTerminal)
 	return mux

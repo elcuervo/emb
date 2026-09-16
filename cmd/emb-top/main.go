@@ -8,11 +8,15 @@
 //
 //	emb-top [-addr host:port] [-interval 1s] [-password p] [-tls]
 //	emb-top -once -samples 10 [-interval 1s]   # headless, machine-readable
+//	emb-top -frames [-interval 1s]             # headless, streamed frames
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"slices"
@@ -27,6 +31,7 @@ import (
 	"github.com/NimbleMarkets/ntcharts/sparkline"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/elcuervo/emb/internal/embtop"
 )
@@ -77,6 +82,7 @@ func main() {
 	useTLS := flag.Bool("tls", false, "connect over TLS")
 	once := flag.Bool("once", false, "headless mode: print polling lines and exit")
 	samples := flag.Int("samples", 10, "number of polls in -once mode")
+	frames := flag.Bool("frames", false, "headless mode: stream the dashboard's rendered frames as JSON lines")
 	window := flag.Int("window", 120, "history window (number of polls)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -110,12 +116,103 @@ func main() {
 		return
 	}
 
+	if *frames {
+		if err := runFrames(context.Background(), client, *interval, *window, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "emb-top:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	m := newTUI(client, *interval, *window)
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "emb-top:", err)
 		os.Exit(1)
 	}
+}
+
+// dashboardClient is the slice of the emb-top client the dashboard uses: the
+// address its header names and a polled snapshot. It is an interface so the
+// headless frame mode can be driven by a fake in tests.
+type dashboardClient interface {
+	Addr() string
+	EnsureConn() (bool, error)
+	Poll(known []string, afterSeq uint64) (*embtop.PollResult, error)
+	Close() error
+}
+
+// frameWidth and frameHeight are the fixed grid the frame mode renders. The
+// live view is a fixed block of monospace text, not a reflowing terminal, so
+// the size is a constant rather than a terminal query.
+const (
+	frameWidth  = 120
+	frameHeight = 40
+)
+
+// frameMessage is one newline-delimited frame: the dashboard's complete
+// rendered output, cursor-free and self-contained, so a consumer needs no
+// terminal emulation and can display only the newest frame it received.
+type frameMessage struct {
+	ANSI string `json:"ansi"`
+}
+
+// runFrames streams the dashboard's complete frames as JSON lines until the
+// process is stopped. It is the headless sibling of the TUI: same model, same
+// renderer, no terminal and no input. It keeps polling across a lost
+// connection instead of exiting, so a live view recovers on its own.
+func runFrames(ctx context.Context, c dashboardClient, interval time.Duration, window int, out io.Writer) error {
+	// There is no terminal to ask, and the profile must not be inferred from
+	// the pipe, or the frames would arrive without their colour.
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	lipgloss.SetHasDarkBackground(true)
+
+	m := newTUI(c, interval, window)
+	m.width, m.height = frameWidth, frameHeight
+	m.layoutCharts()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+		if dialed, err := c.EnsureConn(); err != nil {
+			m.connected = false
+		} else {
+			if dialed {
+				// A fresh (or restarted) node numbers events from the start.
+				m.lastSeq = 0
+			}
+			res, err := c.Poll(m.known, m.lastSeq)
+			if err != nil {
+				m.connected = false
+				_ = c.Close()
+			} else {
+				m.connected = true
+				m.lastGood = time.Now()
+				m.applyResult(res)
+			}
+		}
+		if err := emitFrame(out, m.View()); err != nil {
+			return err
+		}
+	}
+}
+
+// emitFrame writes one JSON-encoded frame and its newline in a single write,
+// so a reader never sees a partial line.
+func emitFrame(out io.Writer, frame string) error {
+	b, err := json.Marshal(frameMessage{ANSI: frame})
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	_, err = out.Write(b)
+	return err
 }
 
 // isLoopback reports whether addr (host:port) resolves to a loopback host, so
@@ -144,7 +241,7 @@ type pollMsg struct {
 // ---- TUI model ----
 
 type tuiModel struct {
-	client   *embtop.Client
+	client   dashboardClient
 	interval time.Duration
 	sampler  *embtop.Sampler
 
@@ -174,7 +271,7 @@ type tuiModel struct {
 	memBar   barchart.Model
 }
 
-func newTUI(client *embtop.Client, interval time.Duration, window int) tuiModel {
+func newTUI(client dashboardClient, interval time.Duration, window int) tuiModel {
 	m := tuiModel{
 		client:   client,
 		interval: interval,

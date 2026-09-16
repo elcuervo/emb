@@ -469,7 +469,7 @@ website-dev port="8080" bridge="8081" upstream="6379" bind="0.0.0.0": sandbox-bu
     trap cleanup EXIT INT TERM; \
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" & emb=$!; \
     ./bin/repl -listen {{bind}}:{{bridge}} -upstream 127.0.0.1:{{upstream}} \
-        -config "$cfg" & repl=$!; \
+        -config "$cfg" -emb-top ./bin/emb-top & repl=$!; \
     python3 website/tools/dev-server.py {{port}} --bind {{bind}} --sandbox-port {{bridge}}
 
 # One-time browser fetch for the site's checks (needs `nix develop .#website`).
@@ -679,7 +679,7 @@ sandbox-test:
 # The sandbox config names /data/models/...; use config.yaml or a copy with
 # local model paths when running against a local server.
 sandbox-run upstream="127.0.0.1:6379" config="website/repl/sandbox.yaml" port="8080" origins="https://emb.is":
-    go run ./website/repl -listen 127.0.0.1:{{port}} -upstream {{upstream}} -config {{config}} -origins {{origins}}
+    go run ./website/repl -listen 127.0.0.1:{{port}} -upstream {{upstream}} -config {{config}} -origins {{origins}} -emb-top ./bin/emb-top
 
 # Build the sandbox image (context is the repository root: the image needs the
 # Go module and the server's build inputs).

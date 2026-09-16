@@ -22,7 +22,9 @@ The host shell has **no `go`** (`go: command not found`). The Nix dev shell prov
 - The site's console is backed by the sandbox under `website/repl/`. `just
   website-dev` starts the site, a local bridge and a local `emb` together (it
   binds `0.0.0.0`, so a phone on the same network can drive it; `bind=127.0.0.1`
-  keeps it local), so the live panel can be exercised without deploying. `just
+  keeps it local), so the live panel can be exercised without deploying. The
+  bridge also runs one `emb-top` producer and serves its frames read-only at
+  `/stats` (`http://localhost:8081/stats` under `just website-dev`). `just
   website` alone serves the published tree, which loads the module from
   `cli.emb.is` — use it for `website-ink` and the published-tree check.
 - The dependency lists are split in `flake.nix`: `serverDeps` (Go, ONNX, Redis, Ruby)

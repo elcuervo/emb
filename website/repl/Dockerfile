@@ -57,7 +57,8 @@ RUN set -eux; \
     CGO_CFLAGS="-I${ORT_DIR}/include" \
     CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime -L/opt/libtokenizers -Wl,-rpath,\$ORIGIN" \
     go build -ldflags="-X main.version=${EMB_VER}" -o /emb ./cmd/emb && \
-    CGO_ENABLED=0 go build -o /repl ./website/repl
+    CGO_ENABLED=0 go build -o /repl ./website/repl && \
+    CGO_ENABLED=0 go build -ldflags="-X main.version=${EMB_VER}" -o /emb-top ./cmd/emb-top
 
 RUN set -eux; \
     ORT_VER="${ORT_VERSION#v}"; \
@@ -74,6 +75,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/onnx-libs/libonnxruntime.so* /usr/lib/
 COPY --from=builder /emb /usr/local/bin/emb
 COPY --from=builder /repl /usr/local/bin/repl
+# The live dashboard at /stats is fed by this producer: the bridge spawns it
+# and turns its frames into the page.
+COPY --from=builder /emb-top /usr/local/bin/emb-top
 # The server config and the preset scripts travel together: the config names
 # `presets/*.lua` relative to its own directory, and the bridge hashes the same
 # files to build the digest manifest it accepts EMB.EVSHA for.

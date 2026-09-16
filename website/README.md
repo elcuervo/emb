@@ -84,6 +84,7 @@ website/
 │   ├── *.go                the bridge — the sandbox's only public surface
 │   ├── terminal.js         the one client module; both surfaces load it
 │   ├── index.html          the standalone terminal served at cli.emb.is/
+│   ├── stats.html          the read-only live dashboard served at /stats
 │   ├── presets/*.lua       the preloaded scripts, called by digest
 │   ├── sandbox.yaml        the server config the bridge reads for its manifest
 │   ├── Dockerfile, run.sh, fly.toml   the one-machine deployment
@@ -381,8 +382,9 @@ twice, so a change to the contract cannot land on one surface only. The landing
 page presents no host or endpoint: the module captures the origin it was served
 from.
 
-**`cli.emb.is/` is the terminal and nothing else.** The standalone page is the
-viewport: `100dvh`, one column, three bands — what the terminal says about
+**`cli.emb.is/` is the terminal, and `/stats` is the one page beside it.** The
+standalone terminal is the viewport: `100dvh`, one column, three bands — what
+the terminal says about
 itself and the commands it takes, the scrolling transcript, the prompt as the
 last line — with no heading, card, status strip, footer or page scroll. The
 model is `redis.io/cli`: the disclosure is written in the same monospace voice as
@@ -400,6 +402,15 @@ that has to stay true for as long as the page is open.
 Above 760px the samples are two columns of one line; below it they are one
 column, the note drops out of the drawn row and stays as the control's name, and
 every control a finger has to hit keeps the 44px floor.
+
+**`/stats` is the live dashboard, read-only.** The bridge runs one `emb-top`
+producer against the loopback node and streams that producer's own rendered
+frames at `/api/stats`; the page replaces one block of monospace text per second
+and carries no control. The producer is a child process, so the bridge never
+links the TUI's renderer (and never runs its terminal-background query), and a
+stop signal reaches both. The window is five minutes at the default poll
+interval, the subscriber count is bounded, and nothing the page can request
+reaches the command surface.
 
 **The preset digests are checked.** A preset is called by the SHA1 of the bytes
 the server preloaded, so the digest the site shows must be that value:
