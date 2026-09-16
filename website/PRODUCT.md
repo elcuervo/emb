@@ -22,7 +22,7 @@ Secondary audience: people self-hosting `emb` directly — running the binary fr
 
 ## Product Purpose
 
-`emb` is a self-hosted text-embeddings server that speaks the Redis protocol.
+`emb` is a simple yet powerful, self-hosted inference server that speaks the Redis protocol.
 
 It exists so that embeddings become one more thing a Redis client can ask for:
 `EMB minilm "hello world"` from `redis-cli`, `redis-py`, `redis-rb`, or anything

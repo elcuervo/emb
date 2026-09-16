@@ -8,7 +8,7 @@ related_targets: []
 ## Scope and visitor mode
 
 **Read.** A documentation surface at `website/docs/index.html` for `emb`, the
-self-hosted text-embeddings server that speaks the Redis protocol. The visitor
+simple yet powerful self-hosted inference server that speaks the Redis protocol. The visitor
 has already decided the product is worth a look; this surface answers "how do I
 run it, what exactly does it do, and what will bite me" without theatre and
 without leaving the site.

@@ -6,14 +6,14 @@
   </picture>
 </a>
 
-A simple yet powerful text embeddings generator.
+A simple yet powerful inference server.
 
 [![GitHub Release](https://img.shields.io/github/v/release/elcuervo/emb?logo=github&color=blue)](https://github.com/elcuervo/emb/releases)
 [![Docker Hub](https://img.shields.io/docker/v/elcuervo/emb?logo=docker&color=blue&label=docker)](https://hub.docker.com/r/elcuervo/emb)
 [![emb gem](https://img.shields.io/gem/v/emb?logo=rubygems&color=red&label=emb)](https://rubygems.org/gems/emb)
 [![emb-server gem](https://img.shields.io/gem/v/emb-server?logo=rubygems&color=red&label=emb-server)](https://rubygems.org/gems/emb-server)
 
-`emb` is a text-embeddings server speaking the Redis protocol. Every Redis
+`emb` is a simple yet powerful inference server speaking the Redis protocol. Every Redis
 client — `redis-cli`, `redis-py`, `redis-rb`, … — can call it with no special
 library. Embeddings come back as raw float32 bytes by default:
 

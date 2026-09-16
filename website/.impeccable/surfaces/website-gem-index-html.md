@@ -8,7 +8,7 @@ related_targets: []
 ## Scope and visitor mode
 
 **Read.** A client surface at `website/gem/index.html` for `emb`, the
-self-hosted text-embeddings server that speaks the Redis protocol. The visitor
+simple yet powerful self-hosted inference server that speaks the Redis protocol. The visitor
 already writes Ruby and has decided the product is worth a look; this surface
 answers "what does the gem do between my call site and the wire, and how much
 does a scope cost" without theatre.
