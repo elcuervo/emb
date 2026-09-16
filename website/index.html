@@ -507,20 +507,18 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
 
             <p class="block__deck">
               A real <span class="t-cmd">emb</span> process answers every
-              command below. It is the same binary you would run locally,
-              loaded with the sandbox's own models, reached over RESP through
-              a bridge that may ask it questions and may not change it: no
-              configuration, no script loaded from this page, nothing written
-              to shared state.
+              command below, over RESP, through a bridge that may ask it
+              questions and may not change it: the same binary you would run
+              locally, the sandbox's own models, no configuration, no scripts
+              from this page, nothing written to shared state.
             </p>
 
             <p class="block__deck">
               Run a row from the ledger, or type your own command and press
-              Enter. <span class="t-cmd">↑</span> and
-              <span class="t-cmd">↓</span> walk what you have already run, and
-              every reply is followed by the round trip that produced it,
-              measured here at the page. Nothing below is replayed from a
-              recording: the bytes are what this server sent, this time.
+              Enter; <span class="t-cmd">↑</span> and
+              <span class="t-cmd">↓</span> walk what you have already run. Each
+              reply ends with how long the server took to answer it. Nothing
+              below is replayed: the bytes are what this server sent, this time.
             </p>
 
           </div>
@@ -531,7 +529,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
               <dt>RUNS</dt><dd><span class="t-cmd">EMB</span> · <span class="t-cmd">EMB.MULTI</span> · the read commands</dd>
               <dt>REFUSES</dt><dd>config · raw Lua · images · writes</dd>
               <dt>BOUNDS</dt><dd>2 commands/s · 8 texts · 2 KB per text</dd>
-              <dt>MEASURED</dt><dd>the round trip, printed under each reply</dd>
+              <dt>MEASURED</dt><dd>the server's time, under each reply</dd>
               <dt>RESETS</dt><dd>the sandbox may restart between visits</dd>
             </dl>
           </div>

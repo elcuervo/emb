@@ -22,6 +22,12 @@ type Envelope struct {
 	Elems  []Envelope `json:"elems,omitempty"`
 	Vector *Vector    `json:"vector,omitempty"`
 	Code   string     `json:"code,omitempty"`
+
+	// ElapsedUs is the server's answer time for this command, measured by the
+	// bridge on its loopback connection to emb. It is absent for a reply the
+	// bridge produced without asking the server (a refusal or a capacity
+	// bound), so a client can tell "not measured" from "measured as zero".
+	ElapsedUs int64 `json:"elapsed_us,omitempty"`
 }
 
 // Vector describes a bulk that carries an embedding: its element dtype and

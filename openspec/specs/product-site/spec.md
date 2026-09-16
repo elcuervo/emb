@@ -257,7 +257,7 @@ target floor.
 #### Scenario: The reply states what it cost
 
 - **WHEN** a command is answered
-- **THEN** the reply states how long the call took, measured from the moment the reader submitted it rather than from the last attempt, so a sandbox that had to wake up reports the wait it cost
+- **THEN** the reply states how long the server took to answer the call, as measured by the sandbox from the command write through the reply read, and the reader's own network round trip is not shown
 
 #### Scenario: The console is not a mode picker
 

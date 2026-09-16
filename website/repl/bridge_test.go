@@ -30,6 +30,7 @@ type fakeEmb struct {
 	ln     net.Listener
 	wg     sync.WaitGroup
 	silent bool
+	delay  time.Duration
 
 	mu    sync.Mutex
 	seen  [][]string
@@ -106,6 +107,9 @@ func (f *fakeEmb) serve(conn net.Conn) {
 		f.mu.Unlock()
 		if f.silent {
 			continue
+		}
+		if f.delay > 0 {
+			time.Sleep(f.delay)
 		}
 		if _, err := conn.Write(f.reply(args)); err != nil {
 			return
@@ -561,6 +565,41 @@ func TestEnvelopeErrorIsNotAValue(t *testing.T) {
 	}
 	if status != http.StatusOK {
 		t.Fatalf("server error status = %d, want 200 (it is a command result)", status)
+	}
+}
+
+func TestReplyCarriesServerMeasuredElapsedTime(t *testing.T) {
+	f := startFakeEmb(t)
+	f.delay = 10 * time.Millisecond
+	b := newTestBridge(t, f.addr(), presets{}, testLimits())
+
+	env, status := mustExec(t, b, []string{"EMB", "minilm", "hi"}, 2)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	// The bridge times the server's answer on the loopback connection, so a
+	// reply the server took ~10 ms to produce reports at least that, and the
+	// client's round trip never enters the number.
+	if env.ElapsedUs < 5000 {
+		t.Fatalf("elapsed_us = %d, want the server's ~10 ms answer time", env.ElapsedUs)
+	}
+}
+
+func TestRefusalCarriesNoElapsedTime(t *testing.T) {
+	f := startFakeEmb(t)
+	b := newTestBridge(t, f.addr(), presets{}, testLimits())
+
+	env, _ := mustExec(t, b, []string{"CONFIG", "SET", "cache", "1GB"}, 2)
+	if env.Code != codeRefused || env.ElapsedUs != 0 {
+		t.Fatalf("refusal = %+v, want no elapsed value", env)
+	}
+	payload, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	// omitempty keeps the field off the wire, so the client renders no trailer.
+	if bytes.Contains(payload, []byte("elapsed_us")) {
+		t.Fatalf("refusal payload %s carries an elapsed value", payload)
 	}
 }
 

@@ -772,11 +772,14 @@ there is nothing to set before either can be read. `terminal.js` still carries
 `proto` in its request — that is the module's contract with the bridge, not the
 panel's furniture.
 
-**Every reply states what it cost.** The client times the call from the moment
-the reader submitted it, not from the last retry, so a sandbox that has to wake
-up reports the wait it actually cost; the reply ends with `(42 ms)`, or `(23.51
-s)` when it was that kind of morning. It is the panel's answer to the only
-question a reader has about an embedding server and cannot see from a reply.
+**Every reply states what the server cost.** The bridge times the command on
+its own loopback connection to `emb` — the write through the reply read — and
+carries that value in the reply, so a reader in a distant region sees how long
+the server took rather than how long their own network did; the reply ends with
+`(4.2 ms)`, or `(23.51 s)` when it was that kind of morning. A reply the bridge
+refused without asking the server carries no time, and so renders no trailer.
+It is the panel's answer to the only question a reader has about an embedding
+server and cannot see from a reply.
 
 **The strip names the console's own condition**, and it is now only that: the
 state on the left, `SANDBOX · MAY RESET` on the right. Its colour is read from

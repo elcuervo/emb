@@ -234,7 +234,7 @@ func (b *Bridge) Execute(args []string, proto int, client string) (Envelope, int
 	}
 	defer release()
 
-	rep, err := b.roundTrip(args, proto)
+	rep, elapsed, err := b.roundTrip(args, proto)
 	if err != nil {
 		var be *bridgeError
 		if errors.As(err, &be) {
@@ -242,64 +242,72 @@ func (b *Bridge) Execute(args []string, proto int, client string) (Envelope, int
 		}
 		return errorEnvelope(codeUnavailable, err.Error()), statusFor(codeUnavailable)
 	}
-	return toEnvelope(rep, isBlobEmbedding(args)), http.StatusOK
+	env := toEnvelope(rep, isBlobEmbedding(args))
+	env.ElapsedUs = elapsed.Microseconds()
+	return env, http.StatusOK
 }
 
 // roundTrip runs one command on the serialized connection, negotiating the
 // requested version on that same connection so the reply really is the
-// server's encoding. A connection lost while idle is retried once: every
-// command on this surface is read-only, so a retry cannot run anything twice
-// that matters.
-func (b *Bridge) roundTrip(args []string, proto int) (resp.Reply, error) {
+// server's encoding. It also returns the server's answer time, measured here
+// rather than by the client, so a distant reader sees what the server cost and
+// not what the network did. A connection lost while idle is retried once:
+// every command on this surface is read-only, so a retry cannot run anything
+// twice that matters.
+func (b *Bridge) roundTrip(args []string, proto int) (resp.Reply, time.Duration, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	rep, err := b.send(args, proto)
+	rep, elapsed, err := b.send(args, proto)
 	if err == nil {
-		return rep, nil
+		return rep, elapsed, nil
 	}
 	var be *bridgeError
 	if errors.As(err, &be) && be.code == codeUnavailable {
-		if rep, retryErr := b.send(args, proto); retryErr == nil {
-			return rep, nil
+		if rep, elapsed, retryErr := b.send(args, proto); retryErr == nil {
+			return rep, elapsed, nil
 		}
 	}
-	return rep, err
+	return rep, elapsed, err
 }
 
-// send performs one connection + negotiation + command round trip.
-func (b *Bridge) send(args []string, proto int) (resp.Reply, error) {
+// send performs one connection + negotiation + command round trip. The elapsed
+// time it returns brackets the command itself — the write through the reply
+// read, after negotiation — so the value is the server's answer time, not the
+// connection's setup or the client's round trip.
+func (b *Bridge) send(args []string, proto int) (resp.Reply, time.Duration, error) {
 	if _, err := b.client.EnsureConn(); err != nil {
 		if b.everOK.Load() {
-			return resp.Reply{}, &bridgeError{codeUnavailable, "the sandbox server is unavailable; the machine is being replaced"}
+			return resp.Reply{}, 0, &bridgeError{codeUnavailable, "the sandbox server is unavailable; the machine is being replaced"}
 		}
-		return resp.Reply{}, &bridgeError{codeStarting, "the sandbox is starting; retry in a moment"}
+		return resp.Reply{}, 0, &bridgeError{codeStarting, "the sandbox is starting; retry in a moment"}
 	}
 	b.client.SetTimeout(b.limits.Timeout)
 	_ = b.client.SetDeadline(b.now().Add(b.limits.Timeout))
 	if err := b.client.Hello(proto); err != nil {
 		_ = b.client.Close()
-		return resp.Reply{}, &bridgeError{codeUnavailable, "could not negotiate the protocol version: " + err.Error()}
+		return resp.Reply{}, 0, &bridgeError{codeUnavailable, "could not negotiate the protocol version: " + err.Error()}
 	}
 	_ = b.client.SetDeadline(b.now().Add(b.limits.Timeout))
+	started := b.now()
 	if err := b.client.WriteArgv(args...); err != nil {
 		_ = b.client.Close()
-		return resp.Reply{}, &bridgeError{codeUnavailable, "lost the connection to the sandbox server"}
+		return resp.Reply{}, 0, &bridgeError{codeUnavailable, "lost the connection to the sandbox server"}
 	}
 	if err := b.client.Flush(); err != nil {
-		return resp.Reply{}, &bridgeError{codeUnavailable, "lost the connection to the sandbox server"}
+		return resp.Reply{}, 0, &bridgeError{codeUnavailable, "lost the connection to the sandbox server"}
 	}
 	rep, err := b.client.ReadReply()
 	if err != nil {
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
-			return resp.Reply{}, &bridgeError{codeTimeout, "the sandbox server did not answer before the deadline"}
+			return resp.Reply{}, 0, &bridgeError{codeTimeout, "the sandbox server did not answer before the deadline"}
 		}
-		return resp.Reply{}, &bridgeError{codeUnavailable, "lost the connection to the sandbox server"}
+		return resp.Reply{}, 0, &bridgeError{codeUnavailable, "lost the connection to the sandbox server"}
 	}
 	b.ready.Store(true)
 	b.everOK.Store(true)
-	return rep, nil
+	return rep, b.now().Sub(started), nil
 }
 
 // probe answers whether the upstream server is answering, without consuming a

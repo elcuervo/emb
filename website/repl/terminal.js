@@ -236,26 +236,21 @@
     var retryDelay = opts.retryDelay === undefined ? 1000 : opts.retryDelay;
     var transcript = [];
     var transientStart = -1;
-    /* When the reader's command left. It is set at submit rather than at each
-       attempt, so a sandbox that has to wake up reports the wait it actually
-       cost rather than the last retry's slice of it. */
-    var startedAt = 0;
-
-    function nowMs() {
-      return global.performance && global.performance.now
-        ? global.performance.now()
-        : Date.now();
-    }
-
-    /* The speed the panel is boasting about, in the form redis-cli prints it.
-       Sub-millisecond and second-scale are both real here: a warm reply is a
-       few milliseconds and a cold sandbox is tens of seconds. */
-    function timing() {
-      var ms = nowMs() - startedAt;
+    /* The server's own answer time, in the form redis-cli prints it, carried
+       by the bridge in the reply. The visitor's round trip is not measured and
+       not shown: the number is the sandbox's, so a reader far from the machine
+       sees what the server cost rather than what their network did.
+       Sub-millisecond and second-scale are both real here. A reply the bridge
+       produced without asking the server carries no elapsed value, and so
+       renders no trailer at all. */
+    function timing(env) {
+      var us = env && env.elapsed_us;
+      if (!us) { return []; }
+      var ms = us / 1000;
       var text = ms < 10 ? (Math.round(ms * 10) / 10) + ' ms'
         : ms < 1000 ? Math.round(ms) + ' ms'
         : (ms / 1000).toFixed(2) + ' s';
-      return { t: '(' + text + ')', k: 'time' };
+      return [{ t: '(' + text + ')', k: 'time' }];
     }
 
     function emit() { onLines(transcript.slice()); }
@@ -313,7 +308,7 @@
           set('offline', env);
           return;
         }
-        push(format(env).concat([timing()]));
+        push(format(env).concat(timing(env)));
         set(env && env.kind === 'error' ? 'error' : 'result', env);
       }, function () {
         if (gen !== generation) { return; }
@@ -358,7 +353,6 @@
         generation += 1;
         attempts = 0;
         last = args;
-        startedAt = nowMs();
         var line = String(text).trim().replace(/\s+/g, ' ');
         /* A command chosen from the examples is submitted, not run, so it lands
            in the history the same way a typed one does. Consecutive repeats are
@@ -378,7 +372,6 @@
         if (!last) { set('idle'); return; }
         generation += 1;
         attempts = 0;
-        startedAt = nowMs();
         run(last, generation);
       }
     };

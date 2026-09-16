@@ -27,6 +27,10 @@ The host shell has **no `go`** (`go: command not found`). The Nix dev shell prov
   `/stats` (`http://localhost:8081/stats` under `just website-dev`). `just
   website` alone serves the published tree, which loads the module from
   `cli.emb.is` — use it for `website-ink` and the published-tree check.
+  **The sandbox under `website/repl/` is deployed by hand: any change to it
+  (the bridge, `terminal.js`, the pages it serves) requires `just
+  sandbox-deploy`.** CI deploys only the static site; a merged push never
+  reaches `cli.emb.is` on its own.
 - The dependency lists are split in `flake.nix`: `serverDeps` (Go, ONNX, Redis, Ruby)
   and `websiteDeps` (browsers, image tools), behind `devShells.{default,server,website}`.
   `nix develop` = both, so every command documented here keeps working. Anything added
