@@ -134,15 +134,32 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           </a>
         </div>
 
-        <!-- The four facts the landing keeps. Everything else lives in docs/:
-             the command tables, the config block, the reply-format prose, the
-             emb-top figures, and the version strings. The release line states
+        <!-- The install choice and the four facts the landing keeps. Everything
+             else lives in docs/: the command tables, the config block, the
+             reply-format prose, the emb-top figures, and the version strings. The release line states
              the status the poster used to overstate; the measured line is the
              single number, with its reproduction one click away. -->
         <div class="hero__start">
-          <p class="hero__install">
-            <span class="hero__install-key">INSTALL</span><code class="hero__install-cmd">curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | sh</code>
-          </p>
+          <div class="hero__install">
+            <p class="hero__install-key">INSTALL</p>
+            <div class="opts">
+              <a class="opt" href="docs/index.html#install">
+                <span class="opt__key">DOCKER</span>
+                <span class="opt__body">
+                  <code class="opt__cmd">docker run -p 6379:6379 elcuervo/emb</code>
+                  <span class="opt__note">Nothing else to install — ONNX Runtime is inside the image.</span>
+                </span>
+              </a>
+              <a class="opt" href="docs/index.html#install">
+                <span class="opt__key">RUBYGEMS</span>
+                <span class="opt__body">
+                  <code class="opt__cmd">gem install emb-server</code>
+                  <span class="opt__note">Precompiled server, the same binary the script fetches.</span>
+                </span>
+              </a>
+            </div>
+            <p class="opt__more">Or <a class="hero__link" href="docs/index.html#install">the install script and the full setup guide</a>.</p>
+          </div>
           <dl class="facts hero__facts">
             <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0</span> · MIT</dd>
             <dt>BUILDS</dt><dd>macOS arm64 · Linux amd64/arm64</dd>

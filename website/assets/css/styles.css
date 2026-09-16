@@ -604,25 +604,61 @@ button{ font: inherit; color: inherit; }
   display: grid;
   gap: clamp(10px, 1.1vw, 17px);
 }
-.hero__install{
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: clamp(8px, .9vw, 15px);
+/* The install CTA: two ruled rows, each the whole clickable target, so the
+   choice between container and gem is one glance and one click. It reuses the
+   page's numbered-ledger atom (rule + uppercase mono key + a note that darkens
+   on hover) instead of inventing a card, and the accent only ever lands on the
+   rule, the command underline and the note -- three signals, none of them the
+   single hue alone. */
+.hero__install{ display: grid; gap: clamp(6px, .7vw, 11px); min-width: 0; }
+.hero__install-key{
   font-family: var(--mono);
   font-size: clamp(12px, 1.02vw, 12.5px);
-  line-height: 1.55;
-  min-width: 0;
+  letter-spacing: .05em;
+  color: var(--muted);
 }
-.hero__install-key{ color: var(--muted); letter-spacing: .05em; flex: none; }
-/* `break-word`, not `anywhere`: the URL is one 60-character token, so it may
-   break when a phone column cannot hold it, but never mid-word by choice. */
-.hero__install-cmd{
-  font: inherit;
+.opts{ display: grid; max-width: 64ch; }
+.opt{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(10px, 1.1vw, 18px);
+  align-items: baseline;
+  padding-block: clamp(8px, .75vw, 12px);
+  border-top: 1px solid var(--rule-soft);
   color: var(--fg);
-  min-width: 0;
-  overflow-wrap: break-word;
+  text-decoration: none;
+  transition: color .12s ease, border-color .12s ease;
 }
+.opt:first-child{ border-top: 1.5px solid var(--rule); }
+.opt__key{
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  flex: none;
+}
+.opt__body{ display: grid; gap: 3px; min-width: 0; }
+.opt__cmd{
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.opt__note{
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 12px);
+  line-height: 1.5;
+  color: var(--muted);
+  transition: color .12s ease;
+}
+.opt:hover,
+.opt:focus-visible{ color: var(--accent-ink); border-top-color: var(--accent-ink); }
+.opt:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
+.opt:hover .opt__cmd,
+.opt:focus-visible .opt__cmd{ text-decoration: underline; text-underline-offset: 3px; }
+.opt:hover .opt__note,
+.opt:focus-visible .opt__note{ color: var(--fg); }
+.opt__more{ font-family: var(--mono); font-size: clamp(11.5px, .95vw, 12px); line-height: 1.6; color: var(--muted); }
 .hero__facts{ max-width: 64ch; }
 .hero__link{ color: var(--accent-ink); text-underline-offset: 3px; }
 .hero__link:hover{ text-decoration-thickness: 2px; }
@@ -2020,8 +2056,9 @@ html.js.is-ready .hero__prose{
   /* the plate words, scaled by the viewBox: at <=640 the stack is ~0.9 x vw,
      so 19 units renders 14.6px at 320 and 18.3px at 390 */
   .plate-label{ font-size: 19px; }
-  /* the kept-facts block sits on the same mobile floor as every other label */
-  .hero__install, .hero__facts{ font-size: 14px; }
+  /* the install CTA and the kept-facts block sit on the same mobile floor as
+     every other label */
+  .opt__key, .opt__cmd, .hero__facts{ font-size: 14px; }
   /* the massif: --art-w decides the artwork's width and --art-h follows from
      it, and --band never falls below the art, so the spine always reaches the
      route's first point */
