@@ -1378,6 +1378,44 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
    every width by construction (--art-w), and the single constant +269.64-unit
    route shift in the terrain block is what puts the fork on the crest. */
 
+/* ── 08b terrain band ───────────────────────────────────────────────
+   The landing's closing massif, reused as a reading break between text
+   blocks on the reference and the gallery. It is the same cut-out on the
+   same paper ground, so nothing new enters the world: no second orange
+   line (the reference carries no spine, and a gallery plate spends its one
+   signal on meaning) and no new colour.
+
+   Each band is its own framing of the one massif -- a different stretch of
+   ridge at its own scale, named in the markup -- so no two dividers show
+   the same picture. They are all 8:1, so the band is one height at every
+   page, and on a phone the cut-out is cropped to its ground rather than
+   shrunk to a 49px strip.
+
+   The landing's `--band` / `--fold` are the hero's own geometry; this
+   component uses neither, which is what lets it sit on any surface. */
+.ridge{
+  position: relative;
+  background: var(--bg);
+  overflow: clip;
+}
+.ridge__art{
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  object-position: 50% 100%;
+}
+.ridge--band .ridge__art{ height: auto; }
+@media (max-width: 640px){
+  .ridge--band .ridge__art{ height: clamp(96px, 22vw, 140px); }
+}
+/* The full stop: the whole massif, exactly as the landing closes on it. On a
+   phone the band keeps the massif's size rather than shrinking it to 130px --
+   the cut-out is cropped to the peak, as the landing's own mobile terrain is. */
+.ridge--full .ridge__art{ height: auto; }
+@media (max-width: 640px){
+  .ridge--full .ridge__art{ height: clamp(180px, 46vw, 260px); object-fit: cover; }
+}
+
 
 /* ── 09 console ────────────────────────────────────────────────────
    The fourth plate, laid flat, and now a live one: the executor is the
@@ -2180,7 +2218,7 @@ html.js.is-ready .hero__prose{
   html.js .sig,
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   .masthead{ position: static; }
-  .terrain, .features, .pipeline, .note, .feat{ break-inside: avoid; }
+  .terrain, .ridge, .features, .pipeline, .note, .feat{ break-inside: avoid; }
   /* The page inverts once, and these are the surfaces that carry light text on a
      dark ground: the scripts block, the console, the emb-top capture, the footer,
      the masthead's dark button, the block header bars, and the skip link. Chrome

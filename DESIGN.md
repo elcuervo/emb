@@ -892,6 +892,47 @@ callouts: they sit in the paper beside the massif and never point at anything.
 
 ---
 
+# The terrain as a reading break
+
+The massif is not only the landing's full stop. The reference and every gallery
+plate reuse it — the same cut-out, the same paper ground, the same engraved
+black-and-cream — as a band of rock between text blocks. The world is not forked
+and no second asset enters it:
+
+```html
+<section class="ridge ridge--band" aria-hidden="true">
+  <img class="ridge__art" src="../assets/img/terrain-slope.png"
+       width="1200" height="150" alt="" decoding="async" fetchpriority="low">
+</section>
+```
+
+`ridge--band` is an 8:1 bottom-anchored stretch of the ridge. There are
+thirteen of them — `slope`, `crag`, `saddle`, `foothill`, `pass`, `scarp`,
+`shoulder`, `west`, `cragw`, and the mirrored `range`, `descent`, `outcrop`,
+`bluff` — so every divider on the reference and the gallery is its own
+framing of the same massif: no two pages show the same picture, and the
+reference's two bands are `slope` and `pass`. `ridge--full` is the closing
+statement, the whole massif from `terrain-matte.png`, exactly as the landing
+closes on it — taller on a phone, where the cut-out is cropped to the peak
+rather than shrunk to a 49px strip. The component lives in `styles.css`, both
+surfaces link it, and it carries neither `--fold` nor `--band`: the hero's
+geometry does not follow it onto a page that has no hero.
+
+**No orange route here, and that is the constraint, not an omission.** The
+reference brief carries no second orange line, and a gallery plate spends its
+one signal on meaning. A band is a photograph of rock on paper: the eye gets a
+rest and the argument is unchanged. The route stays the landing's, where it is
+the page's spine.
+
+**Its placement is the reading order.** On the documentation, one band before
+Configuration and one before Benchmarks bracket the dense middle, and the full
+massif closes the page. On a gallery plate, one band falls after the dark `TRY
+IT` plate and before the explanation, so the reader leaves the instrument, sees
+the ground, and comes back to prose. `.ridge` is listed with `.terrain` in the
+print block's `break-inside: avoid`, so a band never splits across pages.
+
+---
+
 # Decorative crosshair
 
 There should be a simple technical cross symbol near the lower-right portion of the architecture area:
@@ -1464,6 +1505,24 @@ The orange line connecting sections.
 ## BrutalistButton
 
 Square button with physical offset shadow.
+
+## TerrainBand
+
+The landing's massif reused as a reading break on the reference and the
+gallery: a full-bleed `.ridge` section whose `.ridge__art` is one framing of
+the one keyed matte. `ridge--band` is an 8:1 bottom-anchored stretch of ridge
+(`terrain-slope.png`, `terrain-crag.png`, `terrain-saddle.png`, … — thirteen
+of them, one per divider, named in the markup); `ridge--full` is the whole
+massif (`terrain-matte.png`) as the landing closes on it. It carries no
+`--fold` and no route, so a page without a hero gets the ground without the
+spine.
+
+```html
+<section class="ridge ridge--band" aria-hidden="true">
+  <img class="ridge__art" src="assets/img/terrain-slope.png"
+       width="1200" height="150" alt="" decoding="async" fetchpriority="low">
+</section>
+```
 
 ---
 

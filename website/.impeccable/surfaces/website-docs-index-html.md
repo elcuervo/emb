@@ -164,3 +164,47 @@ FINISH: unreviewed and undocumented is unfinished. This build ends with the
 detector run once over the changed files, the measured floors and contrast on
 both surfaces, a `file://` load with no third-party request, and both surfaces
 captured at 1086 and 390.
+
+---
+## Amendment — the terrain bands
+
+**Scope: three `.ridge` sections and nothing else.** Every heading, ledger, code
+specimen, and section order above is unchanged; the reading experience gains a
+band of the landing's massif between the dense middle and a closing massif
+before the footer.
+
+**What changes.** The page carries the landing's own terrain as two `.ridge`
+bands — `terrain-slope.png` between Replies and Configuration, `terrain-pass.png`
+between Operations and Benchmarks — and the full `terrain-matte.png` as a
+closing band before the footer. Each band is a different framing of the same
+keyed matte, so the two do not repeat. The component is defined once in
+`styles.css`, which both surfaces link, and carries neither `--fold` nor
+`--band`, so it cannot pull the hero's geometry onto a page that has no hero.
+
+**Constraints carried over, and how each is met**
+
+- *Inherit the world, do not fork it.* Same cut-out, same paper ground, same
+  engraving, same tokens. The bands are new framings of the one keyed matte,
+  declared in `published-tree.py`; one new atom.
+- *No axis, no second orange line.* The bands are monochrome. They carry no
+  route, no spine, no `--fold`; the orange never appears on this surface.
+- *Atoms only.* The band is a `.ridge` ground and an `object-fit: cover` crop of
+  one shipped image — no card, gradient, radius, shadow, or glass. The two mid
+  bands and the closing band are the same asset read through different crops.
+- *Type floor and contrast.* The bands carry no text. `aria-hidden="true"` and
+  `alt=""`; the massif is decoration and the sections around it keep their own
+  headings and anchors.
+- *No third-party request, `file://` works.* The images are same-origin files
+  referenced by relative path; no script, no CDN, no build step.
+- *Print.* `.ridge` is added to the print block's `break-inside: avoid` list, so
+  a band is not split across pages.
+
+**Detector.** `impeccable detect --json` over the changed files — the two
+surfaces and `styles.css` — was run once after the build and compared finding by
+finding against the same run in a worktree of `HEAD`: identical counts and
+identical findings. The bands add nothing the detector flags.
+
+**Why monochrome.** The route is the landing's spine; on a reference page it
+would be the second orange line the brief forbids, and it would compete with the
+one accent the ledgers already spend. The engraving carries the break on its
+own.
