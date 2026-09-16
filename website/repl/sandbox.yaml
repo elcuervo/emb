@@ -18,9 +18,18 @@ listen: "127.0.0.1:6379"
 # ceiling (20,000 texts per window) can produce only ~29 MB of them, so the
 # budget never binds. It is written out rather than `auto` because this machine
 # is 1.92 GiB with ~0.45 GiB free once both models are warm, and `auto` (13% of
-# RAM) would claim 268 MB of that. No cache_file: this is a sandbox, so a
-# restart may start cold and nothing is written to the volume.
+# RAM) would claim 268 MB of that.
 cache: 64MB
+
+# The warm cache lives on the volume beside the models, so a restart reloads it
+# instead of starting cold. `cache_load` and `cache_save_on_shutdown` already
+# default to true, so naming the file is the whole change; it is written 0600,
+# holds the demo's own input text, and is disposable — deleting it is always
+# safe. A graceful stop flushes it; the interval is the backstop for a restart
+# that never got a signal. The path is a file directly under `/data` because the
+# mount root exists and the snapshot writer does not create directories.
+cache_file: /data/cache.embcache
+cache_save: 30m
 
 max_texts: 8
 max_pairs: 8
