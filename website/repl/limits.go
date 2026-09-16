@@ -20,6 +20,8 @@ type Limits struct {
 	MaxArgs        int           // argv length cap
 	MaxTextBytes   int           // bytes per text
 	MaxTexts       int           // texts per request
+	MaxImages      int           // base64 image arguments per request
+	MaxImageBytes  int           // decoded bytes per image argument
 	WorkWindow     time.Duration // rolling window for the work ceiling
 	WorkCeiling    int           // work units (texts) per window
 	Timeout        time.Duration // per-command upstream deadline
@@ -39,9 +41,15 @@ func DefaultLimits() Limits {
 		MaxArgs:        64,
 		MaxTextBytes:   2 << 10,
 		MaxTexts:       8,
-		WorkWindow:     60 * time.Second,
-		WorkCeiling:    20_000,
-		Timeout:        30 * time.Second,
+		// Images are far larger than texts and far more expensive to decode, so
+		// the sandbox admits two per request at a quarter of a megabyte each.
+		// The server's own decode caps (`max_image_bytes`, `max_image_pixels`)
+		// bound the pixel count; this bounds the wire.
+		MaxImages:     2,
+		MaxImageBytes: 256 << 10,
+		WorkWindow:    60 * time.Second,
+		WorkCeiling:   20_000,
+		Timeout:       30 * time.Second,
 	}
 }
 
@@ -225,8 +233,10 @@ func (l *limiter) acquireSlot() (func(), error) {
 }
 
 // chargeShape applies the per-request caps and returns the request's work cost
-// in texts. Each cap states which bound was hit and by how much.
-func (l *limiter) chargeShape(args []string) (int, error) {
+// in texts. Each cap states which bound was hit and by how much. `bin` names the
+// arguments that carry decoded image bytes, which are bounded by MaxImageBytes
+// instead of the text cap.
+func (l *limiter) chargeShape(args []string, bin map[int]bool) (int, error) {
 	if l.limits.MaxArgs > 0 && len(args) > l.limits.MaxArgs {
 		return 0, &boundError{text: "request carries " + strconv.Itoa(len(args)) + " arguments, above the sandbox cap of " + strconv.Itoa(l.limits.MaxArgs)}
 	}
@@ -235,7 +245,10 @@ func (l *limiter) chargeShape(args []string) (int, error) {
 		return 0, &boundError{text: "request carries " + strconv.Itoa(work) + " texts, above the sandbox cap of " + strconv.Itoa(l.limits.MaxTexts)}
 	}
 	if l.limits.MaxTextBytes > 0 {
-		for _, a := range args {
+		for i, a := range args {
+			if bin[i] {
+				continue
+			}
 			if len(a) > l.limits.MaxTextBytes {
 				return 0, &boundError{text: "one argument is " + strconv.Itoa(len(a)) + " bytes, above the sandbox text cap of " + strconv.Itoa(l.limits.MaxTextBytes)}
 			}

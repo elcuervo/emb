@@ -1,0 +1,305 @@
+{
+  "asset": {
+    "bytes": 6410240,
+    "db": "poe-85ee3149.db",
+    "hash": "66e3304e"
+  },
+  "attribution": "Texts: Edgar Allan Poe (1809–1849), public domain, via Project Gutenberg.",
+  "corpus": {
+    "path": "website/tools/demos/poe.jsonl",
+    "sha256": "85ee314903bbf558f6b7fceab9e4f09d28aa714b4bdd3d84c018e0231fa8875c",
+    "words": 392799,
+    "works": 86
+  },
+  "count": 2782,
+  "generated_by": "website/tools/build-demo-db.py",
+  "models": [
+    {
+      "dimension": 384,
+      "max_length": 512,
+      "name": "minilm",
+      "projection": "pca2",
+      "quantization": "int8",
+      "recall_at_k": 0.9541,
+      "recall_k": 10,
+      "regions": [
+        {
+          "count": 301,
+          "cx": 0.1246,
+          "cy": -0.0329,
+          "id": 0,
+          "label": "THE DESCENT",
+          "radius": 0.2745,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "The Gold-Bug",
+            "The Unparalleled Adventure of One Hans Pfaall"
+          ]
+        },
+        {
+          "count": 200,
+          "cx": 0.2639,
+          "cy": -0.1929,
+          "id": 1,
+          "label": "THE AIR",
+          "radius": 0.2458,
+          "top_works": [
+            "The Unparalleled Adventure of One Hans Pfaall",
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "The Balloon-Hoax"
+          ]
+        },
+        {
+          "count": 221,
+          "cx": -0.1533,
+          "cy": -0.047,
+          "id": 2,
+          "label": "THE BRIDE",
+          "radius": 0.2426,
+          "top_works": [
+            "The Spectacles",
+            "Ligeia",
+            "The System of Doctor Tarr and Professor Fether"
+          ]
+        },
+        {
+          "count": 169,
+          "cx": -0.059,
+          "cy": 0.0762,
+          "id": 3,
+          "label": "DETECTION",
+          "radius": 0.2434,
+          "top_works": [
+            "The Mystery of Marie Rogêt",
+            "The Murders in the Rue Morgue",
+            "The Premature Burial"
+          ]
+        },
+        {
+          "count": 305,
+          "cx": -0.1418,
+          "cy": 0.0137,
+          "id": 4,
+          "label": "THE LITERATI",
+          "radius": 0.2193,
+          "top_works": [
+            "The Literary Life of Thingum Bob, Esq.",
+            "Diddling",
+            "Bon-Bon"
+          ]
+        },
+        {
+          "count": 236,
+          "cx": -0.1317,
+          "cy": -0.1815,
+          "id": 5,
+          "label": "THE METAPHYSIC",
+          "radius": 0.2558,
+          "top_works": [
+            "Mesmeric Revelation",
+            "The Domain of Arnheim",
+            "The Landscape Garden"
+          ]
+        },
+        {
+          "count": 285,
+          "cx": 0.0005,
+          "cy": -0.1673,
+          "id": 6,
+          "label": "THE DREAM",
+          "radius": 0.2599,
+          "top_works": [
+            "Four Beasts in One",
+            "The Thousand-and-Second Tale of Scheherazade",
+            "The Fall of the House of Usher"
+          ]
+        },
+        {
+          "count": 395,
+          "cx": -0.1042,
+          "cy": 0.1384,
+          "id": 7,
+          "label": "THE CRIME",
+          "radius": 0.2401,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "Thou Art the Man",
+            "William Wilson"
+          ]
+        },
+        {
+          "count": 392,
+          "cx": -0.0265,
+          "cy": 0.0953,
+          "id": 8,
+          "label": "THE PIT",
+          "radius": 0.2618,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "The Unparalleled Adventure of One Hans Pfaall",
+            "The Pit and the Pendulum"
+          ]
+        },
+        {
+          "count": 278,
+          "cx": 0.2852,
+          "cy": 0.145,
+          "id": 9,
+          "label": "THE SEA",
+          "radius": 0.2493,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "A Descent into the Maelström",
+            "MS. Found in a Bottle"
+          ]
+        }
+      ],
+      "table": "vec_minilm"
+    },
+    {
+      "dimension": 384,
+      "max_length": 512,
+      "name": "bge-small",
+      "projection": "pca2",
+      "quantization": "int8",
+      "recall_at_k": 0.9486,
+      "recall_k": 10,
+      "regions": [
+        {
+          "count": 252,
+          "cx": -0.0791,
+          "cy": 0.0436,
+          "id": 0,
+          "label": "THE TREATISE",
+          "radius": 0.1796,
+          "top_works": [
+            "The Gold-Bug",
+            "Some Words with a Mummy",
+            "The Narrative of Arthur Gordon Pym of Nantucket"
+          ]
+        },
+        {
+          "count": 147,
+          "cx": 0.033,
+          "cy": 0.1795,
+          "id": 1,
+          "label": "THE AIR",
+          "radius": 0.2171,
+          "top_works": [
+            "The Unparalleled Adventure of One Hans Pfaall",
+            "The Balloon-Hoax",
+            "Mellonta Tauta"
+          ]
+        },
+        {
+          "count": 327,
+          "cx": 0.0552,
+          "cy": 0.0,
+          "id": 2,
+          "label": "THE DREAM",
+          "radius": 0.2257,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "Landor’s Cottage",
+            "The Fall of the House of Usher"
+          ]
+        },
+        {
+          "count": 314,
+          "cx": 0.1027,
+          "cy": -0.0558,
+          "id": 3,
+          "label": "THE PURSUIT",
+          "radius": 0.1912,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "The Unparalleled Adventure of One Hans Pfaall",
+            "The Gold-Bug"
+          ]
+        },
+        {
+          "count": 464,
+          "cx": 0.053,
+          "cy": -0.1626,
+          "id": 4,
+          "label": "THE PLAGUE",
+          "radius": 0.1798,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "The Pit and the Pendulum",
+            "The Spectacles"
+          ]
+        },
+        {
+          "count": 244,
+          "cx": -0.183,
+          "cy": 0.0566,
+          "id": 5,
+          "label": "THE METAPHYSIC",
+          "radius": 0.1909,
+          "top_works": [
+            "The Domain of Arnheim",
+            "The Landscape Garden",
+            "Mesmeric Revelation"
+          ]
+        },
+        {
+          "count": 245,
+          "cx": 0.1986,
+          "cy": 0.1232,
+          "id": 6,
+          "label": "THE SEA",
+          "radius": 0.2048,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "A Descent into the Maelström",
+            "MS. Found in a Bottle"
+          ]
+        },
+        {
+          "count": 455,
+          "cx": -0.1053,
+          "cy": -0.0714,
+          "id": 7,
+          "label": "THE TRICK",
+          "radius": 0.189,
+          "top_works": [
+            "The Literary Life of Thingum Bob, Esq.",
+            "The System of Doctor Tarr and Professor Fether",
+            "The Spectacles"
+          ]
+        },
+        {
+          "count": 223,
+          "cx": -0.1218,
+          "cy": 0.0715,
+          "id": 8,
+          "label": "DETECTION",
+          "radius": 0.1967,
+          "top_works": [
+            "The Mystery of Marie Rogêt",
+            "The Murders in the Rue Morgue",
+            "Thou Art the Man"
+          ]
+        },
+        {
+          "count": 111,
+          "cx": 0.1013,
+          "cy": 0.2537,
+          "id": 9,
+          "label": "THE WHIRLPOOL",
+          "radius": 0.2096,
+          "top_works": [
+            "The Narrative of Arthur Gordon Pym of Nantucket",
+            "The Balloon-Hoax",
+            "The Thousand-and-Second Tale of Scheherazade"
+          ]
+        }
+      ],
+      "table": "vec_bge_small"
+    }
+  ],
+  "precision": "int8",
+  "sqlite_vec": "v0.1.9",
+  "vector_type": "vec_int8"
+}

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the cache — the second call is already answered</title>
+<link rel="canonical" href="https://emb.is/demos/cache.html">
+<meta name="description" content="The same passage embedded twice. The first call fills emb's cache; the second is a hit, and the server's own counters show it.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the cache — the second call is already answered">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Ask once, ask again: emb memoizes the vector, and the second answer is a lookup instead of a model pass.">
+<meta property="og:url" content="https://emb.is/demos/cache.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the cache — the second call is already answered">
+<meta name="twitter:description" content="Ask once, ask again: emb memoizes the vector, and the second answer is a lookup instead of a model pass.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The cache</h1>
+          <p class="plate__teaches">
+            Ask once, ask again. emb keys a vector by the model, the text and the
+            settings, so the second ask is a lookup — not a second pass over the
+            model.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 8 — THE CACHE</b>
+            · <b data-fig-hit>—</b> hit rate
+            · <b data-fig-entries>—</b> entries
+            · <b data-fig-dim>—</b> dimensions
+            · <b>server-side µs</b></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+            <p class="block__deck">
+              Embedding the same text twice is work a server does not have to do
+              twice. The vector is a pure function of the model and the text: the
+              same bytes in always produce the same 384 floats out. That makes it
+              safe to remember, and <span class="t-cmd">emb</span> remembers it in
+              an LRU bounded by a memory budget.
+            </p>
+            <p class="block__deck">
+              The plate asks the sandbox for one passage twice and reads the
+              model's own cache counters around the pair. You will see the second
+              answer leave the cache. If someone has already asked for this exact
+              passage, the first one does too — and the plate says so, because
+              the counters are the server's and not a story about them. Type a
+              passage of your own and the first ask is a miss, the second a hit.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+
+            <div data-live class="rig" data-rig="cache">
+              <svg class="atlas__svg" data-plot viewBox="0 0 640 150" role="img"
+                   aria-label="Two bars comparing the first call against the second, cached call"></svg>
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="c-q">A passage to ask for twice</label>
+                <input class="rig__input" id="c-q" autocomplete="off" spellcheck="false"
+                       value="And Darkness and Decay and the Red Death held illimitable dominion over all.">
+                <button class="rig__go" type="submit">Ask twice</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <!-- the massif, as a reading break: the same cut-out the landing closes on.
+         No route and no second signal -- a gallery plate spends its one accent
+         on meaning. -->
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-cragw.png" width="1600" height="200" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+            <p class="block__deck">
+              Two identical <span class="t-cmd">EMB</span> commands went to the
+              sandbox with an <span class="t-cmd">EMB.INFO</span> before and
+              after each. The first call either missed the cache and filled it,
+              or was already a hit; the second was a hit either way. The
+              <span class="t-cmd">cache_hits</span> counter moved by at least one,
+              and the second <span class="t-cmd">elapsed_us</span> is the
+              server's time for the answer it actually gave.
+            </p>
+            <p class="block__deck">
+              Nothing on the page needed to arrange this. There is no
+              <span class="t-cmd">CACHE GET</span> to call first and no warm-up
+              step in the client: every command path —
+              <span class="t-cmd">EMB</span>, <span class="t-cmd">EMB.MULTI</span>,
+              a Lua preset's <span class="t-cmd">emb.embed</span> — reads and
+              writes the same cache, so a vector computed for one plate is
+              already there for the next.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+            <p class="block__deck">
+              Real traffic repeats itself. A search box re-asks the same query as
+              someone types; a queue retries; a page reloads; a corpus is
+              re-indexed and half the documents have not changed. A cache turns
+              every one of those repeats from inference into a memory read, and
+              it is the cheapest speed-up available — no new hardware, no smaller
+              model, no loss of quality, because it returns the <em>same</em>
+              vector, not an approximation of it.
+            </p>
+            <p class="block__deck">
+              It is also why the gallery can afford to be live. Every demo here
+              runs against one shared 2&nbsp;GB machine; the canned queries are
+              cached after their first reader, so a room full of visitors mostly
+              reads memory. The plate that teaches the trick is also how the
+              rest of them stay up.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+            <p class="block__deck">
+              The counters are part of the model's own info, so the claim is
+              checkable from any client. A repeat across two different visitors
+              is a hit for the second one.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB.INFO minilm
+# -> cache_hits, cache_misses, cache_hit_rate
+
+EMB minilm "the passage"
+# first ask — a miss, and it fills the entry
+
+EMB minilm "the passage"
+# second ask — a hit, served without the model
+
+EMB.INFO minilm
+# the same counters, moved by one hit
+
+INFO cache
+# the whole server's totals, including the hit rate</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, envelopeValue, tween } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'minilm';
+const root = document.querySelector('[data-rig="cache"]');
+const form = root.querySelector('[data-form]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const plot = document.querySelector('[data-plot]');
+const go = root.querySelector('.rig__go');
+const NS = 'http://www.w3.org/2000/svg';
+const X0 = 232, MAXW = 316, BAR = 24;
+
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function label(text, x, y, cls) {
+  const node = svg('text', { class: cls || 'atlas__region', x: x, y: y });
+  node.textContent = text;
+  return node;
+}
+function draw(first, second, animate) {
+  const max = Math.max(first || 0, second || 0, 1);
+  const width = (v) => (v > 0 ? Math.max(2, (v / max) * MAXW) : 0);
+  const w1 = width(first), w2 = width(second);
+  const r1 = svg('rect', { class: 'atlas__mark', x: X0, y: 36, width: (animate ? 0 : w1).toFixed(1), height: BAR });
+  const r2 = svg('rect', { class: 'atlas__mark is-hit', x: X0, y: 96, width: (animate ? 0 : w2).toFixed(1), height: BAR });
+  plot.replaceChildren(
+    label('FIRST ASK', 12, 62, 'atlas__region'),
+    label('SECOND ASK · CACHED', 12, 122, 'atlas__region'),
+    r1,
+    label(first ? first.toLocaleString('en-US') + ' µs' : '—', X0 + w1 + 10, 53, 'atlas__label'),
+    r2,
+    label(second ? second.toLocaleString('en-US') + ' µs' : '—', X0 + w2 + 10, 113, 'atlas__label')
+  );
+  if (animate) {
+    tween(650, (t) => {
+      r1.setAttribute('width', (w1 * t).toFixed(1));
+      r2.setAttribute('width', (w2 * t).toFixed(1));
+    });
+  }
+}
+/* EMB.INFO replies as a flat field/value array; pairing it back up is what lets
+ * the plate read `cache_hits` by name rather than by position. */
+function fields(envelope) {
+  const flat = envelopeValue(envelope);
+  const out = {};
+  if (Array.isArray(flat)) {
+    for (let i = 0; i + 1 < flat.length; i += 2) { out[flat[i]] = flat[i + 1]; }
+  }
+  return out;
+}
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+async function run() {
+  const text = root.querySelector('#c-q').value;
+  go.disabled = true;
+  setState('running');
+  draw(null, null);
+  try {
+    const before = fields(await g.raw(['EMB.INFO', MODEL]));
+    const first = await g.raw(['EMB', MODEL, text]);
+    const second = await g.raw(['EMB', MODEL, text]);
+    const after = fields(await g.raw(['EMB.INFO', MODEL]));
+    // The server's own execution time for each command, not the page's clock:
+    // timing the request here would fold in the network between the reader and
+    // the sandbox, which is not what the cache changes.
+    const firstUs = Number(first.elapsed_us) || 0;
+    const secondUs = Number(second.elapsed_us) || 0;
+    const hits = Number(after.cache_hits) - Number(before.cache_hits);
+    const misses = Number(after.cache_misses) - Number(before.cache_misses);
+    const cold = misses > 0;
+    draw(firstUs, secondUs, true);
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'first ask ' }),
+      el('b', { text: firstUs.toLocaleString('en-US') + ' µs' }),
+      el('span', { text: ' — ' + (cold ? 'miss, and it filled the entry\n' : 'already cached from an earlier ask\n') }),
+      el('span', { class: 'k', text: 'second ask ' }),
+      el('b', { text: secondUs.toLocaleString('en-US') + ' µs' }),
+      el('span', { text: ' — a hit, served without the model\n' }),
+      el('span', { class: 'k', text: 'cache moved ' }),
+      el('b', { text: '+' + hits + ' hit' + (hits === 1 ? '' : 's') + ' · +' + misses + ' miss' + (misses === 1 ? '' : 'es') }),
+      el('span', { text: ' in this model\n' }),
+      el('span', { class: 'k', text: 'hit rate ' }),
+      el('b', { text: String(after.cache_hit_rate || '—') }),
+      el('span', { text: ' · ' }),
+      el('b', { text: Number(after.cache_entries || 0).toLocaleString('en-US') }),
+      el('span', { text: ' entries live · server execution time, network excluded' })
+    );
+    document.querySelector('[data-fig-hit]').textContent = after.cache_hit_rate || '—';
+    document.querySelector('[data-fig-entries]').textContent = Number(after.cache_entries || 0).toLocaleString('en-US');
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    draw(null, null);
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+g.manifest().then((m) => {
+  const entry = m.models.find((x) => x.name === MODEL) || m.models[0];
+  document.querySelector('[data-fig-dim]').textContent = entry.dimension;
+}).catch(() => {});
+draw(null, null);
+
+</script>
+</body>
+</html>

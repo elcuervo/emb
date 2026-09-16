@@ -172,6 +172,23 @@ download-model repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
     if [ -s "{{dir}}/config.json" ]; then echo "✓ config.json already exists"; else curl -sL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"; fi; \
     curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/preprocessor_config.json" -o "{{dir}}/preprocessor_config.json" && echo "  preprocessor_config.json" || rm -f "{{dir}}/preprocessor_config.json"
 
+# Download the pre-quantized (int8) weights beside the fp32 file, so a local
+# server loads the same precision the sandbox serves. `resolveQuantize` prefers
+# a sibling `model_quantized.onnx` whether or not the fp32 file is present.
+# Usage: just download-model-quantized [huggingface_repo] [output_dir]
+download-model-quantized repo="Xenova/all-MiniLM-L6-v2" dir="./models/minilm":
+    @mkdir -p {{dir}}
+    @if [ -f "{{dir}}/model_quantized.onnx" ] && [ "$(wc -c < '{{dir}}/model_quantized.onnx')" -gt 100 ]; then \
+        echo "✓ model_quantized.onnx already exists at {{dir}}"; \
+    else \
+        echo "Downloading {{repo}} (int8)..."; \
+        curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/onnx/model_quantized.onnx" -o "{{dir}}/model_quantized.onnx" \
+          || { rm -f "{{dir}}/model_quantized.onnx"; curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/model_quantized.onnx" -o "{{dir}}/model_quantized.onnx"; } \
+        && echo "  model_quantized.onnx"; \
+    fi; \
+    if [ -s "{{dir}}/tokenizer.json" ]; then echo "✓ tokenizer.json already exists"; else curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/tokenizer.json" -o "{{dir}}/tokenizer.json" && echo "  tokenizer.json"; fi; \
+    if [ -s "{{dir}}/config.json" ]; then echo "✓ config.json already exists"; else curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/config.json" -o "{{dir}}/config.json" && echo "  config.json"; fi
+
 # Download a vision export for EMB.IMG: a SigLIP2/CLIP ONNX vision model plus
 # its preprocessor_config.json (mean/std/rescale/size/crop/resample).
 # Usage: just download-vision-model [huggingface_repo] [output_dir]
@@ -506,6 +523,7 @@ website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
 #     just website-ink                          # the landing
 #     just website-ink http://localhost:8080 docs   # the documentation surface
 #     just website-ink http://localhost:8080 404    # the not-found page
+#     just website-ink http://localhost:8080 demos/batch.html   # a single plate
 #
 # The wait is not optional: the probe measures all 24 widths asynchronously, and
 # evaluating before `window.__inkProbe` exists reports "RUNNING…". The assertion
@@ -657,6 +675,77 @@ website-presets:
 
 website-presets-check:
     python3 website/tools/stamp-presets.py --check
+
+# ── the demos gallery's corpus and index ─────────────────────────────────
+#
+# `poe.jsonl` and the `.db` are committed, so the site builds with no tooling;
+# these two targets are how they are rebuilt, and `--check` is how a drift is
+# caught before it ships.
+#
+# `website-poe` re-fetches the public-domain volumes from Project Gutenberg,
+# strips the acquisition boilerplate, and re-chunks the corpus. It is
+# deterministic: same sources in, same bytes out.
+website-poe:
+    python3 website/tools/demos/fetch-poe.py
+
+website-poe-check:
+    python3 website/tools/demos/fetch-poe.py --check
+
+# `website-demos` embeds the committed corpus against a **local** `emb` and
+# writes the committed index: one `vec0` table per model, the build-time 2D
+# projection, the named cluster regions, and the manifest every gallery figure
+# is read from. It starts its own server on :16389 with the sandbox's own config
+# (paths rewritten to ./models) and stops it again, so the index is built by the
+# models the sandbox serves.
+#
+#   just website-demos                       # minilm + bge-small
+#   just website-demos models=minilm
+website-demos models="minilm,bge-small": build
+    @set -eu; \
+    cfg=website/repl/.sandbox-index.yaml; \
+    port=16389; \
+    if [ -z "{{ort_lib}}" ]; then echo "website-demos: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
+    sed -e "s|^listen: .*|listen: \"127.0.0.1:$port\"|" -e "s|/data/models|$PWD/models|" \
+        website/repl/sandbox.yaml > "$cfg"; \
+    for onnx in $(grep -E '^[[:space:]]+onnx:' "$cfg" | awk '{print $2}'); do \
+      [ -f "$onnx" ] || [ -f "$(dirname $onnx)/model_quantized.onnx" ] || { echo "website-demos: missing $onnx"; \
+        echo "  fetch it with: just download-model-quantized <repo> $(dirname $onnx)"; exit 1; }; \
+    done; \
+    trap 'kill $(cat /tmp/emb-demos.pid) 2>/dev/null || true; rm -f "$cfg"' EXIT; \
+    echo "website-demos: emb on 127.0.0.1:$port"; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" > /tmp/emb-demos.log 2>&1 & echo $! > /tmp/emb-demos.pid; \
+    for i in $(seq 1 300); do redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
+    redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK || { echo "website-demos: emb did not become ready"; tail -20 /tmp/emb-demos.log; exit 1; }; \
+    python3 website/tools/build-demo-db.py --emb 127.0.0.1:$port --models "{{models}}"
+
+# Re-vendor the browser's pinned `sqlite-vec` build, exactly as
+# `just website-player` does for the asciinema player. Two files come out of the
+# npm tarball: the ES module and the wasm it loads beside itself, whose filename
+# the module resolves on its own. Nothing in the tree links a CDN.
+#
+# Run inside `nix develop`, which is what exports `$SQLITE_WASM_VEC_TARBALL`.
+website-demos-vendor:
+    @set -eu; \
+    ver="${SQLITE_WASM_VEC_VERSION:?run inside 'nix develop'}"; \
+    tmp=$(mktemp -d /tmp/sqlite-wasm-vec.XXXXXX); \
+    trap 'rm -rf "$tmp"' EXIT; \
+    tar xzf "$SQLITE_WASM_VEC_TARBALL" -C "$tmp"; \
+    mkdir -p website/assets/vendor/sqlite-wasm-vec-$ver; \
+    cp "$tmp/package/sqlite-wasm/jswasm/sqlite3-bundler-friendly.mjs" website/assets/vendor/sqlite-wasm-vec-$ver/; \
+    cp "$tmp/package/sqlite-wasm/jswasm/sqlite3.wasm" website/assets/vendor/sqlite-wasm-vec-$ver/; \
+    python3 -c 'import hashlib, sys; [print(hashlib.sha256(open(p, "rb").read()).hexdigest(), p) for p in sys.argv[1:]]' \
+      website/assets/vendor/sqlite-wasm-vec-$ver/*
+
+# Assert the committed wasm is exactly the pinned release, byte for byte.
+website-demos-vendor-check:
+    @set -eu; \
+    ver="${SQLITE_WASM_VEC_VERSION:?run inside 'nix develop'}"; \
+    tmp=$(mktemp -d /tmp/sqlite-wasm-vec.XXXXXX); \
+    trap 'rm -rf "$tmp"' EXIT; \
+    tar xzf "$SQLITE_WASM_VEC_TARBALL" -C "$tmp"; \
+    cmp "$tmp/package/sqlite-wasm/jswasm/sqlite3-bundler-friendly.mjs" "website/assets/vendor/sqlite-wasm-vec-$ver/sqlite3-bundler-friendly.mjs"; \
+    cmp "$tmp/package/sqlite-wasm/jswasm/sqlite3.wasm" "website/assets/vendor/sqlite-wasm-vec-$ver/sqlite3.wasm"; \
+    echo "website-demos-vendor-check: the vendored sqlite-vec is sqlite-wasm-vec $ver, byte for byte"
 
 # ── the sandbox (website/repl) ───────────────────────────────────────────
 #

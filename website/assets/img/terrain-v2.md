@@ -56,3 +56,22 @@ warm off-white #F3F0E8. No background texture whatsoever, no checkerboard, no
 shadows or haze in the background. The background must be a single uniform
 solid color up to the sharp edge of the rocks. All rock pixels should remain
 unchanged. Keep the wide 3:1 aspect.
+
+## The reading breaks
+
+Thirteen `terrain-<name>.png` bands are the same keyed matte, each framing a
+different stretch of the ridge at its own scale, with four of them mirrored
+(`range`, `descent`, `outcrop`, `bluff`) so no two dividers show the same
+picture. They are bottom-anchored 8:1 crops of the source — `slope` is the
+left slope, `crag` the twin crag, `saddle` the saddle, `west` the whole
+range — quantised with `pngquant --quality=65-85`. Alpha is derived the same
+way it is for the full cut-out (`gen-terrain-matte.py`'s keying, re-run over
+the crop): the pixels are `terrain-v2.png`'s own and nothing is redrawn.
+
+They exist so the reference and the gallery can carry a band of rock between
+text blocks without every page paying for the full 2172 × 722 cut-out. They
+run from 55 KB to 166 KB against the matte's 0.80 MB, which the closing band
+still reads on its own, and every page loads exactly one. All of them are
+declared in `tools/published-tree.py`'s `SERVED` set and inherit
+`/assets/img/*`'s cache rule, so a change to one is a rename and a new URL
+rather than a stale one.

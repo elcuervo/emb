@@ -145,6 +145,31 @@ in the folder as the matte's source and are excluded from the deployed tree.
 5. **Extensible without forking.** The Lua surface is how users bend the pipeline
    to their problem instead of asking upstream to.
 
+## The demos gallery
+
+`emb.is/demos` is a **demonstration**, not a hosted product. It exists to show
+what an embeddings server and a vector index do together, on a corpus of
+public-domain text that is committed to the repository and embedded before
+deployment.
+
+What that means for a visitor, in the plainest terms:
+
+- **No account, no identity, no stored preference.** Nothing on the gallery asks
+  who you are, and there is nothing to sign in to.
+- **Your text is ephemeral.** Whatever you type is used to answer that one
+  request. It is not stored, not added to the corpus, not shown to anyone else,
+  and not used to train anything. The sandbox writes nothing to disk.
+- **The corpus is fixed.** Every retrieval result comes from the committed Poe
+  corpus; no visitor action can add, remove or change an item in it.
+- **There is no hosted offering.** `emb` is downloadable, self-hosted software.
+  The gallery runs on one small machine to demonstrate it, and nothing about the
+  demonstration implies a managed service, a subscription, or an SLA.
+
+The gallery's figures are read from the shipped index and from the server's own
+metadata rather than typed into the page, and where the sandbox cannot be
+reached the page says so and shows nothing. That is the same posture as the rest
+of the product: state what is true, and let the reader run it themselves.
+
 ## Accessibility & Inclusion
 
 Committed for the web surface (`DESIGN.md`, `website/`):

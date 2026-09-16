@@ -700,16 +700,16 @@ func TestRequestAndTextCapsRefuseIndependently(t *testing.T) {
 	l.MaxTextBytes = 8
 	b := newTestBridge(t, "127.0.0.1:1", presets{}, l)
 
-	if _, err := b.lim.chargeShape([]string{"PING", "a", "b", "c", "d"}); err == nil || !strings.Contains(err.Error(), "arguments") {
+	if _, err := b.lim.chargeShape([]string{"PING", "a", "b", "c", "d"}, nil); err == nil || !strings.Contains(err.Error(), "arguments") {
 		t.Fatalf("argv cap err = %v, want an argument-count refusal", err)
 	}
-	if _, err := b.lim.chargeShape([]string{"EMB", "minilm", "a", "b"}); err == nil || !strings.Contains(err.Error(), "texts") {
+	if _, err := b.lim.chargeShape([]string{"EMB", "minilm", "a", "b"}, nil); err == nil || !strings.Contains(err.Error(), "texts") {
 		t.Fatalf("text count cap err = %v, want a text-count refusal", err)
 	}
-	if _, err := b.lim.chargeShape([]string{"EMB", "minilm", "0123456789"}); err == nil || !strings.Contains(err.Error(), "bytes") {
+	if _, err := b.lim.chargeShape([]string{"EMB", "minilm", "0123456789"}, nil); err == nil || !strings.Contains(err.Error(), "bytes") {
 		t.Fatalf("text byte cap err = %v, want a byte refusal", err)
 	}
-	if _, err := b.lim.chargeShape([]string{"EMB", "minilm", "ok"}); err != nil {
+	if _, err := b.lim.chargeShape([]string{"EMB", "minilm", "ok"}, nil); err != nil {
 		t.Fatalf("a within-caps request was refused: %v", err)
 	}
 }
@@ -1057,4 +1057,70 @@ func TestCORSSameHostDifferentPortIsAllowed(t *testing.T) {
 	if denied.StatusCode != http.StatusForbidden {
 		t.Fatalf("different-host POST = %d, want 403", denied.StatusCode)
 	}
+}
+
+func TestDecodeBinaryOnlyForTheImagePreset(t *testing.T) {
+	l := testLimits()
+	b := newTestBridge(t, "127.0.0.1:1",
+		presets{"clip": {"abc123": imagePresetName}, "minilm": {"def456": "rank"}}, l)
+
+	// Larger than the text cap on purpose: the decoded image must be bounded by
+	// the image cap, not the 2 KiB text cap.
+	img := bytes.Repeat([]byte{0x89, 0x50, 0x4e, 0x47}, 1024)
+	encoded := base64.StdEncoding.EncodeToString(img)
+	args := []string{"EMB.EVSHA", "clip", "abc123", "1", encoded, "a raven"}
+
+	got, bin, err := b.decodeBinary(execRequest{Args: args, Bin: []int{4}})
+	if err != nil {
+		t.Fatalf("valid image refused: %v", err)
+	}
+	if !bytes.Equal([]byte(got[4]), img) {
+		t.Fatal("image was not decoded back to raw bytes")
+	}
+	if !bin[4] {
+		t.Fatal("decoded index was not marked binary")
+	}
+	if got[3] != "1" || got[5] != "a raven" {
+		t.Fatalf("text arguments were altered: %q", got)
+	}
+	if _, err := b.lim.chargeShape(got, bin); err != nil {
+		t.Fatalf("decoded image hit the text cap: %v", err)
+	}
+
+	t.Run("not an image preset", func(t *testing.T) {
+		text := []string{"EMB.EVSHA", "minilm", "def456", "1", encoded}
+		if _, _, err := b.decodeBinary(execRequest{Args: text, Bin: []int{4}}); err == nil {
+			t.Fatal("binary accepted for a text preset")
+		}
+	})
+	t.Run("not a preset command", func(t *testing.T) {
+		raw := []string{"EMB.IMG", "clip", encoded}
+		if _, _, err := b.decodeBinary(execRequest{Args: raw, Bin: []int{2}}); err == nil {
+			t.Fatal("binary accepted for a non-preset command")
+		}
+	})
+	t.Run("over the image cap", func(t *testing.T) {
+		big := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0}, l.MaxImageBytes+1))
+		over := []string{"EMB.EVSHA", "clip", "abc123", "1", big}
+		if _, _, err := b.decodeBinary(execRequest{Args: over, Bin: []int{4}}); err == nil || !strings.Contains(err.Error(), "image cap") {
+			t.Fatalf("oversized image err = %v, want an image-cap refusal", err)
+		}
+	})
+	t.Run("over the image count", func(t *testing.T) {
+		many := []string{"EMB.EVSHA", "clip", "abc123", "3", encoded, encoded, encoded}
+		if _, _, err := b.decodeBinary(execRequest{Args: many, Bin: []int{4, 5, 6}}); err == nil || !strings.Contains(err.Error(), "images") {
+			t.Fatalf("too many images err = %v, want an image-count refusal", err)
+		}
+	})
+	t.Run("malformed base64", func(t *testing.T) {
+		bad := []string{"EMB.EVSHA", "clip", "abc123", "1", "not base64!!"}
+		if _, _, err := b.decodeBinary(execRequest{Args: bad, Bin: []int{4}}); err == nil {
+			t.Fatal("malformed base64 was accepted")
+		}
+	})
+	t.Run("index out of range", func(t *testing.T) {
+		if _, _, err := b.decodeBinary(execRequest{Args: args, Bin: []int{99}}); err == nil {
+			t.Fatal("out-of-range binary index was accepted")
+		}
+	})
 }

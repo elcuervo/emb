@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the model lens — two models, two spaces</title>
+<link rel="canonical" href="https://emb.is/demos/lens.html">
+<meta name="description" content="The same corpus, the same query, two embedding models. The rankings differ, the projections differ, and neither one is wrong: vectors from two models are not comparable.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the model lens — two models, two spaces">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="One corpus under two models: the same query returns different neighbours, because each model defines its own space.">
+<meta property="og:url" content="https://emb.is/demos/lens.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the model lens — two models, two spaces">
+<meta name="twitter:description" content="One corpus under two models: the same query returns different neighbours, because each model defines its own space.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The model lens</h1>
+          <p class="plate__teaches">
+            Two models, one corpus, one query. The neighbours change and the map
+            changes shape, which is why &ldquo;which embedding?&rdquo; is a
+            decision and not a detail.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 5 — THE LENS</b>
+            · <b data-fig-model-a>—</b> vs <b data-fig-model-b>—</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b>one corpus</b>, two tables
+            · <b>incomparable</b> by construction</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        
+            <p class="block__deck">
+              A model defines a space. Two models define two spaces, and a vector
+              from one means nothing in the other. The same numbers, the same
+              dimensions, and no relationship at all. This is the fact every
+              newcomer gets wrong, and the reason a server that serves several
+              embedding models is more useful than one that serves a favourite.
+            </p>
+            <p class="block__deck">
+              Both models here produce 384-dimensional vectors. That is the trap:
+              because the shapes match, the mistake is easy to make and silent.
+              Embed the corpus with one and query it with the other and you get
+              neighbours — plausible-looking, meaningless neighbours. The plate
+              shows the two spaces side by side so the difference is visible
+              rather than asserted.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        
+            <div class="atlas">
+              <svg data-live class="atlas__svg" data-plot viewBox="0 0 1000 420" role="img"
+                   aria-label="The same corpus under two models: the projection changes shape when the model changes"></svg>
+              <div class="rig__row">
+                <div data-live class="rig__pick" role="group" aria-label="Model the projection is drawn for">
+                  <button type="button" data-model="minilm" aria-pressed="true">all-MiniLM-L6-v2</button>
+                  <button type="button" data-model="bge-small" aria-pressed="false">bge-small-en-v1.5</button>
+                </div>
+              </div>
+
+              <div data-live class="rig" data-rig="lens" data-emb-preset-rank="fd56d2f6f0566e232e557cadffac9bf4ac7fd810">
+                <form class="rig__form" data-form>
+                  <label class="sr-only" for="l-q">A query to run against both models</label>
+                  <input class="rig__input" id="l-q" autocomplete="off" spellcheck="false"
+                         value="a guilty conscience that will not stay buried">
+                  <button class="rig__go" type="submit">Ask both</button>
+                </form>
+                <p class="rig__state" data-state>ready when you are</p>
+                <div class="shape__body" data-overlap></div>
+                <div class="shapes" data-out hidden>
+                  <div class="shape"><h3 class="shape__h" data-h-minilm>model A</h3><div data-a></div></div>
+                  <div class="shape"><h3 class="shape__h" data-h-bge>model B</h3><div data-b></div></div>
+                </div>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+    <!-- the massif, as a reading break: the same cut-out the landing closes on.
+         No route and no second signal -- a gallery plate spends its one accent
+         on meaning. -->
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-descent.png" width="1000" height="125" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        
+            <p class="block__deck">
+              The query was embedded twice (once per model) and searched against
+              a table per model. Same corpus, same rows, same query, two
+              rankings. Where they overlap, both models agree there is something
+              there; where they do not, they are each following their own notion
+              of similarity, which is exactly the point.
+            </p>
+            <p class="block__deck">
+              The projection above is per model: the build computed one for each,
+              and the switch re-places the same passages where that model puts
+              them. Nothing is recomputed here. A passage that is the centre of a
+              region under one model can sit at the edge of another under the
+              second, and neither placement is the &ldquo;real&rdquo; one.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        
+            <p class="block__deck">
+              Retrieval-tuned models, multilingual models, small models, long-
+              context models: each is a different answer to the same question, and
+              the right one depends on the corpus, the language, the latency
+              budget and the memory you have. Keeping the choice inside one
+              server means the model is a configuration value rather than a
+              migration.
+            </p>
+            <p class="block__deck">
+              The operational rule is the plate's own caption: <strong>a corpus
+              and its queries must use the same model and the same
+              normalization.</strong> Mixing them does not error, which is what
+              makes it dangerous — it returns a ranking, and the ranking is
+              noise.
+            </p>
+
+      </div></div>
+    </section>
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        
+            <p class="block__deck">
+              One command per model for the query, one query per table. The index
+              is a single file with a table per model, so switching the lens is
+              choosing a different table.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB minilm    BLOB &quot;a guilty conscience that will not stay buried&quot;
+EMB bge-small BLOB &quot;a guilty conscience that will not stay buried&quot;
+
+SELECT rowid FROM vec_minilm    WHERE embedding MATCH vec_int8(:q) AND k = 5;
+SELECT rowid FROM vec_bge_small WHERE embedding MATCH vec_int8(:q) AND k = 5;
+-- -> two rankings, over the same rows, that do not agree
+
+# and the mistake this plate exists to prevent:
+#   EMB bge-small …  queried against  vec_minilm  runs fine, and is noise</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, quotation, motionAllowed, tween } from '../assets/js/demos.js';
+const g = gallery();
+const A = 'minilm', B = 'bge-small';
+const W = 1000, H = 420, PAD = 30;
+const NS = 'http://www.w3.org/2000/svg';
+const plot = document.querySelector('[data-plot]');
+const root = document.querySelector('[data-rig="lens"]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const overlap = root.querySelector('[data-overlap]');
+const aOut = root.querySelector('[data-a]');
+const bOut = root.querySelector('[data-b]');
+const go = root.querySelector('.rig__go');
+const layouts = {};
+let shown = A;
+
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function fit(points) {
+  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const dx = (x1 - x0) * 0.05 || 1, dy = (y1 - y0) * 0.05 || 1;
+  return { x0: x0 - dx, x1: x1 + dx, y0: y0 - dy, y1: y1 + dy };
+}
+function at(layout, p) {
+  return [(PAD + ((p.x - layout.x0) / (layout.x1 - layout.x0)) * (W - 2 * PAD)),
+          (PAD + (1 - (p.y - layout.y0) / (layout.y1 - layout.y0)) * (H - 2 * PAD))];
+}
+function render(model, animate) {
+  const layout = layouts[model];
+  if (!layout) { return; }
+  const previous = new Map(Array.from(plot.querySelectorAll('[data-rowid]'))
+    .map((n) => [n.getAttribute('data-rowid'), { x: Number(n.getAttribute('cx')), y: Number(n.getAttribute('cy')) }]));
+  plot.replaceChildren(svg('rect', { class: 'atlas__frame', x: PAD, y: PAD, width: W - 2 * PAD, height: H - 2 * PAD }));
+  const nodes = [];
+  layout.points.forEach((p) => {
+    const [x, y] = at(layout, p);
+    // A passage the query retrieved under this model is lit on this projection:
+    // the same passages, two maps, the neighbours shown where each model puts
+    // them.
+    const hit = layout.hit && layout.hit.has(p.rowid);
+    const prev = previous.get(String(p.rowid));
+    // With reduced motion this is a cut: the node is drawn where the new layout
+    // puts it. The morph only borrows the old position when it will animate
+    // from it, so the reduced-motion reader never sees a stale map.
+    const from = animate && prev && motionAllowed() ? prev : { x: x, y: y };
+    const node = svg('circle', { class: 'atlas__mark' + (hit ? ' is-hit' : ''), 'data-rowid': p.rowid,
+                                 cx: from.x.toFixed(1), cy: from.y.toFixed(1), r: hit ? 2.6 : 1.4 });
+    nodes.push({ node: node, from: from, to: { x: x, y: y } });
+    plot.appendChild(node);
+  });
+  // The morph is the one place motion is the argument: the same passages,
+  // re-placed by the other model. Reduced motion gets the cut.
+  if (animate && motionAllowed()) {
+    tween(560, (t) => nodes.forEach((n) => {
+      n.node.setAttribute('cx', (n.from.x + (n.to.x - n.from.x) * t).toFixed(1));
+      n.node.setAttribute('cy', (n.from.y + (n.to.y - n.from.y) * t).toFixed(1));
+    }));
+  }
+  shown = model;
+}
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+function line(label, value) {
+  return [el('span', { class: 'k', text: label + ' ' }), el('b', { text: String(value) }), el('span', { text: ' · ' })];
+}
+
+async function run() {
+  const text = root.querySelector('#l-q').value;
+  if (!text || !text.trim()) { return; }
+  go.disabled = true;
+  setState('running');
+  try {
+    const [fa, fb] = await Promise.all([g.search(A, text, 5), g.search(B, text, 5)]);
+    const [pa, pb] = await Promise.all([g.passages(fa.map((h) => h.rowid)), g.passages(fb.map((h) => h.rowid))]);
+    aOut.replaceChildren(...pa.map((p, i) => quotation(p, i + 1, i === 0)));
+    bOut.replaceChildren(...pb.map((p, i) => quotation(p, i + 1, i === 0)));
+    const setA = new Set(fa.map((h) => h.rowid));
+    const shared = fb.filter((h) => setA.has(h.rowid)).length;
+    overlap.replaceChildren(
+      ...line('query', '"' + text + '"'),
+      ...line('neighbours in common (top 5)', shared),
+      el('span', { class: 'k', text: shared === 0
+        ? 'the two models do not agree on a single neighbour'
+        : 'the two models agree on ' + shared + ' — the spaces are not identical' })
+    );
+    // Light both points sets on both projections: the same passages, two maps.
+    ['minilm', 'bge-small'].forEach((m) => {
+      const layout = layouts[m];
+      if (layout) { layout.hit = new Set((m === A ? fa : fb).map((h) => h.rowid)); }
+    });
+    render(shown, false);
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); run(); });
+document.querySelectorAll('[data-model]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const model = btn.getAttribute('data-model');
+    document.querySelectorAll('[data-model]').forEach((o) => o.setAttribute('aria-pressed', String(o === btn)));
+    render(model, true);
+  });
+});
+
+g.manifest().then((m) => {
+  const a = m.models.find((x) => x.name === A), b = m.models.find((x) => x.name === B);
+  root.querySelector('[data-h-minilm]').textContent = A + ' · ' + a.dimension + ' dimensions · ' + a.recall_at_k + ' recall@10';
+  root.querySelector('[data-h-bge]').textContent = B + ' · ' + b.dimension + ' dimensions · ' + b.recall_at_k + ' recall@10';
+  document.querySelector('[data-fig-model-a]').textContent = A === 'minilm' ? 'all-MiniLM-L6-v2' : A;
+  document.querySelector('[data-fig-model-b]').textContent = B;
+  document.querySelector('[data-fig-dim]').textContent = a.dimension + ' vs ' + b.dimension;
+  return Promise.all([g.atlas(A), g.atlas(B)]);
+}).then(([la, lb]) => {
+  // `at()` reads the bounds as top-level fields, so the fit is spread in rather
+  // than nested: `Object.assign({}, la, { bounds: fit(la.points) })` left
+  // x0/x1/y0/y1 undefined and every coordinate NaN.
+  layouts[A] = Object.assign({}, la, fit(la.points));
+  layouts[B] = Object.assign({}, lb, fit(lb.points));
+  render(A, false);
+  return run();
+}).catch((err) => { setState(err.state || 'error', err.message); });
+
+</script>
+</body>
+</html>

@@ -31,6 +31,8 @@ second implementation of gitignore here.
 
 from __future__ import annotations
 
+import json
+import posixpath
 import re
 import sys
 from fnmatch import fnmatchcase
@@ -59,6 +61,26 @@ SERVED = frozenset(
         "index.html",
         "404.html",
         "docs/index.html",
+        "demos/index.html",
+        "demos/vector.html",
+        "demos/similarity.html",
+        "demos/search.html",
+        "demos/atlas.html",
+        "demos/batch.html",
+        "demos/cache.html",
+        "demos/graph.html",
+        "demos/image.html",
+        "demos/lens.html",
+        "demos/function.html",
+        "demos/samples/raven.jpg",
+        "demos/samples/storm.jpg",
+        "demos/samples/portrait.jpg",
+        "demos/samples/ship.jpg",
+        "demos/samples/flowers.jpg",
+        "demos/samples/manuscript.jpg",
+        "assets/js/demos.js",
+        "assets/vendor/sqlite-wasm-vec-0.1.9/sqlite3-bundler-friendly.mjs",
+        "assets/vendor/sqlite-wasm-vec-0.1.9/sqlite3.wasm",
         "assets/css/styles.css",
         "assets/css/docs.css",
         "assets/css/asciinema-player-3.17.0.css",
@@ -70,6 +92,19 @@ SERVED = frozenset(
         "assets/fonts/inter-900-latin.woff2",
         "assets/fonts/jetbrains-mono-var-latin.woff2",
         "assets/img/terrain-matte.png",
+        "assets/img/terrain-bluff.png",
+        "assets/img/terrain-crag.png",
+        "assets/img/terrain-cragw.png",
+        "assets/img/terrain-descent.png",
+        "assets/img/terrain-foothill.png",
+        "assets/img/terrain-outcrop.png",
+        "assets/img/terrain-pass.png",
+        "assets/img/terrain-range.png",
+        "assets/img/terrain-saddle.png",
+        "assets/img/terrain-scarp.png",
+        "assets/img/terrain-shoulder.png",
+        "assets/img/terrain-slope.png",
+        "assets/img/terrain-west.png",
         "assets/img/og.png",
         "assets/img/speckle.svg",
     }
@@ -92,18 +127,61 @@ SERVICE_PREFIX = "repl/"
 
 # Paths whose bytes change under a stable name, because there is no build step
 # to hash them. These must never be pinned immutable by `_headers`.
-UNHASHED_SUFFIXES = (".html", ".css", ".js")
+UNHASHED_SUFFIXES = (".html", ".css", ".js", ".json")
 
 # Every page that must declare its own address, and the metadata on it that must
 # be an absolute URL on ORIGIN. A relative `og:image` is the specific defect this
 # catches: it shipped that way because the site had no hostname until now.
-PAGES = ("index.html", "docs/index.html")
+PAGES = (
+    "index.html",
+    "docs/index.html",
+    "demos/index.html",
+    "demos/vector.html",
+    "demos/similarity.html",
+    "demos/search.html",
+    "demos/atlas.html",
+    "demos/batch.html",
+    "demos/cache.html",
+    "demos/graph.html",
+    "demos/image.html",
+    "demos/lens.html",
+    "demos/function.html",
+)
 ABSOLUTE_METADATA = (
     ("canonical", re.compile(r"""<link[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']*)["']""", re.I)),
     ("og:url", re.compile(r"""<meta[^>]*\bproperty=["']og:url["'][^>]*\bcontent=["']([^"']*)["']""", re.I)),
     ("og:image", re.compile(r"""<meta[^>]*\bproperty=["']og:image["'][^>]*\bcontent=["']([^"']*)["']""", re.I)),
     ("twitter:image", re.compile(r"""<meta[^>]*\bname=["']twitter:image["'][^>]*\bcontent=["']([^"']*)["']""", re.I)),
 )
+
+
+# The demos index is a generated pair whose file names change when the corpus
+# does: the manifest keeps a stable name and the index carries a content hash, so
+# the served set cannot be a constant. The manifest is the declaration — it names
+# the index it belongs to — and it is asserted to exist and to name a file that
+# does, so a rebuild renames the index without editing this check, while a
+# manifest pointing at a missing file still fails.
+INDEX_DIR = "assets/demo"
+INDEX_MANIFEST = f"{INDEX_DIR}/manifest.json"
+
+
+def index_files() -> tuple[set[str], list[str]]:
+    """The served index pair, and the problems that stop it being trusted."""
+    path = SITE_DIR / INDEX_MANIFEST
+    if not path.exists():
+        return {INDEX_MANIFEST}, [f"absent:       website/{INDEX_MANIFEST} (the index's own manifest)"]
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as err:
+        return {INDEX_MANIFEST}, [f"unreadable:   website/{INDEX_MANIFEST} ({err})"]
+    named = (manifest.get("asset") or {}).get("db")
+    if not named:
+        return {INDEX_MANIFEST}, [f"unreadable:   website/{INDEX_MANIFEST} names no index"]
+    if not (SITE_DIR / INDEX_DIR / named).exists():
+        return {INDEX_MANIFEST}, [
+            f"absent:       website/{INDEX_DIR}/{named} (the manifest names it and it is not on disk)"
+        ]
+    return {INDEX_MANIFEST, f"{INDEX_DIR}/{named}"}, []
 
 
 def read_ignore_patterns(path: Path = IGNORE_FILE) -> list[str]:
@@ -154,6 +232,8 @@ def on_disk() -> set[str]:
 def check_published_set(patterns: list[str]) -> list[str]:
     """Assert on-disk == served + ignored + platform config, with no overlap."""
     files = on_disk()
+    generated, index_problems = index_files()
+    served_set = SERVED | generated
     ignored = {
         relative
         for relative in files
@@ -161,8 +241,8 @@ def check_published_set(patterns: list[str]) -> list[str]:
     }
     served = files - ignored - PLATFORM_FILES
 
-    problems = []
-    for relative in sorted(SERVED - served):
+    problems = list(index_problems)
+    for relative in sorted(served_set - served):
         if relative not in files:
             problems.append(f"absent:       {relative} (expected, not on disk)")
         elif relative in ignored:
@@ -171,7 +251,7 @@ def check_published_set(patterns: list[str]) -> list[str]:
             )
         else:
             problems.append(f"wrong set:    {relative} (treated as platform config)")
-    for relative in sorted(served - SERVED):
+    for relative in sorted(served - served_set):
         problems.append(
             f"unexpected:   {relative} (would ship, not in the served set)"
         )
@@ -230,8 +310,17 @@ def read_header_rules(path: Path = HEADERS_FILE) -> list[tuple[str, str]]:
 
 def served_urls() -> list[tuple[str, str]]:
     """Every (request path, file) a reader can ask for, including pretty URLs."""
-    urls = [(f"/{relative}", relative) for relative in sorted(SERVED)]
+    generated, _ = index_files()
+    urls = [(f"/{relative}", relative) for relative in sorted(SERVED | generated)]
     urls += [("/", "index.html"), ("/docs", "docs/index.html"), ("/docs/", "docs/index.html")]
+    urls += [("/demos", "demos/index.html"), ("/demos/", "demos/index.html")]
+    urls += [(f"/demos/{Path(relative).stem}", relative)
+             for relative in sorted(SERVED) if relative.startswith("demos/") and relative.endswith(".html")]
+    # The clean name for both index files, which is what the manifest is read at.
+    urls += [("/assets/demo/manifest.json", INDEX_MANIFEST)]
+    for relative in sorted(generated):
+        if relative.endswith(".db"):
+            urls += [(f"/{relative}", relative)]
     return urls
 
 
@@ -252,6 +341,65 @@ def check_cache_rules() -> list[str]:
                 problems.append(
                     f"stale risk:   _headers pins {pattern} immutable, which covers "
                     f"{url} ({relative}) — its bytes change under a stable name"
+                )
+    return problems
+
+
+# Every internal reference a page can carry. `href` covers links and stylesheets,
+# `src` covers scripts, images and the wasm module. A page that links a file the
+# origin does not serve is a 404 waiting for a reader, and it is invisible in
+# review — which is exactly the class of mistake this tool exists for.
+# `(?<![-\w])` keeps `data-src="…"` out of it: a plate's own hooks are not
+# references, and a checker that fired on them would be turned off.
+REFERENCE = re.compile(r"""(?<![-\w])(?:href|src)\s*=\s*["']([^"']+)["']""", re.I)
+EXTERNAL = ("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript:")
+# Markup that is not a reference: a script's own strings can look like one.
+SCRIPTING = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
+
+
+def check_internal_links() -> list[str]:
+    """Assert every internal reference on a served page resolves to a served file.
+
+    Relative references are what the gallery's own cross-links use, so a plate
+    links its neighbours as `similarity.html` and keeps working whether the tree
+    is served at the root, from a preview alias, or from `just website`
+    locally. Resolving each reference against the page it sits on and then
+    against the served set is what turns "these look right" into a check.
+    """
+    problems: list[str] = []
+    served = set(SERVED) | index_files()[0]
+    for page in sorted(served):
+        if not page.endswith(".html"):
+            continue
+        source = SCRIPTING.sub("", (SITE_DIR / page).read_text(encoding="utf-8"))
+        base = posixpath.dirname(page)
+        for reference in REFERENCE.findall(source):
+            if reference.startswith("#") or reference.lower().startswith(EXTERNAL):
+                continue
+            target = reference.split("#", 1)[0].split("?", 1)[0]
+            if not target:
+                continue
+            resolved = posixpath.normpath(
+                target if target.startswith("/") else posixpath.join(base, target))
+            # A pretty URL is the directory's own index: `/`, `/docs/`, `/demos/`.
+            if resolved in ("", "/", "."):
+                resolved = "index.html"
+            elif resolved.lstrip("/") + "/index.html" in served:
+                resolved = resolved.lstrip("/") + "/index.html"
+            else:
+                resolved = resolved.lstrip("/")
+            if resolved not in served:
+                problems.append(
+                    f"broken link:  website/{page} points at {reference!r}, which resolves to "
+                    f"{resolved!r} — not a served path"
+                )
+                continue
+            # Same-directory references stay relative: they are what keeps a
+            # link correct under any mount point.
+            if base and posixpath.dirname(resolved) == base and target.startswith("/"):
+                problems.append(
+                    f"absolute:     website/{page} points at {reference!r}; a sibling in "
+                    f"{base}/ is reachable relatively"
                 )
     return problems
 
@@ -350,6 +498,7 @@ def main() -> int:
     problems += metadata_problems
     problems += check_wrangler_route(origin)
     problems += check_cache_rules()
+    problems += check_internal_links()
 
     if problems:
         print("published-tree: the published tree does not match what we mean", file=sys.stderr)
@@ -358,7 +507,7 @@ def main() -> int:
         return 1
 
     print(
-        f"published-tree: ok ({len(SERVED)} served paths, one origin at "
+        f"published-tree: ok ({len(SERVED) + len(index_files()[0])} served paths, one origin at "
         f"{origin or 'no absolute reference'})"
     )
     return 0

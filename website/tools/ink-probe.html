@@ -54,8 +54,9 @@
 <p>Loads <code>../index.html</code> at each supported width and asserts that no
    text run's ink crosses the viewport edge. <span class="muted">Sweep also
    covers the breakpoint edges, the 1086px reference frame, and the shell-cap
-   handoff. Add <code>?target=docs</code> to sweep the documentation surface
-   instead.</span></p>
+   handoff. Add <code>?target=docs</code> to sweep the documentation surface,
+   <code>?target=404</code> for the not-found page, or
+   <code>?target=demos/batch.html</code> for a single plate.</span></p>
 
 <p><span id="verdict" class="RUN">RUNNING…</span></p>
 
@@ -85,12 +86,14 @@
 
   // Which surface to sweep. Defaults to the landing; pass ?target=docs to
   // check the documentation surface, or ?target=404 for the not-found page.
-  // The 404 is a real surface with real text, so it is measured like the
-  // others rather than assumed to be safe because it is short.
+  // Any other target is a path under `website/` (e.g. `demos/batch.html`), so a
+  // single plate can be measured without a second harness. The 404 is a real
+  // surface with real text, so it is measured like the others rather than
+  // assumed to be safe because it is short.
   const PARAM = new URLSearchParams(location.search).get('target');
   const TARGET = PARAM === 'docs' ? '../docs/index.html'
     : PARAM === '404' ? '../404.html'
-    : '../index.html';
+    : PARAM ? '../' + PARAM.replace(/^(\.\.\/)+/, '') : '../index.html';
 
   const verdictEl = document.getElementById('verdict');
   const resultsEl = document.getElementById('results');

@@ -6,8 +6,10 @@ package main
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -29,12 +31,22 @@ import (
 //go:embed terminal.js index.html stats.html
 var terminalFS embed.FS
 
+// imagePresetName is the sandbox preset allowed to carry binary, and the only
+// call the base64 argument form is admitted for.
+const imagePresetName = "zeroshot"
+
 // execRequest is the one command path: the argv a client would send to emb,
 // and the protocol version to carry it on. There is no per-visitor state, so
 // nothing is lost between requests.
+//
+// `bin` names indices in `args` that are base64-encoded bytes rather than text.
+// A fused vision model takes an image as raw bytes, and JSON cannot carry them,
+// so the browser base64s the image and the bridge decodes it back to bytes
+// before the command reaches emb. See decodeBinary for the bounds.
 type execRequest struct {
 	Args  []string `json:"args"`
 	Proto int      `json:"proto"`
+	Bin   []int    `json:"bin,omitempty"`
 }
 
 // Bridge is the one public surface. It holds the single upstream connection
@@ -198,19 +210,74 @@ func (b *Bridge) handleExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req execRequest
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorEnvelope(codeRefused, "malformed request: "+err.Error()))
 		return
 	}
-	env, status := b.Execute(req.Args, req.Proto, b.clientKey(r))
+	args, bin, err := b.decodeBinary(req)
+	if err != nil {
+		writeJSON(w, http.StatusOK, errorEnvelope(codeRefused, err.Error()))
+		return
+	}
+	env, status := b.execute(args, req.Proto, b.clientKey(r), bin)
 	writeJSON(w, status, env)
+}
+
+// decodeBinary turns the request's base64 image arguments into the raw bytes
+// emb expects. Binary is not a second command surface: it is admitted only for
+// the sandbox's own preloaded image preset, called by digest, and it is bounded
+// by the image caps. Everything else is refused before a byte reaches the
+// server, and the decoded indices are returned so the text-byte cap can skip
+// them.
+func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
+	if len(req.Bin) == 0 {
+		return req.Args, nil, nil
+	}
+	if !b.isImageCall(req.Args) {
+		return nil, nil, fmt.Errorf("binary arguments are accepted only by the sandbox's image preset")
+	}
+	if b.limits.MaxImages > 0 && len(req.Bin) > b.limits.MaxImages {
+		return nil, nil, fmt.Errorf("request carries %d images, above the sandbox cap of %d", len(req.Bin), b.limits.MaxImages)
+	}
+	args := append([]string(nil), req.Args...)
+	bin := make(map[int]bool, len(req.Bin))
+	for _, i := range req.Bin {
+		if i < 0 || i >= len(args) {
+			return nil, nil, fmt.Errorf("binary argument index %d is out of range", i)
+		}
+		raw, err := base64.StdEncoding.DecodeString(args[i])
+		if err != nil {
+			return nil, nil, fmt.Errorf("binary argument %d is not valid base64", i)
+		}
+		if b.limits.MaxImageBytes > 0 && len(raw) > b.limits.MaxImageBytes {
+			return nil, nil, fmt.Errorf("image is %d bytes, above the sandbox image cap of %d", len(raw), b.limits.MaxImageBytes)
+		}
+		args[i] = string(raw)
+		bin[i] = true
+	}
+	return args, bin, nil
+}
+
+// isImageCall reports whether argv calls the sandbox's preloaded image preset by
+// digest. The digest must be one the server preloaded and the preset must be the
+// image one, so the binary transport cannot be pointed at a text preset.
+func (b *Bridge) isImageCall(args []string) bool {
+	if len(args) < 4 || !strings.EqualFold(args[0], "emb.evsha") {
+		return false
+	}
+	return b.presets[args[1]][args[2]] == imagePresetName
 }
 
 // Execute runs one command through the whole contract and returns the reply
 // envelope plus the HTTP status that matches it. It is the seam the HTTP
 // handler and the tests share.
 func (b *Bridge) Execute(args []string, proto int, client string) (Envelope, int) {
-	work, err := b.lim.chargeShape(args)
+	return b.execute(args, proto, client, nil)
+}
+
+// execute is Execute with the decoded-binary index set the HTTP path supplies.
+func (b *Bridge) execute(args []string, proto int, client string, bin map[int]bool) (Envelope, int) {
+	work, err := b.lim.chargeShape(args, bin)
 	if err != nil {
 		return capacityEnvelope(err), statusFor(codeCapacity)
 	}

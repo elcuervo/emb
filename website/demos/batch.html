@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the batch — one call, many texts</title>
+<link rel="canonical" href="https://emb.is/demos/batch.html">
+<meta name="description" content="Six passages embedded two ways against the same server: six separate EMB calls, then one call carrying all six. The server's own timings show what batching buys.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the batch — one call, many texts">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Six texts, two ways: six round trips versus one. Measured on the server, drawn to scale.">
+<meta property="og:url" content="https://emb.is/demos/batch.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the batch — one call, many texts">
+<meta name="twitter:description" content="Six texts, two ways: six round trips versus one. Measured on the server, drawn to scale.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- The landing's masthead, unchanged: same brand, tagline, nav and CTA. Only
+     the destinations differ, so the gallery opens the way the rest of the site
+     does. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The batch</h1>
+          <p class="plate__teaches">
+            One call, many texts. A model call has a fixed cost before it reads
+            the first word; emb spends it once for a whole batch instead of once
+            per text.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 7 — THE BATCH</b>
+            · <b data-fig-texts>6</b> texts
+            · <b data-fig-dim>—</b> dimensions
+            · <b>server-side µs</b>
+            · <b>measured here</b></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+            <p class="block__deck">
+              Embedding one text is cheap; starting the work is the expensive
+              part. The tokenizer, the matrix multiplies and the pooling each pay
+              a fixed cost per <em>pass</em>, and a pass can carry many texts at
+              once. Six texts in six passes pay that fixed cost six times. Six
+              texts in one pass pay it once.
+            </p>
+            <p class="block__deck">
+              The plate measures both ways against the sandbox and draws them to
+              scale. Both numbers are the server's own measured
+              <span class="t-cmd">elapsed_us</span> — the bridge brackets the
+              command on its loopback connection, so the figure is execution
+              time and the network between you and the sandbox is not in it. It
+              is not a stopwatch in the page and not a benchmark lifted from a
+              README.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+
+            <div data-live class="rig" data-rig="batch">
+              <svg class="atlas__svg" data-plot viewBox="0 0 640 150" role="img"
+                   aria-label="Two bars comparing one batched call against six single calls"></svg>
+              <form class="rig__form" data-form>
+                <button class="rig__go" type="submit">Measure it</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <!-- the massif, as a reading break: the same cut-out the landing closes on.
+         No route and no second signal -- a gallery plate spends its one accent
+         on meaning. -->
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-shoulder.png" width="1200" height="150" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+            <p class="block__deck">
+              Six passages went to the sandbox twice. The first time, the plate
+              sent six separate <span class="t-cmd">EMB</span> commands; each one
+              became its own pass over the model. The second time it sent a
+              single <span class="t-cmd">EMB</span> carrying all six texts, and
+              the server's batcher ran them in one pass. Same six vectors come
+              back both ways.
+            </p>
+            <p class="block__deck">
+              This is the same batcher that handles concurrent visitors: two
+              people who ask at the same moment are coalesced into one pass
+              whether either of them asked for a batch. The gain is not a new
+              command you have to learn; it is the server doing the obvious thing
+              with the work it is handed. Each run salts both sides with a fresh
+              marker, so the measurement is never made cheaper by the cache the
+              next plate is about.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+            <p class="block__deck">
+              Embedding a corpus is an N-request job, and N is not small. Chunk
+              10,000 documents, quote every review, deduplicate every ticket: the
+              same question — one text at a time, or all of them together —
+              decides whether the job finishes in minutes or hours, and whether
+              it costs the CPU of one machine or several.
+            </p>
+            <p class="block__deck">
+              Batching is also why the sandbox can be small. A pile of concurrent
+              requests becomes one pass over a shared CPU, so the 2&nbsp;GB
+              machine behind this gallery serves a room full of readers without
+              a queue and without a second instance.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+            <p class="block__deck">
+              Both are the same command. The only difference is how many texts
+              ride on it — and the bridge caps one call at eight, so a rerank of
+              seven candidates plus a query fits with room to spare.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB minilm "text 1"...     # one call: the model sees the whole batch at once
+EMB minilm "text 2"
+…                          # six calls: the model sees them one at a time
+EMB minilm "text 6"
+
+EMB minilm "text 1" "text 2" "text 3" "text 4" "text 5" "text 6"
+
+# every reply is the same six vectors; only the number of passes differs.</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, tween } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'minilm';
+/* Six passages the sandbox has not been asked for by this page before. They
+ * are the plate's own copy, not a corpus: the batch is about what a call
+ * costs, so the texts only have to be real. */
+const TEXTS = [
+  'Once upon a midnight dreary, while I pondered, weak and weary.',
+  'The thousand injuries of Fortunato I had borne as I best could.',
+  'True!—nervous—very, very dreadfully nervous I had been and am.',
+  'It was many and many a year ago, in a kingdom by the sea.',
+  'The sea was calm, the ship was old, and the night was black.',
+  'The boundaries which divide Life from Death are shadowy and vague.'
+];
+const root = document.querySelector('[data-rig="batch"]');
+const form = root.querySelector('[data-form]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const plot = document.querySelector('[data-plot]');
+const go = root.querySelector('.rig__go');
+const NS = 'http://www.w3.org/2000/svg';
+const W = 640, H = 150, X0 = 232, MAXW = 316, BAR = 24;
+
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function label(text, x, y, cls) {
+  const node = svg('text', { class: cls || 'atlas__region', x: x, y: y });
+  node.textContent = text;
+  return node;
+}
+/* The two bars, drawn from whatever the last run measured. Before a run both
+ * are empty; the labels stay so the frame is never a blank page. */
+function draw(one, six, animate) {
+  const max = Math.max(one || 0, six || 0, 1);
+  const width = (v) => (v > 0 ? Math.max(2, (v / max) * MAXW) : 0);
+  const w1 = width(one), w6 = width(six);
+  const r1 = svg('rect', { class: 'atlas__mark is-hit', x: X0, y: 36, width: (animate ? 0 : w1).toFixed(1), height: BAR });
+  const r6 = svg('rect', { class: 'atlas__mark', x: X0, y: 96, width: (animate ? 0 : w6).toFixed(1), height: BAR });
+  plot.replaceChildren(
+    label('ONE CALL · 6 TEXTS', 12, 62, 'atlas__region'),
+    label('SIX CALLS · 1 TEXT', 12, 122, 'atlas__region'),
+    r1,
+    label(one ? one.toLocaleString('en-US') + ' µs' : '—', X0 + w1 + 10, 53, 'atlas__label'),
+    r6,
+    label(six ? six.toLocaleString('en-US') + ' µs' : '—', X0 + w6 + 10, 113, 'atlas__label')
+  );
+  if (animate) {
+    tween(650, (t) => {
+      r1.setAttribute('width', (w1 * t).toFixed(1));
+      r6.setAttribute('width', (w6 * t).toFixed(1));
+    });
+  }
+}
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+async function run() {
+  go.disabled = true;
+  setState('running');
+  draw(null, null);
+  try {
+    // Two cold sets, salted per run: the cache is the subject of the next
+    // plate, and a batched call that read the six calls' cache entries would
+    // measure the cache instead of the batch. Salting both sides the same way
+    // keeps the comparison one of passes, not of wording.
+    const marker = ' [' + Date.now().toString(36) + ']';
+    const singles = TEXTS.map((t) => t + marker + ' a');
+    const batchedTexts = TEXTS.map((t) => t + marker + ' b');
+
+    // Six calls, one text each. Only the server's own elapsed_us is summed:
+    // the page never times the request, because that would measure the network
+    // between the reader and the sandbox, not the work emb did.
+    let sixUs = 0;
+    for (const text of singles) {
+      const envelope = await g.raw(['EMB', MODEL, text]);
+      sixUs += Number(envelope.elapsed_us) || 0;
+    }
+
+    // One call, six texts.
+    const batched = await g.raw(['EMB', MODEL].concat(batchedTexts));
+    const oneUs = Number(batched.elapsed_us) || 0;
+
+    draw(oneUs, sixUs, true);
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'one call ' }),
+      el('b', { text: oneUs.toLocaleString('en-US') + ' µs' }),
+      el('span', { text: ' server · ' }),
+      el('span', { class: 'k', text: 'six calls ' }),
+      el('b', { text: sixUs.toLocaleString('en-US') + ' µs' }),
+      el('span', { text: ' server\n' }),
+      el('span', { class: 'k', text: 'the batch cost ' }),
+      el('b', { text: oneUs && sixUs ? (sixUs / oneUs).toFixed(1) + '× less execution time' : '—' }),
+      el('span', { text: ' for the same six passages; network excluded' })
+    );
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    draw(null, null);
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+g.manifest().then((m) => {
+  const entry = m.models.find((x) => x.name === MODEL) || m.models[0];
+  document.querySelector('[data-fig-dim]').textContent = entry.dimension;
+}).catch(() => {});
+draw(null, null);
+
+</script>
+</body>
+</html>

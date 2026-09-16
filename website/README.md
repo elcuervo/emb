@@ -29,6 +29,19 @@ website/
 │   ├── js/topviz.js        the emb-top plate, written once and loaded by
 │   │                       both surfaces: the landing plays it on its own,
 │   │                       /docs holds the frame until the reader asks
+│   ├── js/demos.js         the demos gallery's client: the sandbox call (the
+│   │                       same contract the console uses), the browser-side
+│   │                       `vec0` search over the shipped index, and the
+│   │                       loading states a plate renders
+│   ├── vendor/sqlite-wasm-vec-0.1.9/
+│   │                       sqlite-vec in the browser, vendored from the npm
+│   │                       release pinned in `flake.nix` and re-vendored by
+│   │                       `just website-demos-vendor`; the directory carries
+│   │                       the release, which is why `_headers` may pin it
+│   ├── demo/               the gallery's index: `manifest.json` (stable name,
+│   │                       revalidated) naming a content-hashed `poe-<sha8>.db`
+│   │                       that the browser searches. Built offline by
+│   │                       `just website-demos`, never at request time
 │   ├── js/asciinema-player-3.17.0.min.js
 │   │                       the player, verbatim: the landing plate replays
 │   │                       the recorded take with it, from this origin — no
@@ -63,6 +76,15 @@ website/
 │   ├── png_lib.py          dependency-free PNG reader/writer for the above
 │   ├── ink-probe.html      asserts no text ink crosses the viewport, 24 widths
 │   ├── published-tree.py   what ships, the canonical origin, the cache rules
+│   ├── build-demo-db.py    embeds the corpus against a local server and writes
+│   │                       `assets/demo/`: one `vec0` table per model, the
+│   │                       build-time 2D projection, the named cluster regions
+│   │                       and the manifest every gallery figure is read from
+│   ├── demos/              the corpus pipeline: `fetch-poe.py` acquires the
+│   │                       Project Gutenberg volumes, strips the acquisition
+│   │                       boilerplate and chunks them into `poe.jsonl`; the
+│   │                       sources it caches and the notice beside them
+│   │                       (all excluded — only `assets/demo/` ships)
 │   ├── stamp-version.py    writes VERSION into every `data-emb-version` element
 │   │                       and into `PRODUCT.md`
 │   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
@@ -81,6 +103,8 @@ website/
 │   │                       `runs/` hold the last take's recordings, frame and
 │   │                       logs — gitignored, and the only way to check what
 │   │                       the plate shows
+├── demos/                  the gallery: index + six plates, and the only
+│                           surface whose live part costs a download
 ├── repl/                   the sandbox: NOT the site (see § the sandbox)
 │   ├── *.go                the bridge — the sandbox's only public surface
 │   ├── terminal.js         the one client module; both surfaces load it
@@ -98,11 +122,50 @@ pages and `assets/` ship; `tools/`, `repl/`, this README, `PRODUCT.md`, the
 generation sources, and `.impeccable/` do not. [What ships](#what-ships) is
 the contract and `tools/published-tree.py` is the check.
 
-## Two surfaces, two modes
+## Three surfaces, three modes
 
 The landing is **Persuade**: a poster whose job is to earn a click. `/docs` is
 **Read**: the hosted form of the reference that `../README.md` already carries.
-`../README.md` stays the source of truth for both.
+`/demos` is **Experience**: an engraved atlas of a corpus, where the reader
+watches text become a vector and the vector retrieve by meaning. `../README.md`
+stays the source of truth for all three.
+
+### The demos gallery
+
+Six plates, three tiers: what a vector is (the vector, the similarity), why
+vectors help (the search, the atlas), and why emb — and why more than one model
+(the model lens, the model is a function). Each plate carries the same five
+sections in the same order — what you are looking at, try it, what just
+happened, why it matters, the exact commands — so the gallery reads as one
+curriculum rather than six toys.
+
+The corpus is Edgar Allan Poe's collected tales and poems: 86 works, public
+domain, fetched from Project Gutenberg. It is embedded **offline** against a
+local `emb` and shipped as a SQLite database with a `sqlite-vec` `vec0` table
+per model, so a visitor's query costs one embedding on the sandbox and nothing
+else. The search itself runs in the visitor's browser.
+
+```bash
+just website-poe             # fetch, strip and chunk the corpus -> poe.jsonl
+just website-poe-check       # …or assert the committed corpus is current
+just website-demos           # embed it and write assets/demo/ (needs ./models)
+just website-demos-vendor    # re-vendor the pinned sqlite-vec build for the browser
+```
+
+Four Lua presets back the plates, all preloaded by `repl/sandbox.yaml` and
+called by digest: `embed.lua` (dimension, norm, optional similarity),
+`classify.lua` (label, confidence, scores), `rank.lua` (rerank candidates by
+cosine) and `between.lua` (the midpoint of two passages). `just website-presets`
+stamps each digest into the pages from the script bytes, so a plate cannot name
+a script the sandbox was not told to load, and `EMB.EVAL` stays refused — the
+sandbox runs **its** scripts.
+
+**What ships:** `demos/`, `assets/js/demos.js`, `assets/vendor/` (the pinned
+wasm), and `assets/demo/` (the manifest and the content-hashed index).
+**What does not:** the corpus and the pipeline that built it, `tools/demos/`,
+`tools/build-demo-db.py`, and the cached Gutenberg volumes. `published-tree.py`
+reads the index's own manifest to learn which hashed file to expect, then
+asserts the rest of the tree against its served set.
 
 The landing therefore keeps exactly four things beyond its composition, each
 one a decision a reader makes before clicking:
