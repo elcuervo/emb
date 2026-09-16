@@ -22,8 +22,26 @@ website/
 │   ├── css/styles.css      the shared world: tokens → primitives → sections
 │   │                       → responsive (both surfaces link it)
 │   ├── css/docs.css        documentation-only rules; declares no token
-│   ├── js/main.js          entrance sequencing, reveals, pipeline, route
-│   │                       (the landing only — docs ships no JavaScript)
+│   ├── css/asciinema-player-3.17.0.css
+│   │                       the player's own sheet, verbatim (see below)
+│   ├── js/main.js          entrance sequencing, reveals, pipeline, route,
+│   │                       and the console's REPL (the landing only)
+│   ├── js/topviz.js        the emb-top plate, written once and loaded by
+│   │                       both surfaces: the landing plays it on its own,
+│   │                       /docs holds the frame until the reader asks
+│   ├── js/asciinema-player-3.17.0.min.js
+│   │                       the player, verbatim: the landing plate replays
+│   │                       the recorded take with it, from this origin — no
+│   │                       CDN, and no build step to re-derive it. Both files
+│   │                       come from the release tarball pinned in
+│   │                       `flake.nix` and are written by `just website-player`
+│   │                       (sha256 a13c3763… for the script, f619fe17… for
+│   │                       the sheet); `just website-player-check` compares
+│   │                       what is committed against that tarball
+│   ├── cast/               the recorded take the plate plays, named from its
+│   │                       own bytes by `just website-topviz`. ~850 KiB of
+│   │                       asciicast that compresses to ~16 KiB, which is why
+│   │                       `_headers` declares its content type
 │   ├── fonts/              self-hosted Archivo, Inter and JetBrains Mono
 │   └── img/
 │       ├── terrain-matte.png  the cut-out the page ships (2172×724, alpha)
@@ -45,12 +63,38 @@ website/
 │   ├── png_lib.py          dependency-free PNG reader/writer for the above
 │   ├── ink-probe.html      asserts no text ink crosses the viewport, 24 widths
 │   ├── published-tree.py   what ships, the canonical origin, the cache rules
-│   └── stamp-version.py    writes VERSION into every `data-emb-version` element
+│   ├── stamp-version.py    writes VERSION into every `data-emb-version` element
+│   │                       and into `PRODUCT.md`
+│   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
+│   ├── dev-server.py       serves this tree with the console's module origin
+│   │                       pointed at a local bridge (`just website-dev`)
+│   ├── topviz/             the rig behind the emb-top plate: one command
+│   │                       records a real dashboard and publishes three
+│   │                       things from that one take — the take itself into
+│   │                       the plate, where the vendored player replays it;
+│   │                       the dashboard's own text frame into the same
+│   │                       plate, as the still state a reader with scripting
+│   │                       off or a reduced-motion preference keeps; and an
+│   │                       animated capture into `docs/assets/` for
+│   │                       `docs/operations.md`
+│   │                       (`just website-topviz`, see its README). Its
+│   │                       `runs/` hold the last take's recordings, frame and
+│   │                       logs — gitignored, and the only way to check what
+│   │                       the plate shows
+├── repl/                   the sandbox: NOT the site (see § the sandbox)
+│   ├── *.go                the bridge — the sandbox's only public surface
+│   ├── terminal.js         the one client module; both surfaces load it
+│   ├── index.html          the standalone terminal served at cli.emb.is/
+│   ├── stats.html          the read-only live dashboard served at /stats
+│   ├── presets/*.lua       the preloaded scripts, called by digest
+│   ├── sandbox.yaml        the server config the bridge reads for its manifest
+│   ├── Dockerfile, run.sh, fly.toml   the one-machine deployment
+│   └── (all excluded by `.assetsignore`, asserted by published-tree.py)
 └── README.md
 ```
 
 This list is two populations, and the difference is not visible in `ls`. The
-pages and `assets/` ship; `tools/`, this README, `PRODUCT.md`, the
+pages and `assets/` ship; `tools/`, `repl/`, this README, `PRODUCT.md`, the
 generation sources, and `.impeccable/` do not. [What ships](#what-ships) is
 the contract and `tools/published-tree.py` is the check.
 
@@ -118,6 +162,7 @@ just website-published                # what ships, the origin, the cache rules
 just website-ink                      # no text ink crosses the viewport
 just website-ink http://localhost:8080 docs   # …on the docs surface
 just website-ink http://localhost:8080 404    # …on the not-found page
+just website-player-check             # the vendored player is the pinned release
 ```
 
 ### The ink check
@@ -171,9 +216,16 @@ Two other measurement traps worth knowing before trusting a number:
 ### The version check
 
 `just website-version` writes the repo's `VERSION` into every element carrying
-`data-emb-version`; `just website-version-check` fails when one has drifted. The
+`data-emb-version` and the version named in the `PRODUCT.md` pre-1.0 line;
+`just website-version-check` fails when one has drifted. The
 `emb-top` capture shipped a hand-typed `v0.4.0` against a `0.4.0.pre4` VERSION,
-which is the drift this exists to stop. Run the stamper after bumping `VERSION`.
+which is the drift this exists to stop. Run the stamper after bumping `VERSION`
+(`just version` does it as part of the bump).
+
+The same idea covers the sandbox's preset digests: `just website-presets`
+stamps `data-emb-preset-*` from the SHA1 of `website/repl/presets/*.lua`, and
+`just website-presets-check` fails when a preset byte changes under a stamped
+digest. `ci.yml` and `site.yml` both run the check.
 
 ## What ships
 
@@ -199,7 +251,7 @@ the same two commands on every pull request:
 | Set | Members |
 |---|---|
 | **Served** | `index.html`, `404.html`, `docs/index.html`, `styles.css`, `docs.css`, `main.js`, three WOFF2 subsets, `terrain-matte.png`, `og.png`, `speckle.svg` |
-| **Ignored** | `tools/`, `.impeccable/`, `PRODUCT.md`, `README.md`, `terrain-v2.png`, `terrain-v2.md` |
+| **Ignored** | `tools/`, `repl/`, `.impeccable/`, `PRODUCT.md`, `README.md`, `terrain-v2.png`, `terrain-v2.md` |
 | **Platform config** | `.assetsignore`, `_headers` — read, never served |
 
 The check fails both ways: a file that would ship without being expected, and an
@@ -273,6 +325,146 @@ separate from the server's, and browser tooling lives there rather than in the
 Go shell. `firefox` is deliberately not on it: nixpkgs builds it from source on
 `aarch64-darwin`, which is hours. The check that catches that is in
 [`../AGENTS.md`](../AGENTS.md).
+
+## The sandbox
+
+The console and the standalone terminal are driven by a real `emb` process — a
+small Go bridge under `website/repl/` that forwards an allowlisted command
+surface to a server bound to loopback on the same Fly machine. The bridge is
+the only public surface, so no credential reaches a browser and a
+misconfigured public route cannot reach the server.
+
+```
+browser ──HTTPS──▶ bridge (cli.emb.is) ──RESP on 127.0.0.1──▶ emb ──▶ /data/models
+```
+
+**The boundary.** `website/repl/` is a program that happens to live under the
+site directory. It is excluded from the published tree by a `/repl/` entry in
+`.assetsignore`, and `published-tree.py` asserts that every file under it was
+excluded — so a deleted ignore line fails `just website-published` instead of
+publishing service source or presets. CI classifies it as code: a change under
+`website/repl/` runs the bridge's Go tests even though the rest of `website/`
+would skip the server and gem jobs.
+
+The local loop needs the site, the bridge and a server, and the bridge reads
+the server's config to learn the preset digests it will accept. One command
+starts all three and points the console at the local bridge:
+
+```bash
+just website-dev        # site :8080, bridge :8081, emb :6379 — Ctrl-C stops all three
+```
+
+Both the site and the bridge bind `0.0.0.0`, so a phone on the same network
+reaches the same live console at `http://<your-lan-ip>:8080`. `emb` stays on
+loopback. Pass `bind=127.0.0.1` to keep the loop to this machine.
+
+`website/tools/dev-server.py` is what makes that possible: it serves this tree
+with exactly one substitution in HTML responses, the console's module origin
+(`https://cli.emb.is` → this machine, derived from the request's own Host). The
+published page keeps a single source, and the page under test differs from
+production in that one respect. `just website` still serves the tree
+untouched — use it for the ink probe and anything else that must measure what
+ships.
+
+The pieces are also runnable on their own:
+
+```bash
+just website                                               # the static tree
+just dev                                                   # the server alone
+just sandbox-run config=website/repl/sandbox.yaml          # the bridge alone
+just sandbox-test                                          # the bridge's tests
+```
+
+**One client, two surfaces.** `website/repl/terminal.js` is the canonical
+client: a quote-aware tokenizer, the `POST /api/exec {args, proto}` request, the
+reply renderer for every envelope kind, the recall over submitted commands, and
+the idle / running / result / error / starting / offline states. The sandbox
+serves it at `/terminal.js`, its standalone terminal page loads it, and the
+landing page loads the same file from `cli.emb.is`. Nothing renders a reply
+twice, so a change to the contract cannot land on one surface only. The landing
+page presents no host or endpoint: the module captures the origin it was served
+from.
+
+**`cli.emb.is/` is the terminal, and `/stats` is the one page beside it.** The
+standalone terminal is the viewport: `100dvh`, one column, three bands — what
+the terminal says about
+itself and the commands it takes, the scrolling transcript, the prompt as the
+last line — with no heading, card, status strip, footer or page scroll. The
+model is `redis.io/cli`: the disclosure is written in the same monospace voice as
+the replies instead of in a paragraph above them, and the state is expressed by
+the transcript itself (`offline — …` and its retry) rather than by a second
+indicator in a bar.
+
+Two things differ from that model on purpose. The **samples stay pinned** above
+the transcript, because they are the only clickable thing on the page and a
+reader who has just run one command should not have to find the list again. And
+the **`SANDBOX · MAY RESET` line is permanent** — it sits above the samples
+rather than scrolling away in a banner, because it is the one thing on the page
+that has to stay true for as long as the page is open.
+
+Above 760px the samples are two columns of one line; below it they are one
+column, the note drops out of the drawn row and stays as the control's name, and
+every control a finger has to hit keeps the 44px floor.
+
+**`/stats` is the live dashboard, read-only.** The bridge runs one `emb-top`
+producer against the loopback node and streams that producer's own rendered
+frames at `/api/stats`; the page replaces one block of monospace text per second
+and carries no control. The producer is a child process, so the bridge never
+links the TUI's renderer (and never runs its terminal-background query), and a
+stop signal reaches both. The window is five minutes at the default poll
+interval, the subscriber count is bounded, and nothing the page can request
+reaches the command surface.
+
+**The preset digests are checked.** A preset is called by the SHA1 of the bytes
+the server preloaded, so the digest the site shows must be that value:
+
+```bash
+just website-presets          # stamp website/repl/presets/*.lua into index.html
+just website-presets-check    # fail if a preset byte changed under a digest
+```
+
+`stamp-presets.py` also asserts that `website/repl/sandbox.yaml` preloads each
+preset, so the site cannot name a digest the server was never told to load.
+Both `ci.yml` and `site.yml` run the check.
+
+**Nothing here is a hosted offering.** The machine stays running and the
+sandbox may reset; it refuses `CONFIG`, `AUTH`, `MONITOR`, `EMB.SAVE`,
+`EMB.CACHE.FLUSH`, `EMB.SCRIPT *`, and `EMB.IMG*` at the bridge, and bounds
+what a visitor can spend with per-client and global rate limits, a concurrency
+cap, request and text caps, and a rolling work ceiling. See
+[`repl/`](repl/) and `PRODUCT.md`.
+
+**Deploying.** One machine with one volume, declared in
+[`repl/fly.toml`](repl/fly.toml); `just sandbox-deploy` is
+`fly deploy . -c website/repl/fly.toml` run from the repository root, because
+the image needs the Go module and the positional `.` is the build context
+(`build.dockerfile` in that file is resolved against the file's own directory,
+not against that context).
+
+The first deploy needs three things flyctl does not do for you — create the
+app, allocate its ingress addresses, and attach the host name:
+
+```bash
+fly apps create emb-sandbox
+just sandbox-deploy                                    # --volume-initial-size 3 on a first deploy
+fly ips allocate-v6 -a emb-sandbox                     # free, dedicated
+fly ips allocate-v4 --shared -a emb-sandbox            # free, needed for IPv4 clients
+fly certs add cli.emb.is -a emb-sandbox                # after the CNAME below exists
+```
+
+A machine that is up with passing health checks is still unreachable until an
+IP is allocated: `*.fly.dev` has no address, and `fly deploy` on a new app
+prints `Failed to provision IP addresses` without failing, then ends by naming
+the `fly.dev` host as if it resolved. The `cli.emb.is` record is a **CNAME to
+`emb-sandbox.fly.dev`, DNS-only** in the `emb.is` zone — Fly issues its
+Let's Encrypt certificate over TLS-ALPN-01, which a proxied record intercepts.
+`fly certs check cli.emb.is` reports the state, and
+`fly logs -a emb-sandbox` shows the first boot downloading both models onto
+`/data` before `/api/ready` turns true.
+
+`ORIGINS` in that file is the fixed list of page origins the bridge answers.
+A Worker preview alias (`pr-<n>-emb-site.<account>.workers.dev`) is not on it,
+so the live console on a site preview refuses at the bridge; the apex is.
 
 ## Design notes
 
@@ -479,6 +671,25 @@ repeated one, made of material already on the page** — the SERVE plate's own
 this one turned over. Its `--muted` is remapped to `--rule`, because
 `#6B6963` measures only **3.40:1** on `#111110`.
 
+**Direction contract (console REPL pass).** The console is a *terminal*, not a
+*demonstrator*. One prompt, one transcript, one status strip, and a menu that
+stays: no mode selector and no control whose only purpose is to change what the
+transcript is about. The menu is seven commands the sandbox permits, rendered as
+ruled numbered rows, each one click to run, always on screen — so the panel
+teaches by being runnable instead of by carrying a hint sentence, and it stays
+worth clicking after the first click. A
+command that is run is a command that is in history, whether it was typed or
+chosen, and `Enter` and `↑`/`↓` are the whole interaction. The one choice left
+(`RESP 2|3`) is a real one the spec requires to stay observable, and it stays a
+native `<select>` because a segmented control would cost new markup, new state
+and new focus rules to look right in a two-item strip. Nothing here introduces a
+colour, an atom or a motion that the plate did not already have: the status strip
+is the bar's own bar, the example rows are the poster's ruled numbered entry, and
+the `↵` is the `RUN` button with its label removed rather than a control deleted.
+Target: a first-time reader holds a reply after one click and a second one after
+one keypress, and a keyboard reader tabs into six operable commands rather than a
+dead box.
+
 **The console is the SERVE plate, laid flat.** It reuses that plate's own
 faces plus the same 1px `--bg` stroke every other plate carries, and it sits
 *above* the spine: the line passes behind it and re-emerges below, which is
@@ -493,45 +704,154 @@ at **6.06:1**. `--accent-ink` is the one token that does *not* travel: it is
 tuned for the paper (4.66:1) and measures only **3.52:1** here, so the console
 overrides the global focus ring back to `--accent`.
 
-**It is hidden for the first ship, and one attribute brings it back.** The
-live runtime is not wired yet, so `<section class="console" … hidden>` keeps
-the markup, the styles and the transcript client in the tree while taking the
-panel out of the rendered page and the accessibility tree; `main.js` only
-boots a console that is not `hidden`. Removing that single attribute restores
-the placeholder exactly, and the `window.embConsole.exec` seam below is what a
-live RESP client replaces. Everything the panel does is described here as the
-artifact it is, not as what a reader sees today.
+**It runs a live executor.** The panel is rendered, not withheld: the executor
+is `window.embTerminal`, the client module the sandbox serves at
+`cli.emb.is/terminal.js`, and `main.js` drives the markup with it. The panel
+never fabricates a reply — if the module cannot be loaded, or the sandbox
+cannot be reached, the panel states that condition and offers a retry. There
+is no transcript behind the seam.
 
-**It is a placeholder, and it says so.** The bar reads `DEMO · NOT A LIVE
-SERVER`, the note under the panel says the live client is not wired, and there
-is no endpoint anywhere. The controls are real — a `<form>`, a labelled input
-and a `<pre aria-live>` — so the live version is not a rewrite: replacing
-`window.embConsole.exec` with a RESP client drives the same markup, modes and
-states. Two modes are the two special functions: `REDIS` shows the bytes and
-the `VALUES` envelope, `SCRIPTS` shows a script loaded once and called by SHA
-to answer as a classifier. Every line is copied from `README.md` or
-`examples/scripts/`, and the SHA1 in the scripts transcript is a real
-`sha1()` of `examples/scripts/snippets/sst2.lua` — the same value the server's
-`scriptSHA()` returns. The executor never touches the network, playback is
-line-by-line rather than per character, and `prefers-reduced-motion` collapses
-it to one frame. Without JavaScript the form is hidden and a `<noscript>`
-transcript stands in.
+**One client, two surfaces.** The same module drives the sandbox's own
+standalone terminal at `cli.emb.is/`, so a command and its reply render the
+same way on both — and so does the panel around them: the same prompt, the same
+example rows, the same status strip, and the same recall over submitted
+commands, because the history lives in the module rather than in either page. The module owns the tokenizer (quote-aware), the request
+(`POST /api/exec {args, proto}`), the reply renderer for every envelope kind,
+and the idle / running / result / error / starting / offline states; the page
+owns only the DOM. Which host the module came from is captured from its own
+`src`, so no page hardcodes the sandbox address in its copy — the console
+presents no endpoint, host, or hosted-service affordance.
 
-The panel is a real `role="tablist"` with roving `tabindex` and arrow-key
-navigation, and the live region is armed *after* the idle line is painted, so
-loading the page does not announce a console hint. Every control clears the
-44px target floor at 320–834px. The smallest text in the region is **12px at
-1086** and **14px at 390**, which is the committed floor.
+**The badge says what it is, and it is the whole disclaimer.** `SANDBOX · MAY
+RESET` sat above a paragraph that repeated it in a sentence — the same claim
+twice, in two voices, the second a wall of text under a terminal. The paragraph
+is gone; the badge shows at every width, where it used to be hidden below 834px
+on the argument that the paragraph said more there. That argument died with the
+paragraph, and the badge fits on one strip line now that the protocol selector
+does not share it. There is no pricing, account, uptime, or support affordance.
+
+**The console is a REPL with a menu.** There is no mode selector: the two
+special functions the panel exists to show are two rows in a list of six
+commands, each one click to run, each one a real submission that lands in the
+history the arrow keys walk. The rows are built from the two digests the section
+carries, so the console cannot offer a command the sandbox refuses.
+
+The menu is part of the panel, not of a state. It sits *above* the transcript and
+nothing replaces it, so the reader who has just run one command can run the next
+one without reloading the page — which is the only way a menu of commands
+earns its place. Above rather than below because of what is on screen at rest:
+under the transcript an untouched console shows a tall empty field between the
+strip and the menu, and over it the row below the strip is the menu and the empty
+space is the output area directly above the prompt.
+
+**The ledger of twelve is beside the plate, not inside it.** The plate is the
+terminal — a strip, a transcript and a prompt, three bands and nothing else — and
+the ledger above it is what to put in it. It is the poster's ruled numbered entry
+on the paper ground, so it reads as a page of the manual rather than as chrome
+around a widget, and its hover and focus states are the paper's button language
+rather than the plate's.
+
+`REPLY FORMS` is what comes back and is the reason the panel exists: the float
+bytes, the typed envelope, one call across two models, and the two preloaded
+presets by digest. `THE SERVER` is what the server knows: `EMB.MODELS`,
+`EMB.INFO`, `EMB.STATS`, `EMB.READY`, `EMB.HELP`, `PING`, `INFO` — one word
+each, so they carry no notes and fit in a single row of seven, closed by one rule
+rather than ruled inside itself. Between them the twelve rows are every command
+the sandbox permits, so nothing the panel can do is left to be guessed at.
+
+The heading of the first group carries `click one to run it below`, which is the
+whole connection between the two objects and is stated once.
+
+The second group's notes are dropped rather than shortened: a note on
+`EMB.STATS` would be a second line inside a cell for every one of the seven, to
+say what the command's own name already says. The reply forms keep theirs,
+because "384 float32s, as bytes" is not in the command.
+
+There is no protocol selector: the flat and the typed forms are two rows, so
+there is nothing to set before either can be read. `terminal.js` still carries
+`proto` in its request — that is the module's contract with the bridge, not the
+panel's furniture.
+
+**Every reply states what it cost.** The client times the call from the moment
+the reader submitted it, not from the last retry, so a sandbox that has to wake
+up reports the wait it actually cost; the reply ends with `(42 ms)`, or `(23.51
+s)` when it was that kind of morning. It is the panel's answer to the only
+question a reader has about an embedding server and cannot see from a reply.
+
+**The strip names the console's own condition**, and it is now only that: the
+state on the left, `SANDBOX · MAY RESET` on the right. Its colour is read from
+one `data-state` attribute rather than from a second list that can disagree with
+the label — `--rule` while idle and `--bg` once there is something to read,
+`--accent` while the sandbox is working, waking or gone, with the indicator
+pulsing only in the two states that are actually in progress.
+
+**The transcript is a window, not a page.** `.console__screen` has a floor and a
+ceiling and scrolls between them, and `main.js` follows the newest line only when
+the reader was already at the end — so a long reply neither grows the panel nor
+interrupts a reader who has scrolled back through one. Whether to follow is read
+*before* the transcript grows: read after, a batch of lines arrives with the
+panel already past its own threshold and the reader is left at the top of output
+they never saw.
+
+At rest the transcript is not empty: one dim line in the panel's own voice says
+the one thing the ledger above cannot — that the arrow keys walk what you have
+run — and the first command replaces it. The plate is **205px** at 1440px and
+**192px** at 390px, against 467px and 941px for the version that carried the menu
+and the paragraph, and it never passes **320px** however long the reply is.
+
+**A menu row is a label, not the command.** Where a command and its note cannot
+share a row, the drawn label elides the digest — `EMB.EVSHA sst2 51ae48b3… 1 …` —
+while the button submits the command in full and keeps it in full in its
+accessible name. A 40-character SHA spent in a menu is a row that wraps for no
+reader's benefit, and the digest is printed in full the moment the command runs.
+Below 834px the rows are one column of one line: the note is dropped from the
+drawn row and kept as the button's name, and the badge is dropped from the strip,
+where the note under the panel says the same sentence in full.
+
+**Enter submits, and the arrow keys recall.** Recall stops at both ends rather
+than wrapping, holds the line being typed for the whole walk, and is
+feature-detected, because the module is served from the sandbox's own origin
+and a page can be newer than the client it loads. `RUN` survives as a `↵`
+beside the prompt: it is not a second way to submit so much as the touch target
+a soft keyboard needs.
+
+**The digests are derived, not typed.** `just website-presets` stamps
+`data-emb-preset-embed` and `data-emb-preset-classify` from the SHA1 of
+`website/repl/presets/*.lua` — the same `sha1(bytes)` the server computes for
+the script it preloaded — and `--check` fails when a preset byte changes under
+a stamped digest. Without that, editing a preset would leave the site naming a
+digest the sandbox answers `no such script` to.
+
+The panel paints its examples before the live region is armed, so loading the
+page does not announce a list of commands. Playback of replies is line-by-line
+rather than per character, and `prefers-reduced-motion` collapses it to one
+frame. Without JavaScript the form is hidden and a labelled `<noscript>`
+specimen stands in, so the section is never empty.
+
+Every control clears the 44px target floor at 320–834px. The smallest text in the region is
+**12px at 1086** and **14px at 390**, which is the committed floor.
 
 **Code is typeset as code.** Every specimen — the shell invocation, the Lua
-source, the `model(fn(input))` shift, and the console's replayed commands and
-replies — carries four token classes. The specs in the markup are marked by
-hand; the console's plain-string transcripts get the identical classes from a
-small pattern-based highlighter in `main.js` (four rules, no library), which
-is why `sst2` is not mangled into `sst` + `2`: the numeric rule is
-word-bounded. Emphasis is weight and colour-role, never a second hue — the
-page has one accent and this does not spend it twice. Measured on both
-grounds:
+source, the `model(fn(input))` shift, and the `<noscript>` console specimen —
+carries four token classes, marked up by hand. The live console's transcript
+carries the same four, from `embTerminal.highlight`: a command or a reply's own
+keyword, a quoted string literal, a number. The console had been the one place
+that was *not* typeset as code, which the site's own requirement does not allow
+— "the console's replayed commands and replies" are named in it — so the
+highlighter is back, in the client module rather than in either page, and the
+two surfaces mark up identically.
+
+It marks only what it can recognise without ambiguity, and it is told whether a
+line is a command or a reply. Only a command has a command word at its head and
+only a command carries the reply-format keywords; a reply is matched against the
+value words it can actually contain, so a labelled `POSITIVE` is left alone
+instead of being dressed as a command. A *run* is matched whole before it is
+classified, which is what keeps `sst2` a model name and a 40-character digest a
+digest rather than a shower of numbers. Dim and error lines are left whole:
+those are the panel's voice, not code.
+
+Emphasis is weight and colour-role, never a second hue — the page has one accent
+and this does not spend it twice. Measured on both grounds:
 
 | Class | Paper | Ratio | Dark | Ratio |
 |---|---|---|---|---|
@@ -544,6 +864,40 @@ grounds:
 A code block's only container is a rule above and below it. It never uses a
 coloured side border, which the craft floor refuses and the poster's own
 language does not use.
+
+**The same take is on `/docs`, and it does not move until asked.** The
+documentation surface's plate is a figure in the reference measure rather than
+a band, and it is written by the same `publish.py` from the same run: the frame,
+the cast URL, the caption and the figures are stamped by data attribute on both
+pages, so the two cannot describe different recordings.
+
+The one real difference is declared on the mount. The landing page's plate
+autoplays and loops because it is the section's argument; the reference page's
+player is created at once and **held** — `autoplay: false` at the run's poster
+frame — so the plate shows the recording drawn in the dashboard's own colours,
+stopped at zero, and starts only when the reader asks. That is the difference
+between a page arguing and a page explaining, and it is why the documentation
+plate is the player rather than the `<pre>` beside it: the frame is
+`asciinema convert -f txt` output and carries no ANSI at all, so resting on it
+would draw the dashboard in one flat colour while the GIF in
+`docs/operations.md` showed the same run in its real palette. The frame is what a
+reader the player cannot reach keeps, not this surface's picture of the run.
+
+**The held plate carries no control of its own.** The player draws a start
+overlay over a poster frame, so the `PLAY THE RECORDING` button an earlier
+revision added was a second control, in a second place, for the same action —
+deleted with its markup and its rules. The plate's one control is the player's
+own transport, which is also the pause the motion contract promises.
+
+That retires this file's earlier rule that `/docs` ships no JavaScript. The page
+now links the vendored player and one small module (`assets/js/topviz.js`, the
+same file the landing loads), and its no-scripting state is the whole plate minus
+the picture: the frame, the caption and the run's figures are all static markup,
+and there is no control to be left inert, because the control is the player's
+own. The plate's `restore()` path — a take that will not load — puts the frame
+back and hides the emptied mount. At widths where the plate is not drawn the
+player is never built and the recording is never fetched; the run's figures
+stand in, as they do on the landing.
 
 **`emb-top` is a full-width band.** Its capture's longest line is ~100
 characters; no 640px column holds that without either cutting the output or

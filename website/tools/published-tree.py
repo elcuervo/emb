@@ -61,7 +61,11 @@ SERVED = frozenset(
         "docs/index.html",
         "assets/css/styles.css",
         "assets/css/docs.css",
+        "assets/css/asciinema-player-3.17.0.css",
         "assets/js/main.js",
+        "assets/js/topviz.js",
+        "assets/cast/emb-top-dd60083b.cast",
+        "assets/js/asciinema-player-3.17.0.min.js",
         "assets/fonts/archivo-var-latin.woff2",
         "assets/fonts/inter-900-latin.woff2",
         "assets/fonts/jetbrains-mono-var-latin.woff2",
@@ -78,6 +82,13 @@ SERVED = frozenset(
 # them into SERVED keeps the check honest about what a reader can fetch — a
 # `_headers` that ships as a static file is a bug, not a success.
 PLATFORM_FILES = frozenset({".assetsignore", "_headers"})
+
+# The sandbox service lives under the site directory and is not the site: its
+# source, server configuration, preset Lua, image build, and terminal page are a
+# program, not a page. Excluding the directory is not enough on its own — the
+# exclusion is asserted here, so neither a deleted `.assetsignore` line (which
+# would publish service source) nor a re-included file can pass unnoticed.
+SERVICE_PREFIX = "repl/"
 
 # Paths whose bytes change under a stable name, because there is no build step
 # to hash them. These must never be pinned immutable by `_headers`.
@@ -176,9 +187,20 @@ def check_published_set(patterns: list[str]) -> list[str]:
         if not any(matches(relative, pattern) for relative in files):
             print(f"published-tree: warning: {pattern!r} matches nothing", file=sys.stderr)
 
+    service = {relative for relative in files if relative.startswith(SERVICE_PREFIX)}
+    if not service:
+        problems.append(
+            f"absent:       {SERVICE_PREFIX} (the sandbox service directory is missing)"
+        )
+    for relative in sorted(service):
+        if relative not in ignored:
+            problems.append(
+                f"unexcluded:   {relative} (sandbox service code must never ship)"
+            )
+
     print(
         f"published-tree: {len(served)} served, {len(ignored)} ignored, "
-        f"{len(PLATFORM_FILES)} platform config"
+        f"{len(PLATFORM_FILES)} platform config, {len(service)} sandbox service file(s)"
     )
     return problems
 

@@ -23,6 +23,7 @@
 <link rel="preload" href="assets/fonts/inter-900-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/asciinema-player-3.17.0.css">
 <link rel="stylesheet" href="assets/css/styles.css">
 <script>document.documentElement.classList.add('js');
 /* The class above hides the hero for its entrance, and only main.js can bring
@@ -141,7 +142,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
             <span class="hero__install-key">INSTALL</span><code class="hero__install-cmd">curl -fsSL https://github.com/elcuervo/emb/raw/main/install.sh | sh</code>
           </p>
           <dl class="facts hero__facts">
-            <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0.pre4</span> · MIT</dd>
+            <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.0</span> · MIT</dd>
             <dt>BUILDS</dt><dd>macOS arm64 · Linux amd64/arm64</dd>
             <dt>MEASURED</dt><dd><span class="t-num">2010.05 req/s</span> · minilm, 16 clients, Apple M4 · <a class="hero__link" href="https://github.com/elcuervo/emb/blob/main/BENCHMARK.md#multi-threaded">reproduce</a></dd>
           </dl>
@@ -487,11 +488,130 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
   </div>
 </section>
 
+    <!-- ══════════════════════════════════════════════════════ BLOCK · DEMO -->
+    <!-- Block 1 of 4. The page turns over early, into the plate's own material
+         (#111110), because the panel below is not an illustration of the
+         sandbox -- it is the sandbox. The prose says what answers and what the
+         bridge refuses; the ledger says what to type; the plate is the
+         terminal. The spine crosses this ground in plain sight, and the plate
+         is still the thing that covers it. -->
+    <section class="block block--dark" id="demo" aria-labelledby="demo-h">
+      <div class="shell block__inner">
+        <div class="block__body">
+          <span class="spine" aria-hidden="true"></span>
+
+        <h2 class="block__head" id="demo-h">THE SERVER IS THE DEMO</h2>
+
+        <div class="block__grid">
+          <div class="block__main">
+
+            <p class="block__deck">
+              A real <span class="t-cmd">emb</span> process answers every
+              command below. It is the same binary you would run locally,
+              loaded with the sandbox's own models, reached over RESP through
+              a bridge that may ask it questions and may not change it: no
+              configuration, no script loaded from this page, nothing written
+              to shared state.
+            </p>
+
+            <p class="block__deck">
+              Run a row from the ledger, or type your own command and press
+              Enter. <span class="t-cmd">↑</span> and
+              <span class="t-cmd">↓</span> walk what you have already run, and
+              every reply is followed by the round trip that produced it,
+              measured here at the page. Nothing below is replayed from a
+              recording: the bytes are what this server sent, this time.
+            </p>
+
+          </div>
+
+          <div class="block__aside">
+            <dl class="facts">
+              <dt>ANSWERS</dt><dd>emb v<span data-emb-version>0.4.0</span> · minilm · sst2</dd>
+              <dt>RUNS</dt><dd><span class="t-cmd">EMB</span> · <span class="t-cmd">EMB.MULTI</span> · the read commands</dd>
+              <dt>REFUSES</dt><dd>config · raw Lua · images · writes</dd>
+              <dt>BOUNDS</dt><dd>2 commands/s · 8 texts · 2 KB per text</dd>
+              <dt>MEASURED</dt><dd>the round trip, printed under each reply</dd>
+              <dt>RESETS</dt><dd>the sandbox may restart between visits</dd>
+            </dl>
+          </div>
+        </div>
+
+        <!-- The live console. Its executor is `window.embTerminal`, loaded from
+             the sandbox origin by the script tag below this document's own
+             script. When that module cannot be reached the console renders its
+             offline state; it never falls back to a transcript. The two
+             digests are stamped from the preset bytes by
+             `website/tools/stamp-presets.py`, and `EMB.EVSHA` here names only
+             those bytes: the console's example commands are built from them,
+             so it cannot offer a digest the sandbox refuses. -->
+        <!-- The commands the console takes, as a ledger above it rather than
+             as part of it: the plate below is the REPL, and this says what to
+             put in it. `main.js` fills it from the two digests the section
+             carries; it ships empty and `hidden`, so a reader without
+             scripting sees the specimen below instead of an empty box. -->
+        <section class="examples" aria-label="Example commands" data-reveal>
+          <div class="examples__band" id="console-examples" hidden></div>
+        </section>
+
+        <section class="console" id="console" data-console="live" data-state="idle"
+                 data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445"
+                 data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32"
+                 aria-labelledby="console-h" data-reveal>
+          <h3 class="sr-only" id="console-h">Console</h3>
+
+          <div class="console__bar">
+            <p class="console__status" id="console-status">
+              <span class="console__dot" id="console-dot" aria-hidden="true"></span><span class="console__status-t" id="console-status-t">IDLE</span>
+            </p>
+            <p class="console__badge">SANDBOX · MAY RESET</p>
+          </div>
+
+          <div class="console__screen" id="console-screen">
+            <div class="console__out" id="console-out" aria-live="off"></div>
+            <noscript>
+              <!-- The specimen is complete without JavaScript: it is a static
+                   capture, labelled as one, so the section is never empty. -->
+              <pre class="console__out console__out--static">SPECIMEN · CAPTURED FROM THE SANDBOX
+
+EMB minilm VALUES "hello world"
+  dtype       FLOAT
+  shape       [1 384]
+  values      [-0.19744610786437988, 0.17766517400741577, …]
+
+EMB minilm "hello world"
+  \x7c\x8e\x80\xbd…   384 float32s × 4 bytes · 1.5 KB bulk string
+
+EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
+  label       POSITIVE
+  confidence  0.99
+  scores      […]
+
+Run these on a local server; this panel is a specimen without JavaScript.</pre>
+            </noscript>
+          </div>
+
+          <p class="console__state" id="console-state" hidden></p>
+
+          <form class="console__form" id="console-form" autocomplete="off">
+            <label class="console__prompt" for="console-in">emb&gt;</label>
+            <input class="console__input" id="console-in" name="command" type="text"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   spellcheck="false" enterkeyhint="go"
+                   placeholder='EMB minilm "hello world"'>
+            <button class="console__run" type="submit" aria-label="Run the command"
+                    title="Run (Enter)"><span aria-hidden="true">↵</span></button>
+          </form>
+        </section>
+
+        </div>
+      </div>
+    </section>
+
     <!-- ════════════════════════════════════════════════════ BLOCK · PROTOCOL -->
-    <!-- Block 1 of 3. Paper ground, the spine in an explicit lane, and the
-         console plate covering the lane where it crosses: the same rule the
-         hero's plates follow. Facts sit right of the fold in the annotation
-         strip; body text never touches the line. -->
+    <!-- Block 2 of 4. Paper ground, the spine in an explicit lane. Facts sit
+         right of the fold in the annotation strip; body text never touches the
+         line. -->
     <section class="block block--paper" id="protocol" aria-labelledby="protocol-h">
       <div class="shell block__inner">
         <div class="block__body">
@@ -543,73 +663,14 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           </div>
         </div>
 
-                <!-- HIDDEN for the first ship. The live runtime is not wired
-                     yet, so the panel is kept here, inert and out of the
-                     accessibility tree, rather than deleted. Removing the one
-                     `hidden` attribute below restores the placeholder
-                     transcript client exactly; pointing `window.embConsole.exec`
-                     at a RESP client then makes it live. See
-                     `website/README.md` § the console. -->
-                <section class="console" id="console" data-console="transcript" aria-labelledby="console-h" data-reveal hidden>
-          <h3 class="sr-only" id="console-h">Console</h3>
-
-          <div class="console__bar">
-            <div class="console__modes" role="tablist" aria-label="Console mode">
-              <button class="console__mode" type="button" role="tab" id="tab-redis"
-                      aria-controls="console-screen" aria-selected="true" data-mode="redis"
-                      data-tab="0">REDIS</button>
-              <button class="console__mode" type="button" role="tab" id="tab-scripts"
-                      aria-controls="console-screen" aria-selected="false" data-mode="scripts"
-                      data-tab="1" tabindex="-1">SCRIPTS</button>
-            </div>
-            <p class="console__badge">DEMO · NOT A LIVE SERVER</p>
-          </div>
-
-          <div class="console__screen" id="console-screen" role="tabpanel"
-               aria-labelledby="tab-redis" tabindex="-1">
-            <pre class="console__out" id="console-out" aria-live="off"></pre>
-            <noscript>
-              <pre class="console__out console__out--static">EMB minilm "hello world"
-  \x7c\x8e\x80\xbd…   (384 float32s × 4 bytes)
-
-  EMB minilm VALUES "hello world"
-  dtype  FLOAT
-  shape  [1 384]
-  values [-0.19744610786437988, 0.17766517400741577, …]
-
-  EMB.SCRIPT LOAD sst2 "…sst2.lua…"
-  "77c1e0c01d3c43e8f07b262869d13c21b93b28f9"
-
-  EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE
-  label       POSITIVE
-  confidence  0.99
-  scores      […]</pre>
-            </noscript>
-          </div>
-
-          <form class="console__form" id="console-form" autocomplete="off">
-            <label class="console__prompt" for="console-in">EMB ›</label>
-            <input class="console__input" id="console-in" name="command" type="text"
-                   autocomplete="off" autocapitalize="off" autocorrect="off"
-                   spellcheck="false" enterkeyhint="go"
-                   placeholder='EMB minilm "hello world"'>
-            <button class="console__run" type="submit">RUN</button>
-          </form>
-          <p class="console__note">
-            Placeholder transcript from the reference server. The live client
-            is not wired yet.
-          </p>
-        </section>
-
         </div>
       </div>
     </section>
 
     <!-- ═══════════════════════════════════════════════════ BLOCK · SCRIPTS -->
-    <!-- Block 2 of 3. The page's single inversion: full-bleed #111110, the
-         plates' own material, and the one place the spine crosses a dark
-         ground in plain sight. Code is the content here, not an illustration
-         of it. -->
+    <!-- Block 3 of 4. Full-bleed #111110, the plates' own material, and the
+         place the spine crosses a dark ground in plain sight. Code is the
+         content here, not an illustration of it. -->
     <section class="block block--dark" id="scripts" aria-labelledby="scripts-h">
       <div class="shell block__inner">
         <div class="block__body">
@@ -683,7 +744,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
     </section>
 
     <!-- ══════════════════════════════════════════════════ BLOCK · OPERATIONS -->
-    <!-- Block 3 of 3. Back to paper, and the densest measure on the page: a
+    <!-- Block 4 of 4. Back to paper, and the densest measure on the page: a
          ledger of the commands an operator already knows, with the emb-top
          capture as the dark plate that proves it. -->
     <section class="block block--paper" id="operations" aria-labelledby="operations-h">
@@ -749,18 +810,58 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
             Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
             trip, over the same protocol you already speak.
           </p>
-          <!-- Field spans, not decoration: a line may break between these
-               but never inside one, so at the widths where the render cannot
-               hold a line no value is split from its unit. Every character
-               of the capture is unchanged. -->
-          <pre class="topviz__screen"> <span class="tf">emb-top v<span data-emb-version>0.4.0.pre4</span> ·</span> <span class="tf">localhost:6379 ·</span> <span class="tf">uptime 3h22m ·</span> <span class="tf">4 models ·</span> <span class="tf">poll 1s ·</span> <span class="tf">447 r/s ·</span> <span class="tf">p95 86.0ms ·</span> <span class="tf">● connected</span>
-<span class="tf">minilm</span>        <span class="tf tf--bar">████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████</span>  <span class="tf">280 r/s</span>  <span class="tf">11.8k t/s</span>  <span class="tf">p50 6.5ms</span>  <span class="tf">p95 68.0ms</span>  <span class="tf">err 0</span>
-   <span class="tf">dim 384 ·</span> <span class="tf">mean ·</span> <span class="tf">int8 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
-<span class="tf">bge-small-en…</span> <span class="tf tf--bar">▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████</span>  <span class="tf">151 r/s</span>   <span class="tf">5.7k t/s</span>  <span class="tf">p50 8.8ms</span>  <span class="tf">p95 77.0ms</span>  <span class="tf">err 18 ↑</span>
-   <span class="tf">dim 384 ·</span> <span class="tf">cls ·</span> <span class="tf">fp32 ·</span> <span class="tf">batch 32/16384</span> <span class="tf">workers 2</span>
-<span class="tf">cache 93.6% <span class="tf--bar">██████████</span></span>  <span class="tf">cpu 50.3% <span class="tf--bar">██████</span></span>  <span class="tf">mem 552MB <span class="tf--bar">████████████</span></span>
-<span class="tf">conns 7 ·</span> <span class="tf">active 1 ·</span> <span class="tf">goroutines 22 ·</span> <span class="tf">truncated 0/0</span></pre>
-          <p class="topviz__src">Illustrative render · not a measured run</p>
+          <!-- A capture, not a drawing — and it plays. `.topviz__live` is the
+               player's mount point and it is deliberately empty: the player
+               builds its terminal into the element it is given, so nothing this
+               page needs to keep can live inside it. The take's URL is written
+               into `data-topviz-cast` by website/tools/topviz/publish.py — do
+               not hand-edit it.
+
+               The `<pre>` beside the mount is that run's own frame, taken from
+               the middle of it, and it is not a fallback to be tidied away: it
+               is what a reader with scripting off or a reduced-motion
+               preference keeps. It paints before any script runs, so the plate
+               is never empty and never shifts under the player, and it comes
+               back if the take will not load. The player draws the same
+               recording's own characters as text, so the plate stays selectable
+               and sharp either way; there is still no image of the dashboard on
+               this page. The frame, the caption and the figures below are
+               written by `publish.py` — do not hand-edit them. -->
+          <div class="topviz__play">
+          <div class="topviz__live" data-topviz-cast="assets/cast/emb-top-dd60083b.cast" data-topviz-autoplay="1" data-topviz-loop="1" data-topviz-speed="1.8" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.0.pre5 · 127.0.0.1:16379 · uptime 29s · 4 models · poll 1s · 85.6 r/s · p95 12.2ms · ● connected
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  req/s · models × recent polls  ████████                                                                     │
+│ e5-small      ██████████████████████████████████████████████████████████████████████████████████████████████ │
+│ minilm        ██████████████████████████████████████████████████████████████████████████████████████████████ │
+│ jina-small    ██████████████████████████████████████████████████████████████████████████████████████████████ │
+│ bge-small     ██████████████████████████████████████████████████████████████████████████████████████████████ │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
+│     │                                 ╭─╮ ╭──╮│ ╰─╮    ││       │                                  ╭────────╯    │
+│  136│                                 │ ╰─╯  ╰╯   ╰╮   ││  8.1ms│                               ╭──╯             │
+│     │                             ╭───╯            ╰── ││       │                           ╭───╯                │
+│ 67.8│                             │                    ││  4.1ms│                          ╭╯                    │
+│     │                            ╭╯                    ││       │                          │                     │
+│  0.0│                          ──╯                     ││   0µs │                        ──╯                     │
+╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
+e5-small                       ▂██▆▆▅▃▄▃ 34.8 r/s 419 t/s p50 4.9ms p95 14.2ms err 0
+   dim 384 · mean · fp32 · batch 32/16384 workers 1
+minilm             ▂▇██▆▇▇▅▅▆▄▅▃▄▄▃▃▃▃▂▂ 26.9 r/s 245 t/s p50 2µs p95 5.5ms err 0
+   dim 384 · mean · fp32 · batch 32/16384 workers 1
+jina-small                 ▃▆█▆▅▅▃▃▃▂▃▂▂ 15.9 r/s 145 t/s p50 2µs p95 5.7ms err 0
+   dim 512 · mean · fp32 · batch 32/16384 workers 1
+bge-small              ▁▇█▆▅▅▄▄▃▂▃▁▃▁▁ ▁ 8.0 r/s 72.7 t/s p50 2µs p95 9.5ms err 0
+   dim 384 · cls · fp32 · batch 32/16384 workers 1
+cache   54.1%                          cpu     90.9%                          mem     1.1kMB
+█████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
+█████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
+  conns 2 · active 0 · goroutines 25 · truncated texts/pairs/images 0/0/0
+  event e5-small · 1 texts · 5.9ms ✓
+q quit · p pause · r reset · j/k scroll · ? help</pre>
+          </div>
+          <p class="topviz__src">Measured run · <span data-topviz-run>2026-09-15 · emb-top v0.4.0.pre5 · 4 models · 127.0.0.1:16379</span></p>
+          <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 224 requests/s, 2.4k tokens/s, p95 latency 8.6ms, cache hit rate 37%, CPU 174%, 1050MB resident. Per model: minilm 47/s (avg 1.3ms, dim 384, mean, fp32); bge-small 18/s (avg 2.4ms, dim 384, cls, fp32); jina-small 44/s (avg 1.8ms, dim 512, mean, fp32); e5-small 115/s (avg 2.4ms, dim 384, mean, fp32).</p>
         </section>
 
         </div>
@@ -809,6 +910,9 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
   </div>
 </footer>
 
+<script src="assets/js/asciinema-player-3.17.0.min.js" defer></script>
+<script src="https://cli.emb.is/terminal.js" defer></script>
+<script src="assets/js/topviz.js" defer></script>
 <script src="assets/js/main.js" defer onerror="document.documentElement.classList.remove('js')"></script>
 </body>
 </html>

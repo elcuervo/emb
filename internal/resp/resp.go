@@ -1,10 +1,11 @@
-// Package resp is a minimal RESP2 client shared by emb's operator tooling
-// (emb-top and the embedding verifiers).
+// Package resp is a minimal RESP client shared by emb's operator tooling
+// (emb-top, the embedding verifiers, and the sandbox bridge).
 //
-// It decodes only the reply shapes emb produces: bulk strings ('$'), status
-// ('+'), integers (':'), arrays ('*'), errors ('-'), and nil (empty bulk or
-// array). It imports nothing from internal/server, so tools built on it build
-// without CGo/onnxruntime.
+// It decodes the reply shapes emb produces: bulk strings ('$'), status ('+'),
+// integers (':'), arrays ('*'), errors ('-'), nil (empty bulk or array), and the
+// RESP3 kinds the server emits — maps ('%'), doubles (','), and nulls ('_').
+// It imports nothing from internal/server, so tools built on it build without
+// CGo/onnxruntime.
 package resp
 
 import (
@@ -18,13 +19,24 @@ import (
 	"time"
 )
 
-// Reply is one RESP2 reply.
+// Reply is one RESP reply.
 type Reply struct {
-	Type  byte    // '+', '-', ':', '$', '*'
+	Type  byte    // '+', '-', ':', '$', '*', '%', ',', '_'
 	Str   string  // payload for + / - / $
 	Int   int64   // payload for :
-	Elems []Reply // payload for *
-	Nil   bool    // nil bulk or array
+	Float float64 // payload for ,
+	Elems []Reply // payload for * (elements) and % (alternating key/value)
+	Nil   bool    // nil bulk, array, or null (_, $-1, *-1)
+}
+
+// MapPairs returns a map reply's entries as key/value pairs. Elems holds them
+// flattened in wire order, so ordering is preserved; the count is always even.
+func (r Reply) MapPairs() [][2]Reply {
+	pairs := make([][2]Reply, 0, len(r.Elems)/2)
+	for i := 0; i+1 < len(r.Elems); i += 2 {
+		pairs = append(pairs, [2]Reply{r.Elems[i], r.Elems[i+1]})
+	}
+	return pairs
 }
 
 // Err returns the error for an error reply, else nil.
@@ -38,7 +50,7 @@ func (r Reply) Err() error {
 // String returns the string payload (bulk/status) or "" for other types.
 func (r Reply) String() string { return r.Str }
 
-// Client is a minimal RESP2 client for an emb node.
+// Client is a minimal RESP client for an emb node.
 type Client struct {
 	addr      string
 	password  string
@@ -48,6 +60,10 @@ type Client struct {
 	conn net.Conn
 	r    *bufio.Reader
 	w    *bufio.Writer
+
+	// proto is the RESP version negotiated on this connection: 0 (fresh, i.e.
+	// RESP2 by default) or 3 after a successful HELLO 3. Dial resets it.
+	proto int
 }
 
 // NewClient returns a Client for addr (host:port) with optional password
@@ -58,6 +74,55 @@ func NewClient(addr, password string, useTLS bool) *Client {
 
 // Addr returns the configured address.
 func (c *Client) Addr() string { return c.addr }
+
+// Proto returns the version negotiated on the current connection (2 when none
+// has been negotiated, which is RESP2's default).
+func (c *Client) Proto() int {
+	if c.proto == 3 {
+		return 3
+	}
+	return 2
+}
+
+// Hello negotiates the RESP version on the connection by sending HELLO 2 or
+// HELLO 3 and reading its reply, which itself arrives as an array under RESP2
+// and a map under RESP3. It is a no-op when the connection already speaks the
+// requested version. The version travels on the connection, so a caller gets
+// the server's own encoding of subsequent commands rather than a synthesized
+// form.
+func (c *Client) Hello(version int) error {
+	if version != 2 && version != 3 {
+		return fmt.Errorf("resp: protocol version must be 2 or 3, got %d", version)
+	}
+	if c.conn == nil {
+		return errors.New("resp: not connected")
+	}
+	if err := c.conn.SetDeadline(time.Now().Add(c.Timeout())); err != nil {
+		return err
+	}
+	if c.Proto() == version {
+		return nil
+	}
+	if err := c.WriteArgv("HELLO", strconv.Itoa(version)); err != nil {
+		return err
+	}
+	if err := c.Flush(); err != nil {
+		return err
+	}
+	rep, err := c.ReadReply()
+	if err != nil {
+		return err
+	}
+	if err := rep.Err(); err != nil {
+		return fmt.Errorf("hello %d: %w", version, err)
+	}
+	if version == 3 {
+		c.proto = 3
+	} else {
+		c.proto = 0
+	}
+	return nil
+}
 
 // DefaultTimeout bounds the TLS handshake, each round trip's write/read, and
 // the AUTH exchange, so a stalled peer surfaces as an error instead of hanging
@@ -95,6 +160,7 @@ func (c *Client) Dial() error {
 	c.conn = nc
 	c.r = bufio.NewReader(nc)
 	c.w = bufio.NewWriter(nc)
+	c.proto = 0 // a fresh connection defaults to RESP2
 
 	if c.password != "" {
 		if err := c.WriteArgv("AUTH", c.password); err != nil {
@@ -160,7 +226,7 @@ func (c *Client) Close() error {
 	return err
 }
 
-// WriteArgv appends one RESP2 command (array of bulk strings) to the write
+// WriteArgv appends one RESP command (array of bulk strings) to the write
 // buffer. Call Flush to send. Multiple WriteArgv calls batch into a single
 // round trip. It returns an error when the client is not connected.
 func (c *Client) WriteArgv(args ...string) error {
@@ -208,7 +274,7 @@ const (
 	MaxLineBytes = 64 << 10 // 64 KiB
 )
 
-// ReadReply decodes one RESP2 reply, closing the connection on a decode error
+// ReadReply decodes one RESP reply, closing the connection on a decode error
 // so a misaligned stream cannot be reused.
 func (c *Client) ReadReply() (Reply, error) {
 	rep, err := c.readReply(0)
@@ -284,6 +350,50 @@ func (c *Client) readReply(depth int) (Reply, error) {
 			rep.Elems = append(rep.Elems, el)
 		}
 		return rep, nil
+	case '%':
+		line, err := c.readLine()
+		if err != nil {
+			return Reply{}, err
+		}
+		n, err := strconv.Atoi(line)
+		if err != nil {
+			return Reply{}, err
+		}
+		if n < 0 {
+			return Reply{}, fmt.Errorf("resp: negative map length %d", n)
+		}
+		if n > MaxArrayLen/2 {
+			return Reply{}, fmt.Errorf("resp: map length %d exceeds %d entries", n, MaxArrayLen/2)
+		}
+		elems := n * 2
+		rep := Reply{Type: '%', Elems: make([]Reply, 0, elems)}
+		for i := 0; i < elems; i++ {
+			el, err := c.readReply(depth + 1)
+			if err != nil {
+				return Reply{}, err
+			}
+			rep.Elems = append(rep.Elems, el)
+		}
+		return rep, nil
+	case ',':
+		line, err := c.readLine()
+		if err != nil {
+			return Reply{}, err
+		}
+		f, err := strconv.ParseFloat(line, 64)
+		if err != nil {
+			return Reply{}, fmt.Errorf("resp: invalid double %q: %w", line, err)
+		}
+		return Reply{Type: ',', Float: f}, nil
+	case '_':
+		line, err := c.readLine()
+		if err != nil {
+			return Reply{}, err
+		}
+		if line != "" {
+			return Reply{}, fmt.Errorf("resp: null payload %q is not empty", line)
+		}
+		return Reply{Type: '_', Nil: true}, nil
 	default:
 		return Reply{}, fmt.Errorf("resp: unexpected prefix %q", prefix)
 	}

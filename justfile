@@ -420,15 +420,60 @@ tag:
 release: tag
 	git push origin "v$(cat VERSION)"
 
-# Bump version: edit VERSION with $EDITOR, then update gem lockfiles
+# Bump version: edit VERSION with $EDITOR, then rewrite every copy of it
+# (site stamps, PRODUCT.md, both gem lockfiles) and fail if any copy is stale.
 version:
 	$EDITOR VERSION
+	just website-version
 	cd gems/emb && bundle
 	cd gems/emb-server && bundle
+	just website-version-check
 
 # Serve the static product site (website/) at http://localhost:8080
 website port="8080":
     python3 -m http.server {{port}} --directory website
+
+# Serve the site AND the sandbox behind its console, for testing the live panel
+# locally instead of against the deployed cli.emb.is.
+#
+# Three processes, one terminal:
+#   * emb         on 127.0.0.1:{{upstream}}, with a generated config whose model
+#                 paths point at ./models (the sandbox config's own paths are
+#                 the deployment's /data/models)
+#   * the bridge  on {{bind}}:{{bridge}}, reading that same config for its preset
+#                 digest manifest
+#   * the site    on {{bind}}:{{port}}, with the console's module origin rewritten
+#                 from https://cli.emb.is to this machine's own address
+#
+# Both the site and the bridge bind 0.0.0.0, so a phone on the same network can
+# open http://<your-lan-ip>:{{port}} and get the same live console: the module
+# origin is derived per request from the address the browser used, and the
+# bridge accepts that same host on its own port. emb stays on loopback.
+#
+# Ctrl-C stops all three. `just website` still serves the published tree
+# untouched — use it for the ink probe, which must measure what ships.
+#
+#   just website-dev                             # site :8080, bridge :8081, emb :6379
+#   just website-dev port=9000 bridge=9001 upstream=16399
+#   just website-dev bind=127.0.0.1              # this machine only
+website-dev port="8080" bridge="8081" upstream="6379" bind="0.0.0.0": sandbox-build
+    @set -eu; \
+    cfg=website/repl/.sandbox-dev.yaml; \
+    sed -e 's|^listen: .*|listen: "127.0.0.1:{{upstream}}"|' \
+        -e "s|/data/models|$PWD/models|" \
+        website/repl/sandbox.yaml > "$cfg"; \
+    echo "website-dev: emb 127.0.0.1:{{upstream}} · bridge {{bind}}:{{bridge}} · site http://localhost:{{port}} (and http://<lan-ip>:{{port}})"; \
+    emb=; repl=; \
+    cleanup() { \
+        if [ -n "$emb" ]; then kill "$emb" 2>/dev/null || true; fi; \
+        if [ -n "$repl" ]; then kill "$repl" 2>/dev/null || true; fi; \
+        rm -f "$cfg"; \
+    }; \
+    trap cleanup EXIT INT TERM; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" & emb=$!; \
+    ./bin/repl -listen {{bind}}:{{bridge}} -upstream 127.0.0.1:{{upstream}} \
+        -config "$cfg" -emb-top ./bin/emb-top & repl=$!; \
+    python3 website/tools/dev-server.py {{port}} --bind {{bind}} --sandbox-port {{bridge}}
 
 # One-time browser fetch for the site's checks (needs `nix develop .#website`).
 # agent-browser drives Chrome for Testing; nixpkgs ships the CLI only. Set
@@ -484,8 +529,110 @@ website-ink url="http://localhost:8080" target="":
     agent-browser wait --fn "window.__inkProbe" --timeout 120000
     agent-browser eval "window.__inkProbe.assert()"
 
+# Re-vendor the asciinema player the landing plate replays the take with.
+#
+# The player is not packaged in nixpkgs, so its release is pinned in `flake.nix`
+# as an npm tarball and copied verbatim out of it here, into two committed files
+# the site links by name. The site has no build step: these bytes ship, and the
+# `check` variant re-derives them without writing, so a version bump is verified
+# rather than trusted.
+#
+# Only two files of the package are taken -- the monolithic bundle, which embeds
+# the terminal emulator, so the plate needs no worker and no second request.
+#
+# Run inside `nix develop`, which is what exports `$ASCIIINEMA_PLAYER_TARBALL`.
+website-player:
+    @set -eu; \
+    ver="${ASCIIINEMA_PLAYER_VERSION:?run inside 'nix develop'}"; \
+    tmp=$(mktemp -d /tmp/asciinema-player.XXXXXX); \
+    trap 'rm -rf "$tmp"' EXIT; \
+    tar xzf "$ASCIIINEMA_PLAYER_TARBALL" -C "$tmp"; \
+    cp "$tmp/package/dist/bundle/asciinema-player.min.js" "website/assets/js/asciinema-player-$ver.min.js"; \
+    cp "$tmp/package/dist/bundle/asciinema-player.css" "website/assets/css/asciinema-player-$ver.css"; \
+    python3 -c 'import hashlib, sys; [print(hashlib.sha256(open(p, "rb").read()).hexdigest(), p) for p in sys.argv[1:]]' \
+      "website/assets/js/asciinema-player-$ver.min.js" "website/assets/css/asciinema-player-$ver.css"
+
+# Assert the committed player is exactly the pinned release, byte for byte.
+website-player-check:
+    @set -eu; \
+    ver="${ASCIIINEMA_PLAYER_VERSION:?run inside 'nix develop'}"; \
+    tmp=$(mktemp -d /tmp/asciinema-player.XXXXXX); \
+    trap 'rm -rf "$tmp"' EXIT; \
+    tar xzf "$ASCIIINEMA_PLAYER_TARBALL" -C "$tmp"; \
+    cmp "$tmp/package/dist/bundle/asciinema-player.min.js" "website/assets/js/asciinema-player-$ver.min.js"; \
+    cmp "$tmp/package/dist/bundle/asciinema-player.css" "website/assets/css/asciinema-player-$ver.css"; \
+    echo "website-player-check: the vendored player is asciinema-player $ver, byte for byte"
+
 # Assert that the set of files this folder publishes is the set we mean.
 #
+# Record the site's emb-top plate and the documentation's capture from a real
+# run (see website/tools/topviz/README.md and
+# openspec/changes/website-emb-top-recording).
+#
+# Builds the binaries, starts one node on :16379 with the models in
+# models.yaml, waits for EMB.READY, records the dashboard headlessly against a
+# scripted load, and publishes three things from that one take: the trimmed
+# take itself into the landing page's plate, replayed there as text by the
+# vendored player (see `just website-player`); the dashboard's own text frame
+# into the same plate as its still state -- what a reader with scripting off or
+# a reduced-motion preference gets; and an animated GIF of the same run into
+# docs/assets/ for docs/operations.md. The raw recording, the trims, the
+# frame, the traffic log and a machine-readable sample log of the same run land
+# in website/tools/topviz/runs/ -- unserved, and the only way to check what the
+# artifacts show.
+#
+# The documented capture is rendered at font-size 12: the frame comes out 881px
+# wide, near enough to the width docs/operations.md is read at that GitHub shows
+# it about 1:1, and it is ~100 KiB smaller than a 14px render that would only be
+# downscaled to the same apparent size.
+#
+# Needs the full dev shell: it builds emb from Go+CGo, drives load with
+# redis-cli, and takes its recorder from the website half. Nothing else in the
+# site build depends on any of it.
+website-topviz: build
+    @set -eu; \
+    cfg=website/tools/topviz/models.yaml; \
+    runs=website/tools/topviz/runs; \
+    port=16379; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    for tool in redis-cli asciinema agg; do \
+      command -v $tool >/dev/null 2>&1 || { echo "website-topviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
+    done; \
+    if [ -z "{{ort_lib}}" ]; then echo "website-topviz: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
+    for onnx in $(grep -E '^[[:space:]]+onnx:' $cfg | awk '{print $2}'); do \
+      if [ ! -f "$onnx" ]; then \
+        echo "website-topviz: missing $onnx"; \
+        echo "  fetch it with: just download-model <repo> $(dirname $onnx)"; \
+        exit 1; \
+      fi; \
+    done; \
+    if redis-cli -p $port ping >/dev/null 2>&1; then echo "website-topviz: something already answers on :$port"; exit 1; fi; \
+    mkdir -p $runs; \
+    tmp=$(mktemp -d /tmp/emb-topviz.XXXXXX); \
+    trap 'kill $(cat $runs/node.pid) 2>/dev/null || true; rm -rf $tmp' EXIT; \
+    echo "website-topviz: starting the node"; \
+    ./bin/emb -config $cfg > $runs/node.log 2>&1 & echo $! > $runs/node.pid; \
+    deadline=$(( $(date +%s) + 300 )); \
+    until redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK; do \
+      kill -0 $(cat $runs/node.pid) 2>/dev/null || { echo "website-topviz: emb exited during startup"; tail -20 $runs/node.log; exit 1; }; \
+      if [ $(date +%s) -ge $deadline ]; then echo "website-topviz: not ready within 300s"; tail -20 $runs/node.log; exit 1; fi; \
+      sleep 1; \
+    done; \
+    echo "website-topviz: recording (about a minute)"; \
+    ./bin/emb-top -addr 127.0.0.1:$port -once -samples 44 -interval 1s > $runs/samples.txt 2>&1 & sampler=$!; \
+    EMB_TOPVIS_LOG=$runs/traffic.log asciinema record --headless --quiet --overwrite --window-size 120x32 \
+      -c website/tools/topviz/run.sh $runs/raw.cast; \
+    kill $sampler 2>/dev/null || true; \
+    python3 website/tools/topviz/trim.py $runs/raw.cast $runs/take.cast; \
+    python3 website/tools/topviz/trim.py --until-pct 65 $runs/raw.cast $runs/frame.cast; \
+    asciinema convert -f txt --overwrite $runs/frame.cast $runs/frame.txt >/dev/null; \
+    agg --quiet --theme "$theme" --font-size 12 --line-height 1.4 \
+      --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/take.cast $tmp/take.gif; \
+    python3 website/tools/topviz/publish.py --frame $runs/frame.txt --cast $runs/take.cast --gif $tmp/take.gif \
+      --samples $runs/samples.txt \
+      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port; \
+    python3 website/tools/published-tree.py
+
 # `website/` is edited and `website/` is published, so `.assetsignore` is the
 # only thing between an authoring file and a public URL -- which makes this
 # check load-bearing rather than a convenience. It fails both ways: a file that
@@ -495,10 +642,62 @@ website-ink url="http://localhost:8080" target="":
 website-published:
     python3 website/tools/published-tree.py
 
-# Write VERSION into every element carrying `data-emb-version` on both surfaces,
-# or (`--check`) fail if any stamped value has drifted. Run after bumping VERSION.
+# Write VERSION into every copy of it -- the `data-emb-version` elements on both
+# surfaces and the version named in PRODUCT.md -- or (`--check`) fail if any has
+# drifted. Run after bumping VERSION; `just version` does this for you.
 website-version:
     python3 website/tools/stamp-version.py
+
+# Stamp the sandbox preset digests into the site, or (`--check`) fail when a
+# preset byte changed under a stamped digest. `EMB.EVSHA` calls a preset by the
+# SHA1 of the bytes the server preloaded, so a stale digest is a command the
+# site presents as working that the sandbox answers "no such script" to.
+website-presets:
+    python3 website/tools/stamp-presets.py
+
+website-presets-check:
+    python3 website/tools/stamp-presets.py --check
+
+# ── the sandbox (website/repl) ───────────────────────────────────────────
+#
+# A small Go bridge in front of an emb server that listens on loopback. It is
+# the only public surface the sandbox has, so it lives under the site directory
+# without being part of the site: `website/.assetsignore` keeps it out of the
+# published tree and `published-tree.py` asserts that it did.
+
+# Build the bridge beside the server (`bin/repl`).
+sandbox-build: build
+    CGO_ENABLED=0 go build -o ./bin/repl ./website/repl
+
+# The bridge's contract tests: no ONNX, no model, no server.
+sandbox-test:
+    CGO_ENABLED=0 go test ./website/repl/
+
+# Run the bridge in front of an emb instance. It reads the server's config for
+# the preset digests it will accept EMB.EVSHA for, so both processes must agree
+# on one config file:
+#
+#     just dev                                        # in another shell
+#     just sandbox-run config=website/repl/sandbox.yaml
+#
+# The sandbox config names /data/models/...; use config.yaml or a copy with
+# local model paths when running against a local server.
+sandbox-run upstream="127.0.0.1:6379" config="website/repl/sandbox.yaml" port="8080" origins="https://emb.is":
+    go run ./website/repl -listen 127.0.0.1:{{port}} -upstream {{upstream}} -config {{config}} -origins {{origins}} -emb-top ./bin/emb-top
+
+# Build the sandbox image (context is the repository root: the image needs the
+# Go module and the server's build inputs).
+sandbox-image:
+    docker buildx build --load -f website/repl/Dockerfile -t {{docker_user}}/emb-sandbox:{{image_tag}} .
+
+# Deploy the sandbox to Fly (requires flyctl and an authenticated account).
+# The app, region, volume, and hostname are declared in website/repl/fly.toml.
+# Run from the repository root: `.` is the build context, and fly.toml's
+# `dockerfile` is resolved against *its own* directory. A first deploy needs
+# the app created, the ingress IPs allocated, and cli.emb.is added as a
+# certificate — see the "Deploying" note in website/README.md.
+sandbox-deploy:
+    fly deploy . -c website/repl/fly.toml
 
 # Verify the stamped versions match VERSION. This is what a CI job or pre-commit
 # hook runs; the emb-top capture once shipped `v0.4.0` against a `0.4.0.pre4`

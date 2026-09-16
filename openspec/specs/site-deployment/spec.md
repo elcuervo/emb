@@ -13,14 +13,21 @@ change reaches a reader.
 The deployed origin SHALL serve exactly one landing page, one documentation
 surface, one not-found page, and the assets those three reference. Files that
 exist to author, measure, or critique the site MUST NOT be reachable at any
-path on the deployed origin. Because those files may live beside the pages they
-describe, their absence MUST NOT rest on convention: the exclusion MUST be
+path on the deployed origin, and neither MUST the source, configuration, or
+presets of a service runtime that happens to live under the site directory.
+Because those files may live beside the pages they describe, their absence MUST
+NOT rest on convention: the exclusion MUST be
 declared in the repository, applied by the deploy tooling, and asserted against
 the resulting tree rather than trusted.
 
 #### Scenario: An authoring file is not served
 
 - **WHEN** any file that documents, generates, measures, or critiques the site is requested at its path on the deployed origin
+- **THEN** the response is not that file's content
+
+#### Scenario: Service source is not served
+
+- **WHEN** a file that belongs to the sandbox's implementation, its configuration, or its preset scripts is requested at its path on the deployed origin
 - **THEN** the response is not that file's content
 
 #### Scenario: The exclusion is declared, not remembered
@@ -217,10 +224,12 @@ unstyled page.
 ### Requirement: The gate runs only the suites a change can affect
 
 Continuous integration SHALL classify a change before running the repository's
-suites. A change confined to the site directory MUST NOT run the server's or the
-gems' jobs; a change touching anything outside the site directory MUST run them.
-The site's own checks MUST run for both kinds of change, because the version
-file reaches the pages as well as the binary.
+suites. A change confined to the site directory, excluding the sandbox service's
+own code, MUST NOT run the server's or the gems' jobs; a change touching any
+other file MUST run them. A change to the sandbox service's code MUST run the
+tests for that code even though it lives under the site directory, because that
+code is a program and not a page. The site's own checks MUST run for both kinds
+of change, because the version file reaches the pages as well as the binary.
 
 When the changed files cannot be determined, the suites MUST run rather than be
 skipped, and a skipped suite MUST be reported as a result of the change rather
@@ -231,6 +240,11 @@ left waiting on a status that will not report.
 
 - **WHEN** a change touches only files under the site directory
 - **THEN** the site's own checks run, and the server's and the gems' jobs are skipped
+
+#### Scenario: A service change runs the service's tests
+
+- **WHEN** a change touches the sandbox service's code, its presets, or its deployment configuration
+- **THEN** the tests for the service run, whether or not the other suites run
 
 #### Scenario: A change outside the site runs the suites
 

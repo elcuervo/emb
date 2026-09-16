@@ -1,0 +1,72 @@
+# Fly configuration for the sandbox: one machine, one volume, two processes
+# (emb on loopback, the bridge public) behind one entrypoint.
+#
+# Deploy from the repository root, because the image build needs the Go module.
+# The positional `.` is the build context (the repository root); `dockerfile`
+# below is resolved against *this file's* directory, not against that context:
+#
+#     fly deploy . -c website/repl/fly.toml
+#
+# or via `just sandbox-deploy`. The app name and region are the deployment's
+# own; the hostname cli.emb.is is attached to the app afterwards.
+
+app = "emb-sandbox"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  EMB_CONFIG = "/etc/emb/sandbox.yaml"
+  BRIDGE_LISTEN = "0.0.0.0:8080"
+  UPSTREAM = "127.0.0.1:6379"
+  ORIGINS = "https://emb.is,https://www.emb.is"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # The machine stays running. Cost was accepted in exchange for removing the
+  # cold-start path, the wake-and-retry client state, and the proxy-timeout
+  # cliff on the first model download. The work ceiling, not autostop, is the
+  # cost ceiling.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "3s"
+  # Fly caps a check's grace period at one minute, so asking for more only
+  # produces a warning. The first boot downloads both models onto the volume
+  # before /api/ready turns true; if that ever exceeds a minute, raise the
+  # volume or ship the models in the image rather than this number.
+  grace_period = "60s"
+  method = "GET"
+  path = "/api/ready"
+
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "3s"
+  grace_period = "30s"
+  method = "GET"
+  path = "/api/health"
+
+[[vm]]
+  # Sized from the measured pair, not a guess: 1 467 040 KB (~1.40 GiB) steady
+  # RSS with both fp32 models loaded (see tasks 1.2). 2 GB leaves ~0.6 GiB of
+  # headroom; if the model set grows, switch to the pre-quantized exports and
+  # re-measure before widening this.
+  # One shared CPU, measured twice: at 2 shared CPUs (gomaxprocs 2, +$0.72/mo at
+  # this memory size) the same five fresh texts took 5.71 ms (minilm) and
+  # 16.35 ms (sst2) against 5.32 ms and 16.39 ms at one — a single request is
+  # one thread and the bridge serializes upstream work, so the second CPU buys
+  # nothing. Revisit only if requests ever run concurrently.
+  size = "shared-cpu-1x"
+  memory = "2gb"
+
+[mounts]
+  # Models download onto the volume on the first boot and load from disk after
+  # that; the server config names /data/models/<name>/model.onnx.
+  source = "emb_sandbox_data"
+  destination = "/data"

@@ -71,7 +71,7 @@ Confirmed surfaces: `EMB`, `EMB.MULTI`, `EMB.MODELS`, `EMB.INFO`, `EMB.STATS`,
 
 Constraints and facts future work must preserve:
 
-- **Pre-1.0.** Current version `0.4.0.pre4` (`VERSION`). Interfaces may still move.
+- **Pre-1.0.** Current version `0.4.0` (`VERSION`). Interfaces may still move.
 - **MIT licensed**, `Copyright (c) 2026 elcuervo`.
 - **Platforms:** macOS (Apple Silicon) and Linux (amd64, arm64).
 - **RESP2 by default**; RESP3 is opt-in via `HELLO 3`. `INFO` stays a bulk string
@@ -87,6 +87,13 @@ Constraints and facts future work must preserve:
   disposable warm-start optimization, not a durable database.
 - **No hosted or managed cloud offering exists.** There is no pricing, tier, or
   account system to describe.
+- **The sandbox at `cli.emb.is` is a demonstration, not an offering.** It runs a
+  real `emb` process behind a read-only bridge so a visitor can run commands and
+  read the real replies (`website/repl/`). It has no account, no pricing, no
+  tier, no uptime commitment, and no support path, and it may reset at any time;
+  it refuses every command that would change configuration or shared state. The
+  sandbox does not qualify the line above: `emb` remains self-hosted, and the
+  sandbox is not a hosted or managed service.
 
 ## Brand Commitments
 

@@ -13,11 +13,20 @@ The host shell has **no `go`** (`go: command not found`). The Nix dev shell prov
 - Tools: `go`, `gopls`, `golangci-lint`, `just`, `python3`, `redis`, `ruby_3_4`, `bundler`, `act`, `xan`
 - Website tools (same shell, plus `nix develop .#website` on its own): `agent-browser`,
   `nodejs_22`, `wrangler` (the Cloudflare CLI, from its own `nixpkgs-wrangler`
-  pin so it stays substitutable), `imagemagick`, `pngquant`, `optipng`, `jpegoptim`,
+  pin so it stays substitutable), `flyctl` (the Fly.io CLI for `just
+  sandbox-deploy`), `imagemagick`, `pngquant`, `optipng`, `jpegoptim`,
   `cwebp`, `tidy`, and `python3Packages.pillow`/`numpy` for image measurement.
   `just website-browser` fetches Chrome for Testing once; `nix profile install
   .#agent-browser` puts the CLI on the host `PATH` for editors and agent harnesses,
-  and `nix profile install .#wrangler` does the same for `wrangler`.
+  and `nix profile install .#wrangler` / `.#flyctl` do the same for the deploy CLIs.
+- The site's console is backed by the sandbox under `website/repl/`. `just
+  website-dev` starts the site, a local bridge and a local `emb` together (it
+  binds `0.0.0.0`, so a phone on the same network can drive it; `bind=127.0.0.1`
+  keeps it local), so the live panel can be exercised without deploying. The
+  bridge also runs one `emb-top` producer and serves its frames read-only at
+  `/stats` (`http://localhost:8081/stats` under `just website-dev`). `just
+  website` alone serves the published tree, which loads the module from
+  `cli.emb.is` — use it for `website-ink` and the published-tree check.
 - The dependency lists are split in `flake.nix`: `serverDeps` (Go, ONNX, Redis, Ruby)
   and `websiteDeps` (browsers, image tools), behind `devShells.{default,server,website}`.
   `nix develop` = both, so every command documented here keeps working. Anything added

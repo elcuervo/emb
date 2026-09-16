@@ -6,11 +6,22 @@ on:
   pull_request:
     branches: [main]
 
+# No job needs more than to read the tree, and `pull_request` runs the fork's
+# own Go tests. Least privilege keeps a persisted credential worthless to code
+# that does not own the repository.
+permissions:
+  contents: read
+
 jobs:
   # Decides whether the Go and gem suites have anything to check. A diff
   # confined to `website/` cannot change the server, the tokenizer, or the
   # gems, so `lint`, `test`, and `gem-rails` are skipped for it — the site's own
   # gates still run, in the `site` job below and again in `site.yml`.
+  #
+  # `website/repl/` is the exception: it is a Go program that happens to live
+  # under the site directory, so a change there must run the sandbox's own
+  # tests (`sandbox`), even though a change to the rest of `website/` skips the
+  # server and gem suites.
   #
   # Job-level `if` rather than a workflow-level `paths-ignore`: a workflow that
   # path filtering skips leaves its checks in `Pending`, which blocks a merge
@@ -20,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      sandbox: ${{ steps.diff.outputs.sandbox }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -56,6 +68,7 @@ jobs:
           if [ -z "$base" ] || [ "$base" = "$zero" ] || [ -z "$head" ]; then
             echo "No base revision to diff against; running the full suite."
             echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "sandbox=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -68,6 +81,7 @@ jobs:
           if ! changed=$(git diff --name-only "$range"); then
             echo "::warning::Could not diff $range; running the full suite."
             echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "sandbox=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -76,10 +90,21 @@ jobs:
           # An empty diff is an empty commit: nothing to check. Anything outside
           # `website/` means the suites run.
           if [ -n "$changed" ] && printf '%s\n' "$changed" | grep -qv '^website/'; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
+            code=true
           else
-            echo "code=false" >> "$GITHUB_OUTPUT"
+            code=false
           fi
+
+          # The sandbox service's Go code runs its own tests whether or not the
+          # rest of the suites run: under website/repl/ for a service change,
+          # and with `code` for anything a service change could have broken.
+          sandbox=$code
+          if [ -n "$changed" ] && printf '%s\n' "$changed" | grep -q '^website/repl/'; then
+            sandbox=true
+          fi
+
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "sandbox=$sandbox" >> "$GITHUB_OUTPUT"
 
   lint:
     needs: changes
@@ -144,6 +169,36 @@ jobs:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
 
+  # The sandbox bridge's own tests. It lives under `website/` but is a Go
+  # program: a change to it, its presets, or its deployment configuration runs
+  # these, and so does any change outside the site directory (which could have
+  # broken it). It is deliberately CGo-free — no ONNX, no model, no server — so
+  # it runs in seconds.
+  sandbox:
+    needs: changes
+    if: needs.changes.outputs.sandbox == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # This job runs the fork's own Go tests; do not leave the workflow
+          # token in the checkout's git config for them to read.
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Format check
+        run: |
+          test -z "$(gofmt -l website/repl)" || { echo "Run 'gofmt -s -w website/repl' to fix formatting"; exit 1; }
+
+      - name: Test the sandbox bridge
+        run: go test ./website/repl/
+        env:
+          CGO_ENABLED: "0"
+
   # The product site's gates. No Go, no ONNX, no browser, no network: three
   # static assertions over `website/` that were previously never run by CI at
   # all, which is how an `emb-top` capture shipped `v0.4.0` against a
@@ -177,6 +232,9 @@ jobs:
 
       - name: Version stamps match VERSION
         run: python3 website/tools/stamp-version.py --check
+
+      - name: Preset digests match the preloaded bytes
+        run: python3 website/tools/stamp-presets.py --check
 
       - name: Served tree, canonical origin, and cache rules
         run: python3 website/tools/published-tree.py

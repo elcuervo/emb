@@ -94,28 +94,11 @@ and renders:
 - `AUTH` / TLS support, auto-reconnect with a connection-lost banner, and a
   headless `-once` mode for scripts and CI.
 
-```
- emb-top v0.4.0 · localhost:6379 · uptime 3h22m · 4 models · poll 1s · 447 r/s · p95 86.0ms · ● connected
-╭ req/s · models × recent polls ───────────────────────────────────────────────╮
-│ minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████                                      │
-│ bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████                                       │
-│ e5-base       ▂▂▃▃▃▄▅▅▆▆▇▇███████▇▆▆▅▅▄▄                                       │
-│ gte-tiny      ▃▅█████████▅▅▃▃▃                                                 │
-╰────────────────────────────────────────────────────────────────────────────────╯
-╭ req/s ──────────────────────────╮╭ p95 latency ────────────────────╮
-│       ╭──╮                     ││    ╭╮    ╭─╮                   │
-│ ╭─────╯  ╰──╮                  ││   ╯ ╰────╯ ╰──╮                │
-│ ╯            ╰──╮              ││ ╯              ╰               │
-╰────────────────────────────────╯╰────────────────────────────────╯
-minilm        ████▇▇▇▆▆▅▅▄▄▄▄▄▅▅▅▆▆▇▇████  280 r/s  11.8k t/s  p50 6.5ms  p95 68.0ms  err 0
-   dim 384 · mean · int8 · batch 32/16384 workers 2
-bge-small-en… ▅▄▄▃▃▂▂▂▂▂▂▃▃▄▄▅▅▆▆▇▇█████  151 r/s   5.7k t/s  p50 8.8ms  p95 77.0ms  err 18 ↑
-   dim 384 · cls · fp32 · batch 32/16384 workers 2
-cache 93.6% ██████████  cpu 50.3% ██████  mem 552MB ████████████
-conns 7 · active 1 · goroutines 22 · truncated 0/0
-event bge-small-en-… · 2 texts · 12.7ms ✓
-q quit · p pause · r reset · j/k scroll · ? help
-```
+<!-- topviz:begin -->
+![The emb-top dashboard under load: four models with their request, token and latency rates, an activity heatmap, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-74d0848f.gif)
+
+*Captured 2026-09-15 · emb-top v0.4.0.pre5 · 4 models · 127.0.0.1:16379.*
+<!-- topviz:end -->
 
 ```bash
 # watch a node
@@ -125,13 +108,19 @@ emb-top -addr localhost:6379
 emb-top -addr localhost:6379 -once -samples 10 -interval 1s
 # t=... total_requests=6 req_rate=2.0 tok_rate=11.0 cpu_pct=14.5 lat_p50_us=1139 lat_p95_us=1801 …
 
+# headless: stream the dashboard's own rendered frames (JSON lines)
+emb-top -addr localhost:6379 -frames -interval 1s
+
 # secured node
 emb-top -addr localhost:6379 -password secret -tls
 ```
 
 Keys: `q` quit · `p`/space pause · `r` reset window · `j`/`k` scroll models ·
 `?` help. Flags: `-addr`, `-interval`, `-password`, `-tls`, `-window`,
-`-once -samples N`. Prefer the `EMB_TOP_PASSWORD` environment variable over
+`-once -samples N`, `-frames`. `-frames` is the headless streaming mode: it
+prints one complete, coloured frame per interval, so another process can render
+the dashboard live without a terminal (the sandbox's read-only `/stats` view is
+built on it). Prefer the `EMB_TOP_PASSWORD` environment variable over
 `-password` (command-line arguments are visible in process listings); sending a
 password to a non-loopback address without `-tls` prints a warning. Terminal:
 UTF-8; a color-capable terminal is recommended.

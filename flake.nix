@@ -32,6 +32,17 @@
 
         ltInfo = builtins.getAttr system archMap;
 
+        # The landing plate replays the take with the asciinema player, which
+        # nixpkgs does not package: the release the site serves is pinned here
+        # as its npm tarball and re-vendored into `website/assets/` by
+        # `just website-player`. The version is pinned with it — the filenames
+        # the page links carry it, so a bump is a hash and a re-vendor.
+        asciinemaPlayerVersion = "3.17.0";
+        asciinemaPlayer = pkgs.fetchurl {
+          url = "https://registry.npmjs.org/asciinema-player/-/asciinema-player-${asciinemaPlayerVersion}.tgz";
+          hash = "sha256-0D72f8LzKnqlF3wLZGUMfI/SNO8tPks0iGYyuz3VjFw=";
+        };
+
         libtokenizers = pkgs.stdenv.mkDerivation {
           pname = "libtokenizers";
           version = "1.27.0";
@@ -85,6 +96,15 @@
         #                  `nixpkgs-wrangler` pin, because the main pin's copy
         #                  is not in the binary cache and would build from
         #                  source. See that input's comment.
+        #   flyctl         the Fly.io CLI for deploying the sandbox
+        #                  (`just sandbox-deploy`), which lives under
+        #                  `website/repl/` and so belongs to the website half.
+        #   asciinema/agg  the recorder and renderer behind `just website-topviz`
+        #                  (see openspec/changes/website-emb-top-recording).
+        #                  Both are headless — no browser — unlike `vhs`,
+        #                  whose runtime Chromium this flake deliberately avoids.
+        #                  NB: the binary is `agg`, the attribute is
+        #                  `asciinema-agg`; plain `agg` is the AGG 2D library.
         #
         # `firefox` is deliberately absent: on aarch64-darwin the nixpkgs we
         # pin builds it from source, which is hours, not minutes. Check any
@@ -103,6 +123,9 @@
           jpegoptim
           libwebp
           html-tidy
+          flyctl
+          asciinema
+          asciinema-agg
         ]) ++ [ pkgsWrangler.wrangler ];
 
         # The CGo/runtime environment the server binary needs. Everything
@@ -124,7 +147,12 @@
           if [ -d website/node_modules/.bin ]; then
             export PATH="$PWD/website/node_modules/.bin:$PATH"
           fi
+          # The pinned player tarball `just website-player` vendors from. The
+          # site itself never needs this shell: it serves committed bytes.
+          export ASCIIINEMA_PLAYER_TARBALL="${asciinemaPlayer}"
+          export ASCIIINEMA_PLAYER_VERSION="${asciinemaPlayerVersion}"
           echo "website: \`just website\` serves website/ on :8080;" \
+               "\`just website-dev\` serves it with a local sandbox behind the console;" \
                "\`just website-browser\` fetches Chrome for Testing once."
         '';
       in
@@ -151,6 +179,11 @@
         # The Cloudflare CLI on its own, from the dedicated pin above:
         #   nix profile install .#wrangler
         packages.wrangler = pkgsWrangler.wrangler;
+
+        # The Fly.io CLI on its own, for deploying the sandbox
+        # (`just sandbox-deploy`):
+        #   nix profile install .#flyctl
+        packages.flyctl = pkgs.flyctl;
 
         devShells = {
           # Both halves. This is the shell AGENTS.md points at, so it keeps

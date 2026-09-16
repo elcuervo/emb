@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb · live dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#111110">
+<!-- The sandbox's live dashboard: the `emb-top` frames the sandbox's own
+     emb process produces, streamed read-only. There is nothing to operate here
+     and nothing that submits work — the page replaces one block of text with
+     the next frame. The dashboard's own palette travels in the frame, so these
+     tokens only dress what surrounds it. -->
+<style>
+  :root{
+    --bg:#F3F0E8; --fg:#0B0B0B; --accent:#FF5A1F; --muted:#6B6963;
+    --rule:#B8B5AC; --plate:#111110; --hair:#292823;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--plate);
+    color:var(--bg);
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.5;
+  }
+  .stats{
+    max-width:100%;
+    padding:14px clamp(12px, 1.6vw, 20px) 28px;
+  }
+  .stats__head{ border-bottom:1px solid var(--hair); padding-bottom:8px; }
+  .stats__title{
+    margin:0 0 4px;
+    font-size:13px;
+    font-weight:500;
+    letter-spacing:.02em;
+  }
+  .stats__title b{ color:var(--accent); font-weight:500; }
+  .stats__about{
+    margin:0;
+    color:var(--rule);
+    font-size:12.5px;
+    text-wrap:pretty;
+  }
+  .stats__about b{ color:var(--bg); font-weight:500; }
+  .stats__about a{ color:var(--rule); text-underline-offset:2px; }
+  .stats__about a:hover{ color:var(--accent); }
+  .stats__state{
+    margin:10px 0 0;
+    color:var(--accent);
+  }
+  .stats__state[hidden]{ display:none; }
+  /* The frame is a fixed 120×40 grid, scaled so 120 columns fit the measure
+     rather than wrapping. It is a monospace block, not a reflowing page. */
+  .stats__frame{
+    margin:10px 0 0;
+    white-space:pre;
+    overflow-x:auto;
+    font:inherit;
+    font-size:clamp(5px, calc((100vw - 40px) / 72), 13px);
+    line-height:1.06;
+  }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+</style>
+</head>
+<body>
+
+<main class="stats">
+  <header class="stats__head">
+    <h1 class="stats__title"><b>emb-top</b> · live</h1>
+    <p class="stats__about">
+      the sandbox's own <b>emb</b> node, rendered by the dashboard every second ·
+      read-only ·
+      <a href="/">emb&gt;&nbsp;terminal&nbsp;&#8599;</a>
+    </p>
+  </header>
+
+  <p class="stats__state" id="state" hidden></p>
+  <noscript>
+    <p class="stats__state">the live dashboard needs scripting to stream; the
+    terminal at <a href="/">/</a> does not.</p>
+  </noscript>
+
+  <pre class="stats__frame" id="frame" aria-live="off"></pre>
+</main>
+
+<script defer>
+(function () {
+  'use strict';
+
+  var frame = document.getElementById('frame');
+  var state = document.getElementById('state');
+
+  function show(text) {
+    state.textContent = text;
+    state.hidden = false;
+    /* A status means the frame on screen is no longer live; hide it rather
+       than leave the last poll reading as if it were current. */
+    frame.hidden = true;
+  }
+
+  /* The stream is the whole page: one event per frame, parsed from the JSON
+     the bridge sends. The markup is the bridge's own escaped output. */
+  function connect() {
+    if (!window.EventSource) {
+      show('this browser cannot show the live stream.');
+      return;
+    }
+    var es = new EventSource('/api/stats');
+    var lastFrame = 0;
+
+    es.onmessage = function (event) {
+      var ev;
+      try { ev = JSON.parse(event.data); } catch (err) { return; }
+      if (ev.kind === 'frame' && ev.html) {
+        frame.innerHTML = ev.html;
+        frame.hidden = false;
+        state.hidden = true;
+        lastFrame = Date.now();
+        return;
+      }
+      if (ev.kind === 'status') {
+        show(ev.text || 'the live dashboard is unavailable.');
+      }
+    };
+
+    /* EventSource reconnects on its own; say so rather than leaving the last
+       frame on screen as if it were still live. */
+    es.onerror = function () {
+      show('the live stream is reconnecting…');
+    };
+
+    setInterval(function () {
+      if (lastFrame && Date.now() - lastFrame > 5000) {
+        show('the live dashboard stopped updating.');
+      }
+    }, 2000);
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

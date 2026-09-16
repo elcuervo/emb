@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Stamp the repository VERSION into the site's version-bearing elements.
+"""Stamp the repository VERSION into every committed copy of it.
 
 The site has no build step, so a version string in the markup is a hand-typed
-copy of VERSION and drifts silently -- the `emb-top` capture in
-`website/index.html` shipped `v0.4.0` against a VERSION of `0.4.0.pre4`.
+copy of VERSION and drifts silently -- the `emb-top` plate in
+`website/index.html` shipped `v0.4.0` against a VERSION of `0.4.0.pre4`, before
+it was recomposed into a real capture whose version is frozen in its frames and
+written into its caption by `tools/topviz/publish.py`.
 
 This tool makes the value derived instead of typed. Any element carrying the
 `data-emb-version` attribute has its text content rewritten from `VERSION`:
 
-    emb-top v<span data-emb-version>0.4.0.pre4</span> ·
+    v<span data-emb-version>0.4.0.pre4</span> · MIT
+
+`website/PRODUCT.md` has no elements, so the sentence names the value instead:
+the version in backticks after "Current version" is rewritten, prose intact.
 
 Run it after bumping VERSION:
 
@@ -38,10 +43,16 @@ MARKED = re.compile(
     r"(</(?P=tag)>)"
 )
 
-# Files that may carry a stamped version.
+# PRODUCT.md is markdown, so there is no element to mark: the sentence itself is
+# the marker. Keyed on the prose rather than a hidden comment so the line stays
+# readable, and narrow enough that only its backticked value is rewritten.
+PRODUCT_VERSION = re.compile(r"(Current version\s+`)(?P<inner>[^`]+)(`)")
+
+# Files that may carry a stamped version, and the pattern that finds it there.
 TARGETS = [
-    "website/index.html",
-    "website/docs/index.html",
+    ("website/index.html", MARKED),
+    ("website/docs/index.html", MARKED),
+    ("website/PRODUCT.md", PRODUCT_VERSION),
 ]
 
 
@@ -54,7 +65,7 @@ def read_version() -> str:
     return version
 
 
-def stamp(text: str, version: str) -> tuple[str, list[str]]:
+def stamp(text: str, version: str, pattern: re.Pattern[str]) -> tuple[str, list[str]]:
     """Return the stamped text plus the versions that were replaced."""
     replaced: list[str] = []
 
@@ -62,9 +73,12 @@ def stamp(text: str, version: str) -> tuple[str, list[str]]:
         old = match.group("inner").strip()
         if old != version:
             replaced.append(old or "(empty)")
-        return f"{match.group(1)}{version}{match.group(4)}"
+        whole = match.group(0)
+        start = match.start("inner") - match.start(0)
+        end = match.end("inner") - match.start(0)
+        return whole[:start] + version + whole[end:]
 
-    return MARKED.sub(sub, text), replaced
+    return pattern.sub(sub, text), replaced
 
 
 def main() -> int:
@@ -79,16 +93,18 @@ def main() -> int:
     version = read_version()
     failures: list[str] = []
     touched: list[str] = []
+    missing: list[str] = []
     seen = 0
 
-    for relative in TARGETS:
+    for relative, pattern in TARGETS:
         path = REPO_ROOT / relative
         if not path.exists():
             continue
         source = path.read_text(encoding="utf-8")
-        stamped, replaced = stamp(source, version)
-        count = MARKED.search(source)
-        seen += len(MARKED.findall(source))
+        if not pattern.search(source):
+            missing.append(relative)
+        stamped, replaced = stamp(source, version, pattern)
+        seen += len(pattern.findall(source))
         if stamped == source:
             continue
         if args.check:
@@ -96,8 +112,12 @@ def main() -> int:
         else:
             path.write_text(stamped, encoding="utf-8")
             touched.append(f"{relative}: {', '.join(repr(r) for r in replaced)} -> {version!r}")
-        if count is None:  # pragma: no cover - defensive
-            continue
+
+    if missing:
+        print("stamp-version: no version marker found in", file=sys.stderr)
+        for line in missing:
+            print(f"  {line}", file=sys.stderr)
+        return 1
 
     if args.check:
         if failures:
@@ -106,14 +126,14 @@ def main() -> int:
                 print(f"  {line}", file=sys.stderr)
             print(f"  run: python3 website/tools/stamp-version.py", file=sys.stderr)
             return 1
-        print(f"stamp-version: ok ({seen} stamped element(s), all {version!r})")
+        print(f"stamp-version: ok ({seen} stamped value(s), all {version!r})")
         return 0
 
     if touched:
         for line in touched:
             print(f"stamp-version: {line}")
     else:
-        print(f"stamp-version: nothing to do ({seen} stamped element(s) already {version!r})")
+        print(f"stamp-version: nothing to do ({seen} stamped value(s) already {version!r})")
     return 0
 
 

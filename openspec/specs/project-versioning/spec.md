@@ -33,6 +33,17 @@ The Go binary, `gems/emb`, and `gems/emb-server` SHALL all use the version from 
 - **WHEN** `gem build emb-server.gemspec` runs in `gems/emb-server/`
 - **THEN** the gem version SHALL be read from root `VERSION`
 
+### Requirement: Bump propagates to committed copies
+
+Changing the root `VERSION` SHALL be propagated to every committed copy by the bump entry point (`just version`): the `data-emb-version` elements on the site, the pre-1.0 version named in `website/PRODUCT.md`, and both gem lockfiles. The bump SHALL fail rather than leave any copy stale.
+
+#### Scenario: just version updates the copies
+
+- **WHEN** `just version` edits `VERSION`
+- **THEN** `just website-version` SHALL rewrite the `data-emb-version` elements and the `PRODUCT.md` pre-1.0 line from the new value
+- **THEN** `bundle` SHALL rewrite both gem lockfiles
+- **THEN** `just website-version-check` SHALL pass
+
 ### Requirement: CI injects tag version
 
 The release workflow SHALL overwrite the root `VERSION` file with the release tag version before building artifacts.

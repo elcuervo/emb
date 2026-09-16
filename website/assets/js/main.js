@@ -213,111 +213,132 @@
       });
     }
 
-    /* ── 6. the console (placeholder) ───────────────────────────────
-       Deterministic transcripts, no network, no endpoint. Every line is
-       copied from the repository, and each entry names its source so a
-       server change has a defined update path:
+    /* ── 6. the console (live) ──────────────────────────────────────
+       The executor is `window.embTerminal`: the module the sandbox serves
+       at cli.emb.is/terminal.js, and the same module its own terminal page
+       loads. A reply is therefore rendered once, for both surfaces.
 
-         README.md §intro          EMB, and EMB ... VALUES
-         README.md §Reply formats  the VALUES envelope fields
-         README.md §EMB.MULTI      the multi-model reply
-         README.md §Example 2      the sst2 classifier reply
-         README.md §Operations     EMB.READY
-         examples/scripts/snippets/sst2.lua the SHA1 below, which is sha1() of that
-                                   file's exact bytes -- the same value the
-                                   server's scriptSHA() returns
+       Nothing here fabricates a reply. When the module is missing or the
+       sandbox cannot be reached, the console says so and offers a retry:
+       there is no transcript behind this seam.
 
-       The executor is the seam. Replace `window.embConsole.exec` with a
-       RESP client and the same markup, modes and states drive it.
-
-       The panel ships hidden while that client is unwired: the section
-       carries `hidden` and this selector skips it, so none of the below
-       boots and the transcript is never reachable. Drop the attribute to
-       bring the placeholder back, byte-for-byte. */
-    var root = document.querySelector('[data-console="transcript"]:not([hidden])');
+       The two preset digests are stamped into the section's attributes by
+       `website/tools/stamp-presets.py` from the bytes the server preloaded,
+       so a command here cannot name a digest the sandbox does not have. */
+    var root = document.querySelector('[data-console="live"]');
     if (root) {
       var out = root.querySelector('#console-out');
       var form = root.querySelector('#console-form');
       var input = root.querySelector('#console-input') || root.querySelector('#console-in');
       var runBtn = root.querySelector('.console__run');
       var screen = root.querySelector('#console-screen');
-      var tabs = [].slice.call(root.querySelectorAll('.console__mode'));
+      var stateEl = root.querySelector('#console-state');
+      var statusEl = root.querySelector('#console-status-t');
 
-      var TRANSCRIPTS = {
-        redis: {
-          hint: 'EMB minilm "hello world"',
-          idle: 'Type a command. Try EMB minilm "hello world".',
-          entries: [
-            { match: /^EMB\s+\S+\s+VALUES(\s|$)/i, lines: [
-              { t: '\"dtype\"   FLOAT' },
-              { t: '\"shape\"   [1 384]' },
-              { t: '\"values\"  [-0.19744610786437988, 0.17766517400741577, …]', k: 'dim' },
-              { t: 'self-describing envelope · 384 decimals', k: 'dim' }
-            ] },
-            { match: /^EMB\s+\S+(\s|$)/i, lines: [
-              { t: '\\x7c\\x8e\\x80\\xbd…' },
-              { t: '384 float32s × 4 bytes · 1.5 KB bulk string', k: 'dim' }
-            ] },
-            { match: /^EMB\.MULTI(\s|$)/i, lines: [
-              { t: '1) \\x7c\\x8e\\x80\\xbd…   minilm · 384 floats' },
-              { t: '2) \\x4a\\x9f\\x31\\xc2…   siglip2 · 768 floats' },
-              { t: 'one round trip · MGET-style partial failures', k: 'dim' }
-            ] },
-            { match: /^EMB\.READY(\s|$)/i, lines: [ { t: 'OK' } ] },
-            { match: /^PING(\s|$)/i, lines: [ { t: 'PONG' } ] },
-            { match: /^EMB\.HELP(\s|$)|^HELP(\s|$)/i, lines: [
-              { t: 'EMB  EMB.MULTI  EMB.MODELS  EMB.INFO  EMB.STATS  MONITOR' },
-              { t: 'EMB.READY  EMB.EVAL  EMB.EVSHA  EMB.SCRIPT  EMB.CACHE.FLUSH', k: 'dim' }
-            ] }
-          ]
-        },
-        scripts: {
-          hint: 'EMB.EVSHA sst2 "77c1…" 1 "this film is great" NEGATIVE POSITIVE',
-          idle: 'Load a script once, then call it by SHA. Try EMB.SCRIPT LOAD sst2.',
-          entries: [
-            { match: /^EMB\.SCRIPT\s+LOAD(\s|$)/i, lines: [
-              { t: '"77c1e0c01d3c43e8f07b262869d13c21b93b28f9"' },
-              { t: 'compiled, cached per model', k: 'dim' }
-            ] },
-            { match: /^EMB\.EVSHA(\s|$)/i, lines: [
-              { t: 'label       POSITIVE' },
-              { t: 'confidence  0.99' },
-              { t: 'scores      […]', k: 'dim' },
-              { t: 'model(fn(input)) → model output', k: 'dim' }
-            ] },
-            { match: /^EMB\.SCRIPT\s+EXISTS(\s|$)/i, lines: [ { t: '1' } ] }
-          ]
-        }
+      var PRESETS = {
+        embed: root.getAttribute('data-emb-preset-embed') || '',
+        classify: root.getAttribute('data-emb-preset-classify') || ''
       };
 
-      var state = { mode: 'redis' };
+      /* The demonstration menu, in the order a reader wants it: the reply forms
+         first, because those are the product, then the server reads, because
+         those are one word each. Between them they cover the whole surface the
+         sandbox permits, so nothing the panel can do is left to be discovered
+         by guessing.
+
+         The preset rows are built from the digests the section carries rather
+         than typed here: a preset whose bytes change cannot leave the console
+         offering a digest the sandbox answers `no such script` to. Each row is
+         a submitted command, not a special path, so running one is
+         indistinguishable from typing it — including for the history the arrow
+         keys walk.
+
+         `t` is the command that is submitted; `d` is the label drawn on the row
+         when the command is too long to sit on one line beside its note. The
+         digest is elided on the row and printed in full the moment the command
+         runs: the row is something to click, and a 40-character SHA spent in a
+         menu is a row that wraps for no reader's benefit. */
+      var GROUPS = [
+        {
+          h: 'REPLY FORMS',
+          hint: 'click one to run it below',
+          cols: 2,
+          items: [
+            { t: 'EMB minilm "hello world"', n: '384 float32s, as bytes' },
+            { t: 'EMB minilm VALUES "hello world"', n: 'the same vector, typed' },
+            { t: 'EMB.MULTI minilm "hello world" sst2 "this film is great"', n: 'two models, one call' }
+          ]
+        },
+        {
+          /* No notes here on purpose: these are one word each and their names
+             say what they do, so a note would be a second line inside a cell
+             for every row -- seven rows of two lines to say nothing the command
+             does not. They fit in one row of seven instead. */
+          h: 'THE SERVER',
+          cols: 7,
+          items: [
+            { t: 'EMB.MODELS' },
+            { t: 'EMB.INFO minilm' },
+            { t: 'EMB.STATS' },
+            { t: 'EMB.READY' },
+            { t: 'EMB.HELP' },
+            { t: 'PING' },
+            { t: 'INFO' }
+          ]
+        }
+      ];
+      if (PRESETS.embed) {
+        GROUPS[0].items.push({
+          t: 'EMB.EVSHA minilm ' + PRESETS.embed + ' 1 "hello world" "hello there"',
+          d: 'EMB.EVSHA minilm ' + PRESETS.embed.slice(0, 8) + '… 1 "hello world" "hello there"',
+          n: 'dim · norm · cosine'
+        });
+      }
+      if (PRESETS.classify) {
+        GROUPS[0].items.push({
+          t: 'EMB.EVSHA sst2 ' + PRESETS.classify + ' 1 "this film is great" NEGATIVE POSITIVE',
+          d: 'EMB.EVSHA sst2 ' + PRESETS.classify.slice(0, 8) + '… 1 "this film is great" NEGATIVE POSITIVE',
+          n: 'labelled reply'
+        });
+      }
+
+      /* The strip names the console's own condition. The label is the state's
+         name in the reader's vocabulary; the attribute is what the styles read,
+         so the indicator's colour is a rule rather than a second string here. */
+      var STATUS = {
+        idle: 'IDLE',
+        running: 'RUNNING',
+        starting: 'WAKING',
+        result: 'READY',
+        error: 'ERROR',
+        offline: 'OFFLINE'
+      };
+
+      var painted = [];
       var timers = [];
 
-      /* Code highlighting. The specimens in the markup are marked up by hand;
-         these transcripts are plain strings, so the identical four token
-         classes are applied by pattern. It marks what a token IS -- a string,
-         a command, a number -- and never colours text for emphasis. */
-      var HL = /("(?:[^"\\]|\\.)*")|(\bEMB(?:\.[A-Z]+)*\b|\bHELLO\b|\bVALUES\b|\bBLOB\b|\bPING\b|\bLOAD\b|\bEXISTS\b|\bFLUSH\b)|(\b\d+(?:\.\d+)?\b|\\x[0-9a-f]{2})/g;
+      function sameLine(a, b) { return a && b && a.t === b.t && a.k === b.k; }
+      function clearTimers() { timers.forEach(window.clearTimeout); timers = []; }
 
-      function highlight(text) {
-        var frag = document.createDocumentFragment();
-        var last = 0;
-        var m;
-        HL.lastIndex = 0;
-        while ((m = HL.exec(text)) !== null) {
-          if (m.index > last) {
-            frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-          }
-          var sp = document.createElement('span');
-          sp.className = m[1] ? 't-str' : m[2] ? 't-cmd' : 't-num';
-          sp.textContent = m[0];
-          frag.appendChild(sp);
-          last = m.index + m[0].length;
+      /* Lines are plain {t, k} pairs produced by the shared client, so both
+         surfaces paint the same thing: the console here, the terminal page
+         there. A line carries its tokens from `embTerminal.highlight`, which is
+         the same treatment the page's hand-marked specimens get — a command or
+         a reply's keyword, a string literal, a number — so what a reader runs
+         and what the page shows about the server are typeset alike. Dim and
+         error lines are left whole: they are the panel's own voice, not code. */
+      function appendTokens(el, text, command) {
+        if (!window.embTerminal || !window.embTerminal.highlight) {
+          el.appendChild(document.createTextNode(text));
+          return;
         }
-        if (last < text.length) {
-          frag.appendChild(document.createTextNode(text.slice(last)));
-        }
-        return frag;
+        window.embTerminal.highlight(text, command).forEach(function (token) {
+          if (!token.c) { el.appendChild(document.createTextNode(token.t)); return; }
+          var span = document.createElement('span');
+          span.className = 't-' + token.c;
+          span.textContent = token.t;
+          el.appendChild(span);
+        });
       }
 
       function lineEl(line) {
@@ -326,154 +347,218 @@
         if (line.k === 'echo') {
           var caret = document.createElement('span');
           caret.className = 'console__caret';
-          caret.textContent = 'EMB ›';
+          caret.textContent = 'emb>';
           el.appendChild(caret);
           el.appendChild(document.createTextNode(' '));
-          el.appendChild(highlight(line.t));
-        } else if (line.k) {
-          el.textContent = line.t;
-        } else {
-          el.appendChild(highlight(line.t));
+          appendTokens(el, line.t, true);
+          return el;
         }
+        if (line.k === 'dim' || line.k === 'err') {
+          el.textContent = line.t;
+          return el;
+        }
+        appendTokens(el, line.t, line.k === 'echo');
         return el;
       }
 
-      function clearTimers() {
-        timers.forEach(window.clearTimeout);
-        timers = [];
-      }
-
-      /* Playback is line-by-line, not per character: the panel is a console,
-         and a 40-character line typing itself out is noise, not information.
-         Reduced motion collapses it to one frame. */
-      function play(lines) {
-        clearTimers();
-        out.textContent = '';
-        if (reduceMotion.matches) {
-          lines.forEach(function (l) { out.appendChild(lineEl(l)); });
-          setBusy(false);
+      /* Paint the complete transcript, stepping only the lines that arrived
+         since the last frame. A transcript that is not an extension of the
+         painted one (the client replaced a transient line) repaints whole.
+         Reduced motion collapses the step to one frame. */
+      function paint(lines) {
+        var prefix = painted.length <= lines.length;
+        for (var i = 0; prefix && i < painted.length; i++) {
+          if (!sameLine(painted[i], lines[i])) prefix = false;
+        }
+        /* Whether to follow is decided before the transcript grows: a reader at
+           the end of a full panel stays there, and a reader who has scrolled
+           back through a long reply is not yanked away by the next line. A
+           repaint that is not an extension of what is on screen is a new
+           command, and its output is followed. */
+        var follow = !prefix || atEnd();
+        if (!prefix) {
+          clearTimers();
+          out.textContent = '';
+          painted = [];
+        }
+        if (painted.length === lines.length) return;
+        var fresh = lines.slice(painted.length);
+        painted = lines.slice();
+        if (reduceMotion.matches || fresh.length > 8) {
+          fresh.forEach(function (l) { out.appendChild(lineEl(l)); });
+          if (follow) { screen.scrollTop = screen.scrollHeight; }
           return;
         }
-        lines.forEach(function (l, i) {
-          if (i === 0) { out.appendChild(lineEl(l)); return; }
+        fresh.forEach(function (l, i) {
+          if (i === 0) {
+            out.appendChild(lineEl(l));
+            if (follow) { screen.scrollTop = screen.scrollHeight; }
+            return;
+          }
           timers.push(window.setTimeout(function () {
             out.appendChild(lineEl(l));
-            if (i === lines.length - 1) setBusy(false);
-          }, i * 110));
+            if (follow) { screen.scrollTop = screen.scrollHeight; }
+          }, i * 90));
         });
       }
 
-      function setBusy(busy) {
-        if (input) input.disabled = busy;
-        if (runBtn) runBtn.disabled = busy;
-        screen.setAttribute('aria-busy', busy ? 'true' : 'false');
+      /* A terminal shows its newest line, and this one has a bounded height, so
+         a reply longer than the panel scrolls instead of growing the plate. */
+      function atEnd() {
+        return screen.scrollHeight - screen.scrollTop - screen.clientHeight < 4;
       }
 
-      function respond(mode, command) {
-        var spec = TRANSCRIPTS[mode] || TRANSCRIPTS.redis;
-        var cmd = String(command).trim().replace(/\s+/g, ' ');
-        var head = cmd.split(' ')[0] || '';
-        var lines = [{ k: 'echo', t: cmd }];
-        for (var i = 0; i < spec.entries.length; i++) {
-          if (spec.entries[i].match.test(cmd)) {
-            return lines.concat(spec.entries[i].lines);
+      /* The rows are the poster's ruled numbered entry, made operable: the
+         row's number is the page's own `01` / `02` ladder, and the button
+         carries the command as its accessible name, with the note that says
+         what the command returns as part of the same name. The numbers run
+         across the groups rather than restarting in each, so one number always
+         names one command. */
+      function examplesEl() {
+        /* The heading and the list go straight into the band: a wrapper here
+           would carry the band's own class and its padding twice. */
+        var box = document.createDocumentFragment();
+        var n = 0;
+        GROUPS.forEach(function (group) {
+          if (!group.items.length) { return; }
+          var head = document.createElement('p');
+          head.className = 'examples__group';
+          var label = document.createElement('span');
+          label.className = 'examples__label';
+          label.textContent = group.h;
+          head.appendChild(label);
+          /* Only the first group says it: the rows below are the same kind of
+             thing, and a second "click one" is the page repeating itself. */
+          if (group.hint) {
+            var hint = document.createElement('span');
+            hint.className = 'examples__hint';
+            hint.textContent = group.hint;
+            head.appendChild(hint);
           }
-        }
-        return lines.concat([
-          { t: "-ERR unknown command '" + head + "'", k: 'err' },
-          { t: 'Try: ' + spec.hint, k: 'dim' }
-        ]);
-      }
-
-      function idle(mode) {
-        var spec = TRANSCRIPTS[mode] || TRANSCRIPTS.redis;
-        clearTimers();
-        out.textContent = '';
-        out.appendChild(lineEl({ t: spec.idle, k: 'dim' }));
-        setBusy(false);
-        if (input) {
-          input.placeholder = spec.hint;
-          input.value = '';
-        }
-      }
-
-      function submit(command) {
-        setBusy(true);
-        out.textContent = '';
-        out.appendChild(lineEl({ k: 'echo', t: command }));
-        var result;
-        try {
-          result = window.embConsole.exec(command, state.mode);
-        } catch (err) {
-          play([{ t: '-ERR executor failed', k: 'err' }]);
-          return;
-        }
-        Promise.resolve(result).then(function (lines) {
-          play(Array.isArray(lines) ? lines : []);
-        }, function () {
-          play([{ t: '-ERR executor failed', k: 'err' }]);
-        });
-      }
-
-      /* The default executor. It never touches the network: the transcripts
-         above are the whole server. Called as exec(command, mode) so a live
-         client knows which command surface it is answering. */
-      window.embConsole = window.embConsole || {
-        exec: function (command, mode) {
-          return new Promise(function (resolve) {
-            window.setTimeout(function () {
-              resolve(respond(mode || state.mode, command));
-            }, reduceMotion.matches ? 0 : 140);
+          box.appendChild(head);
+          var list = document.createElement('ol');
+          list.className = 'examples__list examples__list--' + group.cols;
+          group.items.forEach(function (ex) {
+            n += 1;
+            var li = document.createElement('li');
+            li.className = 'examples__i';
+            var num = document.createElement('span');
+            num.className = 'examples__n';
+            num.textContent = (n < 10 ? '0' : '') + n;
+            num.setAttribute('aria-hidden', 'true');
+            var cmd = document.createElement('button');
+            cmd.type = 'button';
+            cmd.className = 'examples__cmd';
+            /* The row is the command, and what it returns, in one name: the two
+               texts sit in separate flex boxes, so without this the name would
+               be read as one run-on word. */
+            cmd.setAttribute('aria-label', (n < 10 ? '0' : '') + n + '. ' + (ex.n ? ex.t + ' — ' + ex.n : ex.t));
+            /* The command sits in its own box so a long digest can be broken:
+               beside the note it is a flex item whose minimum is its longest
+               word, and a 40-character SHA is wider than a phone. */
+            var text = document.createElement('span');
+            text.className = 'examples__t';
+            text.textContent = ex.d || ex.t;
+            cmd.appendChild(text);
+            if (ex.n) {
+              var note = document.createElement('span');
+              note.className = 'examples__note';
+              note.setAttribute('aria-hidden', 'true');
+              note.textContent = ex.n;
+              cmd.appendChild(note);
+            }
+            cmd.addEventListener('click', function () { submitCommand(ex.t); });
+            li.appendChild(num);
+            li.appendChild(cmd);
+            list.appendChild(li);
           });
-        }
-      };
+          box.appendChild(list);
+        });
+        return box;
+      }
+
+      /* The ledger is beside the plate rather than inside it, so it is found
+         from the document: the console's own subtree no longer contains it. */
+      var examplesBox = document.querySelector('#console-examples');
+      if (examplesBox) {
+        examplesBox.appendChild(examplesEl());
+        examplesBox.hidden = false;
+      }
+
+      var term = null;
+      if (window.embTerminal) {
+        term = window.embTerminal.create({
+          base: window.embTerminal.origin,
+          onLines: paint,
+          onState: function (state, detail) {
+            var busy = state === 'running' || state === 'starting';
+            if (input) input.disabled = busy;
+            if (runBtn) runBtn.disabled = busy;
+            screen.setAttribute('aria-busy', busy ? 'true' : 'false');
+            root.setAttribute('data-state', state);
+            if (statusEl) statusEl.textContent = STATUS[state] || STATUS.idle;
+            if (!stateEl) return;
+            stateEl.hidden = true;
+            stateEl.textContent = '';
+            if (state === 'offline') {
+              stateEl.hidden = false;
+              var retry = document.createElement('button');
+              retry.type = 'button';
+              retry.textContent = 'Retry';
+              retry.addEventListener('click', function () { term.retry(); });
+              stateEl.appendChild(document.createTextNode((detail && detail.text ? detail.text : 'offline') + ' '));
+              stateEl.appendChild(retry);
+            }
+          }
+        });
+      } else {
+        /* The module did not load, so the sandbox is unreachable: disable
+           the controls rather than answer from a transcript. The offline
+           line is painted below, after the idle paint that would otherwise
+           overwrite it. */
+        if (input) input.disabled = true;
+        if (runBtn) runBtn.disabled = true;
+      }
+
+      function submitCommand(text) {
+        if (input) input.value = '';
+        if (term) term.submit(text);
+      }
 
       if (form && input && out) {
         form.addEventListener('submit', function (event) {
           event.preventDefault();
           var command = input.value.trim();
           if (!command) return;
-          input.value = '';
-          submit(command);
+          submitCommand(command);
         });
 
-        tabs.forEach(function (tab, i) {
-          tab.addEventListener('click', function () { select(i, false); });
+        /* Recall is the REPL's other half. It is feature-detected because the
+           client module is served from the sandbox's own origin: a page can be
+           newer than the module it loads, and it must still submit a command
+           when it is. */
+        input.addEventListener('keydown', function (event) {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+          if (!term || !term.recall) return;
+          var next = term.recall(event.key === 'ArrowUp' ? -1 : 1, input.value);
+          if (next === null) return;
+          event.preventDefault();
+          input.value = next;
+          input.setSelectionRange(next.length, next.length);
         });
 
-        var tablist = root.querySelector('.console__modes');
-        function select(i, focus) {
-          var mode = tabs[i].getAttribute('data-mode');
-          tabs.forEach(function (tab, j) {
-            var on = j === i;
-            tab.setAttribute('aria-selected', on ? 'true' : 'false');
-            tab.tabIndex = on ? 0 : -1;
-          });
-          state.mode = mode;
-          screen.setAttribute('aria-labelledby', tabs[i].id);
-          idle(mode);
-          if (focus) tabs[i].focus();
+        /* The live region is armed after the panel is built, so loading the
+           page does not announce the idle line. Replies are announced. */
+        if (term) {
+          /* A terminal that opens on nothing is a terminal the reader has to
+             guess at. One dim line, in the panel's own voice, states the one
+             thing about it the ledger above cannot: that the arrow keys walk
+             what you have already run. It is replaced by the first command. */
+          paint([{ t: '↑ and ↓ recall what you have run · Enter sends', k: 'dim' }]);
+          screen.scrollTop = screen.scrollHeight;
+        } else {
+          paint([{ t: 'offline — the sandbox client could not be loaded', k: 'dim' }]);
         }
-
-        if (tablist) {
-          tablist.addEventListener('keydown', function (event) {
-            var current = tabs.indexOf(document.activeElement);
-            if (current < 0) current = tabs.indexOf(root.querySelector('[aria-selected="true"]'));
-            var next = null;
-            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
-            else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
-            else if (event.key === 'Home') next = 0;
-            else if (event.key === 'End') next = tabs.length - 1;
-            if (next === null) return;
-            event.preventDefault();
-            select(next, true);
-          });
-        }
-
-        /* Idle is painted before the live region is armed, so loading the page
-           does not announce a console hint. Results and mode hints after that
-           are announced. */
-        idle('redis');
         out.setAttribute('aria-live', 'polite');
       }
     }

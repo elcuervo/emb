@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb · sandbox</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#111110">
+<!-- The sandbox's own terminal, and the whole of it: the viewport is the
+     terminal, the way a CLI is. There is no page around it -- no masthead, no
+     card, no footer, no status bar -- because there is nothing this page does
+     that the terminal does not do. What it says about itself it says in the
+     line above the samples, in the same voice as the replies.
+
+     It speaks the same contract as the landing page's console through the same
+     module (`/terminal.js`), so a command and its reply render the same way on
+     both. Tokens are the site's own; the fonts are not shipped here, so a
+     system monospace stack stands in. -->
+<style>
+  :root{
+    --bg:#F3F0E8; --fg:#0B0B0B; --accent:#FF5A1F; --muted:#6B6963;
+    --rule:#B8B5AC; --plate:#111110; --hair:#292823;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--plate);
+    color:var(--bg);
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.6;
+    overscroll-behavior:none;
+  }
+  .cli{
+    display:flex;
+    flex-direction:column;
+    height:100dvh;
+    max-height:100dvh;
+  }
+
+  /* ── what the terminal says about itself, and the commands it takes ── */
+  .cli__head{
+    flex:0 0 auto;
+    padding:10px clamp(12px, 1.6vw, 20px) 0;
+    border-bottom:1px solid var(--hair);
+  }
+  /* One line on a desktop, two or three on a phone: it is the terminal saying
+     what it is in the same voice as its replies, not a paragraph about itself.
+     It is a sentence, so it is written as one -- no flex, no separators built
+     out of pseudo-elements -- and it wraps where the measure says. */
+  .cli__about{
+    margin:0 0 8px;
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--rule);
+    text-wrap:pretty;
+  }
+  .cli__about b{ font-weight:500; color:var(--bg); }
+  .cli__about a{ color:var(--rule); text-underline-offset:2px; }
+  .cli__about a:hover{ color:var(--accent); }
+
+  /* The samples are the terminal's opening message, and they stay: a reader who
+     has just run one should not have to find the others again. They are drawn
+     as the terminal's own numbered rows -- no boxes, no buttons' costume --
+     and every row is a real control. */
+  .cli__examples{ padding-bottom:8px; }
+  .cli__examples[hidden]{ display:none; }
+  .cli__examples-h{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:2px 20px;
+    flex-wrap:wrap;
+    /* full-bleed: the bar runs the width of the band, out through the head's
+       own padding, so it reads as a header rather than as a chip floating in
+       the rows. The negative margin is that padding, cancelled. */
+    margin:0 calc(-1 * clamp(12px, 1.6vw, 20px)) 4px;
+    padding:2px clamp(12px, 1.6vw, 20px);
+    background:var(--bg);
+    color:var(--muted);
+    font-size:12.5px;
+    font-weight:500;
+    letter-spacing:.1em;
+  }
+  /* The group heading is the poster's own solid bar, inverted for this ground:
+     paper with black ink, the same move `.block--dark .block__head` makes on
+     the landing's dark block. It is the band's one loud line, and it is what
+     says the rows under it are commands rather than terminal noise. */
+  .cli__examples-label{ color:var(--fg); }
+  .cli__examples-hint{ font-weight:400; letter-spacing:.02em; }
+  .cli__examples-list + .cli__examples-h{ margin-top:10px; }
+  .cli__examples-list{
+    display:grid;
+    margin:0;
+    padding:0;
+    list-style:none;
+    column-gap:clamp(16px, 2.4vw, 40px);
+  }
+  .cli__examples-list--2{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .cli__examples-list--7{ grid-template-columns:repeat(7, minmax(0, 1fr)); }
+  .cli__example{
+    display:grid;
+    grid-template-columns:2.4em minmax(0, 1fr);
+    align-items:baseline;
+    gap:0 10px;
+  }
+  .cli__example-n{ color:var(--rule); }
+  .cli__example-cmd{
+    appearance:none;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:0 14px;
+    width:100%;
+    min-width:0;
+    min-height:26px;
+    padding:1px 0;
+    border:0;
+    background:none;
+    text-align:left;
+    font:inherit;
+    color:var(--bg);
+    cursor:pointer;
+  }
+  .cli__example-t{ min-width:0; overflow-wrap:anywhere; }
+  .cli__example-note{ color:var(--rule); }
+  .cli__example-cmd:hover{ color:var(--accent); }
+  .cli__example-cmd:hover .cli__example-note{ color:var(--bg); }
+
+  /* ── the transcript: the one part that grows, and the one that scrolls ── */
+  .cli__out{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding:10px clamp(12px, 1.6vw, 20px);
+    scrollbar-width:none;
+  }
+  .cli__out::-webkit-scrollbar{ width:0; height:0; }
+  .cli__line{ display:block; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .cli__line--dim{ color:var(--rule); }
+  .cli__line--err{ color:var(--accent); }
+  .cli__line--key{ color:var(--bg); }
+  .cli__line--echo{ color:var(--bg); }
+  /* the speed of the call, in the form redis-cli prints it: the number is the
+     point, the unit is not, and the landing's plate prints it the same way */
+  .cli__line--time{ color:var(--rule); }
+  .cli__line--time .t-num{ color:var(--bg); }
+  .cli__prompt-mark{ color:var(--accent); }
+  /* the token classes the site's specimens use, on this ground */
+  .t-cmd{ font-weight:700; }
+  .t-str{ color:var(--accent); }
+  .t-num{ font-variant-numeric:tabular-nums; }
+  .sr-only{
+    position:absolute;
+    width:1px;
+    height:1px;
+    margin:-1px;
+    padding:0;
+    overflow:hidden;
+    clip:rect(0 0 0 0);
+    white-space:nowrap;
+    border:0;
+  }
+
+  .cli__state{
+    flex:0 0 auto;
+    margin:0;
+    padding:0 clamp(12px, 1.6vw, 20px) 6px;
+    color:var(--rule);
+  }
+  .cli__state[hidden]{ display:none; }
+  .cli__state button{
+    appearance:none;
+    padding:0;
+    border:0;
+    background:none;
+    color:var(--accent);
+    font:inherit;
+    text-decoration:underline;
+    cursor:pointer;
+  }
+
+  /* ── the prompt, which is the last line of the terminal ── */
+  .cli__form{
+    flex:0 0 auto;
+    display:grid;
+    grid-template-columns:auto minmax(0, 1fr) auto;
+    align-items:center;
+    gap:10px;
+    padding:6px clamp(12px, 1.6vw, 20px) 10px;
+    border-top:1px solid var(--hair);
+  }
+  .cli__prompt{ color:var(--accent); }
+  .cli__input{
+    width:100%;
+    min-width:0;
+    padding:2px 0;
+    border:0;
+    background:transparent;
+    color:var(--bg);
+    font:inherit;
+    caret-color:var(--accent);
+  }
+  .cli__input::placeholder{ color:var(--rule); opacity:1; }
+  .cli__input[disabled]{ color:var(--rule); cursor:progress; }
+  .cli__run{
+    appearance:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-width:26px;
+    min-height:26px;
+    padding:2px 6px;
+    border:0;
+    background:none;
+    color:var(--rule);
+    font:inherit;
+    cursor:pointer;
+  }
+  .cli__run:hover{ color:var(--accent); }
+  .cli__run[disabled]{ color:var(--hair); cursor:progress; }
+
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  /* one command per row once the rows are the width of a phone, and the
+     sample that the row cannot show is the note, which stays as the control's
+     own name. Everything a finger has to hit keeps the 44px floor here. */
+  @media (max-width:760px){
+    .cli__about{ font-size:12px; }
+    .cli__examples-list--2{ grid-template-columns:minmax(0, 1fr); }
+    .cli__examples-list--7{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .cli__example-note{ display:none; }
+    .cli__example-cmd{ min-height:44px; }
+    .cli__prompt,
+    .cli__input{ min-height:44px; }
+    .cli__run{ min-width:44px; min-height:44px; }
+    .cli__form{ padding-bottom:6px; }
+  }
+  @media (max-width:420px){
+    body{ font-size:12.5px; }
+  }
+</style>
+</head>
+<body>
+
+<main class="cli">
+  <h1 class="sr-only">emb sandbox</h1>
+  <!-- The terminal's opening message, and the whole of its chrome: one line
+       that says what this is, then the commands it takes. A reader without
+       scripting gets exactly this and nothing to type into, which is the
+       honest state -- there is no reply this page can produce on its own. -->
+  <header class="cli__head">
+    <p class="cli__about">
+      A real <b>emb</b> process answers over RESP · sandbox, may reset · it
+      refuses anything that changes its configuration or shared state ·
+      <a href="/stats">live stats&nbsp;&#8599;</a> ·
+      <a href="https://emb.is/">emb.is&nbsp;&#8599;</a>
+    </p>
+    <div class="cli__examples" id="term-examples" hidden></div>
+  </header>
+
+  <div class="cli__out" id="term-out" aria-live="off"></div>
+
+  <p class="cli__state" id="term-state" hidden></p>
+
+  <form class="cli__form" id="term-form" autocomplete="off">
+    <label class="cli__prompt" for="term-in">emb&gt;</label>
+    <input class="cli__input" id="term-in" name="command" type="text"
+           autocomplete="off" autocapitalize="off" autocorrect="off"
+           spellcheck="false" enterkeyhint="send" value=""
+           aria-label="Command" placeholder="EMB minilm &quot;hello world&quot;">
+    <button class="cli__run" type="submit" aria-label="Run the command"
+            title="Run (Enter)"><span aria-hidden="true">&#8629;</span></button>
+  </form>
+</main>
+
+<script src="/terminal.js" defer></script>
+<script defer>
+(function () {
+  'use strict';
+
+  /* The demonstration menu, in the order a reader wants it: the reply forms
+     first, because those are the product, then the server reads, because those
+     are one word each. Between them they cover the whole surface the sandbox
+     permits, so nothing this terminal can do is left to be guessed at.
+
+     The preset rows are appended from the manifest this page fetches, so the
+     digests are the server's rather than transcribed here. `t` is the command
+     that is submitted; `d` is the label drawn on the row when the command is
+     too long to sit on one line beside its note. */
+  var GROUPS = [
+    {
+      h: 'REPLY FORMS',
+      hint: 'click one, or type your own',
+      cols: 2,
+      items: [
+        { t: 'EMB minilm "hello world"', n: '384 float32s, as bytes' },
+        { t: 'EMB minilm VALUES "hello world"', n: 'the same vector, typed' },
+        { t: 'EMB.MULTI minilm "hello world" sst2 "this film is great"', n: 'two models, one call' }
+      ]
+    },
+    {
+      /* No notes here on purpose: these are one word each and their names say
+         what they do, so a note would be a second line inside a cell for every
+         row -- seven rows of two lines to say nothing the command does not.
+         They fit in one row of seven instead. */
+      h: 'THE SERVER',
+      cols: 7,
+      items: [
+        { t: 'EMB.MODELS' },
+        { t: 'EMB.INFO minilm' },
+        { t: 'EMB.STATS' },
+        { t: 'EMB.READY' },
+        { t: 'EMB.HELP' },
+        { t: 'PING' },
+        { t: 'INFO' }
+      ]
+    }
+  ];
+
+  function boot() {
+    if (!window.embTerminal) { return; }
+    var out = document.getElementById('term-out');
+    var band = document.getElementById('term-examples');
+    var stateEl = document.getElementById('term-state');
+    var form = document.getElementById('term-form');
+    var input = document.getElementById('term-in');
+    var runBtn = form.querySelector('.cli__run');
+
+    /* A line carries its tokens from `embTerminal.highlight`, the same
+       treatment the site's hand-marked specimens get — a command or a reply's
+       keyword, a string literal, a number. Dim and error lines are left whole:
+       they are the terminal's own voice, not code. */
+    function appendTokens(el, text, command) {
+      if (!window.embTerminal || !window.embTerminal.highlight) {
+        el.appendChild(document.createTextNode(text));
+        return;
+      }
+      window.embTerminal.highlight(text, command).forEach(function (token) {
+        if (!token.c) { el.appendChild(document.createTextNode(token.t)); return; }
+        var span = document.createElement('span');
+        span.className = 't-' + token.c;
+        span.textContent = token.t;
+        el.appendChild(span);
+      });
+    }
+
+    function lineEl(line) {
+      var el = document.createElement('span');
+      el.className = 'cli__line' + (line.k ? ' cli__line--' + line.k : '');
+      if (line.k === 'echo') {
+        var mark = document.createElement('span');
+        mark.className = 'cli__prompt-mark';
+        mark.textContent = 'emb>';
+        el.appendChild(mark);
+        el.appendChild(document.createTextNode(' '));
+        appendTokens(el, line.t, true);
+        return el;
+      }
+      if (line.k === 'dim' || line.k === 'err') {
+        el.textContent = line.t;
+        return el;
+      }
+      appendTokens(el, line.t, false);
+      return el;
+    }
+
+    /* The rows are the terminal's own numbered lines: no boxes, no buttons'
+       costume, and every row is a real control. The numbers run across the
+       groups rather than restarting in each, so one number names one command. */
+    function examplesEl() {
+      /* The heading and the list go straight into the band: a wrapper here would
+         carry the band's own class and its padding twice. */
+      var box = document.createDocumentFragment();
+      var n = 0;
+      GROUPS.forEach(function (group) {
+        if (!group.items.length) { return; }
+        var head = document.createElement('p');
+        head.className = 'cli__examples-h';
+        var label = document.createElement('span');
+        label.className = 'cli__examples-label';
+        label.textContent = group.h;
+        head.appendChild(label);
+        /* Only the first group says it: the rows below are the same kind of
+           thing, and a second "click one" is the terminal repeating itself. */
+        if (group.hint) {
+          var hint = document.createElement('span');
+          hint.className = 'cli__examples-hint';
+          hint.textContent = group.hint;
+          head.appendChild(hint);
+        }
+        box.appendChild(head);
+        var list = document.createElement('ol');
+        list.className = 'cli__examples-list cli__examples-list--' + group.cols;
+        group.items.forEach(function (ex) {
+          n += 1;
+          var li = document.createElement('li');
+          li.className = 'cli__example';
+          var num = document.createElement('span');
+          num.className = 'cli__example-n';
+          num.textContent = (n < 10 ? '0' : '') + n;
+          var cmd = document.createElement('button');
+          cmd.type = 'button';
+          cmd.className = 'cli__example-cmd';
+          /* The row is the command, and what it returns, in one name: the two
+             texts sit in separate flex boxes, so without this the name would be
+             read as one run-on word. */
+          cmd.setAttribute('aria-label', ex.n ? ex.t + ' — ' + ex.n : ex.t);
+          var label = document.createElement('span');
+          label.className = 'cli__example-t';
+          label.textContent = ex.d || ex.t;
+          cmd.appendChild(label);
+          if (ex.n) {
+            var note = document.createElement('span');
+            note.className = 'cli__example-note';
+            note.setAttribute('aria-hidden', 'true');
+            note.textContent = ex.n;
+            cmd.appendChild(note);
+          }
+          cmd.addEventListener('click', function () { submitCommand(ex.t); });
+          li.appendChild(num);
+          li.appendChild(cmd);
+          list.appendChild(li);
+        });
+        box.appendChild(list);
+      });
+      return box;
+    }
+
+    /* The transcript is bounded by the viewport rather than by itself, so a
+       long reply scrolls instead of growing the terminal. Whether to follow the
+       output is read before the transcript is replaced: a reader who has
+       scrolled back through a reply is not yanked to the end by the next one. */
+    function atEnd() {
+      return out.scrollHeight - out.scrollTop - out.clientHeight < 4;
+    }
+
+    function paint(lines) {
+      var follow = atEnd();
+      out.textContent = '';
+      lines.forEach(function (l) { out.appendChild(lineEl(l)); });
+      if (follow) { out.scrollTop = out.scrollHeight; }
+    }
+
+    /* This page is served by the same bridge that owns the manifest, so the
+       commands it suggests are ones the sandbox will accept. */
+    function loadExamples() {
+      return fetch('/api/presets').then(function (res) { return res.json(); }).then(function (body) {
+        var presets = (body && body.presets) || [];
+        var seen = {};
+        presets.forEach(function (p) {
+          if (!p || !p.model || !p.sha || seen[p.name]) { return; }
+          seen[p.name] = true;
+          var short = p.sha.slice(0, 8) + '\u2026';
+          if (p.name === 'embed') {
+            GROUPS[0].items.push({
+              t: 'EMB.EVSHA ' + p.model + ' ' + p.sha + ' 1 "hello world" "hello there"',
+              d: 'EMB.EVSHA ' + p.model + ' ' + short + ' 1 "hello world" "hello there"',
+              n: 'dim · norm · cosine'
+            });
+          } else if (p.name === 'classify') {
+            GROUPS[0].items.push({
+              t: 'EMB.EVSHA ' + p.model + ' ' + p.sha + ' 1 "this film is great" NEGATIVE POSITIVE',
+              d: 'EMB.EVSHA ' + p.model + ' ' + short + ' 1 "this film is great" NEGATIVE POSITIVE',
+              n: 'labelled reply'
+            });
+          }
+        });
+      }, function () {});
+    }
+
+    var term = window.embTerminal.create({
+      base: window.embTerminal.origin,
+      onLines: paint,
+      onState: function (state, detail) {
+        var busy = state === 'running' || state === 'starting';
+        input.disabled = busy;
+        runBtn.disabled = busy;
+        out.setAttribute('aria-busy', busy ? 'true' : 'false');
+        stateEl.hidden = true;
+        stateEl.textContent = '';
+        if (state === 'offline') {
+          stateEl.hidden = false;
+          var retry = document.createElement('button');
+          retry.type = 'button';
+          retry.textContent = 'Retry';
+          retry.addEventListener('click', function () { term.retry(); });
+          stateEl.appendChild(document.createTextNode((detail && detail.text ? detail.text : 'offline') + ' '));
+          stateEl.appendChild(retry);
+        }
+      }
+    });
+
+    function submitCommand(text) {
+      input.value = '';
+      term.submit(text);
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var command = input.value.trim();
+      if (!command) { return; }
+      submitCommand(command);
+    });
+
+    input.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') { return; }
+      if (!term.recall) { return; }
+      var next = term.recall(event.key === 'ArrowUp' ? -1 : 1, input.value);
+      if (next === null) { return; }
+      event.preventDefault();
+      input.value = next;
+      input.setSelectionRange(next.length, next.length);
+    });
+
+    /* The samples are drawn before the live region is armed, so arriving on the
+       page does not announce a list of commands. Replies after that are. */
+    band.appendChild(examplesEl());
+    band.hidden = false;
+    out.setAttribute('aria-live', 'polite');
+
+    /* A terminal that opens on nothing is a terminal the reader has to guess
+       at. One dim line, in the terminal's own voice, states the one thing the
+       menu above cannot: that the arrow keys walk what you have already run.
+       The first command replaces it. */
+    out.appendChild(lineEl({ t: '\u2191 and \u2193 recall what you have run \u00b7 Enter sends', k: 'dim' }));
+
+    /* The manifest arrives after the first draw, so the two preset rows are
+       appended once it does. The band is an opening message, not a state:
+       nothing already on screen is disturbed by it. */
+    loadExamples().then(function () {
+      band.textContent = '';
+      band.appendChild(examplesEl());
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
