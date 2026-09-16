@@ -1,0 +1,21 @@
+language: en-US
+tone_instructions: >-
+  Be terse. Only report correctness, security, or data-loss issues and
+  clear-cut simplifications. Skip style nits, praise, restating the diff,
+  and suggestions on unchanged code. One sentence per finding.
+
+reviews:
+  profile: quiet
+  high_level_summary: false
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  assess_linked_issues: false
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+  review_status: false
+
+chat:
+  art: false
