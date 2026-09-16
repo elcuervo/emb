@@ -47,9 +47,9 @@ func DefaultLimits() Limits {
 		// bound the pixel count; this bounds the wire.
 		MaxImages:     2,
 		MaxImageBytes: 256 << 10,
-		WorkWindow:     60 * time.Second,
-		WorkCeiling:    20_000,
-		Timeout:        30 * time.Second,
+		WorkWindow:    60 * time.Second,
+		WorkCeiling:   20_000,
+		Timeout:       30 * time.Second,
 	}
 }
 
