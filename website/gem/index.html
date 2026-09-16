@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — the Ruby client: one call, one command, and the shape of your call site</title>
+<link rel="canonical" href="https://emb.is/gem/">
+<meta name="description" content="How the emb Ruby gem turns a call site into one EMB or one EMB.MULTI: the four wire shapes, the create-then-consume rule, fail-closed batches, and the emb-server gem that ships the server as a precompiled binary.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — the Ruby client: one call, one command, and the shape of your call site">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Four execution modes, four wire shapes, and the one rule that decides how many commands a scope costs.">
+<meta property="og:url" content="https://emb.is/gem/">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — the Ruby client: one call, one command, and the shape of your call site">
+<meta name="twitter:description" content="Four execution modes, four wire shapes, and the one rule that decides how many commands a scope costs.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<!-- One entry per surface the site serves, so the client is a peer of the
+     reference and the gallery rather than a page reachable only from a section
+     of one of them. Destinations are relative, so the tree keeps working under
+     any mount point. -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../demos/index.html">Demos</a>
+      <a href="index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="../demos/index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <div class="shell">
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h">The Ruby client</h1>
+          <p class="plate__teaches">
+            One call, one command. The gem is a skin over the Redis protocol
+            with three execution modes on top, and the shape of your call site
+            decides how many commands a scope puts on the wire.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 1 — THE CLIENT</b>
+            · <b>3</b> execution modes
+            · pool <b>5</b>
+            · <b>512</b> texts per call
+            · <b>2</b> gems
+            · <b>v<span data-emb-version>0.4.0</span></b></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="what-h">WHAT YOU ARE LOOKING AT</h2>
+
+        <p class="block__deck">
+          The server answers RESP. Anything that speaks RESP can ask it for a
+          vector, and the gem does not change that. What it removes is the part
+          you would otherwise write yourself: the <span class="t-cmd">unpack('e*')</span>
+          that turns four bytes per number back into an array, the registry that
+          remembers one proxy per model, the connection pool, and the coalescing.
+        </p>
+        <p class="block__deck">
+          <span class="t-cmd">Emb[:minilm]["hello world"]</span> is 384 floats,
+          eager and unremarkable — it sends <span class="t-cmd">EMB minilm
+          "hello world"</span> and unpacks the reply. The interesting part is
+          what the same line does under a <span class="t-cmd">lazy</span> mode,
+          which is the subject of the rest of this page.
+        </p>
+
+        <div class="block__main block__main--ledger">
+          <div class="cap">
+            <p class="cap__label">01 · YOUR CALL</p>
+            <p class="cap__claim">A model proxy from the client's registry. Eager, it sends; deferred, it hands back a value that has not asked the server for anything yet.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">02 · THE POOL</p>
+            <p class="cap__claim">Five persistent connections per instance by default, taken in rotation. Up to five commands run at once; the sixth waits for one to free, and that wait has no timeout of its own.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">03 · THE BATCH SCOPE</p>
+            <p class="cap__claim">Where deferred values collect, per thread. The first one used sends the command for the whole scope, and the scope is cleared at the end of the request or job.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">04 · THE WIRE</p>
+            <p class="cap__claim"><span class="t-cmd">EMB</span> when the scope holds one model, <span class="t-cmd">EMB.MULTI</span> when it holds several. The first takes a model and any number of texts; the second takes model/text pairs, so one command can carry several models.</p>
+          </div>
+        </div>
+
+        <div class="code">
+<pre class="code__body"><span class="t-dim"># eager, the default: one command, one vector</span>
+<span class="t-cmd">Emb</span>[:minilm][<span class="t-str">"hello world"</span>]
+<span class="t-dim"># → [0.0123, -0.0456, …]   — 384 Float, one Array</span>
+
+<span class="t-dim"># VALUES: the same call, asking for the server's self-describing envelope</span>
+<span class="t-cmd">Emb</span>[:minilm][<span class="t-str">"hello world"</span>, format: :values]
+<span class="t-dim"># → { dtype: "FLOAT", shape: [1, 384], values: [0.0123, …] }</span></pre>
+        </div>
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="modes-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="modes-h">THE FOUR WIRE SHAPES</h2>
+
+        <p class="block__deck">
+          Every way the gem can be told to embed six texts, and the command each
+          one puts on the wire. Read the instrument column downwards: the same
+          six texts in every row, four different counts, and the shape the
+          client sends for each.
+        </p>
+
+        <ol class="wire">
+          <li class="wire__i">
+            <div class="wire__m">
+              <p class="wire__t">lazy: false <span class="t-dim">— the default</span></p>
+              <p class="wire__cmd">Six calls at the call site become six commands. Each one is its own pass over the model.</p>
+            </div>
+            <p class="wire__n">6 commands</p>
+            <div class="wire__track"><span class="wire__lane">
+              <i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i>
+            </span></div>
+          </li>
+
+          <li class="wire__i">
+            <div class="wire__m">
+              <p class="wire__t">lazy: :multi</p>
+              <p class="wire__cmd">Deferred, then coalesced. One model in the scope sends <span class="t-cmd">EMB minilm "t1" … "t6"</span>; a scope that mixes models sends <span class="t-cmd">EMB.MULTI</span> instead. Chunks are sent one at a time.</p>
+            </div>
+            <p class="wire__n">1 command</p>
+            <div class="wire__track"><span class="wire__lane">
+              <i class="wire__lamp is-one" data-texts="6"></i>
+            </span></div>
+          </li>
+
+          <li class="wire__i">
+            <div class="wire__m">
+              <p class="wire__t">lazy: :batch</p>
+              <p class="wire__cmd">The same deferral, and the same commands — sent concurrently instead of one after another. Here <span class="t-cmd">batch_size: 2</span> over six texts is three shares of two, in flight at once.</p>
+            </div>
+            <p class="wire__n">3 commands, at once</p>
+            <div class="wire__track">
+              <span class="wire__lane"><i class="wire__lamp" data-texts="2"></i><i class="wire__rest" data-texts="4"></i></span>
+              <span class="wire__lane"><i class="wire__lamp" data-texts="2"></i><i class="wire__rest" data-texts="4"></i></span>
+              <span class="wire__lane"><i class="wire__lamp" data-texts="2"></i><i class="wire__rest" data-texts="4"></i></span>
+            </div>
+          </li>
+
+          <li class="wire__i">
+            <div class="wire__m">
+              <p class="wire__t">Emb.multi { }</p>
+              <p class="wire__cmd">Explicit and always eager, in every mode: collect pairs, then send one <span class="t-cmd">EMB.MULTI minilm "t1" bge "t2" …</span> carrying as many models as you name.</p>
+            </div>
+            <p class="wire__n">1 command</p>
+            <div class="wire__track"><span class="wire__lane">
+              <i class="wire__lamp is-one" data-texts="6"></i>
+            </span></div>
+          </li>
+        </ol>
+
+        <dl class="wire__key">
+          <div>
+            <dt>A LANE IS THE SCOPE</dt>
+            <dd>Edge to edge, the six texts this scope is about.</dd>
+          </div>
+          <div>
+            <dt>A MARK IS ONE COMMAND</dt>
+            <dd>Its width is the texts that command carries.</dd>
+          </div>
+          <div>
+            <dt>STACKED LANES RUN AT ONCE</dt>
+            <dd>Same moment, separate connections from the pool.</dd>
+          </div>
+          <div>
+            <dt>THE ACCENT IS ONE CALL</dt>
+            <dd>A single command carrying every text in the scope.</dd>
+          </div>
+        </dl>
+
+        <p class="fig"><b>FIG. 2 — THE SHAPE THE CLIENT SENDS</b>
+          · <b>a count of commands, not a stopwatch</b>
+          · the sandbox runs the server and not Ruby, so no run of the gem is
+          observable from a page — every number here is the shipped slicing
+          code's own arithmetic, and every bar is that count drawn to scale.</p>
+      </div></div>
+    </section>
+
+    <!-- the massif, as a reading break: the same cut-out the gallery's plates
+         use. No route and no second signal -- this page spends its accent on
+         meaning, in the ledger. -->
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-shoulder.png" width="1200" height="150" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="rule-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="rule-h">THE ONE RULE</h2>
+
+        <p class="block__deck">
+          In a lazy mode, <span class="t-cmd">Emb[:minilm]["text"]</span> sends
+          nothing. It returns a value that asks the server the first time it is
+          <em>used</em> — and that first use pays for every other deferred value
+          in the scope. So the deferral only helps if the values exist before
+          the first one is consumed. That is the whole feature and the whole
+          trap.
+        </p>
+
+        <div class="code">
+<pre class="code__body"><span class="t-dim"># WRONG — create and consume in the same breath</span>
+texts.each { |t| <span class="t-cmd">process</span>(<span class="t-cmd">Emb</span>[:minilm][t]) }
+<span class="t-dim"># six values, each used before the next exists → 6 EMB commands, 6 passes</span>
+
+<span class="t-dim"># RIGHT — create them all, then consume them</span>
+loaders = texts.map { |t| <span class="t-cmd">Emb</span>[:minilm][t] }
+<span class="t-dim"># nothing has been sent yet</span>
+loaders.each { |l| <span class="t-cmd">process</span>(l) }
+<span class="t-dim"># the first use sends ONE EMB minilm "t1" … "t6" for all of them</span></pre>
+        </div>
+
+        <ol class="wire">
+          <li class="wire__i">
+            <div class="wire__m">
+              <p class="wire__t">Interleaved</p>
+              <p class="wire__cmd">Each value is used before the next is created, so each scope holds one text.</p>
+            </div>
+            <p class="wire__n">6 commands</p>
+            <div class="wire__track"><span class="wire__lane">
+              <i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i><i class="wire__lamp" data-texts="1"></i>
+            </span></div>
+          </li>
+          <li class="wire__i">
+            <div class="wire__m">
+              <p class="wire__t">Hoisted</p>
+              <p class="wire__cmd">The same six texts, with the calls separated from the uses by one loop.</p>
+            </div>
+            <p class="wire__n">1 command</p>
+            <div class="wire__track"><span class="wire__lane">
+              <i class="wire__lamp is-one" data-texts="6"></i>
+            </span></div>
+          </li>
+        </ol>
+
+        <p class="block__deck">
+          Two consequences follow from the same rule. A value created and never
+          used never embeds at all — it is dropped when the thread's scope ends,
+          which is a leak of nothing. And the scope caches what it resolved, so
+          asking for the same text twice inside one scope costs nothing the
+          second time. Change one call site or turn it on for the whole app with
+          <span class="t-cmd">Emb.configure { |c| c.lazy = :batch }</span>; the
+          shape of the call site is the only thing that has to change.
+        </p>
+
+        <p class="fig"><b>FIG. 3 — CREATE THEN CONSUME</b>
+          · one scope, one rule
+          · <b>the deferral is the feature</b></p>
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="fails-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="fails-h">WHEN IT FAILS</h2>
+
+        <p class="block__deck">
+          A batch that fails fails closed. It raises
+          <span class="t-cmd">Emb::ServerError</span> to the code that used the
+          first value, and every deferred item in that batch is removed from the
+          scope — so retrying, or using a sibling from the same failed batch,
+          does not re-send it. The underlying redis error is preserved as
+          <span class="t-cmd">cause</span>, and the message names the models,
+          the text count and the attempt count.
+        </p>
+
+        <div class="block__main block__main--ledger">
+          <div class="cap">
+            <p class="cap__label">WHY NOTHING IS RETRIED BY DEFAULT</p>
+            <p class="cap__claim"><span class="t-cmd">EMB.MULTI</span> is not idempotent. A re-send re-runs inference the first send may already have done, so the gem ships <span class="t-cmd">reconnect_attempts: 0</span>: one attempt, then a terminal error.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">WHY A TIMEOUT IS TERMINAL</p>
+            <p class="cap__claim">A read timeout may have executed server work already. redis-client never re-dispatches one, and the gem counts it as a single attempt rather than a retryable failure.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">THE ONE RETRY THAT IS SAFE</p>
+            <p class="cap__claim">A connection refused <em>before</em> the command was written. Given a <span class="t-cmd">url</span> array, the router moves that command to the next instance, because a command never sent cannot be duplicated.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">WHY THE TIMEOUT IS 10s</p>
+            <p class="cap__claim">redis-client's silent default is 1.0s, and 512 pairs of inference on a shared CPU can outlast it. The gem sets both read and write timeouts explicitly; raise them if you raise <span class="t-cmd">batch_size</span>.</p>
+          </div>
+        </div>
+
+        <p class="block__deck">
+          Per-pair failure is a different thing and is not an error at all. A
+          pair the server could not embed comes back as a <span class="t-cmd">null</span>
+          slot, MGET-style, and that value materializes as <span class="t-cmd">nil</span>
+          while its siblings resolve normally. Only a failure of the command
+          itself closes the batch.
+        </p>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="scope-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="scope-h">THE SCOPE IS PER THREAD</h2>
+
+        <p class="block__deck">
+          The scope holding deferred values is a thread-local, and it is cleared
+          at the boundary of the work that filled it — so a request cannot inherit
+          another request's cache, and a job cannot leak its scope into the next
+          one. In Rails the railtie wires every boundary it finds, and each can be
+          switched off.
+        </p>
+
+        <div class="block__main block__main--ledger">
+          <div class="cap">
+            <p class="cap__label">RACK</p>
+            <p class="cap__claim">Middleware inserted into the stack automatically. Cleared after each request, including when the app raises. Opt out with <span class="t-cmd">config.emb.middleware = false</span>.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">ACTIVEJOB</p>
+            <p class="cap__claim">An <span class="t-cmd">around_perform</span> callback on the base class, so every adapter is covered — SolidQueue, Sidekiq, Shoryuken, the test adapters. Opt out with <span class="t-cmd">config.emb.job_middleware = false</span>.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">SIDEKIQ</p>
+            <p class="cap__claim">A server middleware for plain workers, plus the testing chain when <span class="t-cmd">sidekiq/testing</span> is loaded before boot, so fake and inline modes clear per job too.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">SHORYUKEN</p>
+            <p class="cap__claim">The same server middleware, registered when Shoryuken is present. Outside Rails, both are a one-line registration into the framework's own chain.</p>
+          </div>
+        </div>
+
+        <p class="block__deck">
+          In a threaded server the scope is per thread, so the shape is one
+          coalesced command per thread per flush. That composes with a pool of
+          emb instances rather than competing with it: each instance receives one
+          <span class="t-cmd">EMB</span> for a single-model scope and one
+          <span class="t-cmd">EMB.MULTI</span> for a mixed one.
+        </p>
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="gems-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="gems-h">TWO GEMS, TWO JOBS</h2>
+
+        <p class="block__deck">
+          The name is shared and the jobs are not. One gem talks to a server; the
+          other <em>is</em> the server, wrapped so that installing it is one
+          command and no build.
+        </p>
+
+        <div class="block__main block__main--ledger">
+          <div class="cap">
+            <p class="cap__label">emb — THE CLIENT</p>
+            <p class="cap__claim">Pure Ruby over <span class="t-cmd">redis-client</span>, plus <span class="t-cmd">batch-loader</span> for the deferral. Nothing to compile, no native extension, and no server of its own.</p>
+          </div>
+          <div class="cap">
+            <p class="cap__label">emb-server — THE DISTRIBUTION</p>
+            <p class="cap__claim">A gemspec around a precompiled binary. <span class="t-cmd">gem install emb-server</span> puts <span class="t-cmd">emb</span> and <span class="t-cmd">emb-top</span> on your PATH; the wrapper picks the binary for your platform and <span class="t-cmd">exec</span>s it.</p>
+          </div>
+        </div>
+
+        <p class="block__deck">
+          The wrapper is thinner than it sounds, and the dependency is the
+          interesting part: the gem does not ship ONNX Runtime. It asks the
+          <span class="t-cmd">onnxruntime</span> gem where its shared library
+          is, then runs the server with <span class="t-cmd">-ort-lib</span> and
+          that path — so the runtime you install is the runtime the server
+          loads. Platforms are macOS arm64, Linux x86_64 and Linux aarch64, and
+          both gems take their version from the same file as the server, so the
+          client, the binary and the release are one number.
+        </p>
+
+        <div class="code">
+<pre class="code__body"><span class="t-dim"># the client</span>
+<span class="t-cmd">gem</span> <span class="t-str">"emb"</span>
+
+<span class="t-dim"># the server, as a binary you do not build</span>
+<span class="t-cmd">gem install</span> emb-server
+<span class="t-cmd">emb</span> -model-repo Xenova/all-MiniLM-L6-v2   <span class="t-dim"># downloads the model, serves on :6379</span></pre>
+        </div>
+
+        <p class="fig"><b>FIG. 4 — TWO GEMS</b>
+          · <b>one VERSION</b>
+          · client, binary and server released as the same number</p>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="commands-h">
+      <div class="shell block__inner"><div class="block__body seq-body">
+        <h2 class="sec__h" id="commands-h">THE EXACT COMMANDS</h2>
+
+        <p class="block__deck">
+          What the gem sends, spelled out. The argument shapes are the whole
+          contract: a text may repeat, a model may repeat, and
+          <span class="t-cmd">VALUES</span> is the one keyword that changes what
+          comes back.
+        </p>
+
+        <div class="code">
+<pre class="code__body"><span class="t-dim"># EMB — one model, one or more texts, binary reply (the default)</span>
+<span class="t-cmd">EMB</span> minilm <span class="t-str">"t1"</span>
+<span class="t-cmd">EMB</span> minilm <span class="t-str">"t1"</span> <span class="t-str">"t2"</span> <span class="t-str">"t3"</span>
+
+<span class="t-dim"># EMB.MULTI — model/text pairs, mixed models in one call</span>
+<span class="t-cmd">EMB.MULTI</span> minilm <span class="t-str">"t1"</span> minilm <span class="t-str">"t2"</span> bge <span class="t-str">"t3"</span>
+
+<span class="t-dim"># VALUES — the same two, with the decimal envelope instead of bytes</span>
+<span class="t-cmd">EMB</span> minilm VALUES <span class="t-str">"t1"</span>
+<span class="t-cmd">EMB.MULTI</span> VALUES minilm <span class="t-str">"t1"</span> bge <span class="t-str">"t2"</span>
+
+<span class="t-dim"># every reply is float32 little-endian, four bytes a number,
+# which is why the gem unpacks with 'e*' and you never see them</span></pre>
+          <figcaption class="code__cap">
+            One model, many texts, and several models in one call — with the
+            decimal <span class="t-cmd">VALUES</span> envelope when a client
+            cannot unpack binaries. Nothing here is gem-specific: it is what any
+            RESP client would send.
+          </figcaption>
+        </div>
+
+        <div class="code">
+<pre class="code__body"><span class="t-dim"># the whole deferred path, in three lines</span>
+<span class="t-cmd">Emb.configure</span> { |c| c.lazy = :batch }
+
+loaders = texts.map { |t| <span class="t-cmd">Emb</span>[:minilm][t] }
+loaders.map(&:first)
+
+<span class="t-dim"># → EMB minilm "t1" "t2" "t3" "t4" "t5" "t6"
+# one command, one pass, six vectors back in deferral order</span></pre>
+        </div>
+      </div></div>
+    </section>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+</body>
+</html>

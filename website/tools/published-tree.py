@@ -61,6 +61,7 @@ SERVED = frozenset(
         "index.html",
         "404.html",
         "docs/index.html",
+        "gem/index.html",
         "demos/index.html",
         "demos/vector.html",
         "demos/similarity.html",
@@ -135,6 +136,7 @@ UNHASHED_SUFFIXES = (".html", ".css", ".js", ".json")
 PAGES = (
     "index.html",
     "docs/index.html",
+    "gem/index.html",
     "demos/index.html",
     "demos/vector.html",
     "demos/similarity.html",
@@ -313,6 +315,7 @@ def served_urls() -> list[tuple[str, str]]:
     generated, _ = index_files()
     urls = [(f"/{relative}", relative) for relative in sorted(SERVED | generated)]
     urls += [("/", "index.html"), ("/docs", "docs/index.html"), ("/docs/", "docs/index.html")]
+    urls += [("/gem", "gem/index.html"), ("/gem/", "gem/index.html")]
     urls += [("/demos", "demos/index.html"), ("/demos/", "demos/index.html")]
     urls += [(f"/demos/{Path(relative).stem}", relative)
              for relative in sorted(SERVED) if relative.startswith("demos/") and relative.endswith(".html")]

@@ -965,6 +965,16 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   font-size: clamp(13px, 1.25vw, 16px);
   line-height: 1.5;
 }
+/* The base sheet sets `a{color:inherit;text-decoration:none}` because the
+   masthead, the ledger rows and the CTAs each dress their own links. A deck
+   that points at another surface therefore needs its own treatment or the door
+   reads as body copy: the documentation surface's link, in the same tokens. */
+.block__deck a{
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.block--dark .block__deck a{ color: var(--accent); }
 
 /* the block's unit of argument: a hairline, a mono label, a short claim.
    Not a card -- the rule is the only container it ever gets. */
@@ -2537,4 +2547,271 @@ html.js.is-ready .hero__prose{
   .ord__i{ grid-template-columns: 3.2ch minmax(0, 1fr); }
   .ord__w{ grid-column: 2; }
   .plate__head{ grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE RUBY CLIENT'S LEDGER AND ITS INSTRUMENT
+   ═══════════════════════════════════════════════════════════════════════
+   The client surface's one instrument: a ruled ledger whose right column draws
+   the commands a given execution mode puts on the wire, so the client's four
+   modes can be read against each other in one glance instead of in four code
+   samples with prose between them.
+
+   The encoding is fixed, and the page states it above the ledger:
+
+     · a LANE is the scope's own texts, edge to edge;
+     · a MARK is one command, and its width is the texts that command carries;
+     · stacked LANES run at the same time.
+
+   So six marks end to end is six commands of one text (eager), one full-width
+   mark is one command carrying all six (`:multi`), and one mark a third of a
+   lane on each of three stacked lanes is three concurrent shares of two
+   (`:batch`). The width is arithmetic on the shipped code's slicing and never a
+   duration: a bar that could be read as time would be a measurement this page
+   has no way to take, because the sandbox runs the server and not Ruby. That is
+   also why the instrument is drawn from the ledger's own hairlines and `--rule`
+   bars rather than from the gallery's plot vocabulary: this is a fingerprint of
+   the dispatch, not a chart.
+
+   The accent is spent once per ledger, on the single call that carries every
+   text -- what `:multi` and `Emb.multi` have and what eager and `:batch` do
+   not -- because that is the fact the section exists to teach.
+*/
+.wire{ list-style: none; margin: clamp(22px, 2.6vw, 42px) 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.wire__i{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content minmax(220px, 288px);
+  column-gap: clamp(14px, 2vw, 34px);
+  align-items: center;
+  padding-block: clamp(15px, 1.7vw, 23px);
+  border-bottom: 1px solid var(--rule);
+}
+/* The mode and the command it becomes share one ledger cell, so the left
+   column is one addressable block rather than two auto-placed grid items. */
+.wire__m{ min-width: 0; }
+.wire__t{
+  font-family: var(--mono); font-size: clamp(13px, 1.25vw, 16px);
+  font-weight: 500; letter-spacing: .01em; line-height: 1.3; margin: 0;
+}
+/* The mode's name in the wire's own spelling, then the call site that produces
+   it, then the command it becomes. The three are the row's whole argument, so
+   they stay in one cell rather than being spread across the ledger's columns. */
+.wire__cmd{
+  font-family: var(--mono); font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.5; color: var(--muted); margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+.wire__n{
+  font-family: var(--mono); font-size: clamp(12px, 1.02vw, 12.5px);
+  letter-spacing: .05em; color: var(--fg); font-weight: 500;
+  font-variant-numeric: tabular-nums; text-align: right; margin: 0;
+  white-space: nowrap;
+}
+/* The lanes are bottom-aligned so every row's instrument shares one lower edge
+   and the column reads as a column. A row that leaves the upper lanes empty is
+   saying something true: one command is in flight. */
+.wire__track{
+  display: flex; flex-direction: column; justify-content: flex-end;
+  gap: 3px; height: 30px; border-right: 1px solid var(--rule);
+}
+.wire__lane{ display: flex; gap: 3px; height: 8px; }
+.wire__lamp{
+  display: block; height: 100%; background: var(--rule); min-width: 2px;
+}
+.wire__lamp.is-one{ background: var(--accent); }
+/* Each cell's share of the lane, as the texts it carries: `flex` is the count,
+   so a mark's width is the texts it holds against the lane's own total. The
+   values are declared rather than derived because the lane's total is the scope
+   and the counts that can appear in one are these: six texts, a share of two,
+   and the remainder that keeps a share off the full width. */
+.wire__lane > [data-texts="1"]{ flex: 1; }
+.wire__lane > [data-texts="2"]{ flex: 2; }
+.wire__lane > [data-texts="3"]{ flex: 3; }
+.wire__lane > [data-texts="4"]{ flex: 4; }
+.wire__lane > [data-texts="5"]{ flex: 5; }
+.wire__lane > [data-texts="6"]{ flex: 6; }
+/* The unused remainder of a lane, kept as an element rather than a gap so the
+   lane's total is declared and cannot drift from the count beside it. */
+.wire__rest{ display: block; height: 100%; background: none; }
+
+/* The legend is the operating manual for the instrument and sits with it, not
+   in a caption below the fold of the section. */
+.wire__key{
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: clamp(10px, 1.4vw, 22px);
+  margin: clamp(16px, 1.8vw, 26px) 0 0;
+  font-family: var(--mono); font-size: 12px; line-height: 1.55; color: var(--muted);
+}
+.wire__key dt{ color: var(--fg); font-weight: 500; letter-spacing: .05em; }
+.wire__key dd{ margin: 4px 0 0; }
+
+/* The client surface's sections are a flat sequence -- deck, ledger, specimen,
+   deck -- rather than the landing's two-column grid, so the body spaces its own
+   children instead of inheriting the air from `.block__grid`. This is scoped to
+   the class the client page puts on its own `.block__body`, so the landing and
+   the gallery keep the spacing their grids provide. The paragraph-to-paragraph
+   gap is left to the existing `.sec .block__deck + .block__deck` rule, which is
+   tighter: two paragraphs of one argument are closer than two kinds of thing. */
+.seq-body > * + *{ margin-top: clamp(20px, 2.3vw, 34px); }
+
+.block--dark .wire{ border-top-color: var(--rule-dark); }
+.block--dark .wire__i{ border-bottom-color: var(--rule-dark); }
+.block--dark .wire__t,
+.block--dark .wire__n,
+.block--dark .wire__key dt{ color: var(--bg); }
+.block--dark .wire__cmd,
+.block--dark .wire__key{ color: var(--rule); }
+.block--dark .wire__track{ border-right-color: var(--rule-dark); }
+.block--dark .wire__lamp{ background: var(--rule); }
+.block--dark .wire__lamp.is-one{ background: var(--accent); }
+
+/* Below the two-column breakpoint the instrument is not a column any more, so
+   the row stacks: the mode and its count on one line, the command under them,
+   and the lanes full width beneath both. The lanes need the width -- three
+   marks sharing a 220px column would be 3px slivers -- so the ledger gives it
+   to them rather than shrinking the encoding.
+
+   The type is promoted here rather than in the shared 1000px block above
+   because this family is declared after it: equal specificity means the later
+   declaration wins, so the atom owns its own phone sizes. A ledger row is
+   reading text on a phone, not a caption, so it moves the way `.cap__label`
+   and `.cap__claim` move -- the mode's name and its count to the label size,
+   the command it becomes and the legend that decodes the instrument to the
+   code size. */
+@media (max-width: 1000px){
+  .wire__i{
+    grid-template-columns: minmax(0, 1fr) max-content;
+    row-gap: 8px;
+    align-items: baseline;
+  }
+  /* The wrapper cell dissolves so the mode's own name and its count share the
+     row's first line and the command it becomes takes the full width under
+     them. At this size the description is prose rather than a column, and
+     pinning it to a narrow first cell leaves the count floating beside seven
+     short lines. */
+  .wire__m{ display: contents; }
+  .wire__t{ grid-column: 1; grid-row: 1; }
+  .wire__n{ grid-column: 2; grid-row: 1; }
+  .wire__cmd{ grid-column: 1 / -1; grid-row: 2; margin-top: 0; }
+  .wire__track{ grid-column: 1 / -1; grid-row: 3; }
+  .wire__t, .wire__n{ font-size: 15px; line-height: 1.4; }
+  .wire__cmd, .wire__key{ font-size: 14px; line-height: 1.55; }
+}
+
+/* ── the client ledger's motion: the dispatch, performed ──────────────
+   A Read surface, so motion here explains rather than performs. One authored
+   moment, at the instrument, rehearsed wherever a ledger carries one: the four
+   wire shapes, then create-then-consume, because the second ledger's contrast
+   is the same argument over the same six texts.
+
+   The moment is the product's own. As a row comes into view its marks go onto
+   the wire in the shape that mode dispatches them:
+
+     · `lazy: false`  six marks tick in, left to right, one after another;
+     · `lazy: :multi` ONE stroke draws across and settles from the rule's grey
+       to the accent as it completes;
+     · `lazy: :batch` three strokes draw at the SAME moment, each filling only
+       its share;
+     · `Emb.multi`    one stroke, settling to the accent, as `:multi`.
+
+   The colour change is the message rather than a flourish: a mark that turns
+   accent is a single call carrying every text, which is what the accent means
+   everywhere else in this family, and it is why the eager row's six marks and
+   the batch row's three never turn -- neither is one call.
+
+   Each ROW owns its timeline rather than the ledger owning one, so a row
+   performs while the reader is looking at it, and the sequence is walked by
+   scrolling instead of playing once above the fold. A row's window is its own
+   `cover` range -- the scroll it travels from the bottom edge to the top edge
+   of the viewport -- so the timing is proportional at every viewport height
+   and every row height, instead of being a pixel budget that happens to fit
+   one screen. Within a row the stagger is `--i` alone: six marks two and a
+   half percent apart is a count; a hair apart would be one blur, and one mark
+   (the coalesced rows, and every lane of the batch row) has no stagger at all
+   because its calls are not sequential.
+
+   Scroll-driven and script-free. Everything that moves is inside the
+   `@supports` guard -- including the `border-right` the scope's edge gives up,
+   which moves its paint into a pseudo element -- so an engine without
+   view-progress timelines never sees an undrawn state and renders exactly the
+   finished ledger this family shipped before it had any motion. A reader who
+   prefers reduced motion gets the same finished ledger. */
+.wire__lane > .wire__lamp:nth-child(1){ --i: 0; }
+.wire__lane > .wire__lamp:nth-child(2){ --i: 1; }
+.wire__lane > .wire__lamp:nth-child(3){ --i: 2; }
+.wire__lane > .wire__lamp:nth-child(4){ --i: 3; }
+.wire__lane > .wire__lamp:nth-child(5){ --i: 4; }
+.wire__lane > .wire__lamp:nth-child(6){ --i: 5; }
+
+@supports (animation-timeline: view()) {
+  /* Screen only, and this is load-bearing rather than tidy: a print pass never
+     scrolls, so a scroll-driven animation would print every mark at the start
+     of its range -- a blank instrument on paper. Under print this block simply
+     does not match, which leaves the base styles, and those are the finished
+     ledger (the same state an engine without view() timelines renders). The
+     page's own `@media print` block therefore needs no entry for it. */
+  @media screen and (prefers-reduced-motion: no-preference) {
+    /* This row's own journey through the viewport is the clock. Its name is
+       reused by every row on every ledger, and a mark takes the nearest
+       ancestor's, so one rule serves both rehearsals. */
+    .wire__i{
+      view-timeline-name: --row;
+      view-timeline-axis: block;
+    }
+
+    .wire__lamp{
+      animation-name: wire-draw;
+      animation-duration: auto;
+      animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+      animation-fill-mode: both;
+      animation-timeline: --row;
+      animation-range:
+        cover calc(28% + var(--i) * 2.5%)
+        cover calc(40% + var(--i) * 2.5%);
+    }
+
+    /* The scope's edge is drawn after the row's last command, so a ledger
+       closes in the order it was opened. `border-right` keeps the geometry and
+       gives up only its paint -- the selector carries the extra class so it can
+       out-specify `.block--dark .wire__track`, which sets the same edge's
+       colour later in the dark overrides, and which would otherwise leave the
+       edge painted twice: once still, once drawing. */
+    .wire .wire__track{
+      position: relative;
+      border-right-color: transparent;
+    }
+    .wire__track::after{
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      right: 0;
+      width: 1px;
+      background: var(--rule);
+      transform-origin: top center;
+      animation-name: wire-close;
+      animation-duration: auto;
+      animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+      animation-fill-mode: both;
+      animation-timeline: --row;
+      animation-range: cover 53% cover 64%;
+    }
+    .block--dark .wire__track::after{ background: var(--rule-dark); }
+
+    @keyframes wire-draw {
+      from { transform: scaleX(0); }
+      to   { transform: scaleX(1); }
+    }
+    /* A mark that becomes the single call turns as it arrives. One keyframe
+       carries both properties, so the draw and the turn cannot fall out of
+       step with each other. */
+    @keyframes wire-draw-one {
+      from { transform: scaleX(0); background-color: var(--rule); }
+      to   { transform: scaleX(1); background-color: var(--accent); }
+    }
+    @keyframes wire-close {
+      from { transform: scaleY(0); }
+      to   { transform: scaleY(1); }
+    }
+    .wire__lamp.is-one{ animation-name: wire-draw-one; }
+  }
 }

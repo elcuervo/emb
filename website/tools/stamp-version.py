@@ -52,6 +52,7 @@ PRODUCT_VERSION = re.compile(r"(Current version\s+`)(?P<inner>[^`]+)(`)")
 TARGETS = [
     ("website/index.html", MARKED),
     ("website/docs/index.html", MARKED),
+    ("website/gem/index.html", MARKED),
     ("website/PRODUCT.md", PRODUCT_VERSION),
 ]
 
