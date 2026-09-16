@@ -23,7 +23,7 @@ var refusedFamilies = map[string]string{
 	"auth":            "the sandbox holds no credentials and accepts none",
 	"monitor":         "request events would describe other visitors' traffic",
 	"shutdown":        "the sandbox is not visitor-stoppable",
-	"emb.save":        "the sandbox persists nothing",
+	"emb.save":        "state writes are not visitor-triggerable",
 	"emb.cache.flush": "shared state is not visitor-mutable",
 	"emb.script":      "script loading and flushing are not exposed",
 	"emb.eval":        "raw Lua is not accepted; call a preloaded preset by digest",

@@ -13,6 +13,13 @@
 app = "emb-sandbox"
 primary_region = "iad"
 
+# Graceful exit must outlast the server's own shutdown, which allows up to 30s to
+# drain and flush the cache to the volume. Fly's default is 5s, which would
+# SIGKILL a machine mid-flush; run.sh already traps the signal (the default
+# SIGINT, and SIGTERM) and waits for the server, so only the ceiling changes.
+# This is a ceiling, not a delay: a healthy stop still exits in about a second.
+kill_timeout = 40
+
 [build]
   dockerfile = "Dockerfile"
 

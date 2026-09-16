@@ -420,6 +420,21 @@ func TestValidateArgvRefusesOutsideSurface(t *testing.T) {
 	}
 }
 
+// The sandbox now persists its own warm cache, so the EMB.SAVE refusal must
+// describe who may trigger a write rather than claiming nothing is kept.
+func TestEmbSaveRefusalNamesTheBoundaryNotStatelessness(t *testing.T) {
+	err := validateArgv([]string{"EMB.SAVE"}, nil)
+	if err == nil {
+		t.Fatal("EMB.SAVE was not refused")
+	}
+	if strings.Contains(err.Error(), "persists nothing") {
+		t.Fatalf("EMB.SAVE refusal still claims the sandbox is stateless: %q", err)
+	}
+	if !strings.Contains(err.Error(), "not visitor-triggerable") {
+		t.Fatalf("EMB.SAVE refusal does not name the boundary: %q", err)
+	}
+}
+
 func TestValidateArgvPermitsSurface(t *testing.T) {
 	p := presets{"sst2": {"gooddigest": "classify"}}
 	for _, args := range [][]string{

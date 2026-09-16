@@ -504,6 +504,13 @@ the image needs the Go module and the positional `.` is the build context
 (`build.dockerfile` in that file is resolved against the file's own directory,
 not against that context).
 
+The sandbox keeps its warm cache on the mounted volume: `sandbox.yaml` names
+`cache_file: /data/cache.embcache` and a `cache_save` interval, so a restart
+restores the snapshot before `/api/ready` turns true and a graceful stop flushes
+the latest one. `kill_timeout` is raised above Fly's 5-second default so that
+flush is not killed mid-write. The snapshot is disposable — deleting it just
+starts the next boot cold.
+
 The first deploy needs three things flyctl does not do for you — create the
 app, allocate its ingress addresses, and attach the host name:
 

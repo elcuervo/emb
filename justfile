@@ -478,6 +478,8 @@ website-dev port="8080" bridge="8081" upstream="6379" bind="0.0.0.0": sandbox-bu
     cfg=website/repl/.sandbox-dev.yaml; \
     sed -e 's|^listen: .*|listen: "127.0.0.1:{{upstream}}"|' \
         -e "s|/data/models|$PWD/models|" \
+        -e 's|^cache_file: .*|cache_file: ""|' \
+        -e 's|^cache_save: .*|cache_save: ""|' \
         website/repl/sandbox.yaml > "$cfg"; \
     echo "website-dev: emb 127.0.0.1:{{upstream}} · bridge {{bind}}:{{bridge}} · site http://localhost:{{port}} (and http://<lan-ip>:{{port}})"; \
     emb=; repl=; \
@@ -706,6 +708,7 @@ website-demos models="minilm,bge-small": build
     port=16389; \
     if [ -z "{{ort_lib}}" ]; then echo "website-demos: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
     sed -e "s|^listen: .*|listen: \"127.0.0.1:$port\"|" -e "s|/data/models|$PWD/models|" \
+        -e 's|^cache_file: .*|cache_file: ""|' -e 's|^cache_save: .*|cache_save: ""|' \
         website/repl/sandbox.yaml > "$cfg"; \
     for onnx in $(grep -E '^[[:space:]]+onnx:' "$cfg" | awk '{print $2}'); do \
       [ -f "$onnx" ] || [ -f "$(dirname $onnx)/model_quantized.onnx" ] || { echo "website-demos: missing $onnx"; \
@@ -785,7 +788,11 @@ sandbox-image:
 # `dockerfile` is resolved against *its own* directory. A first deploy needs
 # the app created, the ingress IPs allocated, and cli.emb.is added as a
 # certificate — see the "Deploying" note in website/README.md.
-sandbox-deploy:
+#
+# It depends on `sandbox-build`, so a bridge that does not compile fails
+# locally before the upload. The image is built from this same tree by Docker,
+# so the local compile is the earlier gate, not a different artifact.
+sandbox-deploy: sandbox-build
     fly deploy . -c website/repl/fly.toml
 
 # Verify the stamped versions match VERSION. This is what a CI job or pre-commit
