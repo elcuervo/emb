@@ -213,7 +213,7 @@
               blend. Nothing here selects from the projection at runtime beyond
               reading the committed rows.
             </p>
-<div class="code"><pre class="code__body"><code>SELECT rowid, x, y FROM projection
+<figure class="code"><pre class="code__body"><code>SELECT rowid, x, y FROM projection
   WHERE model = 'minilm';   -- the build-time coordinates
 SELECT label, cx, cy, radius FROM regions
   WHERE model = 'minilm';   -- the hand-named regions
@@ -227,7 +227,9 @@ SELECT rowid FROM vec_minilm
 
 EMB.EVSHA minilm &lt;between.lua sha1&gt; 8
   &quot;the sea&quot; &quot;the grave&quot; &quot;c1&quot; … &quot;c6&quot;
-# -> the midpoint's nearest corpus passages, ranked</code></pre></div>
+# -> the midpoint's nearest corpus passages, ranked</code></pre>
+        <figcaption class="code__cap">Three reads over the build-time index — the coordinates, the named regions, the query's landing — then the preset that averages two meanings into one point and returns the corpus passages around it.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -235,7 +237,7 @@ EMB.EVSHA minilm &lt;between.lua sha1&gt; 8
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>

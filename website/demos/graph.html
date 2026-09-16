@@ -179,7 +179,7 @@
               One scripted command over eight texts and a query, plus the
               <span class="t-cmd">vec0</span> search that chose the eight.
             </p>
-<div class="code"><pre class="code__body"><code>SELECT rowid FROM vec_minilm
+<figure class="code"><pre class="code__body"><code>SELECT rowid FROM vec_minilm
   WHERE embedding MATCH vec_int8(:q) AND k = 8;
 # the eight seed passages, fetched by the page
 
@@ -187,9 +187,11 @@ EMB.EVSHA minilm &lt;graph.lua sha1&gt; 8 "p1" … "p8" "the sea"
 # -> { {from=1, edges={{to=4,score=0.71},…}, query=0.42}, … }
 
 # inside graph.lua:
-#   local vecs = emb.embed(KEYS, { bytes = true })
-#   scores[j] = emb.similarity(vecs[i], vecs[j], "cosine")
-#   local top = emb.math.topk(scores, 2)   -- edges, not the matrix</code></pre></div>
+local vecs = emb.embed(KEYS, { bytes = true })
+scores[j] = emb.similarity(vecs[i], vecs[j], "cosine")
+local top = emb.math.topk(scores, 2)   -- edges, not the matrix</code></pre>
+        <figcaption class="code__cap">Seed by SQL, then one scripted call: the preset embeds the seeds, scores every pair, and returns only the top edges. The graph is computed beside the model, not for it.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -197,7 +199,7 @@ EMB.EVSHA minilm &lt;graph.lua sha1&gt; 8 "p1" … "p8" "the sea"
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>

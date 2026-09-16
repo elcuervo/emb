@@ -187,14 +187,16 @@
               as an argument, which is also what keeps the reply cacheable per
               pair.
             </p>
-<div class="code"><pre class="code__body"><code>EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;first passage&quot; &quot;second passage&quot;
+<figure class="code"><pre class="code__body"><code>EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;first passage&quot; &quot;second passage&quot;
 # -> { dim = 384, norm = 1, similarity = 0.42 }
 
 # the script the sandbox runs, byte for byte:
-#   local packed = emb.embed(KEYS[1], { bytes = true })
-#   local out = { dim = math.floor(#packed / 4), norm = emb.math.norm(packed) }
-#   if ARGV[1] then out.similarity = emb.similarity(packed, emb.embed(ARGV[1], { bytes = true })) end
-#   return out</code></pre></div>
+local packed = emb.embed(KEYS[1], { bytes = true })
+local out = { dim = math.floor(#packed / 4), norm = emb.math.norm(packed) }
+if ARGV[1] then out.similarity = emb.similarity(packed, emb.embed(ARGV[1], { bytes = true })) end
+return out</code></pre>
+        <figcaption class="code__cap">One call carries both passages: the preset embeds each, then returns their cosine similarity beside the 384 dimensions it counted.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -202,7 +204,7 @@
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>

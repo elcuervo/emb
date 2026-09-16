@@ -412,7 +412,7 @@
           cmd.setAttribute('aria-label', ex.n ? ex.t + ' — ' + ex.n : ex.t);
           var label = document.createElement('span');
           label.className = 'cli__example-t';
-          label.textContent = ex.d || ex.t;
+          appendTokens(label, ex.d || ex.t, true);
           cmd.appendChild(label);
           if (ex.n) {
             var note = document.createElement('span');

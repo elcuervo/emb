@@ -215,7 +215,7 @@
               the digests are stamped into this page from the script bytes, so
               they cannot drift from what the sandbox loaded.
             </p>
-<div class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;This film is a masterpiece…&quot;
+<figure class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;This film is a masterpiece…&quot;
 # -> a 1 536-byte bulk
 
 EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;This film is a masterpiece…&quot;
@@ -228,7 +228,9 @@ EMB.EVSHA sst2 &lt;classify.lua sha1&gt; 1 &quot;This film is a masterpiece…&q
 # -> { label = &quot;POSITIVE&quot;, confidence = 0.99, scores = { … } }
 
 EMB.EVAL minilm &quot;return 1&quot; 1 &quot;x&quot;
-# -> refused: raw Lua is not accepted; call a preloaded preset by digest</code></pre></div>
+# -> refused: raw Lua is not accepted; call a preloaded preset by digest</code></pre>
+        <figcaption class="code__cap">Four shapes of one idea — bytes, a described vector, a comparison, a classification — and then the one form emb refuses: raw Lua.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -236,7 +238,7 @@ EMB.EVAL minilm &quot;return 1&quot; 1 &quot;x&quot;
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>

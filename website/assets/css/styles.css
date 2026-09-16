@@ -1788,6 +1788,10 @@ html.js .console__form{
   color: var(--muted);
 }
 .footer__mark{ color: var(--bg); }
+/* The sign-off's one link: the footer's only outbound route, so it is
+   underlined like body links rather than left to look like plain text. */
+.footer__copy a{ color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.footer__copy a:hover{ color: var(--accent); }
 
 /* ── 12 motion + responsive ───────────────────────────────────────── */
 /* The reveals ripple through a group instead of flipping as one block. --i is

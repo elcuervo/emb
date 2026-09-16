@@ -201,7 +201,7 @@
               browser against the shipped file; the third is the server-side
               rerank.
             </p>
-<div class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;a guilty conscience that will not stay buried&quot;
+<figure class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;a guilty conscience that will not stay buried&quot;
 # -> 1 536 bytes: the query vector, from the sandbox
 
 SELECT rowid, distance FROM vec_minilm
@@ -211,7 +211,9 @@ SELECT rowid, distance FROM vec_minilm
 
 EMB.EVSHA minilm &lt;rank.lua sha1&gt; 8 &quot;the query&quot; &quot;candidate 1&quot; … &quot;candidate 7&quot;
 # -> [{rank, doc, score} …] — the query heads it at cosine 1.000,
-#    the seven candidates follow in descending order</code></pre></div>
+#    the seven candidates follow in descending order</code></pre>
+        <figcaption class="code__cap">The query leaves as bytes and returns as a vector; sqlite-vec in this page turns that vector into seven rowids. The scripted call shows the same ranking computed beside the model.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -219,7 +221,7 @@ EMB.EVSHA minilm &lt;rank.lua sha1&gt; 8 &quot;the query&quot; &quot;candidate 1
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>

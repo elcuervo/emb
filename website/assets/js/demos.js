@@ -394,6 +394,19 @@ export function tween(ms, step, done) {
   requestAnimationFrame(frame);
 }
 
+/* One formatter for every elapsed time a plate shows. The bridge hands the
+ * server's own integer microseconds to the page, and a figure should be read at
+ * the scale of its magnitude: a 40 µs cache hit stays in microseconds, a 90 ms
+ * batch becomes milliseconds instead of "90 000 µs", and a cold multi-second
+ * pass becomes seconds. One function, so no two plates can disagree about the
+ * unit. */
+export function duration(us) {
+  const n = Number(us) || 0;
+  if (n < 1000) { return n.toLocaleString('en-US') + ' µs'; }
+  if (n < 999500) { return (n / 1e3).toFixed(n < 1e4 ? 1 : 0) + ' ms'; }
+  return (n / 1e6).toFixed(2) + ' s';
+}
+
 export const PROTO = 2;
 
 /* ── the plate's small rendering surface ────────────────────────────── */
@@ -485,6 +498,37 @@ export function argvLine(args) {
   ]);
 }
 
+/* ── the code specimens ─────────────────────────────────────────────── */
+/* The specimens are written on the page as plain text and marked up here, not
+ * by hand: one tokenizer for every plate, using the same four classes the rest
+ * of the site already styles — a command, a reply keyword or Lua keyword, a
+ * quoted string, a number, a dim comment. A shell comment (`#`, where it
+ * opens a line or follows whitespace, so Lua's `#` length operator survives) or
+ * a Lua/SQL comment (`--`) is the plate's own annotation, so dimming it is what
+ * separates "what is sent" from "what it means" without a second hue. A `<...>`
+ * placeholder is dimmed the same way. Anything the tokenizer does not recognise
+ * is plain. */
+const SPEC_TOKEN = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|((?:^[ \t]*|[ \t])#[^\n]*|--[^\n]*)|(<[^>\n]*>)|(\b\d+(?:\.\d+)?\b)|(\b[A-Z][A-Z0-9_]*(?:\.[A-Z0-9_]+)*\b)|(\b(?:local|function|end|if|then|else|elseif|for|while|do|repeat|until|break|in|return|and|or|not|nil|true|false)\b)/gm;
+
+function markSpecimen(code) {
+  const text = code.textContent;
+  const fragment = document.createDocumentFragment();
+  let last = 0;
+  let m;
+  SPEC_TOKEN.lastIndex = 0;
+  while ((m = SPEC_TOKEN.exec(text)) !== null) {
+    if (m.index > last) { fragment.appendChild(document.createTextNode(text.slice(last, m.index))); }
+    const cls = m[1] ? 't-str' : m[2] ? 't-dim' : m[3] ? 't-dim' : m[4] ? 't-num' : 't-cmd';
+    const span = document.createElement('span');
+    span.className = cls;
+    span.textContent = m[0];
+    fragment.appendChild(span);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) { fragment.appendChild(document.createTextNode(text.slice(last))); }
+  code.replaceChildren(fragment);
+}
+
 /* The `BLOB` reply is the server's packed little-endian float32, base64'd by the
  * bridge. Decoding is explicit about the byte order rather than leaning on the
  * host's, so a big-endian browser would still read the server's bytes. */
@@ -520,3 +564,9 @@ export function toBase64(bytes) {
   }
   return btoa(binary);
 }
+
+/* Every static specimen on the page, once. The module is deferred, so the markup
+ * is parsed before this runs; a specimen the module builds later (`argvLine`)
+ * already carries its own class and is left alone. With scripting off, the
+ * specimen is still the same complete text, just uncoloured. */
+document.querySelectorAll('.code__body > code:not([class])').forEach(markSpecimen);

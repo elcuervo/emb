@@ -236,21 +236,25 @@
     var retryDelay = opts.retryDelay === undefined ? 1000 : opts.retryDelay;
     var transcript = [];
     var transientStart = -1;
-    /* The server's own answer time, in the form redis-cli prints it, carried
-       by the bridge in the reply. The visitor's round trip is not measured and
-       not shown: the number is the sandbox's, so a reader far from the machine
-       sees what the server cost rather than what their network did.
-       Sub-millisecond and second-scale are both real here. A reply the bridge
-       produced without asking the server carries no elapsed value, and so
-       renders no trailer at all. */
+    /* The server's own answer time, carried by the bridge in the reply. The
+       visitor's round trip is not measured and not shown: the number is the
+       sandbox's, so a reader far from the machine sees what the server cost
+       rather than what their network did. The unit follows the magnitude --
+       microseconds for a cache hit, milliseconds for a pass, seconds for a
+       cold start -- so the figure reads at its own scale, the way every
+       gallery plate prints it. A reply the bridge produced without asking the
+       server carries no elapsed value, and so renders no trailer at all. */
+    function elapsed(us) {
+      var n = Number(us) || 0;
+      if (n < 1000) { return n + ' µs'; }
+      if (n < 999500) { return (n / 1000).toFixed(n < 10000 ? 1 : 0) + ' ms'; }
+      return (n / 1000000).toFixed(2) + ' s';
+    }
+
     function timing(env) {
       var us = env && env.elapsed_us;
       if (!us) { return []; }
-      var ms = us / 1000;
-      var text = ms < 10 ? (Math.round(ms * 10) / 10) + ' ms'
-        : ms < 1000 ? Math.round(ms) + ' ms'
-        : (ms / 1000).toFixed(2) + ' s';
-      return [{ t: '(' + text + ')', k: 'time' }];
+      return [{ t: '(' + elapsed(us) + ')', k: 'time' }];
     }
 
     function emit() { onLines(transcript.slice()); }

@@ -100,8 +100,9 @@ Constraints and facts future work must preserve:
 - **Name:** `emb` — always lowercase, including in the wordmark and headings.
 - **Tagline:** `BYTES IN. VECTORS OUT.` — used as the masthead tagline, the hero
   annotation, and the footer mark (`BYTES IN. VECTORS OUT.  /  EMB`).
-- **Footer sign-off:** `© 2026 emb. Open source, forever.` (2026 confirmed by the
-  maintainer; the poster reference still reads 2024 and must not be copied back.)
+- **Footer sign-off:** `© 2026 emb. made with ☠️ by elcuervo`, with `elcuervo`
+  linked to `https://github.com/elcuervo` (2026 confirmed by the maintainer; the
+  poster reference still reads 2024 and must not be copied back.)
 - **Positioning line the maintainer has committed to:** "A fast embedding server
   that speaks the Redis protocol." / "SAME PROTOCOL. A MORE SEMANTIC WORLD."
 - Visual direction is owned by `DESIGN.md` and the poster reference; it is not

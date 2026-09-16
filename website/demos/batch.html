@@ -84,7 +84,7 @@
           <p class="fig"><b>FIG. 7 — THE BATCH</b>
             · <b data-fig-texts>6</b> texts
             · <b data-fig-dim>—</b> dimensions
-            · <b>server-side µs</b>
+            · <b>server-side timing</b>
             · <b>measured here</b></p>
         </div>
       </div>
@@ -196,14 +196,16 @@
               ride on it — and the bridge caps one call at eight, so a rerank of
               seven candidates plus a query fits with room to spare.
             </p>
-<div class="code"><pre class="code__body"><code>EMB minilm "text 1"...     # one call: the model sees the whole batch at once
+<figure class="code"><pre class="code__body"><code>EMB minilm "text 1"...     # one call: the model sees the whole batch at once
 EMB minilm "text 2"
 …                          # six calls: the model sees them one at a time
 EMB minilm "text 6"
 
 EMB minilm "text 1" "text 2" "text 3" "text 4" "text 5" "text 6"
 
-# every reply is the same six vectors; only the number of passes differs.</code></pre></div>
+# every reply is the same six vectors; only the number of passes differs.</code></pre>
+        <figcaption class="code__cap">The same command, once per text and once for all six. Only the number of passes over the model differs — the six vectors that come back are identical.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -211,14 +213,14 @@ EMB minilm "text 1" "text 2" "text 3" "text 4" "text 5" "text 6"
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, duration, tween } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 /* Six passages the sandbox has not been asked for by this page before. They
@@ -264,9 +266,9 @@ function draw(one, six, animate) {
     label('ONE CALL · 6 TEXTS', 12, 62, 'atlas__region'),
     label('SIX CALLS · 1 TEXT', 12, 122, 'atlas__region'),
     r1,
-    label(one ? one.toLocaleString('en-US') + ' µs' : '—', X0 + w1 + 10, 53, 'atlas__label'),
+    label(one ? duration(one) : '—', X0 + w1 + 10, 53, 'atlas__label'),
     r6,
-    label(six ? six.toLocaleString('en-US') + ' µs' : '—', X0 + w6 + 10, 113, 'atlas__label')
+    label(six ? duration(six) : '—', X0 + w6 + 10, 113, 'atlas__label')
   );
   if (animate) {
     tween(650, (t) => {
@@ -307,10 +309,10 @@ async function run() {
     draw(oneUs, sixUs, true);
     readout.replaceChildren(
       el('span', { class: 'k', text: 'one call ' }),
-      el('b', { text: oneUs.toLocaleString('en-US') + ' µs' }),
+      el('b', { text: duration(oneUs) }),
       el('span', { text: ' server · ' }),
       el('span', { class: 'k', text: 'six calls ' }),
-      el('b', { text: sixUs.toLocaleString('en-US') + ' µs' }),
+      el('b', { text: duration(sixUs) }),
       el('span', { text: ' server\n' }),
       el('span', { class: 'k', text: 'the batch cost ' }),
       el('b', { text: oneUs && sixUs ? (sixUs / oneUs).toFixed(1) + '× less execution time' : '—' }),

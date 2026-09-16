@@ -458,7 +458,7 @@
                word, and a 40-character SHA is wider than a phone. */
             var text = document.createElement('span');
             text.className = 'examples__t';
-            text.textContent = ex.d || ex.t;
+            appendTokens(text, ex.d || ex.t, true);
             cmd.appendChild(text);
             if (ex.n) {
               var note = document.createElement('span');

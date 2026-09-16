@@ -958,7 +958,7 @@ The footer should be extremely thin.
 Left:
 
 ```text
-© 2026 emb. Open source, forever.
+© 2026 emb. made with ☠️ by elcuervo
 ```
 
 Right:

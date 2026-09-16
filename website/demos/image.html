@@ -196,15 +196,17 @@
               image is the only one; the labels are arguments. The bridge carries
               the image as base64 in the argument named by <span class="t-cmd">bin</span>.
             </p>
-<div class="code"><pre class="code__body"><code>EMB.EVSHA clip &lt;zeroshot.lua sha1&gt; 1 &lt;image bytes&gt; raven storm …
+<figure class="code"><pre class="code__body"><code>EMB.EVSHA clip &lt;zeroshot.lua sha1&gt; 1 &lt;image bytes&gt; raven storm …
 # -> { label = "raven", score = 0.31, probs = {...}, scores = {...} }
 
 # the bridge request: bin names argument 4 as base64 bytes
 { "args": ["EMB.EVSHA", "clip", "&lt;sha&gt;", "1", "&lt;b64&gt;", "raven", …], "bin": [4] }
 
 # inside zeroshot.lua:
-#   local spec = emb.image.preprocess(KEYS[1])
-#   local image = emb.run({ pixel_values = …, input_ids = …, attention_mask = … })</code></pre></div>
+local spec = emb.image.preprocess(KEYS[1])
+local image = emb.run({ pixel_values = …, input_ids = …, attention_mask = … })</code></pre>
+        <figcaption class="code__cap">An image is an argument like any other; <span class="t-cmd">bin</span> names which one is bytes. The preset preprocesses it and hands the tensors to CLIP, and CLIP answers with a label distribution rather than a vector.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -212,7 +214,7 @@
 <!-- ══════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>

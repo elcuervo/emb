@@ -85,7 +85,7 @@
             · <b data-fig-hit>—</b> hit rate
             · <b data-fig-entries>—</b> entries
             · <b data-fig-dim>—</b> dimensions
-            · <b>server-side µs</b></p>
+            · <b>server-side timing</b></p>
         </div>
       </div>
     </section>
@@ -202,7 +202,7 @@
               checkable from any client. A repeat across two different visitors
               is a hit for the second one.
             </p>
-<div class="code"><pre class="code__body"><code>EMB.INFO minilm
+<figure class="code"><pre class="code__body"><code>EMB.INFO minilm
 # -> cache_hits, cache_misses, cache_hit_rate
 
 EMB minilm "the passage"
@@ -215,7 +215,9 @@ EMB.INFO minilm
 # the same counters, moved by one hit
 
 INFO cache
-# the whole server's totals, including the hit rate</code></pre></div>
+# the whole server's totals, including the hit rate</code></pre>
+        <figcaption class="code__cap">Ask, ask again, and read the counters around the pair. The first ask fills the entry; the second is served from memory, and <span class="t-cmd">EMB.INFO</span> shows the counter move.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -223,14 +225,14 @@ INFO cache
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, envelopeValue, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, envelopeValue, duration, tween } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const root = document.querySelector('[data-rig="cache"]');
@@ -263,9 +265,9 @@ function draw(first, second, animate) {
     label('FIRST ASK', 12, 62, 'atlas__region'),
     label('SECOND ASK · CACHED', 12, 122, 'atlas__region'),
     r1,
-    label(first ? first.toLocaleString('en-US') + ' µs' : '—', X0 + w1 + 10, 53, 'atlas__label'),
+    label(first ? duration(first) : '—', X0 + w1 + 10, 53, 'atlas__label'),
     r2,
-    label(second ? second.toLocaleString('en-US') + ' µs' : '—', X0 + w2 + 10, 113, 'atlas__label')
+    label(second ? duration(second) : '—', X0 + w2 + 10, 113, 'atlas__label')
   );
   if (animate) {
     tween(650, (t) => {
@@ -308,10 +310,10 @@ async function run() {
     draw(firstUs, secondUs, true);
     readout.replaceChildren(
       el('span', { class: 'k', text: 'first ask ' }),
-      el('b', { text: firstUs.toLocaleString('en-US') + ' µs' }),
+      el('b', { text: duration(firstUs) }),
       el('span', { text: ' — ' + (cold ? 'miss, and it filled the entry\n' : 'already cached from an earlier ask\n') }),
       el('span', { class: 'k', text: 'second ask ' }),
-      el('b', { text: secondUs.toLocaleString('en-US') + ' µs' }),
+      el('b', { text: duration(secondUs) }),
       el('span', { text: ' — a hit, served without the model\n' }),
       el('span', { class: 'k', text: 'cache moved ' }),
       el('b', { text: '+' + hits + ' hit' + (hits === 1 ? '' : 's') + ' · +' + misses + ' miss' + (misses === 1 ? '' : 'es') }),

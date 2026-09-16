@@ -186,11 +186,13 @@
               script, which pools and normalizes and reports the dimension and
               the norm. Neither is simulated.
             </p>
-<div class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;The thousand injuries of Fortunato I had borne as I best could.&quot;
+<figure class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;The thousand injuries of Fortunato I had borne as I best could.&quot;
 # -> a 1 536-byte bulk string: 384 little-endian float32s
 
 EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;The thousand injuries…&quot;
-# -> { dim = 384, norm = 1 }</code></pre></div>
+# -> { dim = 384, norm = 1 }</code></pre>
+        <figcaption class="code__cap">Two ways to the same 384 numbers: the raw float32 bytes, then the preset that unpacks them and reports the norm it computed.</figcaption>
+      </figure>
       </div></div>
     </section>
 </main>
@@ -198,7 +200,7 @@ EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;The thousand injuries…&quot;
 <!-- ══════════════════════════════════════════════════════════════ FOOTER -->
 <footer class="footer">
   <div class="shell footer__inner">
-    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
     <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
   </div>
 </footer>
