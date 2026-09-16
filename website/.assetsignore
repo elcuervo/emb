@@ -48,3 +48,8 @@
 # directory is excluded, and `published-tree.py` asserts that it was — so a
 # deleted line here fails the check rather than publishing the service.
 /repl/
+
+# The image plate's sample credits: an authoring note beside the images it
+# describes, not a page. The images themselves ship (published-tree SERVED);
+# this file does not.
+/demos/samples/CREDITS.md

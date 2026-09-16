@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the image — a photo, matched to words</title>
+<link rel="canonical" href="https://emb.is/demos/image.html">
+<meta name="description" content="Drop an image on the sandbox and watch a vision model place it in the same space as text: eight candidate labels, scored live, in one shared graph.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the image — a photo, matched to words">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="One model, two modalities: an image and eight labels scored in the same space, live on the sandbox.">
+<meta property="og:url" content="https://emb.is/demos/image.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the image — a photo, matched to words">
+<meta name="twitter:description" content="One model, two modalities: an image and eight labels scored in the same space, live on the sandbox.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The image</h1>
+          <p class="plate__teaches">
+            A picture into the same space as a sentence. One model, two
+            modalities, so an image can be matched against words it never saw as
+            a caption.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 9 — THE IMAGE</b>
+            · <b data-fig-model>CLIP ViT-B/32</b>
+            · <b data-fig-dim>512</b> dimensions
+            · <b data-fig-labels>8</b> labels
+            · <b>one shared space</b></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+            <p class="block__deck">
+              CLIP was trained so that an image and its caption land near each
+              other. That makes one space hold two kinds of thing — a photograph
+              and a phrase are both points, and the distance between them is a
+              number you can sort.
+            </p>
+            <p class="block__deck">
+              So the labels below are not trained: they are text, embedded beside
+              the image and ranked. Pick a different sample and the ranking
+              moves. That is zero-shot classification, and it is the same cosine
+              the first plates used. The six samples are public-domain paintings
+              and photographs, committed with the gallery.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+
+            <div data-live class="rig" data-rig="image" data-emb-preset-zeroshot="963c9a2b273dab8e6022893e9f338987e4581d60">
+              <div class="samples" data-samples role="group" aria-label="Sample images">
+                <button type="button" data-sample="samples/raven.jpg" aria-pressed="false" title="Doré, The Raven"><img src="samples/raven.jpg" alt="A raven perched above a door"></button>
+                <button type="button" data-sample="samples/storm.jpg" aria-pressed="false" title="Aivazovsky, The Ninth Wave"><img src="samples/storm.jpg" alt="A storm at sea"></button>
+                <button type="button" data-sample="samples/portrait.jpg" aria-pressed="false" title="Edgar Allan Poe, 1849"><img src="samples/portrait.jpg" alt="A portrait of a person"></button>
+                <button type="button" data-sample="samples/ship.jpg" aria-pressed="false" title="Fitz Henry Lane"><img src="samples/ship.jpg" alt="A sailing ship in a harbour"></button>
+                <button type="button" data-sample="samples/flowers.jpg" aria-pressed="false" title="Van Gogh, Sunflowers"><img src="samples/flowers.jpg" alt="Flowers in a vase"></button>
+                <button type="button" data-sample="samples/manuscript.jpg" aria-pressed="false" title="Doré, The Raven"><img src="samples/manuscript.jpg" alt="An engraved plate"></button>
+              </div>
+              <p class="drop__hint">Samples · public domain · Doré · Aivazovsky · Hartshorn · Lane · Van Gogh</p>
+              <img class="drop__img" data-preview alt="The chosen sample" hidden>
+              <p class="rig__state" data-state>pick a sample</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+                <svg class="atlas__svg" data-plot viewBox="0 0 640 300" role="img"
+                     aria-label="Eight candidate labels, scored against the image"></svg>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+            <p class="block__deck">
+              The browser downscaled the sample to 512 pixels and base64-encoded
+              it, because JSON cannot carry bytes; the bridge decoded it back to
+              bytes and passed them to the sandbox. The server preprocessed them
+              to the model's own <span class="t-cmd">pixel_values</span> tensor,
+              ran the fused CLIP graph once for the image and once for each
+              label, and returned the softmax of the cosines.
+            </p>
+            <p class="block__deck">
+              There is no upload: the samples ship with the page and are used for
+              this request only. The bridge accepts binary only for this one
+              preloaded script, only for the vision model, and only within its
+              image bounds — a text command cannot carry an image, and a larger
+              one is refused before decode.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+            <p class="block__deck">
+              One model for two modalities is how image search, tagging, and
+              content moderation work without a classifier per label: embed
+              everything once and compare. A new label is new text, not a new
+              training run.
+            </p>
+            <p class="block__deck">
+              It is also the strongest argument for the scripting layer. The
+              fused graph needs both branches' inputs for either run; the script
+              builds the unused branch as a constant tensor host-side, asks the
+              graph for one output per run, and reduces packed float32 with
+              <span class="t-cmd">emb.math</span> — no 150,000-element Lua table,
+              one round trip.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+            <p class="block__deck">
+              One scripted command. The count is the number of <em>keys</em> — the
+              image is the only one; the labels are arguments. The bridge carries
+              the image as base64 in the argument named by <span class="t-cmd">bin</span>.
+            </p>
+<div class="code"><pre class="code__body"><code>EMB.EVSHA clip &lt;zeroshot.lua sha1&gt; 1 &lt;image bytes&gt; raven storm …
+# -> { label = "raven", score = 0.31, probs = {...}, scores = {...} }
+
+# the bridge request: bin names argument 4 as base64 bytes
+{ "args": ["EMB.EVSHA", "clip", "&lt;sha&gt;", "1", "&lt;b64&gt;", "raven", …], "bin": [4] }
+
+# inside zeroshot.lua:
+#   local spec = emb.image.preprocess(KEYS[1])
+#   local image = emb.run({ pixel_values = …, input_ids = …, attention_mask = … })</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, tween } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'clip';
+const LABELS = ['raven', 'storm at sea', 'portrait of a person', 'old manuscript',
+  'candle in the dark', 'city street at night', 'flower', 'chart or diagram'];
+const MAX_EDGE = 512;
+const root = document.querySelector('[data-rig="image"]');
+const preview = root.querySelector('[data-preview]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const plot = document.querySelector('[data-plot]');
+const NS = 'http://www.w3.org/2000/svg';
+const X0 = 232, MAXW = 300, ROW = 34;
+
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function label(text, x, y, cls) {
+  const node = svg('text', { class: cls || 'atlas__region', x: x, y: y });
+  node.textContent = text;
+  return node;
+}
+/* One bar per label, scaled to the highest probability; the winning label is
+ * the plate's single accent. Labels arrive in the order sent. */
+function draw(probs, animate) {
+  const rows = [];
+  const max = Math.max.apply(null, (probs || [0]).concat([0.0001]));
+  const grow = [];
+  LABELS.forEach((name, i) => {
+    const y = 14 + i * ROW;
+    const value = probs && probs[i] !== undefined ? Number(probs[i]) : null;
+    const width = value === null ? 0 : Math.max(1, (value / max) * MAXW);
+    const best = value !== null && value >= max;
+    const rect = svg('rect', { class: 'atlas__mark' + (best ? ' is-hit' : ''), x: X0, y: y + 1, width: (animate ? 0 : width).toFixed(1), height: 20 });
+    rows.push(label(name, 12, y + 15, 'atlas__region'));
+    rows.push(rect);
+    rows.push(label(value === null ? '—' : (value * 100).toFixed(1) + '%', X0 + width + 10, y + 15, 'atlas__label'));
+    grow.push([rect, width]);
+  });
+  plot.replaceChildren.apply(plot, rows);
+  plot.setAttribute('viewBox', '0 0 640 ' + (14 + LABELS.length * ROW + 6));
+  // The bars grow into place; the numbers are printed at their final position
+  // either way, and with reduced motion the figure is drawn complete, so nothing
+  // depends on the animation having run.
+  if (animate) {
+    tween(520, (t) => grow.forEach(([rect, width]) => rect.setAttribute('width', (width * t).toFixed(1))));
+  }
+}
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); });
+}
+/* Downscale to a bounded JPEG before the bytes leave the browser: a phone photo
+ * is megabytes, the sandbox cap is 256 KiB, and the model resizes to 224 px
+ * anyway. This is the client half of the image limit. */
+function bounded(bytes) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([bytes]));
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => blob ? blob.arrayBuffer().then((b) => resolve(new Uint8Array(b))) : reject(new Error('could not read the image')), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('that file is not an image the browser can read')); };
+    img.src = url;
+  });
+}
+async function run(raw) {
+  setState('running');
+  draw(null);
+  out.hidden = true;
+  try {
+    const bytes = await bounded(raw);
+    preview.src = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+    preview.hidden = false;
+    const digest = root.getAttribute('data-emb-preset-zeroshot');
+    const reply = await g.imagePreset(MODEL, digest, bytes, LABELS);
+    const probs = (reply.probs || []).map(Number);
+    draw(probs, true);
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'label ' }),
+      el('b', { text: String(reply.label) }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: 'score ' }),
+      el('b', { text: Number(reply.score).toFixed(4) }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: 'sent ' }),
+      el('b', { text: (bytes.length / 1024).toFixed(1) + ' KB' })
+    );
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    draw(null);
+    setState(err.state || 'error', err.message);
+  }
+}
+/* The samples ship with the page: the visitor chooses which one to score and
+ * uploads nothing. Each is fetched, bounded, and sent as bytes for one
+ * request. */
+async function sample(btn) {
+  const url = btn.getAttribute('data-sample');
+  root.querySelectorAll('[data-sample]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  preview.hidden = true;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) { throw new Error('the sample could not be loaded'); }
+    await run(new Uint8Array(await resp.arrayBuffer()));
+  } catch (err) {
+    draw(null);
+    setState(err.state || 'error', err.message);
+  }
+}
+root.querySelectorAll('[data-sample]').forEach((btn) => btn.addEventListener('click', () => sample(btn)));
+const first = root.querySelector('[data-sample]');
+if (first) { first.setAttribute('aria-pressed', 'true'); sample(first); }
+g.manifest().then(() => {}).catch(() => {});
+draw(null);
+
+</script>
+</body>
+</html>

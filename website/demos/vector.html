@@ -97,11 +97,9 @@
               gallery works.
             </p>
             <p class="block__deck">
-              Put a passage below and watch what comes back. The dimension and
-              the byte count are the server's; the preview is the first bytes of
-              the reply itself, so you are looking at the actual value and not a
-              rendering of it. The L2 norm comes from the sandbox's own script,
-              which reports the length of the vector it pooled.
+              Put a passage below and watch what comes back: a waveform of the
+              384 values, the dimension and the byte count from the server, and
+              the first bytes of the reply itself.
             </p>
 
       </div></div>
@@ -121,6 +119,8 @@
               <p class="rig__state" data-state>ready when you are</p>
               <div class="rig__out" data-out hidden>
                 <p class="rig__readout" data-readout></p>
+                <svg class="atlas__svg" data-heat viewBox="0 0 640 150" role="img"
+                     aria-label="The 384 values of the vector, above and below a centre line"></svg>
                 <p class="rig__readout" data-bytes></p>
               </div>
             </div>
@@ -133,16 +133,12 @@
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
         
             <p class="block__deck">
-              Four steps, all of them inside the server: the text is
-              <strong>tokenized</strong> into the subword units the model was
-              trained on; each token becomes an <strong>encoding</strong>, a
-              vector that knows its neighbours and its position; the encodings
-              are <strong>pooled</strong> into one vector — averaged, for these
-              models — and that vector is <strong>normalized</strong> to unit
-              length. The pooling is what collapses a sentence of any length into
-              one point, and the normalization is why similarity can be a single
-              number: with <span class="t-cmd">‖v‖ = 1</span>, cosine similarity
-              and the dot product are the same thing.
+              Four steps inside the server: <strong>tokenize</strong> the text
+              into subword units, <strong>encode</strong> each into a vector that
+              knows its neighbours and its position, <strong>pool</strong> those
+              into one vector, and <strong>normalize</strong> it to unit length.
+              Pooling is what makes a sentence of any length one point;
+              normalization is why cosine similarity and the dot product agree.
             </p>
             <p class="block__deck">
               Truncation is the step's own limit. The model reads a bounded
@@ -161,19 +157,11 @@
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
         
             <p class="block__deck">
-              Every later plate is this vector plus arithmetic. Similarity is two
-              vectors and a cosine; search is one vector against thousands; a
-              vector store is an index over these points; a classifier is a
-              different graph's answer in the same reply grammar. If the vector
-              is opaque, everything above it is magic — which is why this is
-              plate one.
-            </p>
-            <p class="block__deck">
-              The bytes matter for the same reason. A vector is 1 536 bytes for
-              these models, not a sentence: an index of a hundred thousand
-              passages is tens of megabytes, and that is a number you can put in
-              a cache, a request, or a browser. The next plate spends that
-              vector on one number.
+              Every later plate is this vector plus arithmetic. If the vector is
+              opaque, everything above it is magic — which is why this is plate
+              one. It is also 1 536 bytes, not a sentence, so a hundred thousand
+              passages fit in tens of megabytes you can cache, send, or search in
+              a browser.
             </p>
 
       </div></div>
@@ -208,7 +196,7 @@ EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;The thousand injuries…&quot;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, figure, showState, b64Float32, hexPreview, argvLine } from '../assets/js/demos.js';
+import { gallery, el, figure, showState, b64Float32, hexPreview, argvLine, tween } from '../assets/js/demos.js';
 
 const g = gallery();
 const MODEL = 'minilm';
@@ -219,9 +207,56 @@ const state = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
 const bytesLine = root.querySelector('[data-bytes]');
+const heat = root.querySelector('[data-heat]');
 const go = root.querySelector('.rig__go');
 let last = null;
+const NS = 'http://www.w3.org/2000/svg';
 
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+/* The vector as a waveform: one thin bar per value, above the centre line when
+ * positive and below when negative, scaled to the largest magnitude. The single
+ * largest is the plate's accent — the rest is the shape of the value, which a
+ * list of 384 numbers hides. The bars rise from the centre line, left to right,
+ * and with reduced motion the figure is drawn complete. */
+function drawHeat(vector, animate) {
+  const W = 640, MID = 74, SCALE = 62;
+  const step = W / vector.length;
+  let max = 0.0001;
+  for (let i = 0; i < vector.length; i++) { max = Math.max(max, Math.abs(vector[i])); }
+  let peak = 0;
+  for (let i = 1; i < vector.length; i++) { if (Math.abs(vector[i]) > Math.abs(vector[peak])) { peak = i; } }
+  const parts = [svg('line', { class: 'atlas__grid', x1: 0, y1: MID, x2: W, y2: MID })];
+  const bars = [];
+  for (let i = 0; i < vector.length; i++) {
+    const h = Math.max(0.5, (Math.abs(vector[i]) / max) * SCALE);
+    const up = vector[i] >= 0;
+    const bar = svg('rect', {
+      class: 'atlas__mark' + (i === peak ? ' is-hit' : ''),
+      x: (i * step).toFixed(2), y: (up ? MID - h : MID).toFixed(2),
+      width: Math.max(0.8, step - 0.4).toFixed(2), height: animate ? 0 : h.toFixed(2),
+      'data-h': h.toFixed(2), 'data-up': up ? '1' : '0'
+    });
+    bars.push(bar);
+    parts.push(bar);
+  }
+  heat.replaceChildren.apply(heat, parts);
+  if (!animate) { return; }
+  const span = 780;
+  tween(span, (t) => {
+    const now = t * span;
+    bars.forEach((bar, i) => {
+      const delay = (i / vector.length) * 380;
+      const p = Math.max(0, Math.min(1, (now - delay) / 400));
+      const h = Number(bar.getAttribute('data-h')) * p;
+      bar.setAttribute('height', h.toFixed(2));
+      bar.setAttribute('y', (bar.getAttribute('data-up') === '1' ? MID - h : MID).toFixed(2));
+    });
+  });
+}
 function setState(next, message) {
   showState(state, next, message, () => { g.retry(); run(last); });
 }
@@ -241,6 +276,7 @@ function render(reply, preset) {
     el('span', { class: 'k', text: 'value ' }), el('b', { text: bytes + ' bytes' })
   );
   const first = vector.slice(0, 6).map((v) => v.toFixed(4)).join(', ');
+  drawHeat(vector, true);
   bytesLine.replaceChildren(
     el('span', { class: 'k', text: 'bytes ' }), el('b', { text: hexPreview(new Uint8Array(vector.buffer), 8) }),
     el('span', { text: '\n' }),

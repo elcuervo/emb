@@ -24,7 +24,16 @@ cache: 64MB
 
 max_texts: 8
 max_pairs: 8
-max_command_bytes: 262144
+max_command_bytes: 1048576
+
+# The image surface is enabled for one demo and bounded before decode: at most
+# two images per command, a quarter of a megabyte each on the wire, and one
+# megapixel of decoded pixels. The bridge enforces the same counts (see
+# `Limits.MaxImages`/`MaxImageBytes`), and only the preloaded image preset may
+# carry a binary argument at all.
+max_images: 2
+max_image_bytes: 262144
+max_image_pixels: 1048576
 
 # The volume paths carry `int8/` on purpose. `downloadModel` returns early when
 # the configured `onnx` file exists, and the volume already holds the fp32
@@ -51,6 +60,7 @@ models:
       - presets/embed.lua
       - presets/rank.lua
       - presets/between.lua
+      - presets/graph.lua
 
   sst2:
     model_repo: Xenova/distilbert-base-uncased-finetuned-sst-2-english
@@ -84,3 +94,29 @@ models:
     normalize: true
     scripts:
       - presets/embed.lua
+
+  # The one vision model: a fused CLIP export whose text and image branches
+  # share a space. It is scripted (`emb.run` over the named tensors) because the
+  # fused graph demands both branches' inputs for either run, so the text-only
+  # `EMB` path cannot feed it directly. `image:` enables `emb.image.preprocess`
+  # and the raw `EMB.IMG` surface; the sandbox exposes the latter to no demo, so
+  # `EMB.IMG` stays outside the surface while the preset runs the same sessions.
+  clip:
+    model_repo: Xenova/clip-vit-base-patch32
+    onnx: /data/models/int8/clip/model.onnx
+    tokenizer: /data/models/int8/clip/tokenizer.json
+    max_length: 77
+    quantize: auto
+    script_preload: true
+    script_workers: 1
+    image:
+      input: pixel_values
+      output: image_embeds
+      size: 224
+      crop: center
+      resample: bicubic
+      rescale: 0.00392156862745098
+      mean: [0.48145466, 0.4578275, 0.40821073]
+      std: [0.26862954, 0.26130258, 0.27577711]
+    scripts:
+      - presets/zeroshot.lua

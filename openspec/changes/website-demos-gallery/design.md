@@ -56,13 +56,14 @@ See `proposal.md` — Why. The current state that shapes the approach:
 
 **Non-Goals:**
 
-- **Image embedding.** SigLIP/CLIP is the highest-wow demo and is deliberately
-  deferred. `EMB.IMG*` is refused by `sandbox-service` on purpose, enabling it
-  turns the sandbox into a public arbitrary-image-upload surface, and the
-  smallest credible pair (CLIP ViT-B/32, text + vision int8) is ~154 MB of
-  weights — the one addition that would force the machine to 4 GB (+$10/mo). It
-  belongs in its own change with its own security review, not smuggled into a
-  gallery. Costed here so the deferral is informed.
+- **Image embedding is enabled, with limits, not deferred.** A fused CLIP
+export (int8, ~154 MB) joins the model set and one scripted preset scores an
+image against labels. The earlier deferral is reversed because the wow is
+worth it and the risk is boundable: the browser downscales before sending, the
+bridge carries binary only for that one preloaded digest, the request is capped
+at two images, 256 KiB each, and one megapixel, and nothing is stored. The
+remaining risk is memory, and the model is gated on the same RSS measurement as
+the dimension dial (D3, D14).
 - **A server-side vector store.** No pgvector, no Qdrant, no sqlite-vec in the
   bridge. A demo corpus is small and read-only; a networked store buys nothing a
   client-side index does not, and costs a machine.
@@ -138,7 +139,7 @@ that carry a lesson. Verified artifact sizes (HF API, `model_quantized.onnx`):
 | `bge-small-en-v1.5` | 384 | 133.1 MB | **34.0 MB** | the lens: same dimension, **different space** |
 | `paraphrase-multilingual-MiniLM-L12-v2` | 384 | 470.3 MB | **118.3 MB** | cross-lingual: query in one language, passage in another |
 | `all-mpnet-base-v2` | 768 | 435.8 MB | **110.1 MB** | the dimension dial (phase B) |
-| *(deferred)* CLIP ViT-B/32 text+vision | 512 | — | 64.5 + 89.1 MB | image ↔ text |
+| CLIP ViT-B/32 (fused, text + vision int8) | 512 | — | **153.7 MB** | the image: one space holds a photo and a sentence |
 
 Budget:
 
@@ -146,7 +147,7 @@ Budget:
 today (fp32 pair)                  90 + 268            = 358 MB
 phase A (int8 + 2 demo models)     23 + 68 + 34 + 118  = 243 MB   −115 MB
 phase B (+ dimension dial)         243 + 110           = 353 MB   ≈ today
-deferred phase C (+ CLIP)          353 + 154           = 507 MB   +149 MB → likely 4 GB
+deferred phase C (+ CLIP)          353 + 154           = 507 MB   +149 MB → gated on the RSS measurement (D14)
 ```
 
 - **Why int8:** ~4× less resident weight memory, a smaller first-boot download
@@ -168,7 +169,7 @@ deferred phase C (+ CLIP)          353 + 154           = 507 MB   +149 MB → li
   (`just download-model-quantized`) fetches `model_quantized.onnx` so the local
   corpus build uses the same weights the sandbox serves.
 
-### D4. The plates: seven demos in three tiers
+### D4. The plates: nine demos in three tiers
 
 | Plate | Title | Model(s) | Corpus | Mechanism | Teaches |
 |---|---|---|---|---|---|
@@ -179,10 +180,16 @@ deferred phase C (+ CLIP)          353 + 154           = 507 MB   +149 MB → li
 | III | **The model lens** | `minilm` + `bge-small` | atlas | two `vec0` tables, one corpus | same text, different space; **you cannot mix models** |
 | III | **The dimension dial** | `minilm` + `mpnet` | atlas | two tables, 384 vs 768 | dimension is a cost/quality dial (gated on D3's measurement) |
 | III | **The model is a function** | `minilm` + `sst2` | none | `EMB` vs `EMB.EVSHA` ×2 presets | one primitive, four answers; extensibility without forking |
+| III | **The image** | `clip` | none | `EMB.EVSHA zeroshot.lua` over binary | one space holds an image and a sentence; zero-shot tagging |
+| III | **The batch** | `minilm` | none | `EMB` ×6 vs `EMB` ×1 carrying six texts | one call, many texts: the batcher amortizes the pass |
+| III | **The cache** | `minilm` | none | `EMB.INFO` around `EMB` twice | the second ask is a lookup; the vector is memoized |
+| IV | **The graph** | `minilm` | atlas | `EMB.EVSHA graph.lua` over 8 passages | the script builds an N-by-N graph beside the model and returns edges |
 
 The atlas carries one extra instrument, not a plate of its own: an **order
 switch** that places the passages by meaning or by year, so the reader can see
-that the space tracks the work rather than the clock.
+that the space tracks the work rather than the clock. The switch is honest about
+what each order can place: the named regions are drawn only by meaning, and the
+query is placed by year at the mean year of the neighbours it retrieved (D11).
 
 ### D5. The gallery is an instrument: the aesthetic, in the existing tokens
 
@@ -307,6 +314,131 @@ Applied in order of effect per effort:
 - `ci.yml`'s path filter learns `website/demos/` and `website/assets/demo/`, and
   the published-tree check runs in `site.yml` before publish as it does today.
 
+### D11. The atlas's order switch places only what the order can place
+
+The switch is the atlas's one piece of interaction, and it was the one place the
+plate could draw a coordinate it did not have. Two defects made it wrong, both
+found by running it:
+
+- **Under the year order the region rings collapsed at the origin.** A region's
+  position is a pair of **projection** coordinates; the year order mapped `x`
+  from a year, so a region with no year computed a coordinate far off the plate
+  and a zero radius, stacking ten labels at the axis' edge. The fix is to draw
+  the named regions **only** in the meaning order: a cluster is a fact about the
+  space, and a chronology has none.
+- **Under the year order the query's mark became `NaN`.** The landing placed the
+  query at the centroid of its retrieved neighbours, and the centroid carried an
+  `x` and a `y` and no year; the year order read `p.year`, got `undefined`, and
+  wrote `cx="NaN"`, which draws nothing. The fix is to carry the **mean year** of
+  the neighbours on the centroid — the same honest rule as the place: a query has
+  no publication year, so it stands where the passages it found stand.
+
+Switching the order no longer re-runs the search, either. The plate holds the
+centroid and the hit set, so the switch redraws from data already on the page;
+re-querying was both a wasted round trip and a spend against the sandbox's rate
+limit. An empty result is now a stated error rather than a divide-by-zero, and
+the secondary instrument — the blend — reports its failure instead of clearing
+itself to look like an empty success (this is the `embedding-demos` requirement
+that a failed interaction is never rendered as an empty result).
+
+### D12. The cost plates measure, and the cache is the trap
+
+The two cost plates exist because the site argues `emb` is fast and never shows
+it. Both draw the server's own execution time and nothing the network did:
+
+- **The batch** compares six single `EMB` calls against one `EMB` carrying six
+texts and draws the summed and single `elapsed_us` to scale. `elapsed_us` is the
+bridge's own bracket around the upstream command on its loopback connection, so
+it is execution time and does not grow with the reader's distance; the plate does
+not time its own requests, because a client clock would measure the ocean between
+the reader and the sandbox. The first draft of it was wrong in a way worth
+recording: it embedded
+the same six texts on both sides, so the batched call read the six calls' cache
+entries and reported a **297×** speed-up that was almost entirely the cache. The
+plate now salts each side with a fresh marker, so the two sides share no entry
+and the number it draws is the batch's own.
+- **The cache** asks for one passage twice with an `EMB.INFO` on each side and
+  reports the counter deltas, so a reader sees `+1 miss · +1 hit` on a cold
+  passage (`4 190 µs` then `103 µs` on the dev machine) and `+2 hits` on a warm
+  one. It never asserts which case it is in; the model's counters decide.
+
+Both reuse the atlas's SVG atoms for the bars — `.atlas__svg`, `.atlas__frame`,
+`.atlas__mark` and its `is-hit` accent — so the two new plates add **no** colour,
+font, texture, or stylesheet rule. The accent is the winning side on the batch
+and the cached call on the cache, which is why the same class does both jobs.
+
+### D13. The gallery is visual first
+
+A gallery that explains vectors in paragraphs repeats the failure it exists to
+fix. Every plate now carries a figure built from the live reply:
+
+- **The vector** is a waveform: one thin bar per value, above the centre line
+  when positive and below when negative, scaled to the largest magnitude, with
+  the single largest value the only accent. A list of 384 numbers hides its own
+  shape; the waveform shows it.
+- **The graph** is a directed graph: nodes on a ring, one arrow per outgoing
+  edge, the strongest edge the accent. The ring is a place to stand, not a
+  claim about geometry — the arrows are the only claim.
+- **The image** is label-probability bars, and **the batch** and **the cache**
+  are measured bars, all on the same SVG atoms the atlas already declared.
+
+Reusing `.atlas__svg`, `.atlas__frame`, `.atlas__mark`, and `.atlas__mark.is-hit`
+means four new figures added no colour, font, texture, or stylesheet token. The
+prose contract is the other half: a plate's sections become captions of the
+figure rather than a substitute for it, and the exact commands stay as they are.
+
+**Motion is the figure arriving.** One primitive, `tween(ms, step)` in
+`demos.js`, animates every figure: the waveform rises from the centre line left
+to right, the graph's edges extend to their end and its nodes open, the bars
+grow, and the atlas's query lands with one ripple while its neighbours flare.
+The primitive reads `motionAllowed()` itself, so under `prefers-reduced-motion`
+`step(1)` runs once and the figure is drawn complete — the end state is the same
+and nothing depends on the animation. The model lens's morph is the one place
+motion *is* the argument; it uses the same primitive and becomes a cut.
+
+### D14. Visual embeddings, enabled inside a bounded transport
+
+The highest-wow demo is a picture in the same space as a sentence, and the
+security analysis that deferred it is answered rather than ignored:
+
+- **No visitor file.** The plate ships six public-domain samples (Doré,
+  Aivazovsky, Hartshorn, Lane, Van Gogh) and scores whichever the reader picks;
+  there is no drop target and no file input, so the sandbox never receives an
+  arbitrary upload from a stranger. The samples are committed at a 512px long
+  edge, and the page still bounds and re-encodes the image before sending it, so
+  the cap holds even if a sample is replaced.
+- **The transport is explicit.** `execRequest` gains `bin`, a list of argument
+  indices that are base64 rather than text; the bridge decodes them back to bytes
+  before the command reaches `emb`. Binary is refused unless the call is
+  `EMB.EVSHA` naming the sandbox's own `zeroshot` preset by a preloaded digest,
+  so the transport cannot be pointed at a text preset or a raw image command.
+- **The bounds are doubled.** The bridge caps two images per request and 256 KiB
+  each; the server caps `max_images`, `max_image_bytes`, and `max_image_pixels`
+  before decode. The browser downscales to 512 px before sending, so a phone
+  photo never reaches the sandbox whole — the first and cheapest of the limits.
+- **Nothing is stored, and nothing new is raw.** The bytes answer one request.
+  `EMB.IMG`/`EMB.IMGMULTI` stay outside the surface; only the sandbox's script
+  sees an image, and the model name is the preset's, not the visitor's.
+- **The fused graph is why the script exists.** The CLIP export demands both
+  branches' inputs for either run, so `zeroshot.lua` builds the unused branch as
+  a constant tensor host-side (`fill = 0`, no 150k-element Lua table) and asks
+  the graph for one output per run.
+
+The model is ~154 MB of weights and is the single biggest memory addition; it is
+phase C, gated on the same `EMB.STATS` RSS figure as the dimension dial, and a
+machine that cannot hold it skips the plate rather than the measurement.
+
+### D15. The scripting layer computes structure, not just a value
+
+The gallery already showed a script returning a number, a hash, and a label. The
+graph plate shows the next step: `graph.lua` embeds its whole batch in one call,
+builds an N-by-N cosine matrix, and returns each node's two nearest neighbours —
+sixty-four cosines in, sixteen edges out, the matrix never on the wire. It is the
+same `emb.embed` batcher and cache as `EMB`, the same `emb.math` reductions that
+keep the work host-side, and the page draws what comes back. This is the
+capability the product's docs call production scripting, made visible in one
+request.
+
 ## Risks / Trade-offs
 
 - **Chunking changes what a query retrieves.** → The split is deterministic and
@@ -350,6 +482,7 @@ Applied in order of effect per effort:
 | Quantize the pair | $0 |
 | `bge-small` + `multilingual` int8 | $0 (covered by the int8 savings) |
 | `mpnet` int8 (phase B) | $0 if the measurement holds, else +$10 (4 GB) |
+| `clip` int8 (the image plate) | $0 if the measurement holds, else +$10 (4 GB) |
 | Browser search + Cloudflare assets | $0 |
 | Fly egress | ≈ $0 (corpus never touches Fly) |
 | **Total** | **≈ $11.56/mo unchanged** |
@@ -358,10 +491,13 @@ Applied in order of effect per effort:
 
 1. **Sandbox first, behind measurement.** Add `quantize: auto`, bump the model
    paths, add `bge-small` and `multilingual`; deploy with `just sandbox-deploy`;
-   confirm `/api/ready` and read RSS from `EMB.STATS`. Decide phase B from that
-   number.
-2. **Presets.** Author `rank.lua` and `between.lua`, list all four presets in
-   `sandbox.yaml`, and stamp the digests with `just website-presets`.
+   confirm `/api/ready` and read RSS from `EMB.STATS`. Decide phase B (the
+   dimension dial) and phase C (the `clip` image model) from that number; if it
+   does not fit at 2 GB, record the figure and skip the model rather than
+   resizing on a guess.
+2. **Presets.** Author `rank.lua`, `between.lua`, `graph.lua`, and
+   `zeroshot.lua`, list every preset in `sandbox.yaml`, and stamp the digests
+   with `just website-presets`.
 3. **Corpus.** Run `just website-poe` to fetch, strip and chunk; run
    `just website-demos` to build the `.db` and its manifest against a local `emb`.
 4. **Ship the plates.** Land the gallery index and the seven plates, the vendored

@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>emb — the demos gallery: vectors, similarity, search, the atlas</title>
+<title>emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph</title>
 <link rel="canonical" href="https://emb.is/demos/">
-<meta name="description" content="Six small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, and why two models produce two incomparable spaces.">
+<meta name="description" content="Ten small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, and what a script can compute beside the model.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas">
+<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="A gallery of six demos that embed real text and search a real index, over one author's public-domain corpus.">
+<meta property="og:description" content="A gallery of ten demos that embed real text and images and search a real index, over one author's public-domain corpus.">
 <meta property="og:url" content="https://emb.is/demos/">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="emb — the demos gallery: vectors, similarity, search, the atlas">
-<meta name="twitter:description" content="A gallery of six demos that embed real text and search a real index, over one author's public-domain corpus.">
+<meta name="twitter:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph">
+<meta name="twitter:description" content="A gallery of ten demos that embed real text and images and search a real index, over one author's public-domain corpus.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 
@@ -74,16 +74,18 @@
         <div>
           <h1 class="plate__title" id="plate-h">The demos gallery</h1>
           <p class="plate__teaches">
-            Six demonstrations of one idea, run against a real server and a real
-            index. The first three answer <em>what is a vector</em> and <em>why
-            does it help</em>; the last three answer <em>why emb</em> and <em>why
-            more than one model</em>. Read them in order, or jump to the one you
-            came for — each stands on its own.
+            Ten demonstrations of one idea, run against a real server and a
+            real index. The first four answer <em>what is a vector</em> and <em>why
+            does it help</em>; the next five answer <em>why emb</em> — several
+            models, an image in the same space, and a batcher and a cache that
+            make it cheap; and the last is the scripting layer computing
+            structure beside the model. Read them in order, or jump to the one
+            you came for — each stands on its own.
           </p>
         </div>
         <div>
           <p class="fig"><b>FIG. 0 — THE ATLAS</b>
-            · <b>six plates</b>
+            · <b>ten plates</b>
             · <b data-fig-count>2 782</b> passages
             · <b data-fig-works>86</b> works
             · <b data-fig-model>all-MiniLM-L6-v2</b>
@@ -127,6 +129,26 @@
           <span class="ord__t"><a href="function.html">The model is a function</a></span>
           <span class="ord__w"><b>PLATE III</b> · One primitive, four answers: bytes, a typed vector, a similarity, a label.<br>Teaches: extensibility without forking the server.</span>
         </li>
+        <li class="ord__i">
+          <span class="ord__n">07</span>
+          <span class="ord__t"><a href="image.html">The image</a></span>
+          <span class="ord__w"><b>PLATE III</b> · A photo and eight labels in one space. The model was never trained on these labels.<br>Teaches: one space for two modalities; zero-shot tagging.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">08</span>
+          <span class="ord__t"><a href="batch.html">The batch</a></span>
+          <span class="ord__w"><b>PLATE III</b> · One call carrying six texts against six calls carrying one each. The model sees one pass, not six.<br>Teaches: why embedding a corpus is a job that finishes.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">09</span>
+          <span class="ord__t"><a href="cache.html">The cache</a></span>
+          <span class="ord__w"><b>PLATE III</b> · Ask once, ask again. The same vector is memoized, so the repeat is a lookup.<br>Teaches: the cheapest speed-up is the one that returns the same answer.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">10</span>
+          <span class="ord__t"><a href="graph.html">The graph</a></span>
+          <span class="ord__w"><b>PLATE IV</b> · A Lua script builds the corpus's nearest-neighbour graph beside the model and returns edges, not a matrix.<br>Teaches: the scripting layer computing structure in one round trip.</span>
+        </li>
           </ol>
         </div></div>
       </section>
@@ -155,7 +177,9 @@
             shipped like any other asset: the sandbox pays one embedding per
             query and nothing else. Nothing in the gallery writes to the
             sandbox, and the sandbox runs only the scripts it preloaded —
-            <span class="t-cmd">EMB.EVAL</span> is refused, on purpose.
+            <span class="t-cmd">EMB.EVAL</span> is refused, on purpose. The two
+            cost plates measure the server's own timings, so the case that emb is
+            cheap is a reading from the machine rather than a claim about it.
           </p>
         </div></div>
       </section>

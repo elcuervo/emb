@@ -75,13 +75,13 @@ export class SandboxError extends Error {
   }
 }
 
-async function exec(args) {
+async function exec(args, bin) {
   let response;
   try {
     response = await fetch(origin + '/api/exec', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ args: args, proto: 2 })
+      body: JSON.stringify(bin && bin.length ? { args: args, proto: 2, bin: bin } : { args: args, proto: 2 })
     });
   } catch (err) {
     throw new SandboxError('unavailable', 'the sandbox could not be reached');
@@ -131,7 +131,7 @@ export function envelopeValue(envelope) {
  * lets a plate read `reply.dim` instead of walking the wire format, and a
  * reply that is not a flat hash (an array of numbers, say) is passed through
  * untouched rather than guessed at. */
-function pairsToObject(items) {
+export function pairsToObject(items) {
   if (!Array.isArray(items) || items.length === 0 || items.length % 2 !== 0) { return null; }
   const out = {};
   for (let i = 0; i + 1 < items.length; i += 2) {
@@ -311,6 +311,13 @@ export function gallery() {
       return rowids.map((id) => byRow.get(id)).filter(Boolean);
     },
 
+    /* The publication year of every passage, and nothing else: the atlas's
+     * year order needs 2 782 years, not 2 782 passages. */
+    async years() {
+      const db = (await index()).db;
+      return new Map(rows(db, 'SELECT rowid, year FROM passages').map((r) => [r[0], r[1]]));
+    },
+
     /* The build-time projection and its hand-named regions. No projection work
      * happens here: the atlas draws what the index was built with. */
     async atlas(model) {
@@ -342,6 +349,17 @@ export function gallery() {
       return Array.isArray(reply) ? reply.map((item) => pairsToObject(item) || item) : reply;
     },
 
+    /* The image preset: raw bytes in, a label distribution out. `bytes` is a
+     * Uint8Array read from a File; the bridge is told which argument is binary
+     * (`bin`) and base64-decodes it back to bytes before emb sees it. Only this
+     * preset and only the sandbox's own digest accept binary. */
+    async imagePreset(model, sha, bytes, labels) {
+      if (!sha) { throw new SandboxError('error', 'no preset digest was stamped for this plate'); }
+      const argv = ['EMB.EVSHA', model, sha, '1', toBase64(bytes)].concat(labels);
+      const reply = envelopeValue(await run(() => exec(argv, [4])));
+      return pairsToObject(reply) || reply;
+    },
+
     /* The raw reply envelope, for a plate that shows the reply's shape. */
     async raw(args) { return exec(args); },
 
@@ -354,6 +372,26 @@ export function gallery() {
 export function motionAllowed() {
   const query = window.matchMedia('(prefers-reduced-motion: reduce)');
   return !query.matches;
+}
+
+/* The gallery's one animation primitive: run `step(t)` with t from 0 to 1 over
+ * `ms`, on the next frames. With reduced motion asked for it runs once at t = 1,
+ * so every figure is still drawn and no result depends on the animation having
+ * run. Plates animate their own attributes rather than depending on CSS
+ * transitions of SVG geometry, which not every engine honours. */
+export function tween(ms, step, done) {
+  if (!motionAllowed()) {
+    step(1);
+    if (done) { done(); }
+    return;
+  }
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / ms);
+    step(t);
+    if (t < 1) { requestAnimationFrame(frame); } else if (done) { done(); }
+  }
+  requestAnimationFrame(frame);
 }
 
 export const PROTO = 2;
@@ -470,4 +508,15 @@ export function hexPreview(bytes, n) {
     parts.push('\\x' + (h.length < 2 ? '0' + h : h));
   }
   return parts.join('') + (bytes.length > count ? '…' : '');
+}
+
+/* Base64 in chunks: `String.fromCharCode.apply` on a whole image would blow the
+ * argument limit, and the bridge expects standard base64 that its decoder reads
+ * back to the same bytes. */
+export function toBase64(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }

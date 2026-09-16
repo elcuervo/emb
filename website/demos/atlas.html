@@ -204,13 +204,20 @@
               blend. Nothing here selects from the projection at runtime beyond
               reading the committed rows.
             </p>
-<div class="code"><pre class="code__body"><code>SELECT rowid, x, y FROM projection WHERE model = 'minilm';
-SELECT label, cx, cy, radius, count FROM regions WHERE model = 'minilm';
+<div class="code"><pre class="code__body"><code>SELECT rowid, x, y FROM projection
+  WHERE model = 'minilm';   -- the build-time coordinates
+SELECT label, cx, cy, radius FROM regions
+  WHERE model = 'minilm';   -- the hand-named regions
 
-EMB minilm BLOB &quot;the dead returning&quot;        # the query's vector
-SELECT rowid FROM vec_minilm WHERE embedding MATCH vec_int8(:q) AND k = 24;
+EMB minilm BLOB &quot;the dead returning&quot;
+# -> the query's vector
 
-EMB.EVSHA minilm &lt;between.lua sha1&gt; 8 &quot;the sea&quot; &quot;the grave&quot; &quot;c1&quot; … &quot;c6&quot;
+SELECT rowid FROM vec_minilm
+  WHERE embedding MATCH vec_int8(:q) AND k = 24;
+# -> the neighbours, ranked by distance
+
+EMB.EVSHA minilm &lt;between.lua sha1&gt; 8
+  &quot;the sea&quot; &quot;the grave&quot; &quot;c1&quot; … &quot;c6&quot;
 # -> the midpoint's nearest corpus passages, ranked</code></pre></div>
       </div></div>
     </section>
@@ -226,7 +233,7 @@ EMB.EVSHA minilm &lt;between.lua sha1&gt; 8 &quot;the sea&quot; &quot;the grave&
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, SandboxError, motionAllowed, tween } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const W = 1000, H = 620, PAD = 34;
@@ -239,7 +246,7 @@ const hits = root.querySelector('[data-hits]');
 const betwixt = document.querySelector('[data-rig="between"]');
 const bState = betwixt.querySelector('[data-between-state]');
 const bHits = betwixt.querySelector('[data-between-hits]');
-let atlas = null, bounds = null, order = 'meaning', lastHit = new Set();
+let atlas = null, bounds = null, order = 'meaning', lastHit = new Set(), lastCentroid = null, lastQuery = '';
 
 const NS = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs) {
@@ -256,8 +263,11 @@ function extent(points) {
 }
 function place(p) {
   const b = bounds;
+  // A passage with no recorded year falls back to the earliest the corpus
+  // holds, so the year order never computes a coordinate off the plate.
+  const py = p.year || b.ymin;
   const x = order === 'year'
-    ? PAD + ((p.year - b.ymin) / Math.max(1, b.ymax - b.ymin)) * (W - 2 * PAD)
+    ? PAD + ((py - b.ymin) / Math.max(1, b.ymax - b.ymin)) * (W - 2 * PAD)
     : PAD + ((p.x - b.x0) / (b.x1 - b.x0)) * (W - 2 * PAD);
   const y = PAD + (1 - (p.y - b.y0) / (b.y1 - b.y0)) * (H - 2 * PAD);
   return { x: x, y: y };
@@ -271,16 +281,35 @@ function draw() {
     plot.appendChild(svg('line', { class: 'atlas__grid', x1: x, y1: PAD, x2: x, y2: H - PAD }));
     plot.appendChild(svg('line', { class: 'atlas__grid', x1: PAD, y1: y, x2: W - PAD, y2: y }));
   }
+  const lit = [];
   atlas.points.forEach((p) => {
     const at = place(p);
-    plot.appendChild(svg('circle', {
-      class: 'atlas__mark' + (lastHit.has(p.rowid) ? ' is-hit' : ''),
-      cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: lastHit.has(p.rowid) ? 2.6 : 1.4
-    }));
+    const hit = lastHit.has(p.rowid);
+    const node = svg('circle', {
+      class: 'atlas__mark' + (hit ? ' is-hit' : ''),
+      cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: hit && motionAllowed() ? 0 : (hit ? 2.6 : 1.4)
+    });
+    if (hit) { lit.push(node); }
+    plot.appendChild(node);
   });
+  // The neighbours flare out of the cloud rather than switching on: the query's
+  // result arriving is the plate's one moment, and with reduced motion the marks
+  // are simply drawn at full size.
+  if (lit.length) {
+    tween(520, (t) => {
+      const now = t * 520;
+      lit.forEach((node, i) => {
+        const p = Math.max(0, Math.min(1, (now - i * 18) / 320));
+        node.setAttribute('r', (2.6 * p).toFixed(2));
+      });
+    });
+  }
   // The named regions, drawn as the ring the centroid and radius describe and
-  // labelled in the manifest's own words.
-  atlas.regions.forEach((r) => {
+  // labelled in the manifest's own words. They belong to the meaning order and
+  // are not drawn under the year order: a cluster is a fact about the space,
+  // and a chronology has no regions. Drawing them there would stack ten rings
+  // at the year axis's origin.
+  (order === 'meaning' ? atlas.regions : []).forEach((r) => {
     const centre = place({ x: r.cx, y: r.cy, year: r.year || 0 });
     const edge = place({ x: r.cx + r.radius, y: r.cy, year: 0 });
     plot.appendChild(svg('circle', {
@@ -303,6 +332,36 @@ function line(label, value) {
   return [el('span', { class: 'k', text: label + ' ' }), el('b', { text: String(value) }), el('span', { text: ' · ' })];
 }
 
+/* The query's mark, drawn from the centroid the last landing computed. Kept
+ * separate from draw() so the order switch can re-place it without asking the
+ * sandbox for the same embedding again: the neighbours have not changed, only
+ * the axis they are read on. */
+function drawQuery() {
+  if (!lastCentroid) { return; }
+  const at = place(lastCentroid);
+  const ripple = svg('circle', { class: 'atlas__query', cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: 0, opacity: 0 });
+  plot.appendChild(svg('circle', { class: 'atlas__query', cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: 13 }));
+  plot.appendChild(ripple);
+  const label = svg('text', { class: 'atlas__label', x: at.x.toFixed(1), y: (at.y + 28).toFixed(1), 'text-anchor': 'middle' });
+  label.textContent = 'the query';
+  plot.appendChild(label);
+  // One ripple as the query lands: it marks the instant without being a result,
+  // and it is skipped entirely when the reader prefers reduced motion.
+  if (motionAllowed()) {
+    tween(760, (t) => {
+      ripple.setAttribute('r', (13 + 40 * t).toFixed(1));
+      ripple.setAttribute('opacity', (0.5 * (1 - t)).toFixed(2));
+    }, () => { ripple.setAttribute('opacity', '0'); });
+  }
+}
+function showReadout() {
+  readout.replaceChildren(
+    ...line('query', '"' + lastQuery + '"'),
+    ...line('neighbours', lastHit.size + ' landed'),
+    ...line('layout', order === 'meaning' ? 'by meaning' : 'by year')
+  );
+}
+
 async function land(text) {
   const found = await g.search(MODEL, text, 24);
   const passages = await g.passages(found.map((h) => h.rowid));
@@ -310,20 +369,24 @@ async function land(text) {
   // The query's own position: the centroid of what it retrieved. No projection
   // runs here; a query lands where its neighbours are.
   const points = atlas.points.filter((p) => lastHit.has(p.rowid));
-  const centroid = points.reduce((acc, p) => ({ x: acc.x + p.x / points.length, y: acc.y + p.y / points.length }),
-                                 { x: 0, y: 0 });
+  if (!points.length) {
+    out.hidden = true;
+    throw new SandboxError('error', 'the index returned no neighbours for that query');
+  }
+  // The centroid carries a year as well as a place: under the year order a
+  // query has no publication date of its own, so it lands at the mean year of
+  // the neighbours it actually retrieved — the same honest rule as the place.
+  const centroid = points.reduce((acc, p) => ({
+    x: acc.x + p.x / points.length,
+    y: acc.y + p.y / points.length,
+    year: acc.year + (p.year || bounds.ymin) / points.length
+  }), { x: 0, y: 0, year: 0 });
+  lastQuery = text;
+  lastCentroid = centroid;
   draw();
-  const at = place(centroid);
-  plot.appendChild(svg('circle', { class: 'atlas__query', cx: at.x.toFixed(1), cy: at.y.toFixed(1), r: 13 }));
-  const label = svg('text', { class: 'atlas__label', x: at.x.toFixed(1), y: (at.y + 28).toFixed(1), 'text-anchor': 'middle' });
-  label.textContent = 'the query';
-  plot.appendChild(label);
+  drawQuery();
   hits.replaceChildren(...passages.slice(0, 3).map((p, i) => quotation(p, i + 1, false)));
-  readout.replaceChildren(
-    ...line('query', '"' + text + '"'),
-    ...line('neighbours', points.length + ' landed'),
-    ...line('layout', order === 'meaning' ? 'by meaning' : 'by year')
-  );
+  showReadout();
   out.hidden = false;
 }
 
@@ -332,9 +395,6 @@ async function run() {
   const text = root.querySelector('#a-q').value;
   root.querySelector('.rig__go').disabled = true;
   setState('running');
-  try {
-    const { loadAtlas } = await import('../assets/js/demos.js');
-  } catch (err) { /* noop */ }
   try {
     await land(text);
     setState('ready');
@@ -351,7 +411,7 @@ document.querySelectorAll('[data-order]').forEach((btn) => {
     order = btn.getAttribute('data-order');
     document.querySelectorAll('[data-order]').forEach((other) =>
       other.setAttribute('aria-pressed', String(other === btn)));
-    if (atlas) { draw(); run(); }
+    if (atlas && lastCentroid) { draw(); drawQuery(); showReadout(); }
   });
 });
 root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); run(); });
@@ -366,6 +426,7 @@ betwixt.querySelector('[data-between-form]').addEventListener('submit', async (e
   const go = betwixt.querySelector('.rig__go');
   go.disabled = true;
   showState(bState, 'running', null, null);
+  let failure = null;
   try {
     const [fa, fb] = await Promise.all([g.search(MODEL, a, 4), g.search(MODEL, b, 4)]);
     const pool = await g.passages(fa.concat(fb).map((h) => h.rowid));
@@ -378,8 +439,14 @@ betwixt.querySelector('[data-between-form]').addEventListener('submit', async (e
       quotation(byDoc.get(r.doc), i + 1, i === 0)));
   } catch (err) {
     bHits.replaceChildren();
-  } finally {
-    go.disabled = false;
+    failure = err;
+  }
+  go.disabled = false;
+  // A failure is stated, never dressed as an empty success: the blank result
+  // area would otherwise read as "the blend found nothing".
+  if (failure) {
+    showState(bState, failure.state || 'error', failure.message, () => { g.retry(); current(); });
+  } else {
     showState(bState, 'ready', null, null);
   }
 });
@@ -399,11 +466,8 @@ g.manifest().then((m) => {
   return g.atlas(MODEL);
 }).then((data) => {
   atlas = data;
-  const years = data.points.map((p) => p.rowid);
-  return g.passages(years).then((rows) => {
-    const year = new Map(rows.map((p) => [p.rowid, p.year]));
+  return g.years().then((year) => {
     atlas.points.forEach((p) => { p.year = year.get(p.rowid) || 0; });
-    atlas.regions.forEach((r) => { r.year = 0; });
     bounds = extent(atlas.points);
     bounds.ymin = Math.min(...atlas.points.map((p) => p.year));
     bounds.ymax = Math.max(...atlas.points.map((p) => p.year));

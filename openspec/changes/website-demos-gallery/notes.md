@@ -251,3 +251,204 @@ morph is skipped and the atlas's query is drawn in one frame when it is set.
   retry, no vector and no ranking, while the explanation, the mechanism, the
   scripts and the captions — whose figures come from the shipped index, not the
   server — stay readable.
+
+## Atlas corrections — 11.1 to 11.5
+
+Both defects were found by running the plate, not by reading it:
+
+- **11.1 — regions under the year order.** `place()` maps `x` from `p.year`
+  under the year order, but a region's position is a pair of projection
+  coordinates. With `r.year = 0`, every ring computed `cx ≈ −77 364` and a
+  **zero radius**, so ten labels stacked off the left edge of the plate. The
+  regions are now drawn only by meaning; a cluster is a fact about the space and
+  a chronology has none.
+- **11.2 — the query under the year order.** The landing's centroid carried
+  `{x, y}` and no year, so the year order wrote `cx="NaN"` and the query's mark
+  disappeared. The centroid now carries the **mean year of the retrieved
+  neighbours**, and the query stands where the passages it found stand. Verified:
+  meaning `cx = 441.5`, year `cx = 646.5`, both finite and the readout's layout
+  line correct.
+- **11.3 — switching the order re-queried.** The switch called `draw(); run();`,
+  spending a sandbox round trip (and a token from the 2/s bucket) to recompute a
+  centroid it already had. It now redraws from the held hit set and centroid;
+  verified by observation that the switch makes no request.
+- **11.4 — failures disguised as emptiness.** The blend cleared its result area
+  and reported `ready` on failure. It now states the condition, offers a retry,
+  and shows no passage, matching the new `embedding-demos` requirement.
+- **11.5 — the year order read every passage.** The init fetched all 2 782 full
+  passages (text included) to recover their years. `demos.js` gained `years()`,
+  which selects `rowid, year` alone.
+
+`just website-ink` caught two code-block regressions the corrections exposed, both
+fixed by breaking the long lines: the atlas's projection `SELECT` was 0.88 px over
+at 390 px, and the cache plate's aligned comment was 11.88 px over at 320 px. The
+probe gained a general `?target=<path>` so a single plate can be swept
+(`just website-ink http://localhost:8080 demos/batch.html`); all four surfaces —
+landing, docs, 404, and each gallery page — pass at all 24 widths.
+
+## Cost plates — 12.1 to 12.6
+
+The first draft of the batch plate was **wrong**, and the number it printed is the
+reason the trap is written down here. It embedded the same six texts on both
+sides, so the batched call read the six single calls' cache entries and reported a
+**297×** speed-up (72 µs against 21 399 µs) that was almost entirely the cache.
+The plate now salts each side with a fresh per-run marker, so neither side shares
+an entry:
+
+```
+one call   7 275 µs server (execution)
+six calls 22 041 µs server (execution)   -> 3.0x less execution time
+```
+
+Both figures are the bridge's `elapsed_us`, bracketed around the upstream
+command on its loopback connection — the server's execution time, not the
+reader's round trip. The plate no longer prints a client wall clock at all: it
+would track the network between the reader and the sandbox rather than the work
+`emb` did, and the whole point of the plate is the work. `cache.html` reports its
+two `elapsed_us` values the same way and says "network excluded" on the line.
+
+The batch gain is real but modest — a six-sequence pass costs about twice a
+single pass, not six times — and the plate draws whatever it measures rather than
+a figure from a README.
+
+The cache plate reads `EMB.INFO`'s per-model counters around a repeated call, so
+it never has to guess its own state. Cold passage on the dev machine:
+
+```
+first ask  4 190 µs — miss, and it filled the entry
+second ask   103 µs — a hit, served without the model
+cache moved +1 hit · +1 miss
+```
+
+Warm passage (the same line asked by an earlier reader) reports `+2 hits · +0
+misses` and says the first was already cached, rather than presenting it as a slow
+miss. `INFO cache` independently reports the server's overall rate (58.6 % at the
+time of writing).
+
+Both plates build their bars from the atlas's SVG atoms — `.atlas__svg`,
+`.atlas__frame`, `.atlas__mark` and its `is-hit` accent — so the two new pages add
+no colour, font, texture, or stylesheet rule. The accent is the winning side on
+the batch and the cached call on the cache.
+
+`published-tree.py` now serves 30 paths (from 28): the two plates are in `SERVED`
+and `PAGES`, and every internal reference resolves. `just website-presets-check`
+still reports 11 markers and 4 current digests, unaffected by the additions.
+
+## Visual first — 14.1 to 14.4
+
+The vector plate now draws the vector: 384 thin bars above and below a centre
+line, scaled to the largest magnitude, with one accent on the largest value. A
+live run reports `dim 384 · norm 0.99999998 · 1536 bytes` and draws exactly 384
+bars and 1 accent from the reply's own floats. The batch, cache, image, and graph
+figures all reuse the atlas's SVG atoms; the only stylesheet additions are two
+small rules in the gallery block (`.atlas__grid.is-hot`, the image plate's
+`.drop`) built from existing tokens, and no new custom property.
+
+`just website-ink` passes at all 24 widths for the vector, image, and graph
+plates, including 1086px and 390px.
+
+## Visual embeddings — 15.1 to 15.6
+
+**The model.** `Xenova/clip-vit-base-patch32` int8 is 153 695 702 bytes. Its
+fused graph declares `input_ids`, `pixel_values`, `attention_mask` and outputs
+`logits_per_image`, `logits_per_text`, `text_embeds`, `image_embeds`. The direct
+`EMB` path cannot feed it (the fused graph demands every input for either
+branch), which is exactly why the sandbox uses a script:
+
+- `zeroshot.lua` calls `emb.image.preprocess(KEYS[1])`, builds the unused branch
+  host-side (`fill = 0`, never a 150k-element Lua table), asks each run for one
+  output, and reduces packed float32 with `emb.similarity` and
+  `emb.math.softmax`. Eight labels is its own cap.
+- A local run over `website/assets/img/og.png` returns a distribution; the
+  brownish poster is the plate's own drawn pattern, labelled `chart or diagram`.
+
+**The transport.** `execRequest` gained `bin []int`; `decodeBinary` base64-decodes
+those indices and `isImageCall` admits the transport only for the sandbox's
+`zeroshot` digest. Bounds: `MaxImages: 2`, `MaxImageBytes: 256 KiB` in the
+bridge, `max_images: 2`, `max_image_bytes: 262144`, `max_image_pixels: 1048576`
+in `sandbox.yaml`. A decoded image is exempt from the 2 KiB text cap and bounded
+by the image cap instead. Tests cover the text-preset refusal, the raw-command
+refusal, the count cap, the byte cap, malformed base64, and an out-of-range
+index; `EMB.IMG`/`EMB.IMGMULTI` are still refused.
+
+**The page** downscales to a 512px long edge and re-encodes to JPEG before
+sending — a drawn pattern left as 8.1 KB on the wire. The bytes answer one
+request and are not stored.
+
+**The gate.** The model is ~154 MB of weights, the single biggest addition; it is
+phase C, still to be measured on the deployed machine (task 15.7). The gallery
+skips the plate if the machine cannot hold it, rather than the measurement.
+
+## The graph — 16.1 to 16.5
+
+`graph.lua` embeds its whole batch with one `emb.embed(KEYS, { bytes = true })`,
+computes the N×N cosine matrix in the server's process, and returns one value per
+key: `{from, edges = {{to, score}, …}, query}`. Two edges per node, self excluded
+by a `-1` sentinel. The matrix never crosses the wire.
+
+`graph.html` seeds eight corpus passages from a query, calls the preset by digest,
+and draws the result as a directed graph — nodes on a ring, one arrow per edge,
+the strongest edge the accent. A live run over the `the sea` seed reports `8
+nodes · 16 edges · strongest 1→2 0.672`, with the works (`Pym`, `Maelström`)
+listed below.
+
+The page reads each node's **nested** edge arrays back through `pairsToObject`
+(the wire is a flat pair list at every level); the first draft read them raw and
+printed `undefined→undefined NaN`. `pairsToObject` is now exported for exactly
+that reason.
+
+## Expansion verification — 17.1 to 17.4
+
+`published-tree: ok (32 served paths)`, `stamp-presets: ok (13 markers, 6
+digests)`, `openspec validate --strict: valid`, `go build ./...`, `go vet`, and
+`go test ./website/repl/` all pass. The gallery is now ten plates across four
+tiers: I the vector and the similarity; II the search and the atlas; III the
+lens, the function, the image, the batch, the cache; IV the graph.
+
+## The model lens, samples, and motion — 18.1 to 18.7
+
+**The lens rendered nothing.** `render()` built each layout as
+`Object.assign({}, la, { bounds: fit(la.points) })`, but `at()` reads
+`layout.x0/x1/y0/y1`. Every coordinate computed from `undefined`, so every mark
+was `cx="NaN"` and the plate was blank. The fix spreads the fit into the layout
+(`Object.assign({}, la, fit(la.points))`); verified: 2 782 marks render, and the
+two models' top-5 share 0 neighbours for the default query.
+
+Two more lens defects were fixed while there: the retrieved neighbours were
+computed into `layout.hit` but never read, and the morph relied on a CSS
+transition of SVG `cx`/`cy`. The neighbours are now lit on the current
+projection, and the morph uses the shared `tween` primitive.
+
+**The reduced-motion trap.** The first morph draft borrowed the previous
+position whenever `animate` was true and only animated the move when
+`motionAllowed()` was true — so a reader who prefers reduced motion got the
+*stale* map, not a cut. The fix is to borrow the old position only when it will
+actually be animated from. The image plate's bars had the same shape of bug
+(widths started at 0 and only the animated branch set them); under reduced motion
+they rendered at width 0. Both now go through `tween`, whose reduced-motion path
+runs `step(1)` once.
+
+`tween(ms, step)` is the gallery's one animation primitive: the waveform rises
+from the centre line, the graph's edges extend and its nodes open, the bars grow,
+and the atlas's query lands with one ripple. Every end state is identical with
+motion off.
+
+**The samples.** The image plate no longer accepts an upload. It ships six
+public-domain images (Doré's raven plate and *Raven* engraving, Aivazovsky's
+*Ninth Wave*, the Hartshorn Poe daguerreotype, Fitz Henry Lane's harbour, Van
+Gogh's *Sunflowers*), all at a 512px long edge (~44–97 KB each), with a credits
+note beside them that is excluded from the served tree. A live run labels the
+raven `raven` (0.2405) and the seascape `storm at sea` (0.2728), discriminating
+well enough to be convincing.
+
+`published-tree: ok (38 served paths)` — 32 plus the six samples.
+`just website-ink` passes at all 24 widths for the index, vector, lens, graph,
+image, atlas, batch, and cache plates, and `openspec validate --strict` is valid.
+
+**The flat distribution.** The first `zeroshot.lua` softmaxed the raw cosines,
+so eight labels came back at 12.1–12.9 % and the winner was invisible. CLIP is
+trained with a learned logit scale (≈100), and the scale is what turns a
+similarity into a distribution with a winner; the script now applies it before
+the softmax (`emb.math.scale(scores, 100)` → `emb.math.softmax`). The raven
+sample goes to `raven 51.7 %` and the seascape to `storm at sea 95.0 %`, so the
+chart reads as an answer instead of a tie.

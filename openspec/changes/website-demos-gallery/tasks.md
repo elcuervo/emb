@@ -78,3 +78,74 @@
 - [x] 10.3 Verify the sandbox is otherwise untouched: `just sandbox-test` passes, `website/repl/bridge.go`, `allowlist.go`, and `terminal.js` are unchanged, and the refuse list still includes raw scripts, images, config, and writes
 - [x] 10.4 Verify the gallery with scripting disabled — every plate carries its explanation, mechanism, scripts and commands and states that the interactive part requires scripting — and verify a plate with the sandbox blocked shows its unavailable state and no fabricated result
 - [ ] 10.5 Run `openspec validate website-demos-gallery --strict` and verify the change validates, then deploy and verify the origin serves the gallery's pages, wasm, and database and that a rebuild is not served stale
+
+## 11. Correct the atlas's order switch
+
+- [x] 11.1 Draw the named region rings and their labels only in the meaning order, and verify by placing the atlas by year that no region ring or label is drawn and none is left with a zero radius or an off-plate coordinate
+- [x] 11.2 Carry the mean year of the retrieved neighbours on the query's centroid and place it under the year order, and verify the query mark's `cx` is finite and sits at the mean year of what it retrieved
+- [x] 11.3 Redraw the query and the marks from data already held when the order switches, without issuing another sandbox command, and verify the switch makes no request and leaves the readout's layout line correct
+- [x] 11.4 State an empty result and a failed blend instead of rendering them as empty, and verify with the sandbox blocked that the blend states the condition, offers a retry, and shows no passage and no fabricated value
+- [x] 11.5 Read only `rowid, year` for the year order rather than every passage's text, and verify the atlas places correctly and the year order no longer materializes the whole corpus in the page
+
+## 12. The cost plates
+
+- [x] 12.1 Add `website/demos/batch.html`: six single `EMB` calls against one `EMB` carrying six texts, drawn to scale from the server's own `elapsed_us`, and verify a live run draws both bars and reports the measured ratio
+- [x] 12.2 Salt both sides of the batch comparison with a fresh per-run marker so neither side reads the other's cache, and verify the batched call is not served from the six calls' entries (the first draft measured 297× and was wrong)
+- [x] 12.3 Add `website/demos/cache.html`: one passage embedded twice with an `EMB.INFO` on each side, reporting the cache counter deltas and stating whether the first call was a hit or a miss; verify a cold passage reports `+1 miss · +1 hit` and shows the hit's lower time, and a warm passage reports both as hits rather than a fake miss
+- [x] 12.4 Link both plates from `website/demos/index.html`, state what each teaches, and update the index's plate count and tier copy from six to eight
+- [x] 12.5 Add both pages to `published-tree.py`'s `SERVED` and `PAGES`, and verify `python3 website/tools/published-tree.py` passes and reports every internal reference resolving
+- [x] 12.6 Verify both plates carry the five sections in order, one accent, passages (where used) attributed, and that the two plates add no custom property, colour, font, texture, or stylesheet rule — they reuse the atlas's SVG atoms for their bars
+
+## 13. Verify the corrections
+
+- [x] 13.1 Run `just website-published`, `just website-presets-check`, `just website-ink` over the gallery, landing, and docs surfaces, and verify all pass with no ink outside the viewport at any tested width
+- [x] 13.2 Against a local `emb`, verify in a browser that the atlas places correctly in both orders with a finite query mark and no region rings by year, that the batch reports a measured several-fold gain, and that the cache reports a cold miss then a hit with the server's counters
+- [x] 13.3 Run `openspec validate website-demos-gallery --strict` and verify the change validates with the new requirements
+
+## 14. Visual first
+
+- [x] 14.1 Draw the vector's 384 values as a waveform on `vector.html` — one bar per value above and below a centre line, scaled to the largest magnitude, with the single largest value the only accent — and verify a live run draws 384 bars and 1 accent from the reply's own floats
+- [x] 14.2 Trim the prose on the vector plate so each section reads beside the figure, and verify no section restates what the waveform shows
+- [x] 14.3 Build the batch, cache, image, and graph figures from the atlas's existing SVG atoms (`.atlas__svg`, `.atlas__mark`, `.atlas__mark.is-hit`, `.atlas__region`, `.atlas__label`) and verify the four new figures add no custom property, colour, font, or texture beyond the two small gallery rules declared
+- [x] 14.4 Verify with `just website-ink` that every changed plate still passes at all 24 widths, including the 1086px reference frame and 390px
+
+## 15. Visual embeddings, enabled with limits
+
+- [x] 15.1 Add the fused `clip` model (int8, 512-d, image block) and the `zeroshot.lua` preset to `website/repl/sandbox.yaml`; verify locally that the model loads, that `emb.image.preprocess` and the image branch run, and that the preset scores labels for an image
+- [x] 15.2 Write `zeroshot.lua` to supply the fused graph's unused branch as a host-built constant (`fill = 0`), request one output per run, reduce packed float32 with `emb.math`, and refuse more than eight labels; verify against a local `emb` that an image returns a label distribution
+- [x] 15.3 Add the base64 binary transport to the bridge (`execRequest.Bin`, `decodeBinary`, `isImageCall`) and admit it only for the sandbox's `zeroshot` digest, with tests for the text-preset refusal, the raw-command refusal, the count cap, the byte cap, malformed base64, and an out-of-range index
+- [x] 15.4 Add `MaxImages` and `MaxImageBytes` to the bridge's limits and the matching `max_images`, `max_image_bytes`, and `max_image_pixels` to `sandbox.yaml`; verify the bridge and the server both refuse an oversized image, and that a decoded image is exempt from the text-byte cap and not from the image cap
+- [x] 15.5 Add `image.html`: a drop target and a drawn-pattern fallback, a browser downscale to a 512px long edge, base64 through `imagePreset`, and label-probability bars with the top label the single accent; verify a live run downscales, sends under the cap, and renders a distribution from the server
+- [x] 15.6 Verify `EMB.IMG` and `EMB.IMGMULTI` are still refused through the bridge, that binary on any other command is refused, and that no image byte is stored or returned to another visitor
+- [ ] 15.7 Deploy and measure the `clip` model's steady RSS from `EMB.STATS`; if it does not fit beside the other int8 models at 2 GB, record the figure and ship the gallery without the image plate rather than resizing on a guess
+
+## 16. The graph, computed by a script
+
+- [x] 16.1 Write `graph.lua` — one batched `emb.embed`, an N-by-N cosine matrix reduced host-side by `emb.math.topk`, one value per key with its outgoing edges and its similarity to the query — and list it under `minilm` in `sandbox.yaml`
+- [x] 16.2 Add `graph.html`: seed the corpus with a query, fetch eight passages, call the preset by digest, and draw the edges as a directed graph with the strongest edge the single accent; verify a live run draws 8 nodes and 16 edges and names the strongest edge
+- [x] 16.3 Verify the page reads each node's nested edge arrays back into `{to, score}` rather than reading the wire's flat pairs, and that the strongest-edge readout is a real score
+- [x] 16.4 Link `image.html` and `graph.html` from the index, renumber the reading order to ten plates, and add both to `published-tree.py`'s `SERVED` and `PAGES`; verify `published-tree.py` passes
+- [x] 16.5 Add `zeroshot` and `graph` to `stamp-presets.py` and verify `just website-presets --check` reports every digest current and preloaded
+
+## 17. Verify the expansion
+
+- [x] 17.1 Run `just website-published`, `just website-presets-check`, and `just website-ink` over the landing, docs, 404, and every gallery plate, and verify all pass
+- [x] 17.2 Verify in a browser against a local `emb` that the vector waveform, the image labels, and the directed graph all render from live replies and degrade honestly with the sandbox blocked
+- [x] 17.3 Run `go test ./website/repl/ -count=1` and verify the new bridge transport and its limits pass without widening the surface
+- [x] 17.4 Run `openspec validate website-demos-gallery --strict` and verify the change validates with the image and visualization requirements
+
+## 18. The model lens, samples, and motion
+
+- [x] 18.1 Fix `lens.html`'s projection: the fitted bounds were nested under `bounds` while `at()` read `x0/x1/y0/y1`, so every coordinate was `NaN` and the plate rendered nothing; verify all 2 782 marks render and the two models' rankings differ
+- [x] 18.2 Light the query's retrieved neighbours on the current projection and re-render after a search, and verify the highlighted marks appear on both lenses
+- [x] 18.3 Replace the lens's CSS-transition morph with the shared `tween` primitive, and verify against motion allowed that the marks move between layouts and that under reduced motion the switch is a cut to the new layout rather than a stale map
+- [x] 18.4 Add `tween(ms, step)` to `demos.js` — one primitive that runs `step(1)` once when the reader prefers reduced motion — and use it for the vector waveform, the graph's edges and nodes, the image's and the cost plates' bars, and the atlas's query ripple and neighbour flare; verify each figure is complete with reduced motion on and animates with it off
+- [x] 18.5 Replace the image plate's upload with six public-domain samples (committed at a 512px long edge, with a credits note), keep the client-side bound, and verify a live run labels the raven `raven` and the seascape `storm at sea` with no file input present
+- [x] 18.6 Add the samples and their credits note to `published-tree.py`/`.assetsignore`, and verify `published-tree.py` passes and the credits note is not served
+- [x] 18.7 Run `just website-published`, `just website-presets-check`, and `just website-ink` over every changed plate, and verify all pass at all 24 widths; run `openspec validate website-demos-gallery --strict`
+
+## 19. The cost figures are execution time, not network time
+
+- [x] 19.1 Remove the client wall clock from `batch.html` — the page no longer times its own requests — and verify the plate draws and reports only the server's `elapsed_us`
+- [x] 19.2 State on both cost plates that the figure is the bridge's bracket around the upstream command, with the network excluded, and verify the copy and the readout agree
+- [x] 19.3 Tighten the `embedding-demos` cost requirement: the time a cost demo shows MUST be measured at or beside the server and MUST NOT be a client clock around the request; verify `openspec validate --strict` passes and no plate prints a wall-clock duration

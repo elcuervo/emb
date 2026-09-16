@@ -217,7 +217,7 @@ SELECT rowid FROM vec_bge_small WHERE embedding MATCH vec_int8(:q) AND k = 5;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation, motionAllowed } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, motionAllowed, tween } from '../assets/js/demos.js';
 const g = gallery();
 const A = 'minilm', B = 'bge-small';
 const W = 1000, H = 420, PAD = 30;
@@ -251,27 +251,34 @@ function at(layout, p) {
 function render(model, animate) {
   const layout = layouts[model];
   if (!layout) { return; }
-  const existing = new Map(Array.from(plot.querySelectorAll('[data-rowid]'))
-    .map((n) => [n.getAttribute('data-rowid'), n]));
+  const previous = new Map(Array.from(plot.querySelectorAll('[data-rowid]'))
+    .map((n) => [n.getAttribute('data-rowid'), { x: Number(n.getAttribute('cx')), y: Number(n.getAttribute('cy')) }]));
   plot.replaceChildren(svg('rect', { class: 'atlas__frame', x: PAD, y: PAD, width: W - 2 * PAD, height: H - 2 * PAD }));
+  const nodes = [];
   layout.points.forEach((p) => {
     const [x, y] = at(layout, p);
-    const node = svg('circle', { class: 'atlas__mark', 'data-rowid': p.rowid,
-                                 cx: x.toFixed(1), cy: y.toFixed(1), r: 1.4 });
-    // The morph is the one place motion is the argument: the same passages,
-    // re-placed. With reduced motion asked for, it is a cut.
-    if (animate && existing.has(String(p.rowid)) && motionAllowed()) {
-      const before = existing.get(String(p.rowid));
-      node.setAttribute('cx', before.getAttribute('cx'));
-      node.setAttribute('cy', before.getAttribute('cy'));
-      requestAnimationFrame(() => {
-        node.style.transition = 'cx .5s linear, cy .5s linear';
-        node.setAttribute('cx', x.toFixed(1));
-        node.setAttribute('cy', y.toFixed(1));
-      });
-    }
+    // A passage the query retrieved under this model is lit on this projection:
+    // the same passages, two maps, the neighbours shown where each model puts
+    // them.
+    const hit = layout.hit && layout.hit.has(p.rowid);
+    const prev = previous.get(String(p.rowid));
+    // With reduced motion this is a cut: the node is drawn where the new layout
+    // puts it. The morph only borrows the old position when it will animate
+    // from it, so the reduced-motion reader never sees a stale map.
+    const from = animate && prev && motionAllowed() ? prev : { x: x, y: y };
+    const node = svg('circle', { class: 'atlas__mark' + (hit ? ' is-hit' : ''), 'data-rowid': p.rowid,
+                                 cx: from.x.toFixed(1), cy: from.y.toFixed(1), r: hit ? 2.6 : 1.4 });
+    nodes.push({ node: node, from: from, to: { x: x, y: y } });
     plot.appendChild(node);
   });
+  // The morph is the one place motion is the argument: the same passages,
+  // re-placed by the other model. Reduced motion gets the cut.
+  if (animate && motionAllowed()) {
+    tween(560, (t) => nodes.forEach((n) => {
+      n.node.setAttribute('cx', (n.from.x + (n.to.x - n.from.x) * t).toFixed(1));
+      n.node.setAttribute('cy', (n.from.y + (n.to.y - n.from.y) * t).toFixed(1));
+    }));
+  }
   shown = model;
 }
 function setState(next, message) {
@@ -305,6 +312,7 @@ async function run() {
       const layout = layouts[m];
       if (layout) { layout.hit = new Set((m === A ? fa : fb).map((h) => h.rowid)); }
     });
+    render(shown, false);
     out.hidden = false;
     setState('ready');
   } catch (err) {
@@ -332,8 +340,11 @@ g.manifest().then((m) => {
   document.querySelector('[data-fig-dim]').textContent = a.dimension + ' vs ' + b.dimension;
   return Promise.all([g.atlas(A), g.atlas(B)]);
 }).then(([la, lb]) => {
-  layouts[A] = Object.assign({}, la, { bounds: fit(la.points) });
-  layouts[B] = Object.assign({}, lb, { bounds: fit(lb.points) });
+  // `at()` reads the bounds as top-level fields, so the fit is spread in rather
+  // than nested: `Object.assign({}, la, { bounds: fit(la.points) })` left
+  // x0/x1/y0/y1 undefined and every coordinate NaN.
+  layouts[A] = Object.assign({}, la, fit(la.points));
+  layouts[B] = Object.assign({}, lb, fit(lb.points));
   render(A, false);
   return run();
 }).catch((err) => { setState(err.state || 'error', err.message); });

@@ -39,6 +39,8 @@ PRESETS = {
     "classify": ("sst2", "website/repl/presets/classify.lua"),
     "rank": ("minilm", "website/repl/presets/rank.lua"),
     "between": ("minilm", "website/repl/presets/between.lua"),
+    "graph": ("minilm", "website/repl/presets/graph.lua"),
+    "zeroshot": ("clip", "website/repl/presets/zeroshot.lua"),
 }
 
 SANDBOX_CONFIG = "website/repl/sandbox.yaml"
@@ -51,6 +53,8 @@ TARGETS = [
     "website/demos/atlas.html",
     "website/demos/lens.html",
     "website/demos/function.html",
+    "website/demos/image.html",
+    "website/demos/graph.html",
 ]
 
 # Leftmost-longest, and narrow: only the marker attribute's own value is

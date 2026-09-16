@@ -523,6 +523,7 @@ website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
 #     just website-ink                          # the landing
 #     just website-ink http://localhost:8080 docs   # the documentation surface
 #     just website-ink http://localhost:8080 404    # the not-found page
+#     just website-ink http://localhost:8080 demos/batch.html   # a single plate
 #
 # The wait is not optional: the probe measures all 24 widths asynchronously, and
 # evaluating before `window.__inkProbe` exists reports "RUNNING…". The assertion

@@ -2365,6 +2365,11 @@ html.js.is-ready .hero__prose{
 .atlas__mark{ fill: var(--rule); }
 .atlas__mark.is-hit{ fill: var(--accent); }
 .atlas__grid{ stroke: var(--rule-dark); stroke-width: 1; }
+.atlas__grid.is-hot{ stroke: var(--accent); }
+/* The graph plate's edges are the claim, so they read brighter than the
+   graticule; the strongest is the accent. */
+.atlas__edge{ stroke: var(--rule); stroke-width: 1; }
+.atlas__edge.is-hot{ stroke: var(--accent); stroke-width: 1.6; }
 .atlas__frame{ stroke: var(--rule-dark); stroke-width: 1; fill: none; }
 .atlas__region{
   font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
@@ -2374,6 +2379,45 @@ html.js.is-ready .hero__prose{
 .atlas__label{
   font-family: var(--mono); font-size: 11px; letter-spacing: .05em;
   fill: var(--accent); text-transform: uppercase;
+}
+
+/* The image plate's drop target: a ruled box on the dark plate, in the same
+   tokens as the console's controls. No new colour, radius, gradient, or shadow;
+   the accent appears only while a file is over it. */
+.drop{
+  display: grid; place-items: center; gap: 10px;
+  padding: clamp(14px, 2vw, 28px); min-height: 44px;
+  border: 1px dashed var(--rule-dark); cursor: pointer;
+}
+.drop.is-over{ border-color: var(--accent); }
+.drop__img{ display: block; max-width: 100%; max-height: 320px; margin: 0 auto; }
+.drop__hint{
+  font-family: var(--mono); font-size: 12px; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--rule); margin: 0;
+}
+
+/* The sample picker: a plate of plates. Thumbnails are held back in grey and
+   released to their own colour when chosen, so the subject is the signal and
+   the accent is the one selected. */
+.samples{
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 1px; background: var(--rule-dark); border: 1px solid var(--rule-dark);
+  margin-bottom: clamp(14px, 1.6vw, 22px);
+}
+.samples button{
+  aspect-ratio: 1; padding: 0; border: 0; background: #111110; cursor: pointer;
+  overflow: hidden; position: relative;
+}
+.samples img{
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  filter: grayscale(1) brightness(.82);
+}
+.samples button:hover img,
+.samples button[aria-pressed="true"] img{ filter: none; }
+.samples button:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
+.samples button[aria-pressed="true"]{ outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference){
+  .samples img{ transition: filter .25s linear; }
 }
 
 /* The reply shapes, side by side: the same primitive, four answers. */

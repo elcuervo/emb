@@ -195,3 +195,138 @@ Every corpus shipped with the gallery SHALL be public domain or openly licensed 
 
 - **WHEN** a corpus is acquired from a public source
 - **THEN** the acquisition headers and footers are stripped before embedding, and the check that builds the index fails if they are present
+
+### Requirement: The atlas's order switch changes only the axis it names
+
+A plate that offers an order switch SHALL draw each mark at the coordinate that
+order defines, and MUST NOT draw an element at a coordinate the order cannot
+supply. Under an order that places passages by an attribute they carry — a year —
+an element that does not carry that attribute MUST be placed by an attribute it
+does have, or omitted, rather than placed at the attribute's zero. Switching the
+order SHALL NOT require re-embedding or re-searching: the plate redraws from the
+data it already holds.
+
+#### Scenario: The named regions belong to the meaning order
+
+- **WHEN** the atlas is placed by year
+- **THEN** the named cluster regions are not drawn, because a chronology has no clusters, and no ring or label is drawn at the origin of the year axis
+
+#### Scenario: A query has no publication year
+
+- **WHEN** the atlas is placed by year and a query has landed
+- **THEN** the query's mark is placed at the mean year of the neighbours it retrieved, or is omitted, and is never placed at a non-finite coordinate
+
+#### Scenario: Switching the order does not re-query
+
+- **WHEN** a reader switches the atlas's order
+- **THEN** the plate redraws from the projection it already holds without issuing another sandbox command
+
+#### Scenario: An order without a coordinate is the year's
+
+- **WHEN** a passage has no recorded year
+- **THEN** its placement under the year order falls back to a defined value and does not compute a non-finite coordinate
+
+### Requirement: A failed interaction is stated, never rendered as an empty result
+
+Every interactive instrument SHALL report the condition that stopped it. An
+instrument MUST NOT swallow a failure and render its normal empty state, because
+an empty result and a failed request are different facts and a reader cannot tell
+them apart. A failed instrument SHALL offer the same retry the rest of the plate
+offers and SHALL show no value it did not receive.
+
+#### Scenario: A second instrument fails honestly
+
+- **WHEN** any of a plate's instruments fails — the primary query or a secondary one such as a blend
+- **THEN** that instrument states the condition and offers a retry, and does not present the failure as a result with no items
+
+#### Scenario: No fabricated value on failure
+
+- **WHEN** an instrument cannot complete its call
+- **THEN** it shows no vector, no ranking, and no timing for the attempt
+
+### Requirement: A cost demo measures the server's execution time, not the network
+
+A demo whose subject is what a call costs SHALL measure the server's own
+reported work — its per-command `elapsed_us`, or its cache counters — and SHALL
+display the measured value rather than a claimed speed-up. The time a cost demo
+shows MUST be execution time measured at or beside the server, and MUST NOT be a
+client clock around the request, which folds in the network between the reader and
+the sandbox and makes the figure track distance rather than work. A demo MUST NOT
+present a comparison as measured when one side read the other side's cache, and
+SHALL keep the two sides of a comparison from warming each other, or SHALL report
+the cache state that makes them incomparable. The plate SHALL show whether a
+repeated call was a hit or a miss, derived from the server's counters rather than
+assumed.
+
+#### Scenario: The measurement is the server's execution time
+
+- **WHEN** a cost demo displays a time
+- **THEN** the time is the server's reported `elapsed_us`, measured by the bridge around the upstream command, and the plate states that the network is not counted
+
+#### Scenario: The page does not time the request
+
+- **WHEN** a cost demo runs a command
+- **THEN** it does not measure the request with a client clock, and no figure it draws is a wall-clock duration that includes the client's network
+
+#### Scenario: A comparison is not made cheaper by the other side's cache
+
+- **WHEN** a cost demo compares batched calls against single calls
+- **THEN** the two sides do not share cache entries, and where they would, the plate separates them and says so
+
+#### Scenario: A repeat is shown, not claimed
+
+- **WHEN** a cost demo asks for the same text twice
+- **THEN** it reads the model's cache counters around the pair and states whether the first call was a hit or a miss, so a warm cache is reported rather than presented as a cold cost
+
+#### Scenario: The claim follows the numbers
+
+- **WHEN** the measured speed-up is smaller than the copy implies, or is absent
+- **THEN** the plate displays the measured value and makes no stronger claim, and a first call that was already cached is stated as such rather than shown as a slow miss
+
+### Requirement: Every plate carries a figure built from the live reply
+
+Each plate SHALL carry at least one visualization generated from the data it
+actually received — the vector's values, the ranked neighbours, the label
+probabilities, the measured times, the graph's edges — and the prose SHALL serve
+the figure rather than replace it. A figure MUST NOT be a static image, a
+screenshot, or a hand-drawn sketch of a result: it is drawn from the reply, so a
+changed reply changes the figure. A plate that explains a result only in words
+MUST NOT ship where the result has a shape.
+
+#### Scenario: A figure is generated, not pasted
+
+- **WHEN** a plate is reviewed
+- **THEN** its visualization is constructed at runtime from the reply's own values, and no image file is presented as a result
+
+#### Scenario: The prose is a caption
+
+- **WHEN** a plate's sections are read
+- **THEN** each section is short enough to read beside the figure, and no section restates in prose what the figure makes visible
+
+#### Scenario: The figure reuses the instrument's atoms
+
+- **WHEN** a new visualization is added
+- **THEN** it is built from the site's existing SVG and type atoms, and it introduces no new colour, font, texture, card, gradient, panel, or stylesheet token
+
+#### Scenario: A reduced-motion reader keeps the figure
+
+- **WHEN** a reader prefers reduced motion
+- **THEN** every figure is drawn in one frame, and no figure depends on an animation having run
+
+### Requirement: The gallery shows a script computing structure, not only a value
+
+At least one plate SHALL show the scripting surface computing over many vectors
+at once — a nearest-neighbour graph, a ranking, or a reduction — and SHALL state
+what crosses the wire and what does not. The plate MUST call a preloaded preset
+by digest, and the work it demonstrates MUST share the server's own batcher and
+cache rather than opening a second model.
+
+#### Scenario: The structure is computed beside the model
+
+- **WHEN** the graph plate runs
+- **THEN** a preloaded preset embeds its whole batch in one call, reduces the pairwise comparison host-side, and returns edges rather than the full matrix
+
+#### Scenario: The interactive structure is drawn
+
+- **WHEN** the graph plate returns its edges
+- **THEN** the plate draws them as a directed graph, with the strongest edge the single accent, and the nodes carry the passages they came from

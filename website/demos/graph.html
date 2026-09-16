@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the graph — a similarity graph built by a script</title>
+<link rel="canonical" href="https://emb.is/demos/graph.html">
+<meta name="description" content="Eight passages from the corpus, embedded in one batch and linked to their nearest neighbours by a Lua script on the server. A directed graph of the space, computed next to the model.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the graph — a similarity graph built by a script">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="The scripting layer computes an N-by-N similarity graph next to the model and returns edges, not a matrix. Drawn as a directed graph.">
+<meta property="og:url" content="https://emb.is/demos/graph.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the graph — a similarity graph built by a script">
+<meta name="twitter:description" content="The scripting layer computes an N-by-N similarity graph next to the model and returns edges, not a matrix. Drawn as a directed graph.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../index.html#start">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The graph</h1>
+          <p class="plate__teaches">
+            Each passage points at its nearest neighbours. The regions of the
+            atlas are the cloud; here they are the edges, computed by a script
+            beside the model.
+          </p>
+        </div>
+        <div>
+          <p class="fig"><b>FIG. 10 — THE GRAPH</b>
+            · <b data-fig-nodes>8</b> nodes
+            · <b data-fig-edges>16</b> edges
+            · <b>one batch</b> to embed
+            · <b>computed in Lua</b></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+            <p class="block__deck">
+              A directed graph: an arrow from one passage to another means the
+              first is closer to the second than to most things. No layout is
+              pretending to be geography — the ring is just a place to stand, and
+              the arrows are the only claim. Dense clusters show up as mutual
+              arrows; lonely passages point out and are not pointed at.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+
+            <div data-live class="rig" data-rig="graph" data-emb-preset-graph="6c532f7a5551b4a2c1d210e62ae4be36b3d4bce2">
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="g-q">A seed query</label>
+                <input class="rig__input" id="g-q" autocomplete="off" spellcheck="false" value="the sea">
+                <button class="rig__go" type="submit">Build the graph</button>
+              </form>
+              <svg class="atlas__svg" data-plot viewBox="0 0 640 480" role="img"
+                   aria-label="Eight passages as nodes, each pointing at its two nearest neighbours"></svg>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+                <div data-map></div>
+              </div>
+            </div>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+            <p class="block__deck">
+              The page embedded the seed, took the corpus's eight nearest
+              passages, and sent those eight texts to <span class="t-cmd">graph.lua</span>
+              on the sandbox. The script called
+              <span class="t-cmd">emb.embed</span> once for all eight — the same
+              batcher and cache as <span class="t-cmd">EMB</span> — built the
+              eight-by-eight cosine matrix, and returned each node's two nearest
+              neighbours.
+            </p>
+            <p class="block__deck">
+              The matrix never crossed the wire. Sixty-four cosines became
+              sixteen edges inside the server's process, over packed float32
+              buffers, with <span class="t-cmd">emb.math.topk</span> doing the
+              ordering host-side. That is the scripting layer's whole argument
+              in one request: move the arithmetic to the data.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+            <p class="block__deck">
+              Nearest-neighbour graphs are how search finds more than the top-k:
+              recommend what is near what you liked, cluster by connected
+              components, spot the outlier nothing points at. All of it is the
+              same cosine, and all of it is cheap when the graph is built where
+              the vectors already are.
+            </p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+            <p class="block__deck">
+              One scripted command over eight texts and a query, plus the
+              <span class="t-cmd">vec0</span> search that chose the eight.
+            </p>
+<div class="code"><pre class="code__body"><code>SELECT rowid FROM vec_minilm
+  WHERE embedding MATCH vec_int8(:q) AND k = 8;
+# the eight seed passages, fetched by the page
+
+EMB.EVSHA minilm &lt;graph.lua sha1&gt; 8 "p1" … "p8" "the sea"
+# -> { {from=1, edges={{to=4,score=0.71},…}, query=0.42}, … }
+
+# inside graph.lua:
+#   local vecs = emb.embed(KEYS, { bytes = true })
+#   scores[j] = emb.similarity(vecs[i], vecs[j], "cosine")
+#   local top = emb.math.topk(scores, 2)   -- edges, not the matrix</code></pre></div>
+      </div></div>
+    </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. Open source, forever.</p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, pairsToObject, tween } from '../assets/js/demos.js';
+const g = gallery();
+const MODEL = 'minilm';
+const N = 8;
+const root = document.querySelector('[data-rig="graph"]');
+const form = root.querySelector('[data-form]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const map = root.querySelector('[data-map]');
+const plot = document.querySelector('[data-plot]');
+const go = root.querySelector('.rig__go');
+const NS = 'http://www.w3.org/2000/svg';
+const CX = 320, CY = 240, R = 180;
+
+function svg(tag, attrs) {
+  const node = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function label(text, x, y, cls, anchor) {
+  const node = svg('text', { class: cls || 'atlas__region', x: x, y: y, 'text-anchor': anchor || 'middle' });
+  node.textContent = text;
+  return node;
+}
+function point(i) {
+  const a = -Math.PI / 2 + (i / N) * Math.PI * 2;
+  return { x: CX + R * Math.cos(a), y: CY + R * Math.sin(a) };
+}
+function defs() {
+  const d = svg('defs', {});
+  const cold = svg('marker', { id: 'arrow', viewBox: '0 0 8 8', refX: '7', refY: '4', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' });
+  cold.appendChild(svg('path', { d: 'M0,0 L8,4 L0,8 z', class: 'atlas__mark' }));
+  const hot = svg('marker', { id: 'arrow-hot', viewBox: '0 0 8 8', refX: '7', refY: '4', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' });
+  hot.appendChild(svg('path', { d: 'M0,0 L8,4 L0,8 z', class: 'atlas__mark is-hit' }));
+  d.appendChild(cold); d.appendChild(hot);
+  return d;
+}
+/* The graph: nodes on a ring, each arrow one outgoing edge. The strongest edge
+ * is the plate's single accent, and the node nearest the query is filled. The
+ * edges draw themselves in — that is the one animation, and with reduced motion
+ * asked for the figure is drawn complete in one frame. */
+function draw(nodes, animate) {
+  const parts = [defs()];
+  const lines = [], circles = [];
+  let strongest = null;
+  (nodes || []).forEach((n) => (n.edges || []).forEach((e) => {
+    if (!strongest || e.score > strongest.score) { strongest = { from: n.from, to: e.to, score: e.score }; }
+  }));
+  (nodes || []).forEach((n) => {
+    (n.edges || []).forEach((e) => {
+      const a = point((n.from || 1) - 1), b = point((e.to || 1) - 1);
+      const hot = strongest && n.from === strongest.from && e.to === strongest.to;
+      const line = svg('line', {
+        class: 'atlas__edge' + (hot ? ' is-hot' : ''),
+        x1: a.x.toFixed(1), y1: a.y.toFixed(1), x2: b.x.toFixed(1), y2: b.y.toFixed(1),
+        'marker-end': 'url(#' + (hot ? 'arrow-hot' : 'arrow') + ')'
+      });
+      lines.push(line);
+      parts.push(line);
+    });
+  });
+  const best = (nodes || []).reduce((m, n) => (n.query > (m === null ? -2 : m) ? n.query : m), null);
+  (nodes || []).forEach((n, i) => {
+    const p = point(i);
+    const hotNode = best !== null && n.query >= best;
+    const r = 3 + Math.max(0, n.query || 0) * 9;
+    const c = svg('circle', { class: 'atlas__mark' + (hotNode ? ' is-hit' : ''), cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: animate ? 0 : r.toFixed(1), 'data-r': r.toFixed(1) });
+    circles.push(c);
+    parts.push(c);
+    parts.push(label(String(n.from), p.x.toFixed(1), (p.y - r - 6).toFixed(1), 'atlas__region'));
+  });
+  plot.replaceChildren.apply(plot, parts);
+  if (!animate || !nodes || !nodes.length) { return; }
+  const drawn = lines.map((line) => ({ line: line, len: line.getTotalLength ? line.getTotalLength() : 0 }));
+  drawn.forEach((d) => { d.line.setAttribute('stroke-dasharray', d.len.toFixed(1)); d.line.setAttribute('stroke-dashoffset', d.len.toFixed(1)); });
+  const span = 620 + drawn.length * 26;
+  tween(span, (t) => {
+    const now = t * span;
+    drawn.forEach((d, i) => {
+      const p = Math.max(0, Math.min(1, (now - i * 26) / 620));
+      d.line.setAttribute('stroke-dashoffset', (d.len * (1 - p)).toFixed(1));
+    });
+    circles.forEach((c, i) => {
+      const target = Number(c.getAttribute('data-r'));
+      const p = Math.max(0, Math.min(1, (now - i * 34) / 380));
+      c.setAttribute('r', (target * p).toFixed(2));
+    });
+  });
+}
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+async function run() {
+  const query = root.querySelector('#g-q').value;
+  go.disabled = true;
+  setState('running');
+  draw(null);
+  try {
+    const found = await g.search(MODEL, query, N);
+    const passages = await g.passages(found.map((h) => h.rowid));
+    const digest = root.getAttribute('data-emb-preset-graph');
+    const reply = await g.preset(MODEL, digest, passages.map((p) => p.text), [query]);
+    const nodes = (Array.isArray(reply) ? reply : [reply]).map((n) => ({
+      from: n.from, query: n.query, edges: (n.edges || []).map(pairsToObject)
+    }));
+    draw(nodes, true);
+    let edges = 0;
+    let strongest = null;
+    nodes.forEach((n) => (n.edges || []).forEach((e) => {
+      edges++;
+      if (!strongest || e.score > strongest.score) { strongest = { from: n.from, to: e.to, score: e.score }; }
+    }));
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'seed ' }),
+      el('b', { text: '"' + query + '"' }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: nodes.length + ' nodes · ' + edges + ' edges' }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: 'strongest ' }),
+      el('b', { text: strongest ? (strongest.from + '→' + strongest.to + ' ' + Number(strongest.score).toFixed(3)) : '—' })
+    );
+    map.replaceChildren.apply(map, passages.map((p, i) => el('p', {
+      class: 'drop__hint',
+      text: (i + 1) + '. ' + (p.work || '') + (p.year ? ' · ' + p.year : '')
+    })));
+    out.hidden = false;
+    setState('ready');
+  } catch (err) {
+    draw(null);
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+  }
+}
+form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+draw(null);
+
+</script>
+</body>
+</html>
