@@ -70,7 +70,7 @@ while read -r when action model; do
   if [ "$action" = start ]; then
     # shellcheck disable=SC2086 # the row is a whitespace-separated plan line
     set -- $(printf '%s\n' "$PLAN" | awk -v m="$model" '$1 == m')
-    band "$1" "$4" "$5" "$6" "${7}" &
+    band "$1" "$4" "$5" "$6" "${*:7}" &
     echo $! > "$pids_dir/$model"
   else
     # The band's own redis-benchmark child may outlive this by one batch; that

@@ -210,12 +210,30 @@ func testLimits() Limits {
 
 func newTestBridge(t *testing.T, upstream string, p presets, l Limits, origins ...string) *Bridge {
 	t.Helper()
-	return NewBridge(upstream, p, l, origins)
+	return NewBridge(upstream, p, l, origins, false)
 }
 
 func mustExec(t *testing.T, b *Bridge, args []string, proto int) (Envelope, int) {
 	t.Helper()
 	return b.Execute(args, proto, "test-client")
+}
+
+func TestClientKeyIgnoresForwardedForUnlessTrusted(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/exec", nil)
+	req.RemoteAddr = "203.0.113.7:5555"
+	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+
+	if got := (&Bridge{}).clientKey(req); got != "203.0.113.7" {
+		t.Fatalf("untrusted clientKey = %q, want the peer address", got)
+	}
+	if got := (&Bridge{trustProxy: true}).clientKey(req); got != "10.0.0.1" {
+		t.Fatalf("trusted clientKey = %q, want the forwarded address", got)
+	}
+
+	req.Header.Set("Fly-Client-IP", "198.51.100.9")
+	if got := (&Bridge{}).clientKey(req); got != "198.51.100.9" {
+		t.Fatalf("Fly clientKey = %q, want the Fly-Client-IP", got)
+	}
 }
 
 // --- 3.1 health and readiness ---------------------------------------------

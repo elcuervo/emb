@@ -227,6 +227,11 @@
     var cursor = -1; /* one past the end while walking; -1 when not walking */
     var draft = '';
     var attempts = 0;
+    /* A retry timer can outlive the command that set it: a reader who submits
+       again while a cold sandbox is retrying must not have the older command's
+       reply land on top of the newer one. Every submission bumps `generation`,
+       and a callback from an older one is ignored. */
+    var generation = 0;
     var maxAttempts = opts.maxAttempts === undefined ? 8 : opts.maxAttempts;
     var retryDelay = opts.retryDelay === undefined ? 1000 : opts.retryDelay;
     var transcript = [];
@@ -287,16 +292,19 @@
       });
     }
 
-    function run(args) {
+    function run(args, gen) {
       set('running');
       request(args).then(function (env) {
+        if (gen !== generation) { return; }
         if (env && env.code === 'starting' && attempts < maxAttempts) {
           attempts += 1;
           set('starting', env);
           pushTransient([{ t: 'starting — the sandbox is waking; retrying…', k: 'dim' }]);
           // Back off gently: a cold machine that is loading its models answers
           // "starting" for tens of seconds, and hammering it helps nobody.
-          global.setTimeout(function () { run(args); }, retryDelay * Math.min(attempts, 4));
+          global.setTimeout(function () {
+            if (gen === generation) { run(args, gen); }
+          }, retryDelay * Math.min(attempts, 4));
           return;
         }
         attempts = 0;
@@ -308,6 +316,7 @@
         push(format(env).concat([timing()]));
         set(env && env.kind === 'error' ? 'error' : 'result', env);
       }, function () {
+        if (gen !== generation) { return; }
         push([{ t: 'offline — the sandbox could not be reached', k: 'dim' }]);
         set('offline', { kind: 'error', code: 'offline', text: 'the sandbox could not be reached' });
       });
@@ -346,6 +355,7 @@
           return;
         }
         if (!args.length) { return; }
+        generation += 1;
         attempts = 0;
         last = args;
         startedAt = nowMs();
@@ -362,13 +372,14 @@
         transcript = [{ t: line, k: 'echo' }];
         transientStart = transcript.length;
         emit();
-        run(args);
+        run(args, generation);
       },
       retry: function () {
         if (!last) { set('idle'); return; }
+        generation += 1;
         attempts = 0;
         startedAt = nowMs();
-        run(last);
+        run(last, generation);
       }
     };
   }

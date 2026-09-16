@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# No job needs more than to read the tree, and `pull_request` runs the fork's
+# own Go tests. Least privilege keeps a persisted credential worthless to code
+# that does not own the repository.
+permissions:
+  contents: read
+
 jobs:
   # Decides whether the Go and gem suites have anything to check. A diff
   # confined to `website/` cannot change the server, the tokenizer, or the
@@ -174,6 +180,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # This job runs the fork's own Go tests; do not leave the workflow
+          # token in the checkout's git config for them to read.
+          persist-credentials: false
 
       - uses: actions/setup-go@v6
         with:

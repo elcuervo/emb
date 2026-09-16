@@ -26,6 +26,7 @@ func main() {
 	upstream := flag.String("upstream", "127.0.0.1:6379", "emb server address (loopback only)")
 	configPath := flag.String("config", "", "emb server config, read for the preloaded preset digests")
 	origins := flag.String("origins", "", "comma-separated CORS origin allowlist")
+	trustProxy := flag.Bool("trust-proxy", false, "key the per-client rate limit on X-Forwarded-For (only when a trusted proxy sets it)")
 	timeout := flag.Duration("timeout", 0, "per-command upstream deadline (0 = default)")
 	embTop := flag.String("emb-top", "emb-top", "path to the emb-top binary that feeds the live dashboard")
 	statsEvery := flag.Duration("stats-interval", statsInterval, "poll interval for the live dashboard")
@@ -42,7 +43,7 @@ func main() {
 		limits.Timeout = *timeout
 	}
 
-	b := NewBridge(*upstream, p, limits, strings.Split(*origins, ","))
+	b := NewBridge(*upstream, p, limits, strings.Split(*origins, ","), *trustProxy)
 
 	// The live dashboard is a child process, so a stop signal must reach it.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -52,6 +53,10 @@ func main() {
 		Addr:              *listen,
 		Handler:           b.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Bound the whole request read so a client cannot hold a connection
+		// open by dribbling a body. WriteTimeout stays unset: /api/stats is an
+		// unbounded SSE stream and a write deadline would cut it off.
+		ReadTimeout: 30 * time.Second,
 	}
 	go func() {
 		<-ctx.Done()

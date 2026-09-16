@@ -225,6 +225,18 @@ func TestReadReplyRESP3Shapes(t *testing.T) {
 	}
 }
 
+func TestReadReplyMapLengthOverflowIsRejected(t *testing.T) {
+	// A map length near MaxInt makes n*2 wrap, so a check that multiplies first
+	// passes and the capacity goes negative. The check must compare n against
+	// MaxArrayLen/2, or a malformed reply panics the reader instead of erroring.
+	c := dial(t, serveOnce(t, []byte("%9223372036854775807\r\n"), time.Second))
+	defer c.Close()
+
+	if _, err := c.ReadReply(); err == nil || !strings.Contains(err.Error(), "map length") {
+		t.Fatalf("err = %v, want a map-length error", err)
+	}
+}
+
 func TestReadReplyRESP3NestedMap(t *testing.T) {
 	// HELLO 3's reply is a map of mixed values, including a nested map: the
 	// shape the bridge reads back after negotiating.

@@ -129,6 +129,14 @@ def main() -> int:
         print(f"stamp-presets: ok ({seen} marker(s), all {len(digests)} digests current)")
         return 0
 
+    # Write mode rewrites the digests it can, but the configuration failures
+    # (missing target, unloaded preset) are not something a write can fix, so
+    # they still fail the run rather than printing "nothing to do".
+    if failures:
+        for line in failures:
+            print(f"stamp-presets: {line}", file=sys.stderr)
+        return 1
+
     if touched:
         for line in touched:
             print(f"stamp-presets: {line}")

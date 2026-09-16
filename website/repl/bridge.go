@@ -49,6 +49,11 @@ type Bridge struct {
 	lim      *limiter
 	mu       sync.Mutex // serializes the upstream connection
 
+	// trustProxy reads X-Forwarded-For for the per-client rate-limit key.
+	// Fly-Client-IP is always trusted (the Fly proxy sets it and is the only
+	// path to the app); this gates the header any other client can forge.
+	trustProxy bool
+
 	now    func() time.Time
 	ready  atomic.Bool
 	everOK atomic.Bool
@@ -67,8 +72,8 @@ func (e *bridgeError) Error() string { return e.text }
 
 // NewBridge wires a bridge to one upstream emb address. presets is the digest
 // manifest the server preloaded; origins is the CORS allowlist (the site and
-// its preview aliases).
-func NewBridge(upstream string, p presets, limits Limits, origins []string) *Bridge {
+// its preview aliases); trustProxy makes X-Forwarded-For the client key.
+func NewBridge(upstream string, p presets, limits Limits, origins []string, trustProxy bool) *Bridge {
 	allowed := make(map[string]bool, len(origins))
 	for _, o := range origins {
 		if o = strings.TrimSpace(o); o != "" {
@@ -76,14 +81,15 @@ func NewBridge(upstream string, p presets, limits Limits, origins []string) *Bri
 		}
 	}
 	return &Bridge{
-		upstream: upstream,
-		presets:  p,
-		limits:   limits,
-		origins:  allowed,
-		client:   resp.NewClient(upstream, "", false),
-		lim:      newLimiter(limits),
-		now:      time.Now,
-		stats:    newStatsService(),
+		upstream:   upstream,
+		presets:    p,
+		limits:     limits,
+		origins:    allowed,
+		client:     resp.NewClient(upstream, "", false),
+		lim:        newLimiter(limits),
+		now:        time.Now,
+		stats:      newStatsService(),
+		trustProxy: trustProxy,
 	}
 }
 
@@ -196,7 +202,7 @@ func (b *Bridge) handleExec(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorEnvelope(codeRefused, "malformed request: "+err.Error()))
 		return
 	}
-	env, status := b.Execute(req.Args, req.Proto, clientKey(r))
+	env, status := b.Execute(req.Args, req.Proto, b.clientKey(r))
 	writeJSON(w, status, env)
 }
 
@@ -400,19 +406,22 @@ func statusFor(code string) int {
 	}
 }
 
-// clientKey identifies the caller for the per-client bucket. Behind the
-// platform proxy the peer address is the proxy, so the proxy's own header is
-// preferred; it is only reachable through that proxy, so it is not a
-// client-forgeable value here.
-func clientKey(r *http.Request) string {
+// clientKey identifies the caller for the per-client bucket. The Fly proxy
+// sets Fly-Client-IP and is the only path to the deployed app, so it is always
+// trusted. X-Forwarded-For is client-supplied, so it is read only when the
+// operator declares a proxy trusted; otherwise the peer address — which a
+// client cannot choose — is the key.
+func (b *Bridge) clientKey(r *http.Request) string {
 	if fwd := r.Header.Get("Fly-Client-IP"); fwd != "" {
 		return fwd
 	}
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		if i := strings.IndexByte(fwd, ','); i >= 0 {
-			return strings.TrimSpace(fwd[:i])
+	if b.trustProxy {
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			if i := strings.IndexByte(fwd, ','); i >= 0 {
+				return strings.TrimSpace(fwd[:i])
+			}
+			return strings.TrimSpace(fwd)
 		}
-		return strings.TrimSpace(fwd)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

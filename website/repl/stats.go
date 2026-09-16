@@ -164,6 +164,12 @@ func (s *statsService) supervise(ctx context.Context, producer, addr string, int
 		return err
 	}
 	err = s.readFrames(stdout)
+	if err != nil && err != io.EOF {
+		// The producer is still running, so Wait below would block on it
+		// forever and the supervisor would never publish an unavailable
+		// state or restart. A normal end is io.EOF, and Wait just reaps it.
+		_ = cmd.Process.Kill()
+	}
 	_ = cmd.Wait()
 	return err
 }

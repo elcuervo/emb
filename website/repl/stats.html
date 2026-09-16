@@ -96,6 +96,9 @@
   function show(text) {
     state.textContent = text;
     state.hidden = false;
+    /* A status means the frame on screen is no longer live; hide it rather
+       than leave the last poll reading as if it were current. */
+    frame.hidden = true;
   }
 
   /* The stream is the whole page: one event per frame, parsed from the JSON
@@ -113,6 +116,7 @@
       try { ev = JSON.parse(event.data); } catch (err) { return; }
       if (ev.kind === 'frame' && ev.html) {
         frame.innerHTML = ev.html;
+        frame.hidden = false;
         state.hidden = true;
         lastFrame = Date.now();
         return;

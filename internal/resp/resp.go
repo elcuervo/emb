@@ -362,11 +362,12 @@ func (c *Client) readReply(depth int) (Reply, error) {
 		if n < 0 {
 			return Reply{}, fmt.Errorf("resp: negative map length %d", n)
 		}
-		if n*2 > MaxArrayLen {
+		if n > MaxArrayLen/2 {
 			return Reply{}, fmt.Errorf("resp: map length %d exceeds %d entries", n, MaxArrayLen/2)
 		}
-		rep := Reply{Type: '%', Elems: make([]Reply, 0, n*2)}
-		for i := 0; i < n*2; i++ {
+		elems := n * 2
+		rep := Reply{Type: '%', Elems: make([]Reply, 0, elems)}
+		for i := 0; i < elems; i++ {
 			el, err := c.readReply(depth + 1)
 			if err != nil {
 				return Reply{}, err

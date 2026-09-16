@@ -160,12 +160,29 @@ func newLimiter(l Limits) *limiter {
 	}
 }
 
+// clientIdle is how long a client's bucket is kept after its last request. A
+// bucket idle this long has refilled to burst, so dropping it and recreating it
+// later make the same decision; the map then follows concurrent clients rather
+// than every address ever seen.
+const clientIdle = 10 * time.Minute
+
+// clientSweepThreshold bounds the sweep's per-request cost: idle buckets are
+// only pruned once the map has grown past this many clients.
+const clientSweepThreshold = 4096
+
 // rate applies the per-client and global token buckets. The per-client refusal
 // names the cooling period, so a visitor understands the wait rather than
 // reading it as a failure of the command.
 func (l *limiter) rate(client string, now time.Time) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.clients) > clientSweepThreshold {
+		for k, b := range l.clients {
+			if now.Sub(b.last) >= clientIdle {
+				delete(l.clients, k)
+			}
+		}
+	}
 	b, ok := l.clients[client]
 	if !ok {
 		b = &bucket{rate: l.limits.PerClientRate, burst: l.limits.PerClientBurst}

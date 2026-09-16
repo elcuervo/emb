@@ -71,7 +71,7 @@ Confirmed surfaces: `EMB`, `EMB.MULTI`, `EMB.MODELS`, `EMB.INFO`, `EMB.STATS`,
 
 Constraints and facts future work must preserve:
 
-- **Pre-1.0.** Current version `0.4.0.pre4` (`VERSION`). Interfaces may still move.
+- **Pre-1.0.** Current version `0.4.0.pre5` (`VERSION`). Interfaces may still move.
 - **MIT licensed**, `Copyright (c) 2026 elcuervo`.
 - **Platforms:** macOS (Apple Silicon) and Linux (amd64, arm64).
 - **RESP2 by default**; RESP3 is opt-in via `HELLO 3`. `INFO` stays a bulk string

@@ -108,8 +108,16 @@
        shape is expected to have, and the only one it needs. The landing page's
        plate is the section's argument and moves by itself; that is the
        difference between the two surfaces. */
+    var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var autoplay = mount.getAttribute('data-topviz-autoplay') === '1'
-      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      && !reducedMotion;
+
+    if (reducedMotion) {
+      /* The frame is the still state the plate keeps for a reader who asked
+         for less motion: it paints before any script, and the player is not
+         created at all, so the take never moves. */
+      return;
+    }
 
     if (!autoplay) {
       ensure();
