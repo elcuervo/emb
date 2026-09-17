@@ -382,15 +382,10 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		}
 	}
 
-	// Cache lookup: serve entirely from cache when every text is a hit; any
-	// miss (or no cache) falls through to ONE evaluation with ALL the request
-	// texts as KEYS (Redis semantics), so the script always sees the true
-	// request context and returns the same shape as a cold run. Per-text
-	// replies are cached under their content-addressed keys. An evaluation whose
-	// KEYS contain a duplicate text is not cacheable: per-text caching maps one
-	// key to one text, so a repeated text would store two different element
-	// replies under the same key (last wins) and a later evaluation could replay
-	// the wrong one.
+	// Serve entirely from cache when every text hits; a miss re-evaluates once
+	// with ALL the texts as KEYS, so the script always sees the true request
+	// context. A repeated text makes the per-text cache ambiguous, so it is
+	// skipped (see hasDuplicateTexts).
 	cacheable := s.cache != nil && !hasDuplicateTexts(texts)
 	replies := make([][]byte, len(texts))
 	if cacheable {
@@ -449,9 +444,8 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	s.writeScriptReply(conn, replies)
 }
 
-// hasDuplicateTexts reports whether a multi-text evaluation repeats a text.
-// Repeated texts make the per-text reply cache ambiguous (one key would carry
-// two different element replies), so such evaluations bypass the cache.
+// hasDuplicateTexts reports whether a multi-text evaluation repeats a text,
+// which makes the per-text reply cache ambiguous (one key, two replies).
 func hasDuplicateTexts(texts []string) bool {
 	if len(texts) < 2 {
 		return false

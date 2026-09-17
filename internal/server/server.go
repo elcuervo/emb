@@ -49,9 +49,8 @@ type Server struct {
 	tlsCert      string
 	tlsKey       string
 	cache        *Cache
-	// cacheConfig retains the live cache size string (the boot value, then each
-	// CONFIG SET value) so CONFIG GET echoes the current configuration. It is an
-	// atomic.Value because CONFIG SET writes it while CONFIG GET reads it.
+	// cacheConfig is the live cache size string (boot value, then each
+	// CONFIG SET), reported by CONFIG GET.
 	cacheConfig atomic.Value // string
 	// scripts is the per-model script cache for EMB.SCRIPT/EMB.EVAL/EMB.EVSHA.
 	scripts *scriptCache
@@ -90,29 +89,26 @@ type Server struct {
 	idleTimeout       time.Duration
 	maxConns          int
 	maxConcurrentReqs int
-	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via New).
-	// Oversized commands are truncated: overflow texts are not processed and their
-	// reply slots are null. Atomic because CONFIG SET mutates it while request
-	// handlers read it.
+	// The max* caps below are runtime-editable via CONFIG SET, so they are
+	// atomic: request handlers read them while a CONFIG SET writes them.
+	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via
+	// New); overflow texts are not processed and their reply slots are null.
 	maxTexts atomic.Int64
-	// maxPairs bounds pairs per EMB.MULTI command (0 = unlimited; default 4096).
-	// Oversized commands are truncated: overflow pairs are not processed and their
-	// reply slots are null. Atomic for the same reason as maxTexts.
+	// maxPairs bounds pairs per EMB.MULTI command (0 = unlimited; default
+	// 4096); overflow pairs are not processed and their reply slots are null.
 	maxPairs       atomic.Int64
 	truncatedTexts atomic.Int64
 	truncatedPairs atomic.Int64
 	// maxImages bounds images per EMB.IMG/EMB.IMGMULTI command (0 = unlimited;
-	// default 4096). Overflow images are not decoded or inferred and their reply
-	// slots are null. Atomic because CONFIG SET mutates it while request handlers
-	// read it.
+	// default 4096); overflow images are not decoded or inferred and their
+	// reply slots are null.
 	maxImages atomic.Int64
-	// maxImageBytes/maxImagePixels bound one image argument and its decoded pixel
-	// count (0 = unlimited). Atomic because CONFIG SET mutates them while request
-	// handlers read them.
+	// maxImageBytes/maxImagePixels bound one image argument's byte size and its
+	// decoded pixel count (0 = unlimited).
 	maxImageBytes  atomic.Int64
 	maxImagePixels atomic.Int64
-	// maxCommandBytes bounds the buffered bytes of a single command (0 = unlimited).
-	// Atomic because CONFIG SET mutates it while the dispatch path reads it.
+	// maxCommandBytes bounds the buffered bytes of a single command (0 =
+	// unlimited).
 	maxCommandBytes atomic.Int64
 	// imageRequests counts processed image requests (one per EMB.IMG command, one
 	// per EMB.IMGMULTI pair); truncatedImages counts overflow images.

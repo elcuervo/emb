@@ -275,8 +275,6 @@ func (s *Server) setConfigCache(v string) error {
 // intCapSetter / int64CapSetter build the CONFIG SET handler for a
 // non-negative integer cap. One helper covers every max_* key, so the parse
 // rule and error wording live in one place; label names the key in errors.
-// The target is atomic because handlers read the cap while CONFIG SET (and
-// thus this setter) writes it.
 func intCapSetter(target *atomic.Int64, label string) func(*Server, string) error {
 	return func(_ *Server, v string) error {
 		n, err := strconv.Atoi(v)

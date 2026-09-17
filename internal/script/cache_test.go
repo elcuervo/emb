@@ -45,9 +45,13 @@ func TestCacheKeyDistinct(t *testing.T) {
 	c := CacheKey("gliner2", "sha1", []string{"PERSON"}, 1, "apple text")
 	d := CacheKey("gliner2", "sha2", []string{"PERSON", "ORG"}, 1, "apple text")
 	e := CacheKey("other", "sha1", []string{"PERSON", "ORG"}, 1, "apple text")
+	// The KEYS count separates entries: single- vs multi-text evaluations of
+	// the same text must never share a key (the arity-collision regression).
+	f := CacheKey("m", "s", nil, 2, "apple text")
+	g := CacheKey("m", "s", nil, 3, "apple text")
 
 	seen := map[string]bool{}
-	for _, k := range []string{a, b, c, d, e} {
+	for _, k := range []string{a, b, c, d, e, f, g} {
 		if k == "" {
 			t.Fatal("empty cache key")
 		}
@@ -55,23 +59,6 @@ func TestCacheKeyDistinct(t *testing.T) {
 			t.Fatalf("duplicate cache key %q", k)
 		}
 		seen[k] = true
-	}
-}
-
-// TestCacheKeyDistinctByTextCount is the regression guard for the arity
-// collision: the same text evaluated with one KEYS element and with several
-// must never share a cache key, because the server interprets the script's
-// return value differently for each shape.
-func TestCacheKeyDistinctByTextCount(t *testing.T) {
-	one := CacheKey("m", "s", nil, 1, "x")
-	two := CacheKey("m", "s", nil, 2, "x")
-	if one == two {
-		t.Fatal("single- and multi-text evaluations must use different cache keys")
-	}
-	// The count is part of the digest, not just the trailing text.
-	three := CacheKey("m", "s", nil, 3, "x")
-	if two == three {
-		t.Fatal("different text counts must use different cache keys")
 	}
 }
 

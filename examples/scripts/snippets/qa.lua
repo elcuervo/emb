@@ -6,8 +6,8 @@
 --   EMB.EVSHA qa <sha> 1 "when was the Mac launched" "Apple launched the Mac in 1976."
 --   -> hash {answer = "1976", start = 26, stop = 30, score = ...}
 --
--- The question is the single KEYS element (numtexts=1, so the script returns one
--- value, the hash below); the context travels as ARGV[1].
+-- The question is KEYS[1]; the context is ARGV[1] (numtexts=1, so the reply is
+-- the single hash below).
 
 local enc = emb.tokenize.encode_pair(KEYS[1], ARGV[1], 384)
 

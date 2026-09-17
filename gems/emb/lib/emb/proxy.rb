@@ -18,7 +18,9 @@ module Emb
     # text, grouped per text when several are requested).
     def [](text, *texts, format: :binary)
       format = normalize_format(format)
-      return lazy_loader(text, texts, format) if @client.lazy?
+      if @client.lazy?
+        return Emb.build_batch_loader(@client, @name, texts.empty? ? text : [text, *texts], format: format)
+      end
       return values_query(text, texts) if format == :values
 
       unpack_set(@client.send_command('EMB', @name.to_s, text, *texts))
@@ -69,13 +71,8 @@ module Emb
 
     private
 
-    def lazy_loader(text, texts, format)
-      Emb.build_batch_loader(@client, @name, texts.empty? ? text : [text, *texts], format: format)
-    end
-
-    # Unpacks a BLOB reply: one packed vector for a single text, or an array of
-    # packed vectors for several. A null (a failed/truncated position) maps to
-    # nil rather than raising.
+    # One packed vector for a single text, an array for several; a null slot
+    # (failed/truncated position) maps to nil.
     def unpack_set(raw)
       return nil if raw.nil?
 

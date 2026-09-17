@@ -6,35 +6,24 @@ import (
 	"encoding/hex"
 )
 
-// CacheKeyInlineLimit is the maximum size of a KEYS element inlined verbatim
-// into a script reply-cache key. Larger payloads (for example image bytes) are
-// represented by a SHA-256 digest instead, so a single image-sized KEYS element
-// does not retain megabytes per cache entry. Short text elements stay inline in
-// the key; the key's digest component may evolve (for example to add the KEYS
-// count), which is a cache miss rather than a wrong hit.
+// CacheKeyInlineLimit is the maximum KEYS element inlined verbatim into a
+// reply-cache key; larger payloads (image bytes) become a SHA-256 digest so one
+// key cannot retain megabytes.
 const CacheKeyInlineLimit = 256
 
 // CacheKey builds the content-addressed cache key for a scripted evaluation:
 //
 //	model:sha1(script):sha256(apiVersion|numTexts|count|len|arg...):text
 //
-// where the trailing `text` is the KEYS element itself when it is small, or
-// "#<sha256(text)>" when it exceeds CacheKeyInlineLimit. numTexts is folded into
-// the digest because the server interprets a script's return value differently
-// for one text (the whole value) than for several (one element per text);
-// without it a single-text and a multi-text call on the same text collide and a
-// cached reply is replayed with the wrong shape/value. The host API version is
-// folded into the digest (design decision 8), so a host-function semantics
-// change never serves a reply produced under the previous surface. The
-// argument hash folds the argument count and each argument's length, so ARGV
-// boundaries are unambiguous: nil, [""], and ["a","b"] vs ["a\x00b"] all hash
-// differently. ARGV is caller-controlled, so the digest uses SHA-256 (a SHA-1
-// collision could replay a cached reply for a different argument sequence); the
-// model/script identity uses Redis EVALSHA's SHA-1 by protocol convention
-// (scriptSHA). Distinct script versions, arg sets (label sets, thresholds, …)
-// and texts always produce distinct keys, so schema changes are simply new
-// cache entries. Determinism of the sandbox (no random/time) makes the key
-// correct: identical inputs always produce identical replies.
+// numTexts is folded into the digest because the server replies with the
+// script's whole value for one text but one element per text for several; the
+// count keeps those namespaces from colliding. apiVersion is folded in so a
+// host-semantics change never serves a reply produced under the old surface.
+// Each arg's length precedes it, so ARGV boundaries are unambiguous (nil, [""],
+// and ["a","b"] vs ["a\x00b"] all hash differently). The hash is SHA-256
+// because ARGV is caller-controlled (a SHA-1 collision could replay another
+// request's reply); model/script identity stays Redis EVALSHA's SHA-1. The
+// trailing `text` is inlined when short and digested past CacheKeyInlineLimit.
 func CacheKey(modelName, scriptSHA string, args []string, numTexts int, text string) string {
 	return cacheKey(APIVersion, modelName, scriptSHA, args, numTexts, text)
 }

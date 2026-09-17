@@ -70,11 +70,8 @@ module Emb
       e.message
     end
 
-    # True only when the server answers EMB.READY with OK. A server that is
-    # loading/draining/empty answers with an error (ready returns that message),
-    # and an unreachable server's connection error is also folded into the
-    # message by #ready, so a Redis failure is a boolean here rather than a
-    # raised exception.
+    # True only when the server answers EMB.READY with OK; #ready folds any
+    # Redis error (including a refused connection) into a string.
     def ready?
       ready == 'OK'
     end
@@ -99,14 +96,7 @@ module Emb
       value
     end
 
-    # Per-client counterpart of Configuration#protocol=: Emb.new(protocol: 3)
-    # must fail as loudly as Emb.configure { |c| c.protocol = 3 }.
-    def validate_protocol!(value)
-      return if value.nil? || value == 2
-
-      raise ArgumentError, "protocol must be 2 (the gem speaks RESP2 only), got #{value.inspect}"
-    end
-
+    # Per-call protocol: bypasses Configuration#protocol=, so validate here too.
     def merged_redis_options(opts, cfg, url)
       defaults = cfg.to_h
       keys = defaults.keys - %i[url pool lazy batch_size]
@@ -116,9 +106,7 @@ module Emb
         opts[key] = defaults[key] if opts[key].nil? && !defaults[key].nil?
       end
 
-      # Validate the per-client protocol override (or the global default) here
-      # so Emb.new(protocol: 3) fails as loudly as Configuration#protocol=.
-      validate_protocol!(opts[:protocol])
+      Configuration.validate_protocol!(opts[:protocol])
       opts
     end
 

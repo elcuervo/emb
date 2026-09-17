@@ -14,7 +14,7 @@ import (
 
 // The tests in this file are the regression guards for the pre-0.4.0 hardening
 // change: they fail against the pre-fix code and are cheap to run without a
-// model. TestConfigCapsRace is meaningful under `go test -race`.
+// model. The race tests are meaningful under `go test -race`.
 
 // TestConfigGetCacheEchoesSet covers the stale-getter bug: CONFIG SET cache
 // resized the budget but CONFIG GET kept reporting the boot value.
@@ -72,8 +72,93 @@ func TestCacheSetRowDoesNotAliasBatchBuffer(t *testing.T) {
 	}
 }
 
+// TestConfigCapsRace exercises CONFIG SET of the runtime caps concurrently with
+// EMB requests. It asserts nothing on its own; under `go test -race` it fails if
+// the cap reads and writes are unsynchronized (the pre-fix behavior).
+func TestConfigCapsRace(t *testing.T) {
+	addr := serveTestWithCache(t, "auto")
+	runRace(t, addr,
+		[][2]string{
+			{"max_texts", "100"}, {"max_texts", "200"},
+			{"max_pairs", "100"}, {"max_pairs", "200"},
+			{"max_images", "100"}, {"max_images", "200"},
+			{"max_image_bytes", "1000000"}, {"max_image_bytes", "2000000"},
+			{"max_image_pixels", "1000000"}, {"max_image_pixels", "2000000"},
+			{"max_command_bytes", "60000000"}, {"max_command_bytes", "70000000"},
+		},
+		[][]string{
+			{"EMB", "test", "a", "b", "c"},
+			{"EMB.MULTI", "test", "a", "test", "b"},
+			{"EMB.IMGMULTI", "test", "a", "test", "b"},
+		})
+}
+
+// TestImageCapsRace drives EMB.IMG/EMB.IMGMULTI (which read max_image_bytes and
+// max_image_pixels in embedImages) while those caps change.
+func TestImageCapsRace(t *testing.T) {
+	addr, _, _ := serveImage(t, "auto")
+	png := solidImagePNG(t, color.White)
+	runRace(t, addr,
+		[][2]string{
+			{"max_image_bytes", strconv.Itoa(len(png))},
+			{"max_image_bytes", strconv.Itoa(len(png) + 8)},
+			{"max_image_pixels", "16"},
+			{"max_image_pixels", "24"},
+			{"max_images", "4"},
+			{"max_images", "8"},
+		},
+		[][]string{
+			{"EMB.IMG", "imgA", png},
+			{"EMB.IMGMULTI", "imgA", png, "imgB", png},
+		})
+}
+
+// runRace hammers addr with CONFIG SET settings and commands concurrently for a
+// fixed window. The command that proves the fix is the `-race` detector.
+func runRace(t *testing.T, addr string, settings [][2]string, requests [][]string) {
+	t.Helper()
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+
+	spawn := func(run func(net.Conn, int)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c, err := net.Dial("tcp", addr)
+			if err != nil {
+				return
+			}
+			defer c.Close()
+			for i := 0; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				run(c, i)
+			}
+		}()
+	}
+
+	spawn(func(c net.Conn, i int) {
+		s := settings[i%len(settings)]
+		_, _ = c.Write(respCommand("CONFIG", "SET", s[0], s[1]))
+		drainReply(c)
+	})
+	for range 3 {
+		spawn(func(c net.Conn, i int) {
+			_, _ = c.Write(respCommand(requests[i%len(requests)]...))
+			drainReply(c)
+		})
+	}
+
+	time.Sleep(400 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+}
+
 // drainReply reads one complete RESP value without touching *testing.T, so it
-// is safe to call from the helper goroutines of TestConfigCapsRace.
+// is safe to call from the helper goroutines of runRace.
 func drainReply(c net.Conn) {
 	buf := make([]byte, 0, 4096)
 	tmp := make([]byte, 4096)
@@ -87,77 +172,6 @@ func drainReply(c net.Conn) {
 			return
 		}
 	}
-}
-
-// TestConfigCapsRace exercises CONFIG SET of the runtime caps concurrently with
-// EMB requests. It asserts nothing on its own; under `go test -race` it fails if
-// the cap reads and writes are unsynchronized (the pre-fix behavior).
-func TestConfigCapsRace(t *testing.T) {
-	addr := serveTestWithCache(t, "auto")
-
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-
-	for g := 0; g < 2; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c, err := net.Dial("tcp", addr)
-			if err != nil {
-				return
-			}
-			defer c.Close()
-			for i := 0; ; i++ {
-				select {
-				case <-stop:
-					return
-				default:
-				}
-				// Cycle every runtime-settable cap so the race covers each setter.
-				settings := [][2]string{
-					{"max_texts", strconv.Itoa(100 + i%50)},
-					{"max_pairs", strconv.Itoa(100 + i%50)},
-					{"max_images", strconv.Itoa(100 + i%50)},
-					{"max_image_bytes", strconv.Itoa(1_000_000 + i)},
-					{"max_image_pixels", strconv.Itoa(1_000_000 + i)},
-					{"max_command_bytes", strconv.Itoa(60_000_000 + i)},
-				}
-				s := settings[i%len(settings)]
-				_, _ = c.Write(respCommand("CONFIG", "SET", s[0], s[1]))
-				drainReply(c)
-			}
-		}()
-	}
-
-	for g := 0; g < 3; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c, err := net.Dial("tcp", addr)
-			if err != nil {
-				return
-			}
-			defer c.Close()
-			requests := [][]string{
-				{"EMB", "test", "a", "b", "c"},
-				{"EMB.MULTI", "test", "a", "test", "b"},
-				{"EMB.IMGMULTI", "test", "a", "test", "b"},
-			}
-			for i := 0; ; i++ {
-				select {
-				case <-stop:
-					return
-				default:
-				}
-				_, _ = c.Write(respCommand(requests[i%len(requests)]...))
-				drainReply(c)
-			}
-		}()
-	}
-
-	time.Sleep(400 * time.Millisecond)
-	close(stop)
-	wg.Wait()
 }
 
 // TestScriptReplyCacheScopedByArity reproduces the collision between a
@@ -198,69 +212,4 @@ func TestScriptReplyCacheBypassesDuplicateKeys(t *testing.T) {
 	if elems := arrayOf(t, again); len(elems) != 2 || elems[0].val != 1 || elems[1].val != 2 {
 		t.Fatalf("duplicate-KEYS reply = %#v, want [1, 2]", again)
 	}
-}
-
-// TestImageCapsRace is the image-path counterpart of TestConfigCapsRace: it
-// drives EMB.IMG/EMB.IMGMULTI (which read max_image_bytes/max_image_pixels in
-// embedImages) while those caps are changed. Meaningful under `-race`.
-func TestImageCapsRace(t *testing.T) {
-	addr, _, _ := serveImage(t, "auto")
-	png := solidImagePNG(t, color.White)
-
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c, err := net.Dial("tcp", addr)
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		for i := 0; ; i++ {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			settings := [][2]string{
-				{"max_image_bytes", strconv.Itoa(len(png) + i%8)},
-				{"max_image_pixels", strconv.Itoa(16 + i%8)},
-				{"max_images", strconv.Itoa(4 + i%4)},
-			}
-			s := settings[i%len(settings)]
-			_, _ = c.Write(respCommand("CONFIG", "SET", s[0], s[1]))
-			drainReply(c)
-		}
-	}()
-
-	for g := 0; g < 2; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c, err := net.Dial("tcp", addr)
-			if err != nil {
-				return
-			}
-			defer c.Close()
-			for i := 0; ; i++ {
-				select {
-				case <-stop:
-					return
-				default:
-				}
-				if i%2 == 0 {
-					_, _ = c.Write(respCommand("EMB.IMG", "imgA", png))
-				} else {
-					_, _ = c.Write(respCommand("EMB.IMGMULTI", "imgA", png, "imgB", png))
-				}
-				drainReply(c)
-			}
-		}()
-	}
-
-	time.Sleep(400 * time.Millisecond)
-	close(stop)
-	wg.Wait()
 }
