@@ -53,6 +53,6 @@ require (
 	golang.org/x/tools v0.50.0 // indirect
 )
 
-replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260913215716-6625c199ee46
+replace github.com/tidwall/redcon => github.com/elcuervo/redcon v0.0.0-20260917041713-38d5185274ff
 
 tool golang.org/x/tools/cmd/deadcode

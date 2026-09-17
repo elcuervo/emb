@@ -5,6 +5,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -172,6 +173,38 @@ func drainReply(c net.Conn) {
 		if consumed, ok := respValueLen(buf); ok && consumed == len(buf) {
 			return
 		}
+	}
+}
+
+// TestConfigSetMaxCommandBytesPropagatesToActiveConn pins the redcon fix: a
+// live CONFIG SET max_command_bytes must reach connections accepted before the
+// change, not only future ones. Without reader propagation the already-accepted
+// connection keeps the boot cap and rejects a command the new cap allows.
+func TestConfigSetMaxCommandBytesPropagatesToActiveConn(t *testing.T) {
+	addr, _ := serveTestWithCacheOptions(t, "auto", WithMaxCommandBytes(4096))
+
+	// One long-lived connection, accepted while the cap is 4096.
+	c := dial(t, addr)
+	if _, err := c.Write(respCommand("PING")); err != nil {
+		t.Fatal(err)
+	}
+	if resp := readRESP(t, c); resp != "+PONG\r\n" {
+		t.Fatalf("PING = %q, want +PONG", resp)
+	}
+
+	// Raise the cap from a separate connection.
+	if tok := redisCmd(t, addr, "CONFIG", "SET", "max_command_bytes", "200000"); tok.kind != "status" {
+		t.Fatalf("CONFIG SET max_command_bytes = %#v", tok)
+	}
+
+	// A command over the OLD cap (8192-byte text) must now succeed on the
+	// connection that was already accepted.
+	big := strings.Repeat("x", 8192)
+	if _, err := c.Write(respCommand("PING", big)); err != nil {
+		t.Fatal(err)
+	}
+	if resp := readRESP(t, c); resp != "+PONG\r\n" {
+		t.Fatalf("command after raising the cap on a live connection = %q, want +PONG", resp)
 	}
 }
 
