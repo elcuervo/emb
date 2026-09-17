@@ -38,7 +38,7 @@ The server SHALL accept a cache configuration via the YAML `cache` field or the 
 
 ### Requirement: Cache behavior
 
-The cache SHALL store embeddings keyed by `"<model>:<text>"` and return them on subsequent requests for the same `(model, text)` pair.
+The cache SHALL store text embeddings keyed by `"txt:<model>:<sha256(text)>"` and return them on subsequent requests for the same `(model, text)` pair.
 
 #### Scenario: Cache hit returns immediately
 
@@ -105,7 +105,7 @@ When cache is not configured, the server SHALL behave identically to today.
 - **THEN** `EMB.INFO` SHALL not include cache fields (or show zeros)
 
 ### Requirement: Cache invalidation preserves core LRU semantics
-Administrative invalidation and snapshot capture SHALL use the existing `"<model>:<text>"` key identity and SHALL NOT change the observable hit, miss, insert, byte-budget, or least-recently-used eviction behavior of entries that remain in the cache.
+Administrative invalidation and snapshot capture SHALL use the existing `"txt:<model>:<sha256(text)>"` key identity and SHALL NOT change the observable hit, miss, insert, byte-budget, or least-recently-used eviction behavior of entries that remain in the cache.
 
 #### Scenario: Scoped invalidation preserves remaining order
 - **GIVEN** interleaved LRU entries for two models with known recency order

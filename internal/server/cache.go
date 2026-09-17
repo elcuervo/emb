@@ -66,9 +66,10 @@ type CacheStats struct {
 	LastFlushDuration time.Duration
 }
 
-// CacheSnapshotEntry is an immutable shallow view of one cache entry. Values
-// published through Set are never mutated in place, so snapshot encoding can
-// safely retain the slice after the cache lock is released.
+// CacheSnapshotEntry is a read-only view of one cache entry. Values published
+// through Set are never mutated in place, so snapshot encoding can safely
+// retain the slice after the cache lock is released; callers MUST NOT mutate
+// Value, which would change live cache bytes.
 type CacheSnapshotEntry struct {
 	Key   string
 	Value []byte

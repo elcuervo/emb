@@ -53,7 +53,6 @@ Production notes). The short version:
   stay consistent across scripts.
 - Scripts must be pure compute (identical inputs → identical replies), and each
   per-text reply must depend only on its own text, the args, and the KEYS count —
-  not on sibling KEYS or its position. That is what makes the reply cache sound;
-  a script that reads `KEYS` globally (e.g. `return #KEYS`, or an element that
-  varies by position) can be replayed from cache with a reply a cold run would
-  not produce.
+  not on sibling KEYS or its position. A script whose per-text element reads
+  sibling KEYS (for example `out[i] = KEYS[#KEYS]`) or varies by position can be
+  replayed from cache with a reply a cold run would not produce.

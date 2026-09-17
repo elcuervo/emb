@@ -126,6 +126,7 @@ func runRace(t *testing.T, addr string, settings [][2]string, requests [][]strin
 			defer wg.Done()
 			c, err := net.Dial("tcp", addr)
 			if err != nil {
+				t.Errorf("race test dial %s: %v", addr, err)
 				return
 			}
 			defer c.Close()

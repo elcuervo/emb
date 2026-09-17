@@ -104,7 +104,7 @@ Script execution SHALL be sandboxed and isolated: each evaluation runs in a fres
 
 ### Requirement: Content-addressed reply caching
 
-When the server cache is enabled, scripted replies SHALL be cached under a content-addressed key derived from model name, script SHA1, the args, and the text — distinct args (e.g. different label sets) SHALL be distinct cache entries, and the arg hash SHALL keep argument boundaries unambiguous (nil, empty, and NUL-containing arguments are distinct keys). A cache hit (every text of a request) SHALL reply without re-running the script or model inference. When any text of a request misses, the server SHALL evaluate the script once with ALL the request texts as KEYS and merge the per-text results by their original indexes, so cache state never changes the inputs or the reply shape a script produces. Per-text caching assumes a script's reply for a text depends only on (model, script SHA1, args, text) — a script whose per-text output reads sibling texts in KEYS is outside the cache contract.
+When the server cache is enabled, scripted replies SHALL be cached under a content-addressed key derived from model name, script SHA1, the args, the number of KEYS in the evaluation, and the text — distinct args (e.g. different label sets) SHALL be distinct cache entries, and the arg hash SHALL keep argument boundaries unambiguous (nil, empty, and NUL-containing arguments are distinct keys). Including the KEYS count SHALL keep a single-text evaluation and a multi-text evaluation of the same script in separate namespaces, because the server interprets their return values differently: a single-text call replies with the script's whole return value, while a multi-text call replies with one element per text. An evaluation whose KEYS contain a repeated text SHALL bypass the reply cache entirely (no lookup, no store), because one per-text key cannot represent two element replies for the same text. A cache hit (every text of a request) SHALL reply without re-running the script or model inference. When any text of a request misses, the server SHALL evaluate the script once with ALL the request texts as KEYS and merge the per-text results by their original indexes, so cache state never changes the inputs or the reply shape a script produces. Per-text caching assumes a script's reply for a text depends only on (model, script SHA1, args, KEYS count, text) — a script whose per-text output reads sibling texts in KEYS is outside the cache contract.
 
 #### Scenario: Same script and labels hit the cache
 
@@ -115,6 +115,11 @@ When the server cache is enabled, scripted replies SHALL be cached under a conte
 
 - **WHEN** the same script and text are sent with different label args
 - **THEN** each distinct arg set is executed and cached separately
+
+#### Scenario: Repeated KEYS bypass the reply cache
+
+- **WHEN** an evaluation's KEYS contain the same text more than once
+- **THEN** the server SHALL NOT look up or store a reply-cache entry for that evaluation
 
 ### Requirement: Math helper functions
 

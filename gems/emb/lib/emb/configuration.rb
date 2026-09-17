@@ -26,7 +26,7 @@ module Emb
     # The gem speaks RESP2 only: its models/stats/info/config decoders assume
     # flat RESP2 arrays, and RESP3 maps would silently return wrong results.
     def self.validate_protocol!(value)
-      return if value.nil? || value == 2
+      return if value == 2
 
       raise ArgumentError, "protocol must be 2 (RESP2 only; RESP3 is not decoded), got #{value.inspect}"
     end

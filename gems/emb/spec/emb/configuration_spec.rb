@@ -127,6 +127,11 @@ RSpec.describe Emb::Configuration do
         .to raise_error(ArgumentError, /protocol must be 2/)
     end
 
+    it 'rejects nil (only 2 is a valid protocol)' do
+      expect { Emb.configure { |c| c.protocol = nil } }
+        .to raise_error(ArgumentError, /protocol must be 2/)
+    end
+
     it 'rejects an unsupported per-client value at construction' do
       expect { Emb::Client.new(port: 16_379, protocol: 3) }
         .to raise_error(ArgumentError, /protocol must be 2/)

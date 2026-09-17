@@ -12,7 +12,7 @@ Users SHALL be able to pass any `RedisClient` constructor option through `Emb.se
 
 #### Scenario: Forward ssl options
 
-- **WHEN** a user calls `Emb.setup(url: "redis://localhost:6379", ssl: true, ssl_params: { verify_mode: 0 })`
+- **WHEN** a user calls `Emb.setup(url: "redis://localhost:6379", ssl: true, ssl_params: { verify_mode: OpenSSL::SSL::VERIFY_PEER })`
 - **THEN** the underlying `RedisClient` SHALL be created with SSL enabled
 - **THEN** the connection pool SHALL work normally
 
