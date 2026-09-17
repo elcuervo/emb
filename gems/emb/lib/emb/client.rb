@@ -66,18 +66,14 @@ module Emb
 
     def ready
       send_command('EMB.READY')
-
-      'ready'
-    rescue RedisClient::CommandError => e
+    rescue RedisClient::Error => e
       e.message
     end
 
+    # True only when the server answers EMB.READY with OK; #ready folds any
+    # Redis error (including a refused connection) into a string.
     def ready?
-      ready
-
-      true
-    rescue RedisClient::CommandError
-      false
+      ready == 'OK'
     end
 
     def reset_registry!
@@ -100,12 +96,7 @@ module Emb
       value
     end
 
-    def instance_urls(url)
-      raise ArgumentError, 'url array must not be empty' if url.is_a?(Array) && url.empty?
-
-      url.nil? ? [nil] : Array(url)
-    end
-
+    # Per-call protocol: bypasses Configuration#protocol=, so validate here too.
     def merged_redis_options(opts, cfg, url)
       defaults = cfg.to_h
       keys = defaults.keys - %i[url pool lazy batch_size]
@@ -115,7 +106,14 @@ module Emb
         opts[key] = defaults[key] if opts[key].nil? && !defaults[key].nil?
       end
 
+      Configuration.validate_protocol!(opts[:protocol])
       opts
+    end
+
+    def instance_urls(url)
+      raise ArgumentError, 'url array must not be empty' if url.is_a?(Array) && url.empty?
+
+      url.nil? ? [nil] : Array(url)
     end
 
     def extract_url!(opts, cfg)

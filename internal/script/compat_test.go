@@ -46,12 +46,13 @@ func TestExampleScriptsCompile(t *testing.T) {
 }
 
 // TestReplyCacheKeyUnchanged pins the content-addressed reply-cache key format
-// (with the host API version folded into the digest) so the cache identity of
-// existing scripts cannot drift silently. The digest changed once when the
-// version was folded in (design decision 8); it is pinned again here.
+// (with the host API version and the KEYS count folded into the digest) so the
+// cache identity of existing scripts cannot drift silently. The digest changed
+// once when the version was folded in (design decision 8) and again when the
+// KEYS count was folded in (the arity-collision fix); it is pinned again here.
 func TestReplyCacheKeyUnchanged(t *testing.T) {
-	got := CacheKey("minilm", "0123456789abcdef0123456789abcdef01234567", []string{"PERSON", "ORG"}, "hello world")
-	const want = "minilm:0123456789abcdef0123456789abcdef01234567:9a249ece555117246fdca83f58b01aeccdd383e81eaf40d48e4ce2d63a221117:hello world"
+	got := CacheKey("minilm", "0123456789abcdef0123456789abcdef01234567", []string{"PERSON", "ORG"}, 1, "hello world")
+	const want = "minilm:0123456789abcdef0123456789abcdef01234567:9a105858960d5dc1ea899889a0f303f3d5df59af5c825eefaa3047e8ed96e009:hello world"
 	if got != want {
 		t.Fatalf("reply cache key changed:\n got %q\nwant %q", got, want)
 	}

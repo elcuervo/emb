@@ -183,7 +183,7 @@ func TestExampleQA(t *testing.T) {
 			"end_logits":   {Name: "end_logits", Shape: []int64{1, int64(n)}, DType: onnx.TensorFloat32, Float: end},
 		}, nil
 	}
-	reply := evalExample(t, "snippets/qa.lua", []string{question, context}, nil, run)
+	reply := evalExample(t, "snippets/qa.lua", []string{question}, []string{context}, run)
 	// The answer surfaced from the context via offsets must include 1976.
 	if !containsReply(reply, "1976") {
 		t.Fatalf("expected answer 1976 in %q", reply)
@@ -242,7 +242,7 @@ func TestExampleQARegressionTrailingSep(t *testing.T) {
 			"end_logits":   {Name: "end_logits", Shape: []int64{1, int64(n)}, DType: onnx.TensorFloat32, Float: end},
 		}, nil
 	}
-	reply := evalExample(t, "snippets/qa.lua", []string{question, context}, nil, run)
+	reply := evalExample(t, "snippets/qa.lua", []string{question}, []string{context}, run)
 	if !containsReply(reply, "1976") {
 		t.Fatalf("trailing [SEP] must not win the span search: %q", reply)
 	}

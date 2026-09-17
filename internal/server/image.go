@@ -110,9 +110,9 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	// Truncate oversized commands: only the first maxImages are decoded and
 	// inferred; the overflow slots stay null.
 	n := total
-	if s.maxImages > 0 && n > s.maxImages {
-		s.truncatedImages.Add(int64(n - s.maxImages))
-		n = s.maxImages
+	if limit := s.maxImages.Load(); limit > 0 && int64(n) > limit {
+		s.truncatedImages.Add(int64(n) - limit)
+		n = int(limit)
 	}
 	images := imgArgs[:n]
 
@@ -196,8 +196,8 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, ima
 	// Per-request plan copy carries the server's live byte/pixel caps without
 	// mutating the shared immutable plan.
 	plan := res.Plan
-	plan.MaxBytes = s.maxImageBytes
-	plan.MaxPixels = s.maxImagePixels
+	plan.MaxBytes = s.maxImageBytes.Load()
+	plan.MaxPixels = s.maxImagePixels.Load()
 
 	// Bound each chunk by the image count and float32-element budget.
 	chunkSize := min(len(misses), maxImageBatchImages)
@@ -295,9 +295,9 @@ func (s *Server) handleIMGMULTI(conn redcon.Conn, cmd redcon.Command) {
 
 	total := len(pairs) / 2
 	n := total
-	if s.maxImages > 0 && n > s.maxImages {
-		s.truncatedImages.Add(int64(n - s.maxImages))
-		n = s.maxImages
+	if limit := s.maxImages.Load(); limit > 0 && int64(n) > limit {
+		s.truncatedImages.Add(int64(n) - limit)
+		n = int(limit)
 		pairs = pairs[:n*2]
 	}
 	results := make([][]byte, n)

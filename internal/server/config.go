@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tidwall/redcon"
@@ -29,7 +30,7 @@ func (s *Server) configParams() []configParam {
 	return []configParam{
 		{
 			name: "cache",
-			get:  func(s *Server) string { return s.cacheConfig },
+			get:  func(s *Server) string { return s.cacheConfig.Load().(string) },
 			set:  (*Server).setConfigCache,
 		},
 		{
@@ -69,32 +70,32 @@ func (s *Server) configParams() []configParam {
 		},
 		{
 			name: "max_texts",
-			get:  func(s *Server) string { return strconv.Itoa(s.maxTexts) },
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxTexts.Load(), 10) },
 			set:  intCapSetter(&s.maxTexts, "max_texts"),
 		},
 		{
 			name: "max_pairs",
-			get:  func(s *Server) string { return strconv.Itoa(s.maxPairs) },
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxPairs.Load(), 10) },
 			set:  intCapSetter(&s.maxPairs, "max_pairs"),
 		},
 		{
 			name: "max_images",
-			get:  func(s *Server) string { return strconv.Itoa(s.maxImages) },
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxImages.Load(), 10) },
 			set:  intCapSetter(&s.maxImages, "max_images"),
 		},
 		{
 			name: "max_image_bytes",
-			get:  func(s *Server) string { return strconv.FormatInt(s.maxImageBytes, 10) },
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxImageBytes.Load(), 10) },
 			set:  int64CapSetter(&s.maxImageBytes, "max_image_bytes"),
 		},
 		{
 			name: "max_image_pixels",
-			get:  func(s *Server) string { return strconv.FormatInt(s.maxImagePixels, 10) },
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxImagePixels.Load(), 10) },
 			set:  int64CapSetter(&s.maxImagePixels, "max_image_pixels"),
 		},
 		{
 			name: "max_command_bytes",
-			get:  func(s *Server) string { return strconv.FormatInt(s.maxCommandBytes, 10) },
+			get:  func(s *Server) string { return strconv.FormatInt(s.maxCommandBytes.Load(), 10) },
 			set:  (*Server).setConfigMaxCommandBytes,
 		},
 		{
@@ -267,30 +268,31 @@ func (s *Server) setConfigCache(v string) error {
 		return fmt.Errorf("cache was disabled at boot; restart with a cache size to configure it at runtime")
 	}
 	s.cache.SetMaxBytes(bytes)
+	s.cacheConfig.Store(v)
 	return nil
 }
 
 // intCapSetter / int64CapSetter build the CONFIG SET handler for a
 // non-negative integer cap. One helper covers every max_* key, so the parse
 // rule and error wording live in one place; label names the key in errors.
-func intCapSetter(target *int, label string) func(*Server, string) error {
+func intCapSetter(target *atomic.Int64, label string) func(*Server, string) error {
 	return func(_ *Server, v string) error {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
 			return fmt.Errorf("%s must be a non-negative integer", label)
 		}
-		*target = n
+		target.Store(int64(n))
 		return nil
 	}
 }
 
-func int64CapSetter(target *int64, label string) func(*Server, string) error {
+func int64CapSetter(target *atomic.Int64, label string) func(*Server, string) error {
 	return func(_ *Server, v string) error {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n < 0 {
 			return fmt.Errorf("%s must be a non-negative integer", label)
 		}
-		*target = n
+		target.Store(n)
 		return nil
 	}
 }
@@ -303,7 +305,7 @@ func (s *Server) setConfigMaxCommandBytes(v string) error {
 	if err != nil || n < 0 {
 		return fmt.Errorf("max_command_bytes must be a non-negative integer")
 	}
-	s.maxCommandBytes = n
+	s.maxCommandBytes.Store(n)
 	if s.srv != nil {
 		s.srv.SetMaxBulkSize(n)
 		s.srv.SetMaxCommandSize(n)

@@ -66,9 +66,10 @@ type CacheStats struct {
 	LastFlushDuration time.Duration
 }
 
-// CacheSnapshotEntry is an immutable shallow view of one cache entry. Values
-// published through Set are never mutated in place, so snapshot encoding can
-// safely retain the slice after the cache lock is released.
+// CacheSnapshotEntry is a read-only view of one cache entry. Values published
+// through Set are never mutated in place, so snapshot encoding can safely
+// retain the slice after the cache lock is released; callers MUST NOT mutate
+// Value, which would change live cache bytes.
 type CacheSnapshotEntry struct {
 	Key   string
 	Value []byte
@@ -183,6 +184,9 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 }
 
 func (c *Cache) Set(key string, value []byte) {
+	// Copy the value: callers pass sub-slices of a larger buffer (one row of a
+	// batch-wide embedding buffer), and retaining one row would pin the batch.
+	value = append([]byte(nil), value...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

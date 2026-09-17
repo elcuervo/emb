@@ -172,10 +172,13 @@ requires in practice:
 - **Determinism and caching.** Scripts are pure compute: `os`, `io`,
   `require`/loaders, coroutines and `math.random*` are stripped, so identical
   inputs always produce identical replies. Replies are cached per
-  `(model, script SHA1, args, text)`, so a script's output must depend only on
-  those. For a **pairwise** operation (similarity, rerank, cross-encoder), put
-  one operand in `KEYS` and the other in `ARGV` — the ARGV hash is part of the
-  key, so distinct pairs stay distinct cache entries.
+  `(model, script SHA1, args, KEYS count, text)`, so each per-text output must
+  depend only on those — not on sibling `KEYS` or its position in the request.
+  An evaluation that repeats a text in `KEYS` bypasses the reply cache (one key
+  cannot hold two element replies for the same text), so it always re-runs. For
+  a **pairwise** operation (similarity, rerank, cross-encoder), put one operand
+  in `KEYS` and the other in `ARGV` — the ARGV hash is part of the key, so
+  distinct pairs stay distinct cache entries.
 - **Embeddings vs raw tensors.** Use `emb.embed` / `emb.image.embed` when the
   model has an embedding configuration: they run the same pooling and
   normalization as `EMB`, share its batcher and `model:text` cache, and never

@@ -49,8 +49,9 @@ type Server struct {
 	tlsCert      string
 	tlsKey       string
 	cache        *Cache
-	// cacheConfig retains the raw boot cache string so CONFIG GET echoes it.
-	cacheConfig string
+	// cacheConfig is the live cache size string (boot value, then each
+	// CONFIG SET), reported by CONFIG GET.
+	cacheConfig atomic.Value // string
 	// scripts is the per-model script cache for EMB.SCRIPT/EMB.EVAL/EMB.EVSHA.
 	scripts *scriptCache
 	// compiler caches compiled script prototypes per (model, sha) so repeat
@@ -88,26 +89,27 @@ type Server struct {
 	idleTimeout       time.Duration
 	maxConns          int
 	maxConcurrentReqs int
-	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via New).
-	// Oversized commands are truncated: overflow texts are not processed and their
-	// reply slots are null.
-	maxTexts int
-	// maxPairs bounds pairs per EMB.MULTI command (0 = unlimited; default 4096).
-	// Oversized commands are truncated: overflow pairs are not processed and their
-	// reply slots are null.
-	maxPairs       int
+	// The max* caps below are runtime-editable via CONFIG SET, so they are
+	// atomic: request handlers read them while a CONFIG SET writes them.
+	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via
+	// New); overflow texts are not processed and their reply slots are null.
+	maxTexts atomic.Int64
+	// maxPairs bounds pairs per EMB.MULTI command (0 = unlimited; default
+	// 4096); overflow pairs are not processed and their reply slots are null.
+	maxPairs       atomic.Int64
 	truncatedTexts atomic.Int64
 	truncatedPairs atomic.Int64
 	// maxImages bounds images per EMB.IMG/EMB.IMGMULTI command (0 = unlimited;
-	// default 4096). Overflow images are not decoded or inferred and their reply
-	// slots are null.
-	maxImages int
-	// maxImageBytes/maxImagePixels bound one image argument and its decoded pixel
-	// count (0 = unlimited).
-	maxImageBytes  int64
-	maxImagePixels int64
-	// maxCommandBytes bounds the buffered bytes of a single command (0 = unlimited).
-	maxCommandBytes int64
+	// default 4096); overflow images are not decoded or inferred and their
+	// reply slots are null.
+	maxImages atomic.Int64
+	// maxImageBytes/maxImagePixels bound one image argument's byte size and its
+	// decoded pixel count (0 = unlimited).
+	maxImageBytes  atomic.Int64
+	maxImagePixels atomic.Int64
+	// maxCommandBytes bounds the buffered bytes of a single command (0 =
+	// unlimited).
+	maxCommandBytes atomic.Int64
 	// imageRequests counts processed image requests (one per EMB.IMG command, one
 	// per EMB.IMGMULTI pair); truncatedImages counts overflow images.
 	imageRequests   atomic.Int64
@@ -205,7 +207,7 @@ func WithMaxConcurrentRequests(n int) Option {
 // Zero disables the cap (unlimited, pre-change behavior). The default when
 // unset is 4096.
 func WithMaxTexts(n int) Option {
-	return func(s *Server) { s.maxTexts = n }
+	return func(s *Server) { s.maxTexts.Store(int64(n)) }
 }
 
 // WithScriptDeadline bounds each EMB.EVAL/EMB.EVSHA script evaluation's
@@ -219,31 +221,31 @@ func WithScriptDeadline(d time.Duration) Option {
 // null). Zero disables the cap (unlimited, pre-change behavior). The default
 // when unset is 4096.
 func WithMaxPairs(n int) Option {
-	return func(s *Server) { s.maxPairs = n }
+	return func(s *Server) { s.maxPairs.Store(int64(n)) }
 }
 
 // WithMaxImages bounds the images processed per EMB.IMG/EMB.IMGMULTI command;
 // overflow images are not decoded or inferred and their reply slots are null.
 // Zero disables the cap (unlimited). The default when unset is 4096.
 func WithMaxImages(n int) Option {
-	return func(s *Server) { s.maxImages = n }
+	return func(s *Server) { s.maxImages.Store(int64(n)) }
 }
 
 // WithMaxImageBytes bounds one image argument's byte size. Zero disables the cap.
 func WithMaxImageBytes(n int64) Option {
-	return func(s *Server) { s.maxImageBytes = n }
+	return func(s *Server) { s.maxImageBytes.Store(n) }
 }
 
 // WithMaxImagePixels bounds one image's decoded pixel count (checked from the
 // header before the full decode). Zero disables the cap.
 func WithMaxImagePixels(n int64) Option {
-	return func(s *Server) { s.maxImagePixels = n }
+	return func(s *Server) { s.maxImagePixels.Store(n) }
 }
 
 // WithMaxCommandBytes bounds the buffered bytes of a single command. Zero
 // disables the cap.
 func WithMaxCommandBytes(n int64) Option {
-	return func(s *Server) { s.maxCommandBytes = n }
+	return func(s *Server) { s.maxCommandBytes.Store(n) }
 }
 
 func WithPersistence(cfg PersistenceConfig) Option {
@@ -277,21 +279,21 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		addr:                addr,
 		tlsConfig:           tlsConfig,
 		cache:               c,
-		cacheConfig:         cacheConfig,
 		scripts:             newScriptCache(0),
 		compiler:            script.NewCompiler(),
 		cacheLoad:           true,
 		cacheSaveOnShutdown: true,
 		version:             "dev",
 		idleTimeout:         config.DefaultIdleTimeout,
-		maxTexts:            4096,
-		maxPairs:            4096,
-		maxImages:           4096,
-		maxImageBytes:       config.DefaultMaxImageBytes,
-		maxImagePixels:      config.DefaultMaxImagePixels,
-		maxCommandBytes:     config.DefaultMaxCommandBytes,
 		monitor:             NewMonitor(8192),
 	}
+	s.cacheConfig.Store(cacheConfig)
+	s.maxTexts.Store(4096)
+	s.maxPairs.Store(4096)
+	s.maxImages.Store(4096)
+	s.maxImageBytes.Store(config.DefaultMaxImageBytes)
+	s.maxImagePixels.Store(config.DefaultMaxImagePixels)
+	s.maxCommandBytes.Store(config.DefaultMaxCommandBytes)
 	for _, o := range opts {
 		o(s)
 	}
@@ -339,8 +341,8 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		// Command-size guard: a command whose buffered bytes exceed the cap is
 		// rejected without decode or inference. The per-bulk guard (SetMaxBulkSize
 		// below) refuses an oversized declared bulk before its payload is read.
-		if s.maxCommandBytes > 0 && int64(len(cmd.Raw)) > s.maxCommandBytes {
-			conn.WriteError(fmt.Sprintf("ERR command of %d bytes exceeds max_command_bytes of %d", len(cmd.Raw), s.maxCommandBytes))
+		if limit := s.maxCommandBytes.Load(); limit > 0 && int64(len(cmd.Raw)) > limit {
+			conn.WriteError(fmt.Sprintf("ERR command of %d bytes exceeds max_command_bytes of %d", len(cmd.Raw), limit))
 			return
 		}
 
@@ -396,9 +398,9 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	// command in the reader, before any payload is buffered. max_command_bytes is
 	// an aggregate cap: without SetMaxCommandSize a command made of many sub-cap
 	// bulks would be buffered in full and only rejected at dispatch.
-	if s.maxCommandBytes > 0 {
-		s.srv.SetMaxBulkSize(s.maxCommandBytes)
-		s.srv.SetMaxCommandSize(s.maxCommandBytes)
+	if limit := s.maxCommandBytes.Load(); limit > 0 {
+		s.srv.SetMaxBulkSize(limit)
+		s.srv.SetMaxCommandSize(limit)
 	}
 
 	return s
@@ -897,9 +899,9 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	// Truncate oversized commands: process only the first maxTexts texts and
 	// reply with null slots for the overflow. Truncation bounds the inference
 	// work of a single command so the payload size cannot pin the task's cores.
-	if s.maxTexts > 0 && total > s.maxTexts {
-		s.truncatedTexts.Add(int64(total - s.maxTexts))
-		texts = texts[:s.maxTexts]
+	if limit := s.maxTexts.Load(); limit > 0 && int64(total) > limit {
+		s.truncatedTexts.Add(int64(total) - limit)
+		texts = texts[:int(limit)]
 	}
 
 	entry, err := s.reg.GetOrInit(modelName)
@@ -1363,9 +1365,9 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	// work of a single command so the payload size cannot pin the task's cores.
 	total := len(pairs) / 2
 	n := total
-	if s.maxPairs > 0 && n > s.maxPairs {
-		s.truncatedPairs.Add(int64(n - s.maxPairs))
-		n = s.maxPairs
+	if limit := s.maxPairs.Load(); limit > 0 && int64(n) > limit {
+		s.truncatedPairs.Add(int64(n) - limit)
+		n = int(limit)
 		pairs = pairs[:n*2]
 	}
 	results := make([][]byte, n)

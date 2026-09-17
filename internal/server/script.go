@@ -252,9 +252,9 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		})
 	}()
 
-	if s.maxTexts > 0 && len(texts) > s.maxTexts {
+	if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
 		failed = true
-		conn.WriteError(fmt.Sprintf("ERR too many texts: %d (max %d)", len(texts), s.maxTexts))
+		conn.WriteError(fmt.Sprintf("ERR too many texts: %d (max %d)", len(texts), limit))
 		return
 	}
 
@@ -328,8 +328,8 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 			if err != nil {
 				return nil, err
 			}
-			if s.maxTexts > 0 && len(texts) > s.maxTexts {
-				return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), s.maxTexts)
+			if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
+				return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
 			}
 			return s.embedTexts(e, model, texts)
 		}
@@ -356,8 +356,8 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 				}
 				// The per-request plan copy carries the server's live byte/pixel
 				// caps so scripts cannot bypass them, exactly like EMB.IMG.
-				plan.MaxBytes = s.maxImageBytes
-				plan.MaxPixels = s.maxImagePixels
+				plan.MaxBytes = s.maxImageBytes.Load()
+				plan.MaxPixels = s.maxImagePixels.Load()
 				return plan.Tensor(data)
 			},
 			Embed: func(images [][]byte) ([][]byte, error) {
@@ -368,8 +368,8 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 				if r == nil {
 					return nil, fmt.Errorf("model '%s' has no image configuration", model)
 				}
-				if s.maxImages > 0 && len(images) > s.maxImages {
-					return nil, fmt.Errorf("too many images: %d (max %d)", len(images), s.maxImages)
+				if limit := s.maxImages.Load(); limit > 0 && int64(len(images)) > limit {
+					return nil, fmt.Errorf("too many images: %d (max %d)", len(images), limit)
 				}
 				results, errs := s.embedImages(model, r, images)
 				for i, e := range errs {
@@ -382,16 +382,16 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		}
 	}
 
-	// Cache lookup: serve entirely from cache when every text is a hit; any
-	// miss (or no cache) falls through to ONE evaluation with ALL the request
-	// texts as KEYS (Redis semantics), so the script always sees the true
-	// request context and returns the same shape as a cold run. Per-text
-	// replies are cached under their content-addressed keys.
+	// Serve entirely from cache when every text hits; a miss re-evaluates once
+	// with ALL the texts as KEYS, so the script always sees the true request
+	// context. A repeated text makes the per-text cache ambiguous, so it is
+	// skipped (see hasDuplicateTexts).
+	cacheable := s.cache != nil && !hasDuplicateTexts(texts)
 	replies := make([][]byte, len(texts))
-	if s.cache != nil {
+	if cacheable {
 		allHit := true
 		for i, text := range texts {
-			if hit, ok := s.cache.Get(script.CacheKey(model, sha, args, text)); ok {
+			if hit, ok := s.cache.Get(script.CacheKey(model, sha, args, len(texts), text)); ok {
 				replies[i] = hit
 			} else {
 				allHit = false
@@ -437,11 +437,27 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 			return
 		}
 		replies[i] = encoded
-		if s.cache != nil {
-			s.cache.Set(script.CacheKey(model, sha, args, texts[i]), encoded)
+		if cacheable {
+			s.cache.Set(script.CacheKey(model, sha, args, len(texts), texts[i]), encoded)
 		}
 	}
 	s.writeScriptReply(conn, replies)
+}
+
+// hasDuplicateTexts reports whether a multi-text evaluation repeats a text,
+// which makes the per-text reply cache ambiguous (one key, two replies).
+func hasDuplicateTexts(texts []string) bool {
+	if len(texts) < 2 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(texts))
+	for _, text := range texts {
+		if _, ok := seen[text]; ok {
+			return true
+		}
+		seen[text] = struct{}{}
+	}
+	return false
 }
 
 // writeScriptReply emits a single converted reply for a one-text request or an

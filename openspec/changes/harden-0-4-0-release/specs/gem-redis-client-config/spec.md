@@ -1,15 +1,8 @@
-## Purpose
-
-Allow users to configure any `RedisClient` option (timeouts, SSL, driver, reconnect
-backoff, etc.) through the emb Ruby client without requiring a gem update. Only `pool`
-is handled by the gem itself.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: redis-client options are forwarded through the gem
 
-Users SHALL be able to pass any `RedisClient` constructor option through `Emb.setup`,
-`Emb.new`, or `Emb::Client.new` using `**rest`.
+Users SHALL be able to pass any `RedisClient` constructor option through `Emb.setup`, `Emb.new`, or `Emb::Client.new` using `**rest`, with one exception: `protocol` is validated by the gem rather than forwarded blindly. The gem speaks RESP2 and does not decode the RESP3 maps the server emits for `EMB.MODELS`, `EMB.STATS`, `EMB.INFO`, and `CONFIG GET`, so any `protocol` other than `2` SHALL raise `ArgumentError` at configuration time (`Emb.configure`) or client construction time (`Emb.new`/`Emb::Client.new`), before any connection is made.
 
 #### Scenario: Forward connect_timeout
 
@@ -37,7 +30,7 @@ Users SHALL be able to pass any `RedisClient` constructor option through `Emb.se
 
 - **WHEN** a user calls `Emb.setup(url: "redis://localhost:6379")`
 - **THEN** the underlying `RedisClient` SHALL default to `protocol: 2`
-- **AND** if a user passes `protocol: 3`, it SHALL be forwarded as-is and rejected by the server naturally (redcon only speaks RESP2)
+- **AND** when a user passes `protocol: 3` to `Emb.setup`, `Emb.new`, or `Emb.configure`, the gem SHALL raise `ArgumentError` instead of forwarding it, because the client cannot decode the RESP3 replies that mode produces
 
 #### Scenario: Pool size remains separate
 
