@@ -2950,3 +2950,38 @@ html.js.is-ready .hero__prose{
 .mech__s .g-accent-fill{ fill: currentColor; }
 .mech__s.is-on .g-accent-stroke{ stroke: var(--accent); }
 .mech__s.is-on .g-accent-fill{ fill: var(--accent); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE PLATE'S OWN STEP  (advance to the next demo)
+   ──────────────────────────────────────────────────────────────────────
+   Each plate closes on the two plates either side of it, so a reader who
+   arrived from a search or a link can keep reading without going back to the
+   gallery. A ruled row, mono labels, the plate's own name in the display
+   face; no card and nothing numbered.
+   ══════════════════════════════════════════════════════════════════════ */
+.plate-nav{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: clamp(30px, 3.4vw, 56px);
+  padding-block: 18px 22px;
+  border-top: 1.5px solid var(--fg);
+}
+.plate-nav__link{ display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.plate-nav__link--next{ text-align: right; margin-left: auto; }
+.plate-nav__k{
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.plate-nav__t{
+  font-family: var(--display), var(--sans), sans-serif;
+  font-size: clamp(15px, 1.5vw, 21px);
+  line-height: 1.1;
+  color: var(--fg);
+}
+.plate-nav__link:hover .plate-nav__t{ color: var(--accent-ink); }
+.plate-nav__link:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }

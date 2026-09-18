@@ -141,3 +141,24 @@ and long floats in the readouts are shown at four places.
 `styles.css`, compared finding by finding against a `HEAD` worktree: 204
 findings now against 208 there, the difference four resolved (em-dash and
 all-caps), and nothing naming the mechanism.
+
+---
+## Amendment — the plate's own step, and a stale module (change `website-demos-tldr`, 2026-09)
+
+**Advance to the next demo.** Every plate now closes on a ruled row naming the
+plates either side of it — `Previous` / `Next` and the plate's own name in the
+display face — so a reader who arrived from a search or a link can keep going
+without returning to the gallery. The first plate carries only `Next`, the last
+only `Previous`; the row is always visible, including in the gist, because it is
+navigation and not an argument.
+
+**A stale `demos.js` broke every plate.** `demos.js` keeps a stable name while
+its exports change; the local dev server sent `Cache-Control: no-store` for the
+HTML only, so a browser kept a heuristically cached module from before the
+mechanism landed and every plate died on `does not provide an export named
+'mechanism'` — a hard failure, because an ESM named import is static. Fixed at
+the source: `website/tools/dev-server.py` now answers every request `no-store`
+and names `demos.js` / `tldr.js` from their own mtimes in the served HTML, so
+the working loop can never outlive an edit. The published tree is unaffected:
+`_headers` already pins `max-age=0, must-revalidate` for `/assets/js/*`, which is
+the right policy for a stable name whose bytes move.

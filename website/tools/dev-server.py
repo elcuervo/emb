@@ -32,6 +32,22 @@ SITE_DIR = REPO_ROOT / "website"
 # The origin the published page names. Rewritten, never removed.
 PRODUCTION_SANDBOX = "https://cli.emb.is"
 
+# The modules whose bytes change while their names do not. A browser that keeps
+# one heuristically cached page dies on the import, so the working loop names
+# them from their own mtimes: `demos.js` gains an export, the page names it, and
+# the template hands the page the current bytes instead of yesterday's.
+LIVE_MODULES = ("demos.js", "tldr.js")
+
+
+def module_token() -> str:
+    newest = 0.0
+    for name in LIVE_MODULES:
+        try:
+            newest = max(newest, (SITE_DIR / "assets" / "js" / name).stat().st_mtime)
+        except OSError:
+            pass
+    return str(int(newest))
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     # The bridge's port on this machine. The host is taken from each request, so
@@ -39,22 +55,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # without knowing any of them up front.
     sandbox_port = 8081
 
+    def send_response(self, code: int, message: str | None = None) -> None:
+        # Nothing in the working loop is cached. The published tree pins its own
+        # policy in `_headers` (revalidate, never immutable); this server is for
+        # the loop, where the answer is always the file on disk. Sending it for
+        # every response, not just the page, is what keeps a stale module from
+        # outliving the export it is missing.
+        super().send_response(code, message)
+        self.send_header("Cache-Control", "no-store")
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib name
         path = Path(self.translate_path(self.path))
         if path.is_dir():
             path = path / "index.html"
         if path.suffix == ".html" and path.is_file():
-            body = (
-                path.read_text(encoding="utf-8")
-                .replace(PRODUCTION_SANDBOX, self.sandbox_origin())
-                .encode("utf-8")
-            )
+            html = path.read_text(encoding="utf-8").replace(PRODUCTION_SANDBOX, self.sandbox_origin())
+            token = module_token()
+            for name in LIVE_MODULES:
+                html = html.replace("assets/js/" + name, "assets/js/" + name + "?v=" + token)
+            body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            # Never cached: this is the working loop, and a heuristically
-            # cached page is how a stale console keeps running after an edit.
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
             return
