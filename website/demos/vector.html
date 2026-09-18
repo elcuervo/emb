@@ -77,6 +77,7 @@
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="similarity.html"><span>Next</span> <b>The similarity</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The vector</h1>
           <p class="plate__teaches">Text becomes a fixed-length list of numbers, and that list is the model's answer — not a hash, and not a rendering of the text.</p>
@@ -120,6 +121,10 @@
                      aria-label="The 384 values of the vector, above and below a centre line"></svg>
                 <p class="rig__readout" data-bytes></p>
               </div>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
             </div>
 
       </div></div>
@@ -180,7 +185,7 @@ EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;The thousand injuries…&quot;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, figure, showState, b64Float32, hexPreview, argvLine, tween, mechanism, playStages } from '../assets/js/demos.js';
+import { gallery, el, figure, showState, b64Float32, hexPreview, unfold, tween, mechanism, playStages } from '../assets/js/demos.js';
 
 const g = gallery();
 const MODEL = 'minilm';
@@ -277,6 +282,7 @@ function render(reply, preset) {
 
 async function run(text) {
   if (!text || !text.trim()) { return; }
+  g.begin();
   last = text;
   go.disabled = true;
   setState('running');
@@ -294,6 +300,7 @@ async function run(text) {
     setState(err.state || 'error', err.message);
   } finally {
     go.disabled = false;
+    unfold(root, g.trace());
   }
 }
 

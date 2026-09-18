@@ -76,6 +76,7 @@
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="multilingual.html"><span>Next</span> <b>The languages</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The model lens</h1>
           <p class="plate__teaches">
@@ -132,6 +133,10 @@
                   <div class="shape"><h3 class="shape__h" data-h-minilm>model A</h3><div data-a></div></div>
                   <div class="shape"><h3 class="shape__h" data-h-bge>model B</h3><div data-b></div></div>
                 </div>
+                <details class="cmds" data-cmds hidden>
+                  <summary class="cmds__h">the commands this run sent</summary>
+                  <div class="cmds__body" data-cmds-body></div>
+                </details>
               </div>
             </div>
 
@@ -196,7 +201,7 @@ SELECT rowid FROM vec_bge_small WHERE embedding MATCH vec_int8(:q) AND k = 5;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation, motionAllowed, tween, mechanism, playStages } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, motionAllowed, tween, mechanism, playStages, unfold } from '../assets/js/demos.js';
 const g = gallery();
 const A = 'minilm', B = 'bge-small';
 const W = 1000, H = 420, PAD = 30;
@@ -277,6 +282,7 @@ function line(label, value) {
 async function run() {
   const text = root.querySelector('#l-q').value;
   if (!text || !text.trim()) { return; }
+  g.begin();
   go.disabled = true;
   setState('running');
   mech.reset(); playStages(mech, 150, 60);
@@ -307,6 +313,7 @@ async function run() {
     setState(err.state || 'error', err.message);
   } finally {
     go.disabled = false;
+    unfold(root, g.trace());
   }
 }
 root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); run(); });

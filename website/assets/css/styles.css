@@ -2269,6 +2269,9 @@ html.js.is-ready .hero__prose{
   html.js .sig,
   html.js .route--signal{ stroke-dasharray: none; stroke-dashoffset: 0; }
   .masthead{ position: static; }
+  /* The run's own commands belong to a run that paper cannot repeat: the plate's
+     static command section is what prints. */
+  .cmds{ display: none; }
   .terrain, .ridge, .features, .pipeline, .note, .feat{ break-inside: avoid; }
   /* The page inverts once, and these are the surfaces that carry light text on a
      dark ground: the scripts block, the console, the emb-top capture, the footer,
@@ -2317,9 +2320,29 @@ html.js.is-ready .hero__prose{
   padding-top: clamp(10px, 1.1vw, 16px);
   display: grid;
   grid-template-columns: minmax(0, var(--col-prose)) minmax(0, 1fr);
-  gap: clamp(20px, 3vw, 56px);
+  column-gap: clamp(20px, 3vw, 56px);
   align-items: start;
 }
+/* The way on, at the top: the rail at the foot is a plate's worth of scrolling
+   away, and the gallery is read in order. The first row of the head, right-
+   aligned, in the rail's own vocabulary -- a mono label and the plate's own
+   name in the display face. */
+.plate__next{
+  grid-column: 1 / -1; justify-self: end;
+  margin-bottom: clamp(8px, .9vw, 12px);
+}
+.plate__next a{
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted); text-decoration: none;
+}
+.plate__next b{
+  font-family: var(--display), var(--sans), sans-serif;
+  font-size: clamp(14px, 1.15vw, 17px); letter-spacing: -.01em;
+  text-transform: none; color: var(--fg);
+}
+.plate__next a:hover b{ color: var(--accent-ink); }
+.plate__next a:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
 /* The plate's number is set inside its title rather than floated above it as a
    kicker over a headline: the atlas numbers its plates, the headline carries the
    number, and there is no separate tracked-caps line to read as an eyebrow. */
@@ -2421,6 +2444,51 @@ html.js.is-ready .hero__prose{
 }
 .rig__state .btn{ margin-left: 10px; }
 .rig__out{ margin-top: clamp(14px, 1.6vw, 22px); }
+/* The run's own commands, unfolded: one ruled label the reader opens, then the
+   argv the plate issued -- each on the site's own code rule. Sits inside the
+   rig, so the no-JS page does not carry it, and print does not either. */
+.cmds{
+  margin-top: clamp(14px, 1.6vw, 22px);
+  border-top: 1px solid var(--rule-dark); padding-top: 10px;
+  /* The fold grows the platform's own content box, so `auto` has to be an
+     animatable length keyword. */
+  interpolate-size: allow-keywords;
+}
+.cmds__h{
+  font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--rule); cursor: pointer;
+}
+.cmds__h::before{ content: "\25B8\00a0"; }
+.cmds[open] .cmds__h::before{ content: "\25BE\00a0"; }
+.cmds__h:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.cmds__body .code{ margin-top: 12px; }
+.cmds__body .code + .code{ margin-top: 14px; }
+/* Text the page did not author -- a corpus passage, the reader's own command --
+   is clamped with the platform's own ellipsis rather than laid out to whatever
+   length it happens to be: a passage shows three lines, a command two. The full
+   text stays in the document, so selecting it still yields every word. */
+.cmds__body .code__body,
+.quote__text{
+  display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cmds__body .code__body{ -webkit-line-clamp: 2; }
+.quote__text{ -webkit-line-clamp: 3; }
+/* The fold opens rather than blinks: where the platform animates its own details
+   content the height grows, and everywhere the commands still arrive on the
+   site's easing. Reduced motion gets the open disclosure in one frame. */
+@media (prefers-reduced-motion: no-preference){
+  .cmds::details-content{
+    block-size: 0; overflow: hidden;
+    transition: block-size 260ms cubic-bezier(.16,1,.3,1),
+                content-visibility 260ms allow-discrete;
+  }
+  .cmds[open]::details-content{ block-size: auto; }
+  .cmds[open] .cmds__body{ animation: cmds-in 260ms cubic-bezier(.16,1,.3,1) both; }
+}
+@keyframes cmds-in{
+  from{ opacity: 0; translate: 0 -4px; }
+  to{ opacity: 1; translate: none; }
+}
 .rig__row{ display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .rig__pick{
   display: flex; gap: 0; border: 1px solid var(--rule-dark);

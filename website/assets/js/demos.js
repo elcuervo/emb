@@ -247,11 +247,21 @@ export function gallery() {
     }
   }
 
+  /* Every command a plate issues passes through `send`, which records the exact
+   * argv before handing it to the transport. Recording here rather than inside
+   * `exec` keeps the trace per gallery instance: a page with two instruments
+   * (the atlas and its blend) holds each one's commands apart. */
+  const trace = [];
+  function send(args, bin) {
+    trace.push({ args: args.slice(), bin: bin ? bin.slice() : [] });
+    return exec(args, bin);
+  }
+
   async function embed(model, text) {
     // The `VALUES` reply is the server's typed tensor: a flat field/value list
     // of dtype, shape and values. Reading it through the field names rather than
     // by position is what keeps this working if the envelope grows a field.
-    const flat = envelopeValue(await exec(['EMB', model, 'VALUES', text]));
+    const flat = envelopeValue(await send(['EMB', model, 'VALUES', text]));
     const tensor = {};
     if (Array.isArray(flat)) {
       for (let i = 0; i + 1 < flat.length; i += 2) { tensor[flat[i]] = flat[i + 1]; }
@@ -270,13 +280,19 @@ export function gallery() {
     get detail() { return detail; },
     onState(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
+    /* The commands issued since the plate last called `begin`, so a plate can
+     * unfold what its own run sent. `begin` is explicit because the gallery's
+     * own state machine never sees a plate that calls `raw` directly. */
+    begin() { trace.length = 0; },
+    trace() { return trace.map((entry) => ({ args: entry.args.slice(), bin: entry.bin.slice() })); },
+
     /* The index's own numbers, so a caption cannot transcribe them. */
     async manifest() { return (await index()).manifest; },
 
     /* The model the sandbox says it serves, for a plate that must not name a
      * model the server does not have. */
     async models() {
-      const flat = envelopeValue(await exec(['EMB.MODELS']));
+      const flat = envelopeValue(await send(['EMB.MODELS']));
       const out = [];
       for (let i = 0; i + 2 < flat.length + 1; i += 3) {
         out.push({ name: flat[i], dimension: Number(flat[i + 1]), status: flat[i + 2] });
@@ -346,7 +362,7 @@ export function gallery() {
     async preset(model, sha, texts, args) {
       if (!sha) { throw new SandboxError('error', 'no preset digest was stamped for this plate'); }
       const argv = ['EMB.EVSHA', model, sha, String(texts.length)].concat(texts, args || []);
-      const reply = envelopeValue(await run(() => exec(argv)));
+      const reply = envelopeValue(await run(() => send(argv)));
       // The server's own contract decides the shape: one text returns the value
       // itself, N texts return one value per text. A single hash and a list of
       // hashes are both arrays on the wire, so the count is the only reliable
@@ -363,12 +379,12 @@ export function gallery() {
     async imagePreset(model, sha, bytes, labels) {
       if (!sha) { throw new SandboxError('error', 'no preset digest was stamped for this plate'); }
       const argv = ['EMB.EVSHA', model, sha, '1', toBase64(bytes)].concat(labels);
-      const reply = envelopeValue(await run(() => exec(argv, [4])));
+      const reply = envelopeValue(await run(() => send(argv, [4])));
       return pairsToObject(reply) || reply;
     },
 
     /* The raw reply envelope, for a plate that shows the reply's shape. */
-    async raw(args) { return exec(args); },
+    async raw(args) { return send(args); },
 
     retry() { indexPromise = null; window[WASM_PROMISE] = null; set('idle'); }
   };
@@ -496,11 +512,38 @@ export function showState(node, state, message, onRetry) {
 
 /* The commands a plate shows: the exact argv it issued, in the site's own
  * command vocabulary, so a reader can run it themselves. */
-export function argvLine(args) {
-  const line = args.map((arg) => (/\s/.test(arg) ? '"' + arg + '"' : arg)).join(' ');
+export function argvLine(args, bin) {
+  const bytes = new Set(bin || []);
+  const line = args.map((arg, i) => {
+    // A binary argument is a payload the page encoded, not text: name its size
+    // and keep the bytes out of the page. The size is the base64 length's own
+    // decoded length, so nothing has to be allocated to read it.
+    if (bytes.has(i)) {
+      const pad = arg.endsWith('==') ? 2 : arg.endsWith('=') ? 1 : 0;
+      const size = Math.max(0, Math.floor(arg.length * 3 / 4) - pad);
+      return '[' + size.toLocaleString('en-US') + ' bytes]';
+    }
+    return /\s/.test(arg) ? '"' + arg + '"' : arg;
+  }).join(' ');
   return el('div', { class: 'code' }, [
     el('pre', { class: 'code__body' }, [el('code', { class: 't-cmd', text: line })])
   ]);
+}
+
+/* The run's own commands, unfolded. A plate hands this its rig (or the
+ * disclosure itself) and the entries `g.trace()` returned, and the disclosure
+ * shows that run's argv. The fold is the platform's, so it opens without a
+ * script; only the command text is filled here. */
+export function unfold(node, entries) {
+  if (!node) { return; }
+  const box = node.matches && node.matches('[data-cmds]') ? node : node.querySelector('[data-cmds]');
+  if (!box) { return; }
+  const items = (entries || []).filter(Boolean);
+  box.querySelector('[data-cmds-body]').replaceChildren(
+    ...items.map((entry) => argvLine(entry.args, entry.bin))
+  );
+  box.hidden = items.length === 0;
+  if (!items.length) { box.open = false; }
 }
 
 /* ── the code specimens ─────────────────────────────────────────────── */

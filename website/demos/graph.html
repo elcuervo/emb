@@ -120,6 +120,10 @@
                 <p class="rig__readout" data-readout></p>
                 <div data-map></div>
               </div>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
             </div>
 
       </div></div>
@@ -186,7 +190,7 @@ local top = emb.math.topk(scores, 2)   -- edges, not the matrix</code></pre>
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, pairsToObject, tween, mechanism, playStages } from '../assets/js/demos.js';
+import { gallery, el, showState, pairsToObject, tween, mechanism, playStages, unfold } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const N = 8;
@@ -288,6 +292,7 @@ function setState(next, message) {
 }
 async function run() {
   const query = root.querySelector('#g-q').value;
+  g.begin();
   go.disabled = true;
   setState('running');
   mech.reset(); playStages(mech, 150, 60);
@@ -327,6 +332,7 @@ async function run() {
     setState(err.state || 'error', err.message);
   } finally {
     go.disabled = false;
+    unfold(root, g.trace());
   }
 }
 form.addEventListener('submit', (e) => { e.preventDefault(); run(); });

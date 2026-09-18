@@ -77,6 +77,7 @@
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="function.html"><span>Next</span> <b>The model is a function</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The languages</h1>
           <p class="plate__teaches">One model holds six languages in one space, so a sentence written in English lands where its Portuguese translation lands. No translator runs between them.</p>
@@ -116,6 +117,10 @@
               <div class="rig__out" data-out hidden>
                 <p class="rig__readout" data-readout></p>
               </div>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
             </div>
 
       </div></div>
@@ -181,7 +186,7 @@ EMB.EVSHA multilingual &lt;embed.lua sha1&gt; 1 "Necesito comprar leche y pan en
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, mechanism, playStages, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, mechanism, playStages, tween, unfold } from '../assets/js/demos.js';
 
 const g = gallery();
 const MODEL = 'multilingual';
@@ -264,6 +269,7 @@ function setState(next, message) {
 }
 
 async function run() {
+  g.begin();
   go.disabled = true;
   setState('running');
   mech.reset(); playStages(mech, 150, 60);
@@ -307,6 +313,7 @@ async function run() {
     setState(err.state || 'error', err.message);
   } finally {
     go.disabled = false;
+    unfold(root, g.trace());
   }
 }
 form.addEventListener('submit', (e) => { e.preventDefault(); run(); });

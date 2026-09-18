@@ -77,6 +77,7 @@
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="search.html"><span>Next</span> <b>The search</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The similarity</h1>
           <p class="plate__teaches">Everything retrieval does is this number, sorted. One cosine over two vectors, not 384 additions you have to read.</p>
@@ -118,9 +119,12 @@
               <p class="rig__state" data-state>ready when you are</p>
               <div class="rig__out" data-out hidden>
                 <p class="rig__readout" data-readout></p>
-                <div class="shape__body" data-source></div>
                 <p class="shape__sha" data-sha></p>
               </div>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
             </div>
 
       </div></div>
@@ -185,7 +189,7 @@ return out</code></pre>
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, mechanism, playStages } from '../assets/js/demos.js';
+import { gallery, el, showState, mechanism, playStages, unfold } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const root = document.querySelector('[data-rig="similarity"]');
@@ -195,7 +199,6 @@ const b = root.querySelector('#s-b');
 const state = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
-const source = root.querySelector('[data-source]');
 const sha = root.querySelector('[data-sha]');
 const go = root.querySelector('.rig__go');
 const mech = mechanism(document.querySelector('[data-mech]'), [
@@ -213,6 +216,7 @@ function setState(next, message) {
 
 async function run() {
   last = true;
+  g.begin();
   go.disabled = true;
   setState('running');
   mech.reset(); playStages(mech, 150, 60);
@@ -227,7 +231,6 @@ async function run() {
       el('span', { text: ' · ' }),
       el('span', { class: 'k', text: 'norm ' }), el('b', { text: Number(reply.norm).toFixed(4) })
     );
-    source.textContent = 'EMB.EVSHA minilm ' + digest + ' 1 \n  "' + a.value + '" \n  "' + b.value + '"';
     sha.textContent = 'preset sha1 ' + digest + ' — the digest the sandbox preloaded';
     out.hidden = false;
     setState('ready');
@@ -236,6 +239,7 @@ async function run() {
     setState(err.state || 'error', err.message);
   } finally {
     go.disabled = false;
+    unfold(root, g.trace());
   }
 }
 form.addEventListener('submit', (e) => { e.preventDefault(); run(); });

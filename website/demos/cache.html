@@ -77,6 +77,7 @@
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="graph.html"><span>Next</span> <b>The graph</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The cache</h1>
           <p class="plate__teaches">
@@ -124,6 +125,10 @@
               <div class="rig__out" data-out hidden>
                 <p class="rig__readout" data-readout></p>
               </div>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
             </div>
 
       </div></div>
@@ -195,7 +200,7 @@ INFO cache
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, envelopeValue, duration, tween, mechanism, playStages } from '../assets/js/demos.js';
+import { gallery, el, showState, envelopeValue, duration, tween, mechanism, playStages, unfold } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const root = document.querySelector('[data-rig="cache"]');
@@ -262,6 +267,7 @@ function setState(next, message) {
 }
 async function run() {
   const text = root.querySelector('#c-q').value;
+  g.begin();
   go.disabled = true;
   setState('running');
   mech.reset(); playStages(mech, 150, 60);
@@ -306,6 +312,7 @@ async function run() {
     setState(err.state || 'error', err.message);
   } finally {
     go.disabled = false;
+    unfold(root, g.trace());
   }
 }
 form.addEventListener('submit', (e) => { e.preventDefault(); run(); });

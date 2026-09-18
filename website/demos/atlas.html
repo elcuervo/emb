@@ -77,6 +77,7 @@
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="lens.html"><span>Next</span> <b>The model lens</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">II.</span>The atlas</h1>
           <p class="plate__teaches">
@@ -133,6 +134,10 @@
                   <p class="rig__readout" data-readout></p>
                   <div data-hits></div>
                 </div>
+                <details class="cmds" data-cmds hidden>
+                  <summary class="cmds__h">the commands this run sent</summary>
+                  <div class="cmds__body" data-cmds-body></div>
+                </details>
               </div>
 
               <div data-live class="rig" data-rig="between" data-emb-preset-between="6623801df0b164e0dd8c5c974aebc7c6e550cf18">
@@ -147,6 +152,10 @@
                 </form>
                 <p class="rig__state" data-between-state>ready when you are</p>
                 <div data-between-hits></div>
+                <details class="cmds" data-cmds hidden>
+                  <summary class="cmds__h">the commands this run sent</summary>
+                  <div class="cmds__body" data-cmds-body></div>
+                </details>
               </div>
             </div>
 
@@ -216,8 +225,9 @@ EMB.EVSHA minilm &lt;between.lua sha1&gt; 8
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation, SandboxError, motionAllowed, tween, mechanism, playStages } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, SandboxError, motionAllowed, tween, mechanism, playStages, unfold } from '../assets/js/demos.js';
 const g = gallery();
+const gb = gallery();
 const MODEL = 'minilm';
 const W = 1000, H = 620, PAD = 34;
 const plot = document.querySelector('[data-plot]');
@@ -383,6 +393,7 @@ async function land(text) {
 async function run() {
   const form = root.querySelector('[data-form]');
   const text = root.querySelector('#a-q').value;
+  g.begin();
   root.querySelector('.rig__go').disabled = true;
   setState('running');
   mech.reset(); playStages(mech, 150, 60);
@@ -394,6 +405,7 @@ async function run() {
     setState(err.state || 'error', err.message);
   } finally {
     root.querySelector('.rig__go').disabled = false;
+    unfold(root, g.trace());
   }
 }
 
@@ -412,6 +424,7 @@ root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventD
 // the instrument answers with real corpus items, not a curated list.
 betwixt.querySelector('[data-between-form]').addEventListener('submit', async (e) => {
   e.preventDefault();
+  gb.begin();
   const a = betwixt.querySelector('#b-a').value;
   const b = betwixt.querySelector('#b-b').value;
   const go = betwixt.querySelector('.rig__go');
@@ -419,11 +432,11 @@ betwixt.querySelector('[data-between-form]').addEventListener('submit', async (e
   showState(bState, 'running', null, null);
   let failure = null;
   try {
-    const [fa, fb] = await Promise.all([g.search(MODEL, a, 4), g.search(MODEL, b, 4)]);
+    const [fa, fb] = await Promise.all([gb.search(MODEL, a, 4), gb.search(MODEL, b, 4)]);
     const pool = await g.passages(fa.concat(fb).map((h) => h.rowid));
     const candidates = pool.slice(0, 6);
     const digest = betwixt.getAttribute('data-emb-preset-between');
-    const ranked = await g.preset(MODEL, digest, [a, b].concat(candidates.map((p) => p.text)));
+    const ranked = await gb.preset(MODEL, digest, [a, b].concat(candidates.map((p) => p.text)));
     const order2 = ranked.filter((r) => r.doc > 2).sort((x, y) => x.rank - y.rank);
     const byDoc = new Map(candidates.map((p, i) => [i + 3, p]));
     bHits.replaceChildren(...order2.slice(0, 3).map((r, i) =>
@@ -433,6 +446,7 @@ betwixt.querySelector('[data-between-form]').addEventListener('submit', async (e
     failure = err;
   }
   go.disabled = false;
+  unfold(betwixt, gb.trace());
   // A failure is stated, never dressed as an empty success: the blank result
   // area would otherwise read as "the blend found nothing".
   if (failure) {
