@@ -641,7 +641,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
         <div class="block__grid">
           <div class="block__main">
 
-            <article class="cap">
+            <article class="cap" data-reveal>
               <h3 class="cap__label">ANY REDIS CLIENT</h3>
               <p class="cap__claim">
                 redis-cli, redis-py, redis-rb — the client you already have is
@@ -649,7 +649,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </p>
             </article>
 
-            <figure class="code">
+            <figure class="code" data-reveal>
 <pre class="code__body"><span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB</span> minilm <span class="t-str">"hello world"</span>
 <span class="t-dim"># → \x7c\x8e\x80\xbd…           384 float32s × 4 bytes</span>
 
@@ -661,7 +661,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </figcaption>
             </figure>
 
-            <article class="cap">
+            <article class="cap" data-reveal>
               <h3 class="cap__label">MANY MODELS, ONE ROUND TRIP</h3>
               <p class="cap__claim">
                 <span class="t-cmd">EMB.MULTI</span> queries several models in one
@@ -707,7 +707,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               preprocessing, postprocessing, and the reply itself.
             </p>
 
-            <div class="shift">
+            <div class="shift" data-reveal>
               <p class="shift__row">
                 <span class="shift__args">model(<span class="shift__fn">input</span>)</span>
                 <span class="shift__arrow" aria-hidden="true">→</span>
@@ -722,7 +722,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </p>
             </div>
 
-            <figure class="code code--dark">
+            <figure class="code code--dark" data-reveal>
 <pre class="code__body"><span class="t-cmd">local</span> enc <span class="t-dim">=</span> emb.tokenize.<span class="t-cmd">encode</span>(<span class="t-str">KEYS[1]</span>, <span class="t-num">512</span>)
 <span class="t-cmd">local</span> out <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({
   input_ids      <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids}, data <span class="t-dim">=</span> enc.ids },
@@ -738,7 +738,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </figcaption>
             </figure>
 
-            <ol class="uses" role="list">
+            <ol class="uses" role="list" data-reveal>
               <li class="uses__i"><span class="uses__n">sst2</span> classify</li>
               <li class="uses__i"><span class="uses__n">qa</span> extractive QA</li>
               <li class="uses__i"><span class="uses__n">rerank</span> sigmoid scores</li>
@@ -776,7 +776,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
         <div class="block__grid">
           <div class="block__main block__main--ledger">
 
-            <article class="cap">
+            <article class="cap" data-reveal>
               <h3 class="cap__label">READ AND TUNE, LIVE</h3>
               <p class="cap__claim">
                 Redis-shaped <span class="t-cmd">INFO</span> and
@@ -785,7 +785,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </p>
             </article>
 
-            <article class="cap">
+            <article class="cap" data-reveal>
               <h3 class="cap__label">A REAL READINESS PROBE</h3>
               <p class="cap__claim">
                 <span class="t-cmd">EMB.READY</span> answers <span
@@ -794,7 +794,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </p>
             </article>
 
-            <article class="cap">
+            <article class="cap" data-reveal>
               <h3 class="cap__label">BACKPRESSURE, NOT QUEUING</h3>
               <p class="cap__claim">
                 At the concurrency cap the server answers
@@ -803,7 +803,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               </p>
             </article>
 
-            <article class="cap">
+            <article class="cap" data-reveal>
               <h3 class="cap__label">WHAT IT DOES TO THE MACHINE</h3>
               <p class="cap__claim">
                 RSS, CPU, goroutines, connections and per-model latency, in the
