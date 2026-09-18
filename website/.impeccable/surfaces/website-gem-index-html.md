@@ -184,3 +184,16 @@ FINISH: unreviewed and undocumented is unfinished. This build ends with the
 detector run once over the changed files, the measured floors and contrast on
 both grounds, a load with scripting disabled, the instrument's motion sampled as
 scroll positions, its three fallbacks rendered, and captures at 1086 and 390.
+
+---
+## Amendment — the read-mode switch (change `website-demos-tldr`)
+
+The gallery's `/demos` switch also loads on `/gem`. A ruled bar inside `<main>`
+carries one button that sets `data-tldr` on `<html>`, remembers it in
+`localStorage` (`emb.tldr`), and is revealed only when scripting can honour it.
+On this surface the gist keeps the plate, the `.tldr` one-paragraph claim,
+`THE FOUR WIRE SHAPES` (the instrument) and `THE EXACT COMMANDS`, and hides the
+argument sections and the terrain break. The button is the page's own material —
+hairline rule, mono label, square bordered control that inverts on press — and
+adds no colour, font or claim. Detector parity with `HEAD` is recorded in the
+demos brief.

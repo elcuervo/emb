@@ -70,6 +70,11 @@
 
 <main id="main">
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
 
     <div class="doc-head">
       <h1>Documentation</h1>
@@ -86,6 +91,7 @@
         and interfaces may still move. Commands, configuration keys and reply
         shapes on this page describe that version.
       </p>
+        <p class="tldr">Everything the server does, as commands and replies. Each section shows the exact command and what comes back.</p>
     </div>
 
     <nav class="doc-toc" aria-labelledby="toc-h">
@@ -898,5 +904,6 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
 
 <script src="../assets/js/asciinema-player-3.17.0.min.js" defer></script>
 <script src="../assets/js/topviz.js" defer></script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

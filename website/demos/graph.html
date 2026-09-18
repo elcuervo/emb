@@ -67,6 +67,11 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
@@ -76,6 +81,7 @@
             atlas are the cloud; here they are the edges, computed by a script
             beside the model.
           </p>
+        <p class="tldr">A script builds the nearest-neighbour graph of the whole corpus beside the model and returns just the edges.</p>
         </div>
         <div>
           <p class="fig"><b>FIG. 10 — THE GRAPH</b>
@@ -92,18 +98,11 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">
-              A directed graph: an arrow from one passage to another means the
-              first is closer to the second than to most things. No layout is
-              pretending to be geography — the ring is just a place to stand, and
-              the arrows are the only claim. Dense clusters show up as mutual
-              arrows; lonely passages point out and are not pointed at.
-            </p>
-
-      </div></div>
+            <p class="block__deck">A directed graph: an arrow from one passage to another means the first is closer to the second than to most things. No layout pretends to be geography — the ring is just a place to stand, and the arrows are the only claim. Dense clusters show up as mutual arrows; lonely passages point out and are not pointed at.</p>
+</div></div>
     </section>
 
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
 
@@ -136,49 +135,24 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">
-              The page embedded the seed, took the corpus's eight nearest
-              passages, and sent those eight texts to <span class="t-cmd">graph.lua</span>
-              on the sandbox. The script called
-              <span class="t-cmd">emb.embed</span> once for all eight — the same
-              batcher and cache as <span class="t-cmd">EMB</span> — built the
-              eight-by-eight cosine matrix, and returned each node's two nearest
-              neighbours.
-            </p>
-            <p class="block__deck">
-              The matrix never crossed the wire. Sixty-four cosines became
-              sixteen edges inside the server's process, over packed float32
-              buffers, with <span class="t-cmd">emb.math.topk</span> doing the
-              ordering host-side. That is the scripting layer's whole argument
-              in one request: move the arithmetic to the data.
-            </p>
-
-      </div></div>
+            <p class="block__deck">The page embedded the seed, took the corpus's eight nearest passages, and sent those eight texts to <span class="t-cmd">graph.lua</span>. The script called <span class="t-cmd">emb.embed</span> once for all eight, built the eight-by-eight cosine matrix, and returned each node's two nearest neighbours.</p>
+            <p class="block__deck">The matrix never crossed the wire. Sixty-four cosines became sixteen edges inside the server's process, over packed float32 buffers, with <span class="t-cmd">emb.math.topk</span> doing the ordering host-side. That is the scripting layer's whole argument: move the arithmetic to the data.</p>
+</div></div>
     </section>
 
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">
-              Nearest-neighbour graphs are how search finds more than the top-k:
-              recommend what is near what you liked, cluster by connected
-              components, spot the outlier nothing points at. All of it is the
-              same cosine, and all of it is cheap when the graph is built where
-              the vectors already are.
-            </p>
-
-      </div></div>
+            <p class="block__deck">Nearest-neighbour graphs are how search finds more than the top-k: recommend what is near what you liked, cluster by connected components, spot the outlier nothing points at. All of it is the same cosine, and all of it is cheap when the graph is built where the vectors already are.</p>
+</div></div>
     </section>
 
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-            <p class="block__deck">
-              One scripted command over eight texts and a query, plus the
-              <span class="t-cmd">vec0</span> search that chose the eight.
-            </p>
+            <p class="block__deck">One scripted command over eight texts and a query, plus the <span class="t-cmd">vec0</span> search that chose the eight.</p>
 <figure class="code"><pre class="code__body"><code>SELECT rowid FROM vec_minilm
   WHERE embedding MATCH vec_int8(:q) AND k = 8;
 # the eight seed passages, fetched by the page
@@ -345,5 +319,6 @@ form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
 draw(null);
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

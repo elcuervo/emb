@@ -70,6 +70,11 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
@@ -79,6 +84,7 @@
             the first word; emb spends it once for a whole batch instead of once
             per text.
           </p>
+        <p class="tldr">Many texts in one call is far faster than one call each. The server does the same thing for readers who arrive together.</p>
         </div>
         <div>
           <p class="fig"><b>FIG. 7 — THE BATCH</b>
@@ -95,27 +101,12 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">
-              Embedding one text is cheap; starting the work is the expensive
-              part. The tokenizer, the matrix multiplies and the pooling each pay
-              a fixed cost per <em>pass</em>, and a pass can carry many texts at
-              once. Six texts in six passes pay that fixed cost six times. Six
-              texts in one pass pay it once.
-            </p>
-            <p class="block__deck">
-              The plate measures both ways against the sandbox and draws them to
-              scale. Both numbers are the server's own measured
-              <span class="t-cmd">elapsed_us</span> — the bridge brackets the
-              command on its loopback connection, so the figure is execution
-              time and the network between you and the sandbox is not in it. It
-              is not a stopwatch in the page and not a benchmark lifted from a
-              README.
-            </p>
-
-      </div></div>
+            <p class="block__deck">Embedding one text is cheap; starting the work is not. The tokenizer, the matrix multiplies and the pooling each pay a fixed cost per <em>pass</em>, and a pass can carry many texts at once. Six texts in six passes pay it six times; six texts in one pass pay it once.</p>
+            <p class="block__deck">The plate measures both ways against the sandbox and draws them to scale. Both numbers are the server's own <span class="t-cmd">elapsed_us</span>, bracketed on the bridge's loopback connection — execution time, with the network between you and the sandbox excluded.</p>
+</div></div>
     </section>
 
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
 
@@ -145,57 +136,25 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">
-              Six passages went to the sandbox twice. The first time, the plate
-              sent six separate <span class="t-cmd">EMB</span> commands; each one
-              became its own pass over the model. The second time it sent a
-              single <span class="t-cmd">EMB</span> carrying all six texts, and
-              the server's batcher ran them in one pass. Same six vectors come
-              back both ways.
-            </p>
-            <p class="block__deck">
-              This is the same batcher that handles concurrent visitors: two
-              people who ask at the same moment are coalesced into one pass
-              whether either of them asked for a batch. The gain is not a new
-              command you have to learn; it is the server doing the obvious thing
-              with the work it is handed. Each run salts both sides with a fresh
-              marker, so the measurement is never made cheaper by the cache the
-              next plate is about.
-            </p>
-
-      </div></div>
+            <p class="block__deck">Six passages went to the sandbox twice. First as six separate <span class="t-cmd">EMB</span> commands, each its own pass over the model; then as one <span class="t-cmd">EMB</span> carrying all six, which the server's batcher ran in one pass. The same six vectors come back both ways.</p>
+            <p class="block__deck">It is the same batcher that handles concurrent visitors: two people who ask at the same moment are coalesced into one pass whether either asked for a batch. Each run salts both sides with a fresh marker, so the measurement is never made cheaper by the cache the next plate is about.</p>
+</div></div>
     </section>
 
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">
-              Embedding a corpus is an N-request job, and N is not small. Chunk
-              10,000 documents, quote every review, deduplicate every ticket: the
-              same question — one text at a time, or all of them together —
-              decides whether the job finishes in minutes or hours, and whether
-              it costs the CPU of one machine or several.
-            </p>
-            <p class="block__deck">
-              Batching is also why the sandbox can be small. A pile of concurrent
-              requests becomes one pass over a shared CPU, so the 2&nbsp;GB
-              machine behind this gallery serves a room full of readers without
-              a queue and without a second instance.
-            </p>
-
-      </div></div>
+            <p class="block__deck">Embedding a corpus is an N-request job, and N is not small. Chunk 10,000 documents, quote every review, deduplicate every ticket: one text at a time or all of them together decides whether the job takes minutes or hours.</p>
+            <p class="block__deck">Batching is also why the sandbox can be small. Concurrent requests become one pass over a shared CPU, so the 2&nbsp;GB machine behind this gallery serves a room full of readers without a queue.</p>
+</div></div>
     </section>
 
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-            <p class="block__deck">
-              Both are the same command. The only difference is how many texts
-              ride on it — and the bridge caps one call at eight, so a rerank of
-              seven candidates plus a query fits with room to spare.
-            </p>
+            <p class="block__deck">Both are the same command. The only difference is how many texts ride on it — and the bridge caps one call at eight.</p>
 <figure class="code"><pre class="code__body"><code>EMB minilm "text 1"...     # one call: the model sees the whole batch at once
 EMB minilm "text 2"
 …                          # six calls: the model sees them one at a time
@@ -336,5 +295,6 @@ g.manifest().then((m) => {
 draw(null, null);
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

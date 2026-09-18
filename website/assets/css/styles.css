@@ -2819,3 +2819,78 @@ html.js.is-ready .hero__prose{
     .wire__lamp.is-one{ animation-name: wire-draw-one; }
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE TL;DR SWITCH  (demos, docs, the client page)
+   ──────────────────────────────────────────────────────────────────────
+   One control at the top of the content switches a reading surface between
+   the full explanation and its gist. The gist keeps what a reader acts on --
+   the plate's own summary, the live demo, the exact commands -- and drops
+   the argument around it. Nothing here carries new information: the
+   `data-tldr` attribute only reveals each surface's `.tldr` line and hides
+   its long form, so with scripting off the full page stands and the control
+   is never shown as a dead button.
+   ═══════════════════════════════════════════════════════════════════════ */
+.tldr-bar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: clamp(20px, 2.4vw, 40px);
+  padding-block: 11px;
+  border-top: 1.5px solid var(--fg);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.tldr-bar__label{
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tldr-toggle{
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.15vw, 14px);
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 1;
+  padding: 11px 15px;
+  border: 1px solid var(--fg);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background-color .12s ease, color .12s ease;
+}
+.tldr-toggle[aria-pressed="true"]{ background: var(--fg); color: var(--bg); }
+.tldr-toggle:hover{ background: var(--accent); color: var(--fg); border-color: var(--accent); }
+.tldr-toggle:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
+/* The bar sits between the masthead and the plate, so the plate's own top
+   margin would open a gap the ruled bar does not want. */
+.tldr-bar + .plate,
+.tldr-bar + .doc-head{ margin-top: clamp(18px, 2vw, 30px); }
+
+/* The gist line: the plate's own summary, set a step louder than the teaching
+   line it replaces. Hidden until the switch is on. */
+.tldr{
+  display: none;
+  margin: 12px 0 0;
+  max-width: 54ch;
+  font-family: var(--mono);
+  font-size: clamp(14px, 1.35vw, 17px);
+  line-height: 1.5;
+  color: var(--fg);
+}
+[data-tldr] .tldr{ display: block; }
+/* The teaching line and the lede are the full-page summaries; the gist line
+   replaces them rather than standing beside them. */
+[data-tldr] .plate__teaches,
+[data-tldr] .doc-lede{ display: none; }
+/* Demos and the client page: keep the plate and the sections a reader acts on
+   (the instrument, the exact commands), drop the argument between them. */
+[data-tldr] .block.sec:not(.tldr-keep){ display: none; }
+/* The reference surface: keep its structure, its commands and its code, drop
+   its prose. */
+[data-tldr] .doc-prose{ display: none; }
+/* The terrain breaks are reading rhythm; the gist is short and needs none. */
+[data-tldr] .ridge{ display: none; }

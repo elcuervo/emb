@@ -70,11 +70,17 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The vector</h1>
           <p class="plate__teaches">Text becomes a fixed-length list of numbers, and that list is the model's answer — not a hash, and not a rendering of the text.</p>
+        <p class="tldr">A model turns text into a fixed list of 384 numbers. Texts that mean the same thing land on nearby numbers.</p>
         </div>
         <div>          <p class="fig"><b>FIG. 1 — THE VECTOR</b>
             · <b data-fig-model>—</b>
@@ -89,25 +95,13 @@
     <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
-        
-            <p class="block__deck">
-              A model turns text into a fixed-length list of numbers. That list
-              is the <strong>embedding</strong>: the model's answer to
-              <em>what does this text mean</em>, expressed as a point. Nothing
-              about it is a hash — the same meaning written two ways lands in
-              nearly the same place, which is the whole reason the rest of this
-              gallery works.
-            </p>
-            <p class="block__deck">
-              Put a passage below and watch what comes back: a waveform of the
-              384 values, the dimension and the byte count from the server, and
-              the first bytes of the reply itself.
-            </p>
 
-      </div></div>
+            <p class="block__deck">A model turns text into a fixed-length list of numbers. That list is the <strong>embedding</strong>: the model's answer to <em>what does this text mean</em>, as a point. It is not a hash — the same meaning written two ways lands in nearly the same place, which is why the rest of this gallery works.</p>
+            <p class="block__deck">Put a passage below and watch what comes back: a waveform of the 384 values, the dimension and byte count from the server, and the first bytes of the reply.</p>
+</div></div>
     </section>
 
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
         
@@ -140,52 +134,25 @@
     <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-        
-            <p class="block__deck">
-              Four steps inside the server: <strong>tokenize</strong> the text
-              into subword units, <strong>encode</strong> each into a vector that
-              knows its neighbours and its position, <strong>pool</strong> those
-              into one vector, and <strong>normalize</strong> it to unit length.
-              Pooling is what makes a sentence of any length one point;
-              normalization is why cosine similarity and the dot product agree.
-            </p>
-            <p class="block__deck">
-              Truncation is the step's own limit. The model reads a bounded
-              number of tokens, so a passage longer than that window loses its
-              tail silently. The sandbox's models are configured for passages,
-              and the corpus this gallery searches was embedded with the same
-              window and the same normalization — the query and the corpus have
-              to go through the same function or the distances mean nothing.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Four steps inside the server: <strong>tokenize</strong> the text into subword units, <strong>encode</strong> each with its neighbours and position, <strong>pool</strong> those into one vector, and <strong>normalize</strong> it to unit length. Pooling makes a sentence one point; normalization is why cosine similarity and the dot product agree.</p>
+            <p class="block__deck">Truncation is the step's own limit: the model reads a bounded number of tokens, so a longer passage loses its tail silently. The corpus was embedded with the same window and normalization, because query and corpus have to go through the same function or the distances mean nothing.</p>
+</div></div>
     </section>
 
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-        
-            <p class="block__deck">
-              Every later plate is this vector plus arithmetic. If the vector is
-              opaque, everything above it is magic — which is why this is plate
-              one. It is also 1 536 bytes, not a sentence, so a hundred thousand
-              passages fit in tens of megabytes you can cache, send, or search in
-              a browser.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Every later plate is this vector plus arithmetic. If the vector is opaque, everything above it is magic — which is why this is plate one. At 1 536 bytes it is not a sentence either, so a hundred thousand passages fit in tens of megabytes.</p>
+</div></div>
     </section>
 
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
-        
-            <p class="block__deck">
-              Two commands, both shown as the plate issued them. The first asks
-              for the packed bytes; the second calls the sandbox's own preloaded
-              script, which pools and normalizes and reports the dimension and
-              the norm. Neither is simulated.
-            </p>
+
+            <p class="block__deck">Two commands, shown as the plate issued them. One asks for the packed bytes; the other calls the sandbox's preloaded script, which pools, normalizes and reports the dimension and norm.</p>
 <figure class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;The thousand injuries of Fortunato I had borne as I best could.&quot;
 # -> a 1 536-byte bulk string: 384 little-endian float32s
 
@@ -329,5 +296,6 @@ g.manifest().then((m) => {
 run(input.value);
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

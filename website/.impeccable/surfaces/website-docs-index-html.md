@@ -208,3 +208,15 @@ identical findings. The bands add nothing the detector flags.
 would be the second orange line the brief forbids, and it would compete with the
 one accent the ledgers already spend. The engraving carries the break on its
 own.
+
+---
+## Amendment — the read-mode switch (change `website-demos-tldr`)
+
+The gallery's `/demos` switch also loads on `/docs`, and this surface is the one
+that reads best as a gist: a ruled bar inside `<main>` carries one button that
+sets `data-tldr` on `<html>`, remembers it in `localStorage` (`emb.tldr`), and is
+revealed only when scripting can honour it. It hides `.doc-prose` and `.doc-lede`
+(the `.tldr` line replaces the lede) and keeps the documentation's structure: the
+contents, the section heads, every command list and every code figure. The
+switch adds no colour, font or claim; detector parity with `HEAD` is recorded in
+the demos brief.

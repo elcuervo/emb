@@ -70,11 +70,17 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The similarity</h1>
           <p class="plate__teaches">Everything retrieval does is this number, sorted. One cosine over two vectors, not 384 additions you have to read.</p>
+        <p class="tldr">Two of those lists compare to one score. Sort the scores and you have search.</p>
         </div>
         <div><p class="fig"><b>FIG. 2 — THE SIMILARITY</b>
             · <b data-fig-dim>—</b> dimensions
@@ -88,27 +94,13 @@
     <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
-        
-            <p class="block__deck">
-              Two vectors and one cosine. Because the model normalizes what it
-              returns, cosine similarity is the dot product, and the result is a
-              single number with a real meaning: 1 is the same direction, 0 is
-              unrelated, and negative is opposed. A passage and a paraphrase of
-              it sit above 0.6; a passage and an unrelated one sit near 0.1.
-            </p>
-            <p class="block__deck">
-              The number is computed by the sandbox, not here: the plate calls
-              one of the server's preloaded Lua scripts by its SHA1 and renders
-              the reply. The script's source is printed below the reply, and the
-              digest beside it is the digest of exactly those bytes — a script
-              the sandbox was not told to load is a call it refuses, so the page
-              cannot describe one it does not have.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Two vectors and one cosine. Because the model normalizes its output, cosine similarity is the dot product: 1 is the same direction, 0 unrelated, negative opposed. A paraphrase scores above 0.6; an unrelated passage sits near 0.1.</p>
+            <p class="block__deck">The sandbox computes the number, not the page: the plate calls a preloaded Lua script by its SHA1 and renders the reply. The source and its digest are printed with it — the sandbox refuses a script it was not told to load.</p>
+</div></div>
     </section>
 
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
         
@@ -143,50 +135,25 @@
     <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-        
-            <p class="block__deck">
-              The script calls <span class="t-cmd">emb.embed</span> twice — the
-              same embedding path, the same batcher and the same cache as
-              <span class="t-cmd">EMB</span> — and then
-              <span class="t-cmd">emb.similarity</span>. It returns a hash rather
-              than 768 floats, because the point is the number: a page does not
-              need the vector to answer <em>how close are these</em>.
-            </p>
-            <p class="block__deck">
-              Doing it in Lua rather than in the page is the product's own
-              argument. The arithmetic runs next to the model, in the server's
-              process, over the same packed float32 buffers the model produced —
-              so a rerank costs one round trip and no bytes on the wire.
-            </p>
 
-      </div></div>
+            <p class="block__deck">The script calls <span class="t-cmd">emb.embed</span> twice — the same path, batcher and cache as <span class="t-cmd">EMB</span> — then <span class="t-cmd">emb.similarity</span>. It returns one number rather than 768 floats, because the number is the answer.</p>
+            <p class="block__deck">Doing it in Lua is the product's argument: the arithmetic runs beside the model, over the same packed float32 buffers, so a rerank costs one round trip and no bytes on the wire.</p>
+</div></div>
     </section>
 
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-        
-            <p class="block__deck">
-              This is the floor of every vector feature. Deduplication,
-              clustering, retrieval, recommendations, anomaly detection: each is
-              a similarity, an ordering, and a threshold chosen to suit the
-              consequences of being wrong. The next plate sorts this number over
-              2 782 passages instead of two.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Every vector feature is this number. Deduplication, clustering, retrieval, recommendations, anomaly detection: each is a similarity, an ordering, and a threshold chosen for the cost of being wrong. The next plate sorts it over 2 782 passages.</p>
+</div></div>
     </section>
 
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
-        
-            <p class="block__deck">
-              One command. The count before the texts is the number of
-              <em>texts</em> the script will see; the reference passage travels
-              as an argument, which is also what keeps the reply cacheable per
-              pair.
-            </p>
+
+            <p class="block__deck">One command. The count is how many texts the script will see; the reference passage travels as an argument, which keeps the reply cacheable per pair.</p>
 <figure class="code"><pre class="code__body"><code>EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;first passage&quot; &quot;second passage&quot;
 # -> { dim = 384, norm = 1, similarity = 0.42 }
 
@@ -264,5 +231,6 @@ g.manifest().then((m) => {
 run();
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

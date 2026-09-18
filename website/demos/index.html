@@ -70,6 +70,11 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
@@ -84,6 +89,7 @@
             structure beside the model. Read them in order, or jump to the one
             you came for — each stands on its own.
           </p>
+        <p class="tldr">Ten short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
         </div>
         <div>
           <p class="fig"><b>FIG. 0 — THE ATLAS</b>
@@ -97,7 +103,7 @@
         </div>
       </div>
 
-      <section class="block block--paper sec" aria-labelledby="plan-h">
+      <section class="block block--paper sec tldr-keep" aria-labelledby="plan-h">
         <div class="shell block__inner"><div class="block__body">
           <h2 class="sec__h" id="plan-h">THE READING ORDER</h2>
           <ol class="ord">
@@ -163,39 +169,12 @@
       <section class="block block--paper sec" aria-labelledby="what-h">
         <div class="shell block__inner"><div class="block__body">
           <h2 class="sec__h" id="what-h">WHAT THESE ARE</h2>
-          <p class="block__deck">
-            Every plate embeds real text with the sandbox's own model, searches a
-            corpus that was embedded before deployment, and shows you the exact
-            command it issued and the exact reply it got. Nothing here is a
-            screenshot and nothing is replayed: where a plate shows a number, the
-            number came from the server or from the shipped index, and where the
-            sandbox cannot be reached the plate says so and shows nothing.
-          </p>
-          <p class="block__deck">
-            The corpus is Edgar Allan Poe's collected tales and poems — 86 works,
-            public domain, fetched from Project Gutenberg and committed here. One
-            author's body of work has real thematic continents (the sea, the
-            grave, detection, grief), which is what makes a map of the space
-            legible. Your own text is used to answer your request and is not
-            stored, indexed, or shown to anyone else.
-          </p>
-          <p class="block__deck">
-            The search runs in your browser, over an index built offline and
-            shipped like any other asset: the sandbox pays one embedding per
-            query and nothing else. Nothing in the gallery writes to the
-            sandbox, and the sandbox runs only the scripts it preloaded —
-            <span class="t-cmd">EMB.EVAL</span> is refused, on purpose. The two
-            cost plates measure the server's own timings, so the case that emb is
-            cheap is a reading from the machine rather than a claim about it.
-          </p>
-          <p class="block__deck">
-            Every plate here drives the server. The
-            <a href="../gem/index.html">Ruby client's own surface</a> is its
-            companion on the other side of the wire: the same six texts, four
-            ways of sending them, and the one rule that decides which of the
-            four your call site is already choosing.
-          </p>
-        </div></div>
+
+          <p class="block__deck">Every plate embeds real text with the sandbox's own model, searches a corpus embedded before deployment, and shows the exact command and reply. Nothing is a screenshot and nothing is replayed: where a plate shows a number, it came from the server or the shipped index — and where the sandbox cannot be reached, the plate says so and shows nothing.</p>
+          <p class="block__deck">The corpus is Poe's collected tales and poems — 86 public-domain works from Project Gutenberg. One author's work has real thematic continents (the sea, the grave, detection, grief), which is what makes a map of the space legible. Your own text answers your request and is not stored or shown to anyone else.</p>
+          <p class="block__deck">The search runs in your browser over an index built offline and shipped like any other asset, so the sandbox pays one embedding per query. Nothing here writes to the sandbox, and it runs only the scripts it preloaded: <span class="t-cmd">EMB.EVAL</span> is refused, on purpose. The cost plates measure the server's own timings, so "cheap" is a reading from the machine, not a claim about it.</p>
+          <p class="block__deck">Every plate here drives the server. The <a href="../gem/index.html">Ruby client's own surface</a> is its companion on the other side of the wire: the same six texts, four ways of sending them, and the one rule that decides which of the four your call site is already choosing.</p>
+</div></div>
       </section>
     </section>
   </div>
@@ -225,5 +204,6 @@ g.manifest().then((m) => {
   put('[data-fig-attrib]', m.attribution);
 }).catch(() => { /* the static figures stand; nothing is fabricated. */ });
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

@@ -33,6 +33,9 @@ website/
 │   │                       same contract the console uses), the browser-side
 │   │                       `vec0` search over the shipped index, and the
 │   │                       loading states a plate renders
+│   ├── js/tldr.js          the read-mode switch on /demos, /docs and /gem:
+│   │                       one remembered preference that reveals each
+│   │                       surface's `.tldr` gist and hides its long form
 │   ├── vendor/sqlite-wasm-vec-0.1.9/
 │   │                       sqlite-vec in the browser, vendored from the npm
 │   │                       release pinned in `flake.nix` and re-vendored by

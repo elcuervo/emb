@@ -69,6 +69,11 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
@@ -78,6 +83,7 @@
             have scripts. The server runs the scripts it preloaded; it does not
             run yours.
           </p>
+        <p class="tldr">One model call can hand back bytes, a typed vector, a score or a label. Same model, a different wrapper around it.</p>
         </div>
         <div>
           <p class="fig"><b>FIG. 6 — THE FUNCTION</b>
@@ -94,29 +100,12 @@
     <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
-        
-            <p class="block__deck">
-              <span class="t-cmd">emb</span> is not a product with an embeddings
-              endpoint bolted on. It is a server whose primitive is <em>run a
-              model over inputs</em>, with one command for the common case and a
-              scripting surface for everything else. This plate runs one passage
-              through four of those answers, from two different models.
-            </p>
-            <p class="block__deck">
-              The first is the raw command: a bulk string of packed float32s and
-              the metadata the bridge attaches to it. The second and third are
-              the sandbox's preloaded <span class="t-cmd">embed.lua</span>,
-              called once on its own and once with a reference text to compare
-              against: a typed <span class="t-cmd">{dim, norm}</span> and then
-              <span class="t-cmd">{dim, norm, similarity}</span>. The fourth is
-              <span class="t-cmd">classify.lua</span> against a
-              sequence-classification model, whose answer is a label and a
-              confidence. Same server, same protocol, same connection.
-            </p>
 
-      </div></div>
+            <p class="block__deck"><span class="t-cmd">emb</span> is not a product with an embeddings endpoint bolted on. It is a server whose primitive is <em>run a model over inputs</em>: one command for the common case, a scripting surface for the rest. This plate runs one passage through four answers, from two models.</p>
+            <p class="block__deck">The first is the raw command — a bulk string of packed float32s and the metadata the bridge attaches. The next two call the preloaded <span class="t-cmd">embed.lua</span>: a typed <span class="t-cmd">{dim, norm}</span>, then <span class="t-cmd">{dim, norm, similarity}</span> against a reference text. The fourth is <span class="t-cmd">classify.lua</span>, whose answer is a label and a confidence.</p>
+</div></div>
     </section>
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
         
@@ -163,58 +152,24 @@
     <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-        
-            <p class="block__deck">
-              Each scripted reply is the server's own bytes. The digest beside
-              the reply is the SHA1 of the script the server preloaded, and
-              <span class="t-cmd">EMB.EVSHA</span> accepts only the digests the
-              sandbox was configured with — so a page cannot describe a script
-              the server does not have, and a digest that drifts is a call the
-              sandbox refuses rather than a result it invents.
-            </p>
-            <p class="block__deck">
-              Nothing on this page sends Lua. <span class="t-cmd">EMB.EVAL</span>
-              — the command that would run script source from a client — is
-              refused by the sandbox's allowlist, with the refusal naming the
-              alternative. That boundary is deliberate and it is part of the
-              lesson: a public sandbox cannot safely execute a stranger's code,
-              and a demonstration of extensibility does not need it to.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Each scripted reply is the server's own bytes. The digest beside it is the SHA1 of the script the server preloaded, and <span class="t-cmd">EMB.EVSHA</span> accepts only the digests the sandbox was configured with — so the page cannot describe a script the server does not have.</p>
+            <p class="block__deck">Nothing here sends Lua. <span class="t-cmd">EMB.EVAL</span> is refused by the sandbox's allowlist, with the refusal naming the alternative. That boundary is part of the lesson: a public sandbox cannot run a stranger's code, and extensibility does not need it to.</p>
+</div></div>
     </section>
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-        
-            <p class="block__deck">
-              The four answers are four different products. A vector store wants
-              the first. A reranker wants the third. A moderation filter or a
-              sentiment badge wants the fourth. If your embeddings server can
-              only return vectors, each of those is a separate service, a
-              separate model download and a separate deployment, and the models
-              are the expensive part, not the HTTP.
-            </p>
-            <p class="block__deck">
-              Keeping the scripting inside the server is also what keeps it
-              fast and honest. The script runs next to the model, over the same
-              buffers, sharing the same batcher and cache, so
-              <span class="t-cmd">classify.lua</span> costs one model call and
-              one round trip — not a vector out, a label back, and a second
-              service in between.
-            </p>
 
-      </div></div>
+            <p class="block__deck">The four answers are four products. A vector store wants the first, a reranker the third, a moderation filter or sentiment badge the fourth. If your server can only return vectors, each is a separate service and a separate deployment — and the models are the expensive part, not the HTTP.</p>
+            <p class="block__deck">Scripting inside the server is also what keeps it fast: the script runs beside the model, over the same buffers, sharing the same batcher and cache, so <span class="t-cmd">classify.lua</span> costs one model call and one round trip.</p>
+</div></div>
     </section>
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
-        
-            <p class="block__deck">
-              Four commands. The three scripted ones name a model and a digest;
-              the digests are stamped into this page from the script bytes, so
-              they cannot drift from what the sandbox loaded.
-            </p>
+
+            <p class="block__deck">Four commands. The three scripted ones name a model and a digest, and the digests are stamped into this page from the script bytes, so they cannot drift from what the sandbox loaded.</p>
 <figure class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;This film is a masterpiece…&quot;
 # -> a 1 536-byte bulk
 
@@ -305,5 +260,6 @@ g.manifest().then((m) => {
 run();
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

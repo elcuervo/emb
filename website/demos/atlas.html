@@ -70,6 +70,11 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
@@ -79,6 +84,7 @@
             similarity. The regions are not decoration — they are where the
             passages actually cluster, named after what they turned out to be.
           </p>
+        <p class="tldr">Lay every passage out by its numbers and the themes clump into regions. A vector store is that map, plus a search over it.</p>
         </div>
         <div>
           <p class="fig"><b>FIG. 4 — THE ATLAS</b>
@@ -96,28 +102,12 @@
     <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
-        
-            <p class="block__deck">
-              A vector has a place, and places have neighbours. Draw one author's
-              collected work by that rule and the structure you get is thematic:
-              the sea stories sit together, the confessional tales sit together,
-              and the poems sit somewhere else again. Nobody labelled them. The
-              <strong>regions</strong> are a k-means clustering over the
-              embeddings, hand-named by reading what landed in each: the ship,
-              the grave, madness, detection, grief.
-            </p>
-            <p class="block__deck">
-              Two things are deliberately absent. There is no projection work at
-              runtime: the coordinates were computed once, offline, and shipped
-              in the index, so the plate draws rather than renders. And there is
-              no fabricated point: your query lands at the centroid of what it
-              actually retrieved, so if retrieval went somewhere odd the plate
-              shows it rather than tidying it away.
-            </p>
 
-      </div></div>
+            <p class="block__deck">A vector has a place, and places have neighbours. Draw one author's work by that rule and the structure is thematic: the sea stories cluster, the confessional tales cluster, the poems sit elsewhere. Nobody labelled them — the regions are k-means over the embeddings, named by reading what landed in each.</p>
+            <p class="block__deck">Two things are deliberately absent. Nothing is projected at runtime: the coordinates were computed offline and shipped, so the plate draws rather than renders. And no point is invented: your query lands at the centroid of what it actually retrieved.</p>
+</div></div>
     </section>
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
         
@@ -171,48 +161,23 @@
     <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-        
-            <p class="block__deck">
-              Your query was embedded by the sandbox, the index returned its
-              nearest passages, and the plate drew them where the build put them.
-              The switch re-places every passage by publication year instead of
-              by meaning, with the vertical axis left alone: the thematic shape
-              falls apart and the passages scatter by date, which is the point.
-              Meaning and chronology are different orderings of the same corpus.
-            </p>
-            <p class="block__deck">
-              The blend is the same space used as arithmetic. Two passages are
-              embedded, their vectors are added and scaled by a half, and the
-              corpus passages nearest that midpoint come back — a query built out
-              of no words at all. It is the clearest demonstration that these are
-              coordinates rather than labels.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Your query was embedded, the index returned its nearest passages, and the plate drew them where the build put them. The switch re-places every passage by publication year: the thematic shape falls apart and the passages scatter by date. Meaning and chronology are different orderings of the same corpus.</p>
+            <p class="block__deck">The blend uses the space as arithmetic: two passages are embedded, their vectors added and halved, and the passages nearest that midpoint come back — a query built from no words at all.</p>
+</div></div>
     </section>
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-        
-            <p class="block__deck">
-              This is what a vector store looks like before you put an API in
-              front of it: points, distances, and regions that turn out to mean
-              something. It is also the argument for keeping the corpus small and
-              legible. A million documents make a cloud; eighty-six works by one
-              author make a map, and a map is what a newcomer can read.
-            </p>
 
-      </div></div>
+            <p class="block__deck">This is what a vector store looks like before you put an API in front of it: points, distances, and regions that turn out to mean something. It is also the argument for a small, legible corpus. A million documents make a cloud; eighty-six works make a map.</p>
+</div></div>
     </section>
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
-        
-            <p class="block__deck">
-              The plate issues the same three commands as the search, plus the
-              blend. Nothing here selects from the projection at runtime beyond
-              reading the committed rows.
-            </p>
+
+            <p class="block__deck">The same three commands as the search, plus the blend. Nothing is projected at runtime; the plate only reads the committed rows.</p>
 <figure class="code"><pre class="code__body"><code>SELECT rowid, x, y FROM projection
   WHERE model = 'minilm';   -- the build-time coordinates
 SELECT label, cx, cy, radius FROM regions
@@ -489,5 +454,6 @@ g.manifest().then((m) => {
 current();
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

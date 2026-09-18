@@ -70,11 +70,17 @@
     <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
   </noscript>
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">II.</span>The search</h1>
           <p class="plate__teaches">A question the corpus cannot match word for word still finds the passages that mean it. This is the retrieval step in every RAG pipeline, with nothing hidden behind a hosted endpoint.</p>
+        <p class="tldr">Ask in your own words. You get back the passages whose numbers are closest — even when they share none of your words.</p>
         </div>
         <div><p class="fig"><b>FIG. 3 — THE SEARCH</b>
             · <b data-fig-count>—</b> passages indexed
@@ -90,28 +96,13 @@
     <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
-        
-            <p class="block__deck">
-              Type a question, one the corpus does not contain and phrased the way a
-              person would phrase it, and the plate answers with passages from
-              Poe that mean it. Nothing is matched on keywords: the query becomes
-              a vector, the vector is compared with every passage's vector, and
-              the nearest ones come back.
-            </p>
-            <p class="block__deck">
-              Two things are working together. The <strong>index</strong> is a
-              vector store holding one row per passage, built before deployment
-              and shipped as a file; the <strong>rerank</strong> is the server's
-              own Lua script, which re-orders the index's candidates with the
-              model itself. The first is approximate and fast; the second is
-              exact and small. That pairing is what a production retrieval stack
-              looks like.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Ask a question the corpus never contains, phrased the way a person would, and you get back passages from Poe that mean it. Nothing matches on keywords: the query becomes a vector, and the nearest passage vectors come back.</p>
+            <p class="block__deck">Two layers work together. The index is a vector store, one row per passage, built offline and shipped as a file. The rerank is the server's Lua script, re-ordering those candidates with the model itself — fast and approximate first, exact and small second.</p>
+</div></div>
     </section>
 
-    <section class="block block--dark sec" aria-labelledby="try-it-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
         
@@ -142,65 +133,27 @@
     <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-        
-            <p class="block__deck">
-              Your query went to the sandbox once, through the allowlist the
-              console uses, and came back as a vector: the same model, the same
-              normalization and the same window that embedded the corpus, which
-              is the only way the distances mean anything. The vector never left
-              this machine again.
-            </p>
-            <p class="block__deck">
-              The nearest passages came from a <span class="t-cmd">vec0</span>
-              table in a SQLite file your browser downloaded: an exact
-              k-nearest-neighbour search, your CPU, no server. Their text and
-              their work and year come from the same file. Then the seven
-              candidates were handed to the sandbox's preloaded
-              <span class="t-cmd">rank.lua</span>, which embedded all eight texts
-              and re-ordered the seven by cosine to the query.
-            </p>
-            <p class="block__deck">
-              The rerank is bounded by the sandbox, not by politeness: the bridge
-              charges one unit of work per declared text and refuses a request
-              over eight, so a rerank carries at most seven candidates. The plate
-              sends exactly seven and says so.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Your query went to the sandbox once and came back as a vector — the same model, normalization and window that embedded the corpus, which is the only way the distances mean anything.</p>
+            <p class="block__deck">The nearest passages came from a <span class="t-cmd">vec0</span> table in a SQLite file your browser downloaded: exact k-nearest-neighbour, your CPU, no server. The seven candidates then went to the preloaded <span class="t-cmd">rank.lua</span>, which embedded all eight texts and re-ordered the seven by cosine.</p>
+            <p class="block__deck">The rerank is bounded by the sandbox: the bridge charges one unit of work per text and refuses a request over eight, so it carries at most seven candidates. The plate sends exactly seven.</p>
+</div></div>
     </section>
 
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-        
-            <p class="block__deck">
-              Retrieval is the step that turns a language model from something
-              that has read the internet into something that can read
-              <em>your</em> corpus. The pattern is always the same: embed the
-              query with the model that embedded the documents, find the nearest
-              documents, put them in the prompt. This plate is that step with the
-              prompt replaced by the page.
-            </p>
-            <p class="block__deck">
-              It is also the honest version of the arithmetic. Every layer states
-              its precision — int8 weights, int8 index vectors, a measured recall
-              of <b data-fig-recall>—</b> at ten — because a retrieval system that
-              will not tell you its recall is asking you to trust its vibes.
-            </p>
 
-      </div></div>
+            <p class="block__deck">Retrieval is what turns a language model into something that can read your corpus. The pattern never changes: embed the query with the model that embedded the documents, find the nearest, put them in the prompt.</p>
+            <p class="block__deck">It is also honest about its arithmetic — int8 weights, int8 index vectors, a measured recall stated rather than implied.</p>
+</div></div>
     </section>
 
-    <section class="block block--paper sec" aria-labelledby="the-exact-commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
-        
-            <p class="block__deck">
-              Three commands, in the order the plate ran them. The first is the
-              query embedding; the second is the search, which runs in your
-              browser against the shipped file; the third is the server-side
-              rerank.
-            </p>
+
+            <p class="block__deck">Three commands, in the order the plate ran them: embed the query, search the shipped file in your browser, rerank on the server.</p>
 <figure class="code"><pre class="code__body"><code>EMB minilm BLOB &quot;a guilty conscience that will not stay buried&quot;
 # -> 1 536 bytes: the query vector, from the sandbox
 
@@ -295,5 +248,6 @@ g.manifest().then((m) => {
 run(input.value);
 
 </script>
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>

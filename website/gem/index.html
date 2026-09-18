@@ -67,6 +67,11 @@
 
 <main id="main">
   <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
 
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
@@ -77,6 +82,7 @@
             with three execution modes on top, and the shape of your call site
             decides how many commands a scope puts on the wire.
           </p>
+        <p class="tldr">A thin Ruby wrapper over the same Redis commands. It pools, batches and unpacks for you; the wire stays <span class="t-cmd">EMB</span>.</p>
         </div>
         <div>
           <p class="fig"><b>FIG. 1 — THE CLIENT</b>
@@ -93,22 +99,9 @@
       <div class="shell block__inner"><div class="block__body seq-body">
         <h2 class="sec__h" id="what-h">WHAT YOU ARE LOOKING AT</h2>
 
-        <p class="block__deck">
-          The server answers RESP. Anything that speaks RESP can ask it for a
-          vector, and the gem does not change that. What it removes is the part
-          you would otherwise write yourself: the <span class="t-cmd">unpack('e*')</span>
-          that turns four bytes per number back into an array, the registry that
-          remembers one proxy per model, the connection pool, and the coalescing.
-        </p>
-        <p class="block__deck">
-          <span class="t-cmd">Emb[:minilm]["hello world"]</span> is 384 floats,
-          eager and unremarkable — it sends <span class="t-cmd">EMB minilm
-          "hello world"</span> and unpacks the reply. The interesting part is
-          what the same line does under a <span class="t-cmd">lazy</span> mode,
-          which is the subject of the rest of this page.
-        </p>
-
-        <div class="block__main block__main--ledger">
+            <p class="block__deck">The server answers RESP, and the gem does not change that. What it removes is what you would otherwise write yourself: the <span class="t-cmd">unpack('e*')</span> that turns four bytes per number into an array, the registry that remembers one proxy per model, the pool, and the coalescing.</p>
+            <p class="block__deck"><span class="t-cmd">Emb[:minilm]["hello world"]</span> is 384 floats, eager and unremarkable — it sends <span class="t-cmd">EMB minilm "hello world"</span> and unpacks the reply. The interesting part is what the same line does under a <span class="t-cmd">lazy</span> mode.</p>
+<div class="block__main block__main--ledger">
           <div class="cap">
             <p class="cap__label">01 · YOUR CALL</p>
             <p class="cap__claim">A model proxy from the client's registry. Eager, it sends; deferred, it hands back a value that has not asked the server for anything yet.</p>
@@ -139,7 +132,7 @@
       </div></div>
     </section>
 
-    <section class="block block--dark sec" aria-labelledby="modes-h">
+    <section class="block block--dark sec tldr-keep" aria-labelledby="modes-h">
       <div class="shell block__inner"><div class="block__body seq-body">
         <h2 class="sec__h" id="modes-h">THE FOUR WIRE SHAPES</h2>
 
@@ -427,7 +420,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
       </div></div>
     </section>
 
-    <section class="block block--paper sec" aria-labelledby="commands-h">
+    <section class="block block--paper sec tldr-keep" aria-labelledby="commands-h">
       <div class="shell block__inner"><div class="block__body seq-body">
         <h2 class="sec__h" id="commands-h">THE EXACT COMMANDS</h2>
 
@@ -483,5 +476,6 @@ loaders.map(&:first)
   </div>
 </footer>
 
+<script src="../assets/js/tldr.js" defer></script>
 </body>
 </html>
