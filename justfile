@@ -509,7 +509,7 @@ website-browser:
 # driven by element position, and a full-page capture otherwise lays the
 # document out without ever moving the trigger line, so everything below the
 # fold is captured at opacity 0. Scrolling once fires the sweep, then the
-# capture is true. See website/CORRECTIONS.md pass 7.
+# capture is true.
 website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
     agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
     @echo "wrote {{out}}"

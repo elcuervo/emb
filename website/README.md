@@ -2,9 +2,9 @@
 
 The static marketing site for [`emb`](../README.md), designed as a
 neo-brutalist technical poster that happens to function as a product
-homepage. The brief lives in [`../DESIGN.md`](../DESIGN.md); the measured
-corrections that took the page to the reference poster live in
-[`CORRECTIONS.md`](CORRECTIONS.md) (implemented).
+homepage. The brief lives in [`../DESIGN.md`](../DESIGN.md); the measurements
+that took the page to the reference poster are in the
+[design notes](#design-notes) below (implemented).
 
 ```
 website/
@@ -622,7 +622,7 @@ column goes to 50% of the content box and then the whole of it. It is not a
 cosmetic number: measured with the plate-derived value at 600px, the CSS line
 was **2.406px against a 6.066px SVG stroke** — a 2.5x weight step at the
 handover — and the route rendered **~1.2px heavier** than the spine on a
-desktop frame. With the single width the segments agree exactly (`CORRECTIONS.md`).
+desktop frame. With the single width the segments agree exactly.
 
 The hero keeps its own masked SVG spine (`.sig`), which is what hides the line
 behind each plate's front edge; a CSS segment runs the hero's full height

@@ -83,14 +83,13 @@
      axis is width-independent:
          41.5% + 40.7% x (100% - 41.5%) = 65.31%
      Change any of the three inputs above and this constant must change with
-     them; the render test in CORRECTIONS.md pass 8 measures it.
+     them.
 
      It is stored as a NUMBER and widened to a percentage, because the terrain
      needs the same axis in two shapes: as a percentage of the shell's content
      box (every spine segment, every block's grid) and as a length from the
      viewport's left edge (--fold-x below, which is what the artwork has to
-     cover against). One source, so the two can never disagree -- the spine
-     probe in `website/tools/spine-probe.html` asserts they do not. */
+     cover against). One source, so the two can never disagree. */
   --fold-n: .6531;
   --fold: calc(var(--fold-n) * 100%);
   /* the gap between body copy and the line, either side of the lane */
