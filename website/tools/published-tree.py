@@ -73,6 +73,7 @@ SERVED = frozenset(
         "demos/image.html",
         "demos/lens.html",
         "demos/function.html",
+        "demos/multilingual.html",
         "demos/samples/raven.jpg",
         "demos/samples/storm.jpg",
         "demos/samples/portrait.jpg",
@@ -80,6 +81,8 @@ SERVED = frozenset(
         "demos/samples/flowers.jpg",
         "demos/samples/manuscript.jpg",
         "assets/js/demos.js",
+        "assets/js/mechanism.js",
+        "assets/js/tldr.js",
         "assets/vendor/sqlite-wasm-vec-0.1.9/sqlite3-bundler-friendly.mjs",
         "assets/vendor/sqlite-wasm-vec-0.1.9/sqlite3.wasm",
         "assets/css/styles.css",
@@ -148,6 +151,7 @@ PAGES = (
     "demos/image.html",
     "demos/lens.html",
     "demos/function.html",
+    "demos/multilingual.html",
 )
 ABSOLUTE_METADATA = (
     ("canonical", re.compile(r"""<link[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']*)["']""", re.I)),
