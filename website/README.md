@@ -34,6 +34,9 @@ website/
 │   │                       `vec0` search over the shipped index, the staged
 │   │                       mechanism every plate opens with, and the loading
 │   │                       states a plate renders
+│   ├── js/mechanism.js     that staged mechanism on its own, so the docs and
+│   │                       the client page draw it without loading the
+│   │                       gallery's sandbox client
 │   ├── js/tldr.js          the read-mode switch on /demos, /docs and /gem:
 │   │                       one remembered preference that reveals each
 │   │                       surface's `.tldr` gist and hides its long form
@@ -107,7 +110,7 @@ website/
 │   │                       `runs/` hold the last take's recordings, frame and
 │   │                       logs — gitignored, and the only way to check what
 │   │                       the plate shows
-├── demos/                  the gallery: index + six plates, and the only
+├── demos/                  the gallery: index + eleven plates, and the only
 │                           surface whose live part costs a download
 ├── repl/                   the sandbox: NOT the site (see § the sandbox)
 │   ├── *.go                the bridge — the sandbox's only public surface

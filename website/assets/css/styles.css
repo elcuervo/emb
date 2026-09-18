@@ -2882,6 +2882,24 @@ html.js.is-ready .hero__prose{
   color: var(--fg);
 }
 [data-tldr] .tldr{ display: block; }
+/* The switch is a gesture: the gist line rises in, and the page behind it
+   cross-fades, so the collapse reads as one move rather than as content
+   vanishing. Both are the sheet's own motion and both stand down when the
+   reader asks for reduced motion. */
+@keyframes tldr-rise {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes tldr-settle {
+  from { opacity: .5; }
+  to   { opacity: 1; }
+}
+[data-tldr] .tldr{ animation: tldr-rise .36s cubic-bezier(.16, 1, .3, 1) both; }
+.tldr-switching main{ animation: tldr-settle .36s ease both; }
+@media (prefers-reduced-motion: reduce){
+  [data-tldr] .tldr{ animation: none; }
+  .tldr-switching main{ animation: none; }
+}
 /* The teaching line and the lede are the full-page summaries; the gist line
    replaces them rather than standing beside them. */
 [data-tldr] .plate__teaches,

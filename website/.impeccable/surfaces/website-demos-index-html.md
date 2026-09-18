@@ -162,3 +162,30 @@ and names `demos.js` / `tldr.js` from their own mtimes in the served HTML, so
 the working loop can never outlive an edit. The published tree is unaffected:
 `_headers` already pins `max-age=0, must-revalidate` for `/assets/js/*`, which is
 the right policy for a stable name whose bytes move.
+
+---
+## Amendment — eleven plates, a switch that resets, and a shared strip (2026-09)
+
+**The languages (plate 6, `website/demos/multilingual.html`).** The sandbox
+loads a multilingual model, so the gallery now shows what it is for: one
+English sentence and its translations in French, Spanish, German, Italian and
+Portuguese, each compared with the original, beside two unrelated sentences.
+Measured on the local sandbox: translations 0.943–0.964, unrelated −0.055–0.060,
+a gap of 0.883 across six languages and one 384-dimension space. The calls are
+sequential, not parallel: the bridge caps commands in flight, and seven at once
+are refused `at capacity`.
+
+**The reading order is now eleven**, and the gallery index says so in the
+teaser, the gist and the ruled caption; the nav chain runs lens → languages →
+function.
+
+**The reading switch resets on navigation.** `tldr.js` no longer reads or writes
+`localStorage`: the mode is a choice about the page in front of you, and it
+starts off on every load. Switching now carries a gesture — the gist line rises
+in (`tldr-rise`) and the page cross-fades (`tldr-settle`), cleared by a
+`tldr-switching` flag — both standing down under `prefers-reduced-motion`.
+
+**The mechanism moved to `assets/js/mechanism.js`** so the client page and the
+documentation draw it without loading the gallery's sandbox client. `demos.js`
+re-exports it, so the plates' imports are unchanged; the module also adds the
+`wire`, `lanes`, `pool`, `reply` and `script` glyphs the other surfaces need.

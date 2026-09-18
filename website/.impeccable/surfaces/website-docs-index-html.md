@@ -220,3 +220,14 @@ revealed only when scripting can honour it. It hides `.doc-prose` and `.doc-lede
 contents, the section heads, every command list and every code figure. The
 switch adds no colour, font or claim; detector parity with `HEAD` is recorded in
 the demos brief.
+
+---
+## Amendment — three mechanism strips (2026-09)
+
+The reference now opens `INSTALL`, `REPLIES AND PROTOCOL` and `LUA SCRIPTING`
+with the gallery's mechanism strip, drawn from `assets/js/mechanism.js`: *one
+binary → a model → first vector*; *your text → one vector → bytes, or an
+envelope*; and *your text → your Lua → a typed reply*. Each is drawn complete
+and animates once as it scrolls into view, and stands still under
+`prefers-reduced-motion`. The strips add rhythm to a page that is otherwise
+prose, tables and code, and they add no claim the section does not already make.

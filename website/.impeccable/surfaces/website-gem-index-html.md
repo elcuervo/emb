@@ -197,3 +197,16 @@ argument sections and the terrain break. The button is the page's own material �
 hairline rule, mono label, square bordered control that inverts on press — and
 adds no colour, font or claim. Detector parity with `HEAD` is recorded in the
 demos brief.
+
+---
+## Amendment — three mechanism strips (2026-09)
+
+The client page now opens three of its sections with the gallery's mechanism
+strip, drawn from `assets/js/mechanism.js` (the module the demos share, which
+does not pull in the sandbox client): *your call site → a scope, per thread →
+the command it sends* in `WHAT YOU ARE LOOKING AT`; *five connections → the
+scope's commands → the wire* in `THE SCOPE IS PER THREAD`; and *emb, the client
+→ emb-server, the binary → one version* in `TWO GEMS, TWO JOBS`. Each is drawn
+complete and animates once as it scrolls into view, and stands still under
+`prefers-reduced-motion`. No command is sent: the page has no sandbox, so these
+are diagrams of the page's own account of the gem.

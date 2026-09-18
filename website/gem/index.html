@@ -98,6 +98,7 @@
     <section class="block block--paper sec" aria-labelledby="what-h">
       <div class="shell block__inner"><div class="block__body seq-body">
         <h2 class="sec__h" id="what-h">WHAT YOU ARE LOOKING AT</h2>
+        <div class="mech" data-mech="call"></div>
 
             <p class="block__deck">The server answers RESP, and the gem does not change that. What it removes is what you would otherwise write yourself: the <span class="t-cmd">unpack('e*')</span> that turns four bytes per number into an array, the registry that remembers one proxy per model, the pool, and the coalescing.</p>
             <p class="block__deck"><span class="t-cmd">Emb[:minilm]["hello world"]</span> is 384 floats, eager and unremarkable — it sends <span class="t-cmd">EMB minilm "hello world"</span> and unpacks the reply. The interesting part is what the same line does under a <span class="t-cmd">lazy</span> mode.</p>
@@ -335,6 +336,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
     <section class="block block--paper sec" aria-labelledby="scope-h">
       <div class="shell block__inner"><div class="block__body seq-body">
         <h2 class="sec__h" id="scope-h">THE SCOPE IS PER THREAD</h2>
+        <div class="mech" data-mech="scope"></div>
 
         <p class="block__deck">
           The scope holding deferred values is a thread-local, and it is cleared
@@ -376,6 +378,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
     <section class="block block--dark sec" aria-labelledby="gems-h">
       <div class="shell block__inner"><div class="block__body seq-body">
         <h2 class="sec__h" id="gems-h">TWO GEMS, TWO JOBS</h2>
+        <div class="mech" data-mech="gems"></div>
 
         <p class="block__deck">
           The name is shared and the jobs are not. One gem talks to a server; the
@@ -477,5 +480,46 @@ loaders.map(&:first)
 </footer>
 
 <script src="../assets/js/tldr.js" defer></script>
+
+<script type="module">
+import { mechanism, playStages } from '../assets/js/mechanism.js';
+
+/* The client page's three how-it-works strips: the call site, the scope, and
+ * the two gems. Nothing here sends a command -- the page has no sandbox -- so
+ * the strips are diagrams, drawn from the page's own account of the gem. */
+const SPECS = {
+  call: [
+    { glyph: 'text', label: 'your call site' },
+    { glyph: 'pool', label: 'a scope, per thread' },
+    { glyph: 'wire', label: 'the command it sends' }
+  ],
+  scope: [
+    { glyph: 'pool', label: 'five connections' },
+    { glyph: 'lanes', label: 'the scope\u2019s commands' },
+    { glyph: 'wire', label: 'the wire' }
+  ],
+  gems: [
+    { glyph: 'wire', label: 'emb, the client' },
+    { glyph: 'script', label: 'emb-server, the binary' },
+    { glyph: 'reply', label: 'one version' }
+  ]
+};
+
+const rails = [];
+document.querySelectorAll('[data-mech]').forEach((node) => {
+  const rail = mechanism(node, SPECS[node.getAttribute('data-mech')] || []);
+  rail.all();
+  rails.push({ node: node, rail: rail });
+});
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (!entry.isIntersecting) { return; }
+    const found = rails.find((r) => r.node === entry.target);
+    if (found) { found.rail.reset(); playStages(found.rail, 150, 60); }
+    io.unobserve(entry.target);
+  });
+}, { threshold: 0.4 });
+rails.forEach((r) => io.observe(r.node));
+</script>
 </body>
 </html>

@@ -117,6 +117,8 @@
     <h2 class="block__head" id="install-h">01 · Install and first vector</h2>
     <div class="doc-body">
 
+      <div class="mech" data-mech="install"></div>
+
       <p class="doc-prose">
         Three ways to get the server. All of them install the same single binary
         with ONNX Runtime embedded — inference, batching, caching, scripting and
@@ -274,6 +276,8 @@
   <div class="block__body">
     <h2 class="block__head" id="replies-h">03 · Replies and protocol</h2>
     <div class="doc-body">
+
+      <div class="mech" data-mech="replies"></div>
 
       <p class="doc-prose">
         <code>EMB</code> and <code>EMB.MULTI</code> accept an optional leading
@@ -451,6 +455,8 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
   <div class="block__body">
     <h2 class="block__head" id="scripts-h">05 · Lua scripting</h2>
     <div class="doc-body">
+
+      <div class="mech" data-mech="scripts"></div>
 
       <p class="doc-prose">
         The plain embed command is a fixed pipeline:
@@ -905,5 +911,46 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
 <script src="../assets/js/asciinema-player-3.17.0.min.js" defer></script>
 <script src="../assets/js/topviz.js" defer></script>
 <script src="../assets/js/tldr.js" defer></script>
+
+<script type="module">
+import { mechanism, playStages } from '../assets/js/mechanism.js';
+
+/* Three of the reference's sections open with the same strip the demos use:
+ * install, the reply shapes, and the scripting layer. The strips are drawn
+ * complete and animate once as the reader reaches them. */
+const SPECS = {
+  install: [
+    { glyph: 'script', label: 'one binary' },
+    { glyph: 'model', label: 'a model' },
+    { glyph: 'vector', label: 'first vector' }
+  ],
+  replies: [
+    { glyph: 'text', label: 'your text' },
+    { glyph: 'vector', label: 'one vector' },
+    { glyph: 'reply', label: 'bytes, or an envelope' }
+  ],
+  scripts: [
+    { glyph: 'text', label: 'your text' },
+    { glyph: 'script', label: 'your Lua' },
+    { glyph: 'reply', label: 'a typed reply' }
+  ]
+};
+
+const rails = [];
+document.querySelectorAll('[data-mech]').forEach((node) => {
+  const rail = mechanism(node, SPECS[node.getAttribute('data-mech')] || []);
+  rail.all();
+  rails.push({ node: node, rail: rail });
+});
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (!entry.isIntersecting) { return; }
+    const found = rails.find((r) => r.node === entry.target);
+    if (found) { found.rail.reset(); playStages(found.rail, 150, 60); }
+    io.unobserve(entry.target);
+  });
+}, { threshold: 0.4 });
+rails.forEach((r) => io.observe(r.node));
+</script>
 </body>
 </html>
