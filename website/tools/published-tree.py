@@ -359,6 +359,10 @@ def check_cache_rules() -> list[str]:
 # `(?<![-\w])` keeps `data-src="…"` out of it: a plate's own hooks are not
 # references, and a checker that fired on them would be turned off.
 REFERENCE = re.compile(r"""(?<![-\w])(?:href|src)\s*=\s*["']([^"']+)["']""", re.I)
+# What a fragment can name on the page it points at. `id` and `name` are the two
+# forms an anchor has taken in HTML; a link to neither is a link to nowhere, which
+# is exactly the failure a path check cannot see.
+ANCHOR = re.compile(r"""\s(?:id|name)\s*=\s*["']([^"']+)["']""", re.I)
 EXTERNAL = ("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript:")
 # Markup that is not a reference: a script's own strings can look like one.
 SCRIPTING = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
@@ -371,20 +375,31 @@ def check_internal_links() -> list[str]:
     links its neighbours as `similarity.html` and keeps working whether the tree
     is served at the root, from a preview alias, or from `just website`
     locally. Resolving each reference against the page it sits on and then
-    against the served set is what turns "these look right" into a check.
+    against the served set is what turns "these look right" into a check. A
+    fragment is resolved the same way, against the target page's own `id`s, so
+    a link to a section that was renamed or never existed fails here rather than
+    quietly landing the reader at the top of the page.
     """
     problems: list[str] = []
     served = set(SERVED) | index_files()[0]
-    for page in sorted(served):
-        if not page.endswith(".html"):
-            continue
-        source = SCRIPTING.sub("", (SITE_DIR / page).read_text(encoding="utf-8"))
+    sources = {
+        page: SCRIPTING.sub("", (SITE_DIR / page).read_text(encoding="utf-8"))
+        for page in sorted(served)
+        if page.endswith(".html")
+    }
+    anchors = {page: set(ANCHOR.findall(text)) for page, text in sources.items()}
+    for page, source in sources.items():
         base = posixpath.dirname(page)
         for reference in REFERENCE.findall(source):
-            if reference.startswith("#") or reference.lower().startswith(EXTERNAL):
+            if reference.lower().startswith(EXTERNAL):
                 continue
             target = reference.split("#", 1)[0].split("?", 1)[0]
             if not target:
+                if reference.startswith("#") and reference[1:] not in anchors[page]:
+                    problems.append(
+                        f"dead anchor:  website/{page} points at {reference!r}; "
+                        f"{page} has no id={reference[1:]!r}"
+                    )
                 continue
             resolved = posixpath.normpath(
                 target if target.startswith("/") else posixpath.join(base, target))
@@ -399,6 +414,13 @@ def check_internal_links() -> list[str]:
                 problems.append(
                     f"broken link:  website/{page} points at {reference!r}, which resolves to "
                     f"{resolved!r} — not a served path"
+                )
+                continue
+            fragment = reference.partition("#")[2]
+            if fragment and fragment not in anchors.get(resolved, set()):
+                problems.append(
+                    f"dead anchor:  website/{page} points at {reference!r}; "
+                    f"website/{resolved} has no id={fragment!r}"
                 )
                 continue
             # Same-directory references stay relative: they are what keeps a
