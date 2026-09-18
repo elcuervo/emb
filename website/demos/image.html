@@ -84,7 +84,7 @@
         <p class="tldr">A photo and a set of words can share one number-world, so a photo matches labels nobody trained it on.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 9 — THE IMAGE</b>
+          <p class="fig"><b>THE IMAGE</b>
             · <b data-fig-model>CLIP ViT-B/32</b>
             · <b data-fig-dim>512</b> dimensions
             · <b data-fig-labels>8</b> labels
@@ -106,6 +106,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
 
             <div data-live class="rig" data-rig="image" data-emb-preset-zeroshot="963c9a2b273dab8e6022893e9f338987e4581d60">
               <div class="samples" data-samples role="group" aria-label="Sample images">
@@ -184,7 +185,7 @@ local image = emb.run({ pixel_values = …, input_ids = …, attention_mask = �
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, tween, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'clip';
 const LABELS = ['raven', 'storm at sea', 'portrait of a person', 'old manuscript',
@@ -196,6 +197,12 @@ const state = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
 const plot = document.querySelector('[data-plot]');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'photo', label: 'your photo' },
+  { glyph: 'model', label: 'CLIP' },
+  { glyph: 'labels', label: 'eight labels scored' }
+]);
+mech.all();
 const NS = 'http://www.w3.org/2000/svg';
 const X0 = 232, MAXW = 300, ROW = 34;
 
@@ -261,6 +268,7 @@ function bounded(bytes) {
 }
 async function run(raw) {
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   draw(null);
   out.hidden = true;
   try {

@@ -97,3 +97,47 @@ docs page and `styles.css` was run in place and compared, finding by finding,
 against the same run over a `HEAD` worktree: 93 findings each, the same set, and
 zero naming the switch. The site's standing findings (cramped `clamp()`
 padding, tracked mono labels) are unchanged and were already recorded.
+
+---
+## Amendment — the mechanism, in stages (change `website-demos-tldr`, 2026-09)
+
+Every plate opens `TRY IT` with the same figure: the steps between the
+reader's input and the answer, as a run of glyphs joined by the page's rule.
+Before a run every step is dim, so the strip is a map of what is about to
+happen; on a run the steps light in order beside the real call, and a step's
+accent mark (the one vector that matters, the row a search lands on) is the
+only thing that changes colour. It is the gallery's one animation that
+explains rather than measures, and it is the answer to *show the mechanism,
+do not narrate it*.
+
+**One renderer, ten specs.** `mechanism()` and `playStages()` live in
+`assets/js/demos.js`; a plate names its steps and nothing else, so ten plates
+cannot invent ten visual vocabularies. The glyph vocabulary is fixed and
+small — text, tokens, model, vector, search, rank, score, labels, passes,
+cache, photo, fanout, graph — drawn in the same 56×44 box at the same two
+weights.
+
+**The motion contract holds.** `playStages()` reads the same
+`prefers-reduced-motion` as every other figure: with reduced motion the strip
+is drawn complete in one frame and nothing depends on the animation having
+run; the plate calls `all()` when the real answer lands, so a slow sandbox
+never leaves the strip mid-stride.
+
+**No figure is labelled.** The `FIG. n —` prefixes were removed from every
+plate, the gallery index and the client page in the same change: a plate's
+ruled caption now opens on its own name, and the mechanism's own steps are
+the only numbering the reader needs.
+
+**Values.** Every demo was run against a local `emb` + bridge and its
+readout read back: vector (384 dims, norm 1.0000, 1 536 bytes), similarity
+(0.754 for a paraphrase), search (7 of 2 782, reranked), atlas (2 782 marks,
+10 regions), lens (two spaces, shared-neighbour count stated), function (four
+reply shapes), image (CLIP ViT-B/32, 8 labels), batch (one call vs six),
+cache (miss then hit), graph (8 nodes, 16 edges). One wrong static fallback
+was corrected — the index said 6.4 MB where the shipped manifest is 6.1 MB —
+and long floats in the readouts are shown at four places.
+
+**Detector.** `impeccable detect --json` over every changed HTML file and
+`styles.css`, compared finding by finding against a `HEAD` worktree: 204
+findings now against 208 there, the difference four resolved (em-dash and
+all-caps), and nothing naming the mechanism.

@@ -82,7 +82,7 @@
           <p class="plate__teaches">Everything retrieval does is this number, sorted. One cosine over two vectors, not 384 additions you have to read.</p>
         <p class="tldr">Two of those lists compare to one score. Sort the scores and you have search.</p>
         </div>
-        <div><p class="fig"><b>FIG. 2 — THE SIMILARITY</b>
+        <div><p class="fig"><b>THE SIMILARITY</b>
             · <b data-fig-dim>—</b> dimensions
             · <b>one cosine</b> per pair
             · <b>scripted</b> server-side
@@ -103,6 +103,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
         
             <div data-live class="rig" data-rig="similarity" data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445">
               <form class="rig__form" data-form>
@@ -178,7 +179,7 @@ return out</code></pre>
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState } from '../assets/js/demos.js';
+import { gallery, el, showState, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const root = document.querySelector('[data-rig="similarity"]');
@@ -191,6 +192,13 @@ const readout = root.querySelector('[data-readout]');
 const source = root.querySelector('[data-source]');
 const sha = root.querySelector('[data-sha]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'two passages' },
+  { glyph: 'model', label: 'minilm' },
+  { glyph: 'vector', label: 'two vectors' },
+  { glyph: 'score', label: 'one score' }
+]);
+mech.all();
 let last = null;
 
 function setState(next, message) {
@@ -201,6 +209,7 @@ async function run() {
   last = true;
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   try {
     const digest = root.getAttribute('data-emb-preset-embed');
     const reply = await g.preset(MODEL, digest, [a.value], [b.value]);
@@ -210,7 +219,7 @@ async function run() {
       el('span', { text: ' · ' }),
       el('span', { class: 'k', text: 'dim ' }), el('b', { text: String(reply.dim) }),
       el('span', { text: ' · ' }),
-      el('span', { class: 'k', text: 'norm ' }), el('b', { text: String(reply.norm) })
+      el('span', { class: 'k', text: 'norm ' }), el('b', { text: Number(reply.norm).toFixed(4) })
     );
     source.textContent = 'EMB.EVSHA minilm ' + digest + ' 1 \n  "' + a.value + '" \n  "' + b.value + '"';
     sha.textContent = 'preset sha1 ' + digest + ' — the digest the sandbox preloaded';

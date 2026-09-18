@@ -84,7 +84,7 @@
         <p class="tldr">A script builds the nearest-neighbour graph of the whole corpus beside the model and returns just the edges.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 10 — THE GRAPH</b>
+          <p class="fig"><b>THE GRAPH</b>
             · <b data-fig-nodes>8</b> nodes
             · <b data-fig-edges>16</b> edges
             · <b>one batch</b> to embed
@@ -105,6 +105,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
 
             <div data-live class="rig" data-rig="graph" data-emb-preset-graph="6c532f7a5551b4a2c1d210e62ae4be36b3d4bce2">
               <form class="rig__form" data-form>
@@ -180,7 +181,7 @@ local top = emb.math.topk(scores, 2)   -- edges, not the matrix</code></pre>
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, pairsToObject, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, pairsToObject, tween, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const N = 8;
@@ -192,6 +193,13 @@ const readout = root.querySelector('[data-readout]');
 const map = root.querySelector('[data-map]');
 const plot = document.querySelector('[data-plot]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'search', label: 'eight passages' },
+  { glyph: 'model', label: 'one batch' },
+  { glyph: 'score', label: '8×8 cosines' },
+  { glyph: 'graph', label: 'sixteen edges' }
+]);
+mech.all();
 const NS = 'http://www.w3.org/2000/svg';
 const CX = 320, CY = 240, R = 180;
 
@@ -277,6 +285,7 @@ async function run() {
   const query = root.querySelector('#g-q').value;
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   draw(null);
   try {
     const found = await g.search(MODEL, query, N);

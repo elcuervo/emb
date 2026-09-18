@@ -87,7 +87,7 @@
         <p class="tldr">Lay every passage out by its numbers and the themes clump into regions. A vector store is that map, plus a search over it.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 4 — THE ATLAS</b>
+          <p class="fig"><b>THE ATLAS</b>
             · <b data-fig-count>—</b> passages
             · <b data-fig-model>—</b>
             · <b data-fig-dim>—</b> dimensions
@@ -110,6 +110,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
         
             <div class="atlas">
               <div class="rig__row">
@@ -209,7 +210,7 @@ EMB.EVSHA minilm &lt;between.lua sha1&gt; 8
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation, SandboxError, motionAllowed, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, SandboxError, motionAllowed, tween, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const W = 1000, H = 620, PAD = 34;
@@ -223,6 +224,13 @@ const betwixt = document.querySelector('[data-rig="between"]');
 const bState = betwixt.querySelector('[data-between-state]');
 const bHits = betwixt.querySelector('[data-between-hits]');
 let atlas = null, bounds = null, order = 'meaning', lastHit = new Set(), lastCentroid = null, lastQuery = '';
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'your query' },
+  { glyph: 'vector', label: '384 numbers' },
+  { glyph: 'search', label: 'nearest rows' },
+  { glyph: 'graph', label: 'on the map' }
+]);
+mech.all();
 
 const NS = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs) {
@@ -371,6 +379,7 @@ async function run() {
   const text = root.querySelector('#a-q').value;
   root.querySelector('.rig__go').disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   try {
     await land(text);
     setState('ready');

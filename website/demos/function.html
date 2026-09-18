@@ -86,7 +86,7 @@
         <p class="tldr">One model call can hand back bytes, a typed vector, a score or a label. Same model, a different wrapper around it.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 6 — THE FUNCTION</b>
+          <p class="fig"><b>THE FUNCTION</b>
             · <b data-fig-works>—</b> works in the corpus
             · <b>4</b> reply shapes
             · <b>2</b> models
@@ -108,6 +108,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
         
             <div data-live class="rig" data-rig="function"
                  data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445" data-emb-preset-classify="51ae48b3bcf40aeba34015a5914fd4b3b2bf7c32">
@@ -200,7 +201,7 @@ EMB.EVAL minilm &quot;return 1&quot; 1 &quot;x&quot;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, showState } from '../assets/js/demos.js';
+import { gallery, showState, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const EMBED_MODEL = 'minilm';
 const CLASSIFY_MODEL = 'sst2';
@@ -210,13 +211,26 @@ const input = root.querySelector('#f-text');
 const state = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'one text' },
+  { glyph: 'model', label: 'minilm / sst2' },
+  { glyph: 'fanout', label: 'four wrappers' },
+  { glyph: 'labels', label: 'bytes · vector · score · label' }
+]);
+mech.all();
 const put = (sel, text) => { root.querySelector(sel).textContent = text; };
 
 function setState(next, message) {
   showState(state, next, message, () => { g.retry(); run(); });
 }
 function pretty(value) {
-  return JSON.stringify(value, null, 2).replace(/\n/g, '\n');
+  // The scripted replies carry the server's own strings; a norm or a confidence
+  // with seventeen digits is true but unreadable, so a plain decimal string is
+  // shown at four places and everything else is left exactly as it arrived.
+  return JSON.stringify(value, (key, v) => {
+    if (typeof v === 'string' && /^-?\d+\.\d+$/.test(v)) { return Number(v).toFixed(4); }
+    return v;
+  }, 2);
 }
 
 async function run() {
@@ -224,6 +238,7 @@ async function run() {
   if (!text || !text.trim()) { return; }
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   try {
     const embedSha = root.getAttribute('data-emb-preset-embed');
     const classifySha = root.getAttribute('data-emb-preset-classify');

@@ -87,7 +87,7 @@
         <p class="tldr">The same text always gives the same vector, so the server keeps it. Asking twice is a lookup, not a second model run.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 8 — THE CACHE</b>
+          <p class="fig"><b>THE CACHE</b>
             · <b data-fig-hit>—</b> hit rate
             · <b data-fig-entries>—</b> entries
             · <b data-fig-dim>—</b> dimensions
@@ -109,6 +109,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
 
             <div data-live class="rig" data-rig="cache">
               <svg class="atlas__svg" data-plot viewBox="0 0 640 150" role="img"
@@ -188,7 +189,7 @@ INFO cache
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, envelopeValue, duration, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, envelopeValue, duration, tween, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const root = document.querySelector('[data-rig="cache"]');
@@ -198,6 +199,14 @@ const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
 const plot = document.querySelector('[data-plot]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'your text' },
+  { glyph: 'cache', label: 'the cache' },
+  { glyph: 'model', label: 'first ask: embed' },
+  { glyph: 'cache', label: 'stored' },
+  { glyph: 'score', label: 'second ask: hit' }
+]);
+mech.all();
 const NS = 'http://www.w3.org/2000/svg';
 const X0 = 232, MAXW = 316, BAR = 24;
 
@@ -249,6 +258,7 @@ async function run() {
   const text = root.querySelector('#c-q').value;
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   draw(null, null);
   try {
     const before = fields(await g.raw(['EMB.INFO', MODEL]));

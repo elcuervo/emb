@@ -82,7 +82,7 @@
           <p class="plate__teaches">A question the corpus cannot match word for word still finds the passages that mean it. This is the retrieval step in every RAG pipeline, with nothing hidden behind a hosted endpoint.</p>
         <p class="tldr">Ask in your own words. You get back the passages whose numbers are closest — even when they share none of your words.</p>
         </div>
-        <div><p class="fig"><b>FIG. 3 — THE SEARCH</b>
+        <div><p class="fig"><b>THE SEARCH</b>
             · <b data-fig-count>—</b> passages indexed
             · <b data-fig-model>—</b>
             · <b data-fig-dim>—</b> dimensions
@@ -105,6 +105,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
         
             <div data-live class="rig" data-rig="search" data-emb-preset-rank="fd56d2f6f0566e232e557cadffac9bf4ac7fd810">
               <form class="rig__form" data-form>
@@ -181,7 +182,7 @@ EMB.EVSHA minilm &lt;rank.lua sha1&gt; 8 &quot;the query&quot; &quot;candidate 1
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 const root = document.querySelector('[data-rig="search"]');
@@ -192,6 +193,14 @@ const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
 const hits = root.querySelector('[data-hits]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'your question' },
+  { glyph: 'model', label: 'minilm' },
+  { glyph: 'vector', label: '384 numbers' },
+  { glyph: 'search', label: 'nearest rows' },
+  { glyph: 'rank', label: 'reranked' }
+]);
+mech.all();
 let last = null;
 
 function setState(next, message) {
@@ -207,6 +216,7 @@ async function run(text) {
   last = text;
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   try {
     // 1. the query is embedded by the same model that embedded the corpus,
     // 2. the index returns its nearest passages,

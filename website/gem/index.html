@@ -85,7 +85,7 @@
         <p class="tldr">A thin Ruby wrapper over the same Redis commands. It pools, batches and unpacks for you; the wire stays <span class="t-cmd">EMB</span>.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 1 — THE CLIENT</b>
+          <p class="fig"><b>THE CLIENT</b>
             · <b>3</b> execution modes
             · pool <b>5</b>
             · <b>512</b> texts per call
@@ -210,7 +210,7 @@
           </div>
         </dl>
 
-        <p class="fig"><b>FIG. 2 — THE SHAPE THE CLIENT SENDS</b>
+        <p class="fig"><b>THE SHAPE THE CLIENT SENDS</b>
           · <b>a count of commands, not a stopwatch</b>
           · the sandbox runs the server and not Ruby, so no run of the gem is
           observable from a page — every number here is the shipped slicing
@@ -283,7 +283,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
           shape of the call site is the only thing that has to change.
         </p>
 
-        <p class="fig"><b>FIG. 3 — CREATE THEN CONSUME</b>
+        <p class="fig"><b>CREATE THEN CONSUME</b>
           · one scope, one rule
           · <b>the deferral is the feature</b></p>
       </div></div>
@@ -414,7 +414,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
 <span class="t-cmd">emb</span> -model-repo Xenova/all-MiniLM-L6-v2   <span class="t-dim"># downloads the model, serves on :6379</span></pre>
         </div>
 
-        <p class="fig"><b>FIG. 4 — TWO GEMS</b>
+        <p class="fig"><b>TWO GEMS</b>
           · <b>one VERSION</b>
           · client, binary and server released as the same number</p>
       </div></div>

@@ -86,7 +86,7 @@
         <p class="tldr">Two models make two different number-worlds. A vector from one is meaningless in the other, so you cannot mix them.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 5 — THE LENS</b>
+          <p class="fig"><b>THE LENS</b>
             · <b data-fig-model-a>—</b> vs <b data-fig-model-b>—</b>
             · <b data-fig-dim>—</b> dimensions
             · <b>one corpus</b>, two tables
@@ -107,6 +107,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
         
             <div class="atlas">
               <svg data-live class="atlas__svg" data-plot viewBox="0 0 1000 420" role="img"
@@ -189,7 +190,7 @@ SELECT rowid FROM vec_bge_small WHERE embedding MATCH vec_int8(:q) AND k = 5;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, quotation, motionAllowed, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, quotation, motionAllowed, tween, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const A = 'minilm', B = 'bge-small';
 const W = 1000, H = 420, PAD = 30;
@@ -202,6 +203,13 @@ const overlap = root.querySelector('[data-overlap]');
 const aOut = root.querySelector('[data-a]');
 const bOut = root.querySelector('[data-b]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'your query' },
+  { glyph: 'model', label: 'two models' },
+  { glyph: 'vector', label: 'two spaces' },
+  { glyph: 'rank', label: 'two rankings' }
+]);
+mech.all();
 const layouts = {};
 let shown = A;
 
@@ -265,6 +273,7 @@ async function run() {
   if (!text || !text.trim()) { return; }
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   try {
     const [fa, fb] = await Promise.all([g.search(A, text, 5), g.search(B, text, 5)]);
     const [pa, pb] = await Promise.all([g.passages(fa.map((h) => h.rowid)), g.passages(fb.map((h) => h.rowid))]);

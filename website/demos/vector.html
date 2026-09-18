@@ -82,7 +82,7 @@
           <p class="plate__teaches">Text becomes a fixed-length list of numbers, and that list is the model's answer — not a hash, and not a rendering of the text.</p>
         <p class="tldr">A model turns text into a fixed list of 384 numbers. Texts that mean the same thing land on nearby numbers.</p>
         </div>
-        <div>          <p class="fig"><b>FIG. 1 — THE VECTOR</b>
+        <div>          <p class="fig"><b>THE VECTOR</b>
             · <b data-fig-model>—</b>
             · <b data-fig-dim>—</b> dimensions
             · <b data-fig-precision>—</b> weights
@@ -104,6 +104,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
         
             <div data-live class="rig" data-rig="vector" data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445">
               <form class="rig__form" data-form>
@@ -174,7 +175,7 @@ EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 &quot;The thousand injuries…&quot;
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, figure, showState, b64Float32, hexPreview, argvLine, tween } from '../assets/js/demos.js';
+import { gallery, el, figure, showState, b64Float32, hexPreview, argvLine, tween, mechanism, playStages } from '../assets/js/demos.js';
 
 const g = gallery();
 const MODEL = 'minilm';
@@ -187,6 +188,13 @@ const readout = root.querySelector('[data-readout]');
 const bytesLine = root.querySelector('[data-bytes]');
 const heat = root.querySelector('[data-heat]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'your text' },
+  { glyph: 'tokens', label: 'words' },
+  { glyph: 'model', label: 'minilm' },
+  { glyph: 'vector', label: '384 numbers' }
+]);
+mech.all();
 let last = null;
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -247,7 +255,7 @@ function render(reply, preset) {
   readout.replaceChildren(
     el('span', { class: 'k', text: 'dim ' }), el('b', { text: String(dim) }),
     el('span', { text: ' · ' }),
-    el('span', { class: 'k', text: 'norm ' }), el('b', { text: String(preset.norm) }),
+    el('span', { class: 'k', text: 'norm ' }), el('b', { text: Number(preset.norm).toFixed(4) }),
     el('span', { text: ' · ' }),
     el('span', { class: 'k', text: 'dtype ' }), el('b', { text: String(meta.dtype || 'float32') }),
     el('span', { text: ' · ' }),
@@ -267,6 +275,7 @@ async function run(text) {
   last = text;
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   try {
     const [raw, scripted] = await Promise.all([
       g.raw(['EMB', MODEL, 'BLOB', text]),

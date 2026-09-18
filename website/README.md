@@ -31,8 +31,9 @@ website/
 │   │                       /docs holds the frame until the reader asks
 │   ├── js/demos.js         the demos gallery's client: the sandbox call (the
 │   │                       same contract the console uses), the browser-side
-│   │                       `vec0` search over the shipped index, and the
-│   │                       loading states a plate renders
+│   │                       `vec0` search over the shipped index, the staged
+│   │                       mechanism every plate opens with, and the loading
+│   │                       states a plate renders
 │   ├── js/tldr.js          the read-mode switch on /demos, /docs and /gem:
 │   │                       one remembered preference that reveals each
 │   │                       surface's `.tldr` gist and hides its long form

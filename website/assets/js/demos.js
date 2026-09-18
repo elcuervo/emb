@@ -471,6 +471,114 @@ export function quotation(passage, rank, hit) {
   return el('figure', { class: 'quote' + (hit ? ' quote--hit' : '') }, children);
 }
 
+/* ── the mechanism: the plate's own how-it-works, in stages ─────────── */
+/* One strip, the same on every plate: the steps between the reader's input and
+ * the answer, as a run of glyphs joined by the page's rule. A plate names its
+ * steps and nothing else; the drawing is here so ten plates cannot invent ten
+ * vocabularies. The accent mark is the meaning inside a step -- the one vector
+ * that matters, the row a search lands on -- and it is the only thing that
+ * changes colour when the step is reached. */
+
+const MECH_NS = 'http://www.w3.org/2000/svg';
+
+function mechNode(tag, attrs, cls) {
+  const node = document.createElementNS(MECH_NS, tag);
+  Object.keys(attrs || {}).forEach((key) => node.setAttribute(key, attrs[key]));
+  if (cls) { node.setAttribute('class', cls); }
+  return node;
+}
+
+/* Every glyph is drawn in the same 56x44 box, stroke 2, square caps, so a step
+ * reads the same wherever it stands. Shapes inherit currentColor, which the
+ * stage sets; the accent names the sub-shape that carries the step's meaning. */
+function mechGlyph(kind) {
+  const svg = mechNode('svg', { class: 'mech__glyph', viewBox: '0 0 56 44', 'aria-hidden': 'true', focusable: 'false' });
+  const line = (x1, y1, x2, y2, cls) => svg.appendChild(mechNode('line', { x1, y1, x2, y2, stroke: 'currentColor', 'stroke-width': 2 }, cls));
+  const box = (x, y, w, h, cls) => svg.appendChild(mechNode('rect', { x, y, width: w, height: h, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, cls));
+  const bar = (x, y, w, h, cls) => svg.appendChild(mechNode('rect', { x, y, width: w, height: h, fill: 'currentColor' }, cls));
+  const dot = (cx, cy, r, cls) => svg.appendChild(mechNode('circle', { cx, cy, r, fill: 'currentColor' }, cls));
+  switch (kind) {
+    case 'text': /* a passage */
+      line(9, 15, 47, 15); line(9, 22, 37, 22); line(9, 29, 43, 29); break;
+    case 'tokens': /* the text cut into subwords */
+      for (let i = 0; i < 9; i++) { const x = 9.5 + i * 4.6; line(x, 16, x, 28); } break;
+    case 'model': /* the model's own call */
+      box(11, 12, 34, 20); dot(20, 22, 2.4); dot(28, 22, 2.4); dot(36, 22, 2.4, 'g-accent-fill'); break;
+    case 'vector': /* the numbers it returns */
+      line(8, 22, 48, 22);
+      [[8, 7], [14, 13], [20, 19], [26, 9], [32, 24, 'g-accent-fill'], [38, 15], [44, 11]].forEach(([x, h, cls]) => bar(x, 22 - h, 3, h * 2, cls)); break;
+    case 'search': /* a lookup over the index */
+      for (let r = 0; r < 3; r++) { for (let c = 0; c < 4; c++) { dot(12 + c * 10, 13 + r * 9, 2.4, r === 1 && c === 2 ? 'g-accent-fill' : null); } } break;
+    case 'rank': /* the rows, in their new order */
+      [[9, 38], [9, 30], [9, 44], [9, 24]].forEach(([x, w], i) => bar(x, 11 + i * 7, w, 3, i === 0 ? 'g-accent-fill' : null)); break;
+    case 'score': /* one number between two texts */
+      line(8, 30, 48, 30); bar(30, 12, 4, 18, 'g-accent-fill'); line(30, 12, 30, 30); break;
+    case 'labels': /* a distribution over candidates */
+      [[10, 9], [19, 20], [28, 13], [37, 6]].forEach(([x, h], i) => bar(x, 32 - h, 6, h, i === 1 ? 'g-accent-fill' : null));
+      line(8, 32, 48, 32); break;
+    case 'passes': /* many inputs, one pass */
+      for (let i = 0; i < 6; i++) { bar(9 + i * 7, 11, 4, 8); }
+      bar(9, 27, 38, 4, 'g-accent-fill'); break;
+    case 'cache': /* a remembered answer */
+      box(11, 12, 34, 20); dot(28, 22, 5, 'g-accent-fill'); break;
+    case 'photo': /* an image beside its labels */
+      box(9, 11, 38, 24); dot(19, 19, 3, 'g-accent-fill'); line(11, 33, 24, 21); line(24, 21, 35, 31); line(35, 31, 45, 24); break;
+    case 'fanout': /* one call, several reply shapes */
+      line(8, 22, 22, 22); [12, 22, 32].forEach((y) => { line(22, 22, 40, y); dot(44, y, 3, y === 22 ? 'g-accent-fill' : null); }); break;
+    case 'graph': /* nodes and the edges between them */
+      line(16, 14, 40, 18); line(16, 14, 22, 34); line(40, 18, 34, 33); line(22, 34, 34, 33);
+      dot(16, 14, 4); dot(40, 18, 4, 'g-accent-fill'); dot(22, 34, 4); dot(34, 33, 4); break;
+    default: break;
+  }
+  return svg;
+}
+
+/* mechanism(node, stages) builds the strip and returns a small controller: a
+ * plate calls `reset()` at the start of a run and `all()` when the answer
+ * lands. `label` is the plain name of the step; `glyph` names its drawing. */
+export function mechanism(node, stages) {
+  const list = el('ol', { class: 'mech__list' });
+  const items = [];
+  stages.forEach((stage, i) => {
+    if (i) { list.appendChild(el('li', { class: 'mech__link', 'aria-hidden': 'true' })); }
+    const item = el('li', { class: 'mech__s' }, [
+      mechGlyph(stage.glyph),
+      el('span', { class: 'mech__name', text: stage.label })
+    ]);
+    items.push(item);
+    list.appendChild(item);
+  });
+  node.replaceChildren(list);
+  const links = list.querySelectorAll('.mech__link');
+  function on(index) {
+    items.forEach((item, i) => item.classList.toggle('is-on', i <= index));
+    links.forEach((link, i) => link.classList.toggle('is-on', i < index));
+  }
+  return {
+    count: stages.length,
+    reset() { on(-1); },
+    on,
+    all() { on(items.length - 1); }
+  };
+}
+
+/* playStages walks a strip a step at a time. It is timing, not truth: the
+ * plate calls `all()` when the real answer arrives, so a slow sandbox never
+ * leaves the strip mid-stride and a fast one never outruns its own result.
+ * With reduced motion asked for, every step is already on. */
+export function playStages(rail, per, gap) {
+  if (!motionAllowed()) { rail.all(); return Promise.resolve(); }
+  return new Promise((resolve) => {
+    let i = 0;
+    function tick() {
+      rail.on(i);
+      i += 1;
+      if (i < rail.count) { window.setTimeout(tick, per + gap); } else { resolve(); }
+    }
+    tick();
+  });
+}
+
 /* The instrument's own state, in the console's vocabulary, with a retry. A
  * plate in any non-ready state shows no result. It fills a stable element
  * rather than replacing it: a plate replaces its state line many times, and an

@@ -87,7 +87,7 @@
         <p class="tldr">Many texts in one call is far faster than one call each. The server does the same thing for readers who arrive together.</p>
         </div>
         <div>
-          <p class="fig"><b>FIG. 7 — THE BATCH</b>
+          <p class="fig"><b>THE BATCH</b>
             · <b data-fig-texts>6</b> texts
             · <b data-fig-dim>—</b> dimensions
             · <b>server-side timing</b>
@@ -109,6 +109,7 @@
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
 
             <div data-live class="rig" data-rig="batch">
               <svg class="atlas__svg" data-plot viewBox="0 0 640 150" role="img"
@@ -179,7 +180,7 @@ EMB minilm "text 1" "text 2" "text 3" "text 4" "text 5" "text 6"
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, duration, tween } from '../assets/js/demos.js';
+import { gallery, el, showState, duration, tween, mechanism, playStages } from '../assets/js/demos.js';
 const g = gallery();
 const MODEL = 'minilm';
 /* Six passages the sandbox has not been asked for by this page before. They
@@ -200,6 +201,12 @@ const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
 const plot = document.querySelector('[data-plot]');
 const go = root.querySelector('.rig__go');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'passes', label: 'six texts' },
+  { glyph: 'model', label: 'one pass' },
+  { glyph: 'vector', label: 'six vectors' }
+]);
+mech.all();
 const NS = 'http://www.w3.org/2000/svg';
 const W = 640, H = 150, X0 = 232, MAXW = 316, BAR = 24;
 
@@ -242,6 +249,7 @@ function setState(next, message) {
 async function run() {
   go.disabled = true;
   setState('running');
+  mech.reset(); playStages(mech, 150, 60);
   draw(null, null);
   try {
     // Two cold sets, salted per run: the cache is the subject of the next

@@ -2894,3 +2894,59 @@ html.js.is-ready .hero__prose{
 [data-tldr] .doc-prose{ display: none; }
 /* The terrain breaks are reading rhythm; the gist is short and needs none. */
 [data-tldr] .ridge{ display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE MECHANISM  (the demos' how-it-works, in stages)
+   ─────────────────────────────────────────────────────────────────────
+   Every plate opens TRY IT with the same idea drawn the same way: the steps
+   between the reader's input and the answer, as a run of glyphs joined by
+   the page's rule. Before a run every step is dim, so the strip is a map of
+   what is about to happen; on a run the steps light in order beside the real
+   call. It is the gallery's one animation that explains rather than measures,
+   and it is drawn in the same mono, hairline and accent as everything else.
+   ══════════════════════════════════════════════════════════════════════ */
+.mech{ margin-bottom: clamp(18px, 2vw, 28px); }
+.mech__list{
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mech__s{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  transition: color .28s ease;
+}
+.mech__glyph{ display: block; width: 56px; height: 44px; }
+.mech__name{
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: center;
+  max-width: 13ch;
+}
+.mech__link{
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 21px;
+  width: clamp(12px, 2vw, 30px);
+  height: 1.5px;
+  background: var(--muted);
+  transition: background-color .28s ease;
+}
+/* The stage is ink when it is reached; on the dark ground that is --bg, on
+   paper it is --fg, and the glyph inherits it through currentColor. */
+.mech__s.is-on{ color: var(--bg); }
+.block--paper .mech__s.is-on{ color: var(--fg); }
+.mech__link.is-on{ background: var(--accent); }
+.mech__s .g-accent-stroke{ stroke: currentColor; }
+.mech__s .g-accent-fill{ fill: currentColor; }
+.mech__s.is-on .g-accent-stroke{ stroke: var(--accent); }
+.mech__s.is-on .g-accent-fill{ fill: var(--accent); }
