@@ -174,9 +174,16 @@
      "temperature": [1.6, 1.25, 1.98],
      "temperature_by_options": { "choice:2": 1.9, "choice:3-5": 1.76, "choice:11+": 0.1006,
                                  "noul:2": 1.98 } }'
-# -> {"answers":{"department":{"type":"choice","choice":"billing",…,"confidence":0.91,
-#     "action":{"act_probability":0.83}},…},
-#     "usage":{"input_tokens":351,"output_tokens":0}}
+# -> {"answers":{"churn":{"action":{"act_probability":0.026},"confidence":0.5054,"noul":0.5054,"type":"noul"},
+#     "department":{"action":{"act_probability":0.2232},"choice":"other","confidence":0,
+#       "probabilities":{"billing":0.3314,"other":0.3343,"technical":0.3342},"type":"choice"},
+#     "phishing":{"action":{"act_probability":0.1368},"confidence":0.5054,"noul":0.5054,"type":"noul"},
+#     "refund":{"action":{"act_probability":0.0307},"confidence":0.5022,"noul":0.5022,"type":"noul"},
+#     "urgency":{"action":{"act_probability":0.0094},"confidence":0,
+#       "legend":{"0":"not urgent","1":"soon","2":"critical deadline"},
+#       "probabilities":{"0":0.333,"1":0.3306,"2":0.3365},"score":1.0035,"type":"score"}},
+#     "usage":{"input_tokens":314,"output_tokens":0}}
+# (the plate's own run; the reply above is the sandbox's real bytes for this ticket)
 
 # production: point the same model entry at the published checkpoint and drop
 # the config envelope's budgets to the checkpoint's own (max_len 512,

@@ -154,13 +154,17 @@ models:
 ```
 
 ```bash
-# In another terminal:
+# In another terminal (the reply below is the vendored tiny export's own bytes):
 EMBSHA=$(redis-cli -p 6379 EMB.SCRIPT LOAD laya "$(cat scripts/laya.lua)")
 redis-cli -p 6379 EMB.EVSHA laya "$EMBSHA" 1 \
   '"we were charged twice for the invoice please refund"' \
   '{"department": {"type": "choice", "instructions": "which team", "criteria": {"billing": "invoices, refunds", "technical": "bugs, outages", "other": null}}}' \
-  '{"max_len": 512, "head_max_len": 192, "temperature": [1.6, 1.25, 1.98], "temperature_by_options": {"choice:2": 1.9}}'
-# → {"answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":0.84},"confidence":0.91,"action":{"act_probability":0.83}}},"usage":{"input_tokens":45,"output_tokens":0}}
+  '{"max_len": 64, "head_max_len": 32, "temperature": [1.6, 1.25, 1.98], "temperature_by_options": {"choice:2": 1.9}}'
+# → {"answers":{"department":{"action":{"act_probability":0.3582},"choice":"technical","confidence":0,
+#     "probabilities":{"billing":0.3333,"other":0.33,"technical":0.3367},"type":"choice"}},
+#     "usage":{"input_tokens":32,"output_tokens":0}}
+# (The production checkpoints take max_len 512 / head_max_len 192 and answer
+# meaningfully; the same command shape carries them.)
 ```
 
 Every question in a request is answered in one forward pass. The reply is a JSON bulk with one answer per question id, the gem's payload shapes, and `usage.input_tokens` accounting.
