@@ -138,6 +138,41 @@ redis-cli EMB minilm "hello world"
 Reply formats, `EMB.IMG` semantics, and RESP3 differences are documented in
 [Commands](docs/commands.md).
 
+## Laya decision models
+
+[Laya](https://github.com/NandhaKishorM/laya) is a multilingual, non-autoregressive System 1 decision engine: typed decisions (`choice`/`score`/`noul`) over any state in one forward pass, with calibrated probabilities. Mount one of the ONNX exports from [`codenamev/laya-onnx`](https://huggingface.co/codenamev/laya-onnx) (`english` ModernBERT-large, `multilingual` mmBERT-base, `typed-decisions`) the way the gem does, and preload the preset:
+
+```yaml
+# config.yaml
+models:
+  laya:
+    onnx: ./models/laya-english/model.onnx
+    tokenizer: ./models/laya-english/tokenizer/tokenizer.json
+    script_preload: true
+    scripts:
+      - ./scripts/laya.lua
+```
+
+```bash
+# In another terminal:
+EMBSHA=$(redis-cli -p 6379 EMB.SCRIPT LOAD laya "$(cat scripts/laya.lua)")
+redis-cli -p 6379 EMB.EVSHA laya "$EMBSHA" 1 \
+  '"we were charged twice for the invoice please refund"' \
+  '{"department": {"type": "choice", "instructions": "which team", "criteria": {"billing": "invoices, refunds", "technical": "bugs, outages", "other": null}}}' \
+  '{"max_len": 512, "head_max_len": 192, "temperature": [1.6, 1.25, 1.98], "temperature_by_options": {"choice:2": 1.9}}'
+# → {"answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":0.84},"confidence":0.91,"action":{"act_probability":0.83}}},"usage":{"input_tokens":45,"output_tokens":0}}
+```
+
+Every question in a request is answered in one forward pass. The reply is a JSON bulk with one answer per question id, the gem's payload shapes, and `usage.input_tokens` accounting.
+
+**Wire contract** (parity with [ruby-laya](https://github.com/codenamev/ruby-laya) 0.3.7):
+
+- `KEYS[1]` is the state, serialized Python-style — a plain string passes through; a JSON object/array must use spaces after every comma and colon (`{"from": "a@b", "body": "x"}`, not `{"from":"a@b","body":"x"}`) because the checkpoints were trained on exactly those strings.
+- `ARGV[1]` is the questions JSON; criteria label order is significant (marker order maps to label order), so criteria objects are sent as JSON objects (not pre-sorted).
+- `ARGV[2]` (optional) is the checkpoint's config envelope: `max_len`, `head_max_len`, `min_seq`, `min_markers`, `temperature` (choice/score/noul), `temperature_by_options` (bucket → value, buckets `2`/`3-5`/`6-10`/`11+`). Shell it into a wrapper — a Ruby client or `redis-cli` one-liner — or bake the defaults for your checkpoint. Calibration clamps follow the gem: temperatures outside [0.5, 5.0] clamp, non-numeric values answer with 1.0.
+
+`scripts/laya.lua` ports the gem's `build_sequence`, marker accounting, temperature calibration, softmax/confidence and answer assembly; the vendored corpus (`testdata/laya/expected.json`) pins it byte-for-byte over the wire (`TestLayaParityCorpus`). The decision graph is a scripted model like GLiNER: there is no new command — `EMB.EVAL`/`EMB.EVSHA` and the script reply cache (keyed on state + questions + config) do the work. `test-laya.yaml` is the running example, with the vendored tiny export in `testdata/laya/`.
+
 ## Development
 
 ```bash

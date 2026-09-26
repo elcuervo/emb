@@ -1,5 +1,9 @@
-## MODIFIED Requirements
+# script-tensor-io Specification
 
+## Purpose
+Defines the Lua host surface for named-tensor inference IO in scripted evaluations (`emb.run` / `emb.run_batch`): tensor shapes and dtypes, packed byte forms, and the host-side vector math and reduction helpers that keep script replies deterministic and cacheable.
+
+## Requirements
 ### Requirement: Packed tensor outputs
 
 `emb.run` and `emb.run_batch` SHALL accept an options table as their final argument, and when it requests packed output (`{bytes = true}`) each returned tensor SHALL carry its data as a Lua string of little-endian raw elements instead of a per-element array:

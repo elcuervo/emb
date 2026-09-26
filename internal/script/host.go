@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
+	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 
@@ -84,6 +86,12 @@ type Hosts struct {
 	// EncodePlain encodes a single text through the model tokenizer's own
 	// pipeline with per-token byte offsets (emb.tokenize.encode).
 	EncodePlain func(text string, maxLen int) (ids, mask []int64, offsets [][2]int, err error)
+	// EncodePlainIDs encodes a single text through the model tokenizer's own
+	// pipeline without special tokens (emb.tokenize.encode_plain).
+	EncodePlainIDs func(text string, maxLen int) (ids []int64, err error)
+	// SpecialTokenIDs reports the model's mask/cls/sep/pad token IDs
+	// (emb.tokenize.special_ids), for scripts that build model templates.
+	SpecialTokenIDs func() (tokenizer.SpecialTokenIDs, error)
 	// EncodePair composes the BERT-family pair template with per-part offsets
 	// (emb.tokenize.encode_pair).
 	EncodePair func(first, second string, maxLen int) (ids, mask []int64, offsets [][2]int, sep int, err error)
@@ -139,6 +147,12 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	tok.RawSetString("encode_pair", ls.NewFunction(func(ls *lua.LState) int {
 		return encodePairHost(ls, h)
 	}))
+	tok.RawSetString("encode_plain", ls.NewFunction(func(ls *lua.LState) int {
+		return encodePlainHost(ls, h)
+	}))
+	tok.RawSetString("special_ids", ls.NewFunction(func(ls *lua.LState) int {
+		return specialIDsHost(ls, h)
+	}))
 	emb.RawSetString("tokenize", tok)
 	registerMath(emb, ls)
 	if h.Image != nil {
@@ -161,6 +175,7 @@ func registerHosts(ls *lua.LState, h Hosts) {
 	j := ls.NewTable()
 	j.RawSetString("encode", ls.NewFunction(jsonEncodeHost))
 	j.RawSetString("decode", ls.NewFunction(jsonDecodeHost))
+	j.RawSetString("decode_ordered", ls.NewFunction(jsonDecodeOrderedHost))
 	// json.null is a unique null sentinel (the cjson.null pattern): Lua tables
 	// cannot hold nil, so decoding {"a": null} stores the sentinel, and
 	// encoding it reproduces null.
@@ -416,6 +431,49 @@ func tokenizeHost(ls *lua.LState, h Hosts) int {
 	return 1
 }
 
+// encodePlainHost implements emb.tokenize.encode_plain(text, max_len) →
+// {ids = {...}}: the model tokenizer's own pipeline without special tokens,
+// the primitive Laya-style sequence construction composes.
+func encodePlainHost(ls *lua.LState, h Hosts) int {
+	if h.EncodePlainIDs == nil {
+		ls.RaiseError("emb.tokenize.encode_plain is unavailable for this model")
+		return 0
+	}
+	text := ls.CheckString(1)
+	maxLen := ls.OptInt(2, 0)
+	ids, err := h.EncodePlainIDs(text, maxLen)
+	if err != nil {
+		ls.RaiseError("emb.tokenize.encode_plain: %v", err)
+		return 0
+	}
+	result := ls.NewTable()
+	result.RawSetString("ids", numberTable(ls, ids))
+	ls.Push(result)
+	return 1
+}
+
+// specialIDsHost implements emb.tokenize.special_ids() → {mask, cls, sep,
+// pad}: the model's special-token ids, resolved from the tokenizer itself.
+func specialIDsHost(ls *lua.LState, h Hosts) int {
+	if h.SpecialTokenIDs == nil {
+		ls.RaiseError("emb.tokenize.special_ids is unavailable for this model")
+		return 0
+	}
+	ids, err := h.SpecialTokenIDs()
+	if err != nil {
+		ls.RaiseError("emb.tokenize.special_ids: %v", err)
+		return 0
+	}
+	result := ls.NewTable()
+	result.RawSetString("mask", lua.LNumber(ids.Mask))
+	result.RawSetString("cls", lua.LNumber(ids.CLS))
+	result.RawSetString("sep", lua.LNumber(ids.SEP))
+	result.RawSetString("pad", lua.LNumber(ids.PAD))
+	result.RawSetString("mask_token", lua.LString(ids.MaskToken))
+	ls.Push(result)
+	return 1
+}
+
 // namedTensorFromLua reads an input spec in one of two forms:
 //
 //	{shape = {n...}, data = {...}, dtype?} — element-wise values
@@ -425,8 +483,10 @@ func tokenizeHost(ls *lua.LState, h Hosts) int {
 // fill constructs the constant tensor host-side from the shape alone (no Lua
 // data table round-trip); a fractional fill infers float32. An explicit dtype
 // overrides both inference rules (zero-filled float tensors like fused-CLIP
-// pixel_values are all-integral and would misinfer as int64). fill and data
-// are mutually exclusive.
+// pixel_values are all-integral and would misinfer as int64; bool tensors
+// like Laya's marker_mask are never inferred). dtypes are "i64", "f32", and
+// "b1" (alias "bool"), the last with 0/1 data values. fill and data are
+// mutually exclusive.
 func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTensor, error) {
 	var t onnx.NamedTensor
 	if shapeTab, ok := spec.RawGetString("shape").(*lua.LTable); ok {
@@ -445,8 +505,11 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 	var explicitDType string
 	if dtype, ok := spec.RawGetString("dtype").(lua.LString); ok {
 		explicitDType = string(dtype)
-		if explicitDType != "f32" && explicitDType != "i64" {
-			return t, fmt.Errorf("dtype must be i64 or f32, got %q", explicitDType)
+		if explicitDType == "bool" {
+			explicitDType = "b1"
+		}
+		if explicitDType != "f32" && explicitDType != "i64" && explicitDType != "b1" {
+			return t, fmt.Errorf("dtype must be i64, f32, or b1, got %q", explicitDType)
 		}
 	}
 
@@ -481,7 +544,7 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 	// the length must match the shape exactly.
 	if hasBytes {
 		if explicitDType == "" {
-			return t, fmt.Errorf("bytes requires an explicit dtype (\"f32\" or \"i64\")")
+			return t, fmt.Errorf("bytes requires an explicit dtype (\"f32\", \"i64\", or \"b1\")")
 		}
 		raw, ok := bytesField.(lua.LString)
 		if !ok {
@@ -505,6 +568,11 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 			t.Float = make([]float32, count)
 			for i := range t.Float {
 				t.Float[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:]))
+			}
+		case onnx.TensorBool:
+			t.Bool = make([]bool, count)
+			for i := range t.Bool {
+				t.Bool[i] = b[i] != 0
 			}
 		default:
 			t.Int64 = make([]int64, count)
@@ -532,6 +600,11 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 			for i, n := range data {
 				t.Float[i] = float32(n)
 			}
+		case onnx.TensorBool:
+			t.Bool = make([]bool, len(data))
+			for i, n := range data {
+				t.Bool[i] = n != 0
+			}
 		default:
 			t.Int64 = make([]int64, len(data))
 			for i, n := range data {
@@ -558,6 +631,11 @@ func namedTensorFromLua(spec *lua.LTable, budget *tensorBudget) (onnx.NamedTenso
 		t.Float = make([]float32, int(count))
 		for i := range t.Float {
 			t.Float[i] = float32(fillVal)
+		}
+	case onnx.TensorBool:
+		t.Bool = make([]bool, int(count))
+		for i := range t.Bool {
+			t.Bool[i] = fillVal != 0
 		}
 	default:
 		t.Int64 = make([]int64, int(count))
@@ -606,10 +684,14 @@ func dtypeFor(explicit string, data []float64) onnx.TensorType {
 }
 
 func dtypeFromString(s string) onnx.TensorType {
-	if s == "f32" {
+	switch s {
+	case "f32":
 		return onnx.TensorFloat32
+	case "b1":
+		return onnx.TensorBool
+	default:
+		return onnx.TensorInt64
 	}
-	return onnx.TensorInt64
 }
 
 // --- json host functions ------------------------------------------------
@@ -634,6 +716,102 @@ func jsonDecodeHost(ls *lua.LState) int {
 	}
 	ls.Push(anyToLuaValue(ls, v))
 	return 1
+}
+
+// jsonDecodeOrderedHost implements json.decode_ordered(raw): like json.decode,
+// except JSON objects become arrays of {k = <key>, v = <value>} pairs in
+// document order (plus a trailing {n = count} sentinel), because a plain Lua
+// table cannot hold nil and string-key iteration order is not deterministic
+// in the sandbox VM. JSON arrays decode as plain integer-keyed tables. Scripts
+// that depend on an object's key order (e.g. Laya option rendering, where
+// marker order maps to label order) use this form.
+func jsonDecodeOrderedHost(ls *lua.LState) int {
+	raw := ls.CheckString(1)
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	v, err := decodeOrderedValue(ls, dec)
+	if err != nil {
+		ls.RaiseError("json.decode_ordered: %v", err)
+		return 0
+	}
+	ls.Push(v)
+	return 1
+}
+
+// decodeOrderedValue reads one JSON value from dec, preserving object key
+// order as {k, v} pairs.
+func decodeOrderedValue(ls *lua.LState, dec *json.Decoder) (lua.LValue, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	return orderedTokenToLua(ls, dec, tok)
+}
+
+func orderedTokenToLua(ls *lua.LState, dec *json.Decoder, tok json.Token) (lua.LValue, error) {
+	switch t := tok.(type) {
+	case json.Delim:
+		switch t {
+		case '{':
+			pairs := ls.NewTable()
+			i := 1
+			for dec.More() {
+				keyTok, err := dec.Token()
+				if err != nil {
+					return nil, err
+				}
+				key, ok := keyTok.(string)
+				if !ok {
+					return nil, fmt.Errorf("object key is not a string: %v", keyTok)
+				}
+				val, err := decodeOrderedValue(ls, dec)
+				if err != nil {
+					return nil, err
+				}
+				pair := ls.NewTable()
+				pair.RawSetString("k", lua.LString(key))
+				pair.RawSetString("v", val)
+				pairs.RawSetInt(i, pair)
+				i++
+			}
+			pairs.RawSetString("n", lua.LNumber(i-1))
+			pairs.RawSetString("obj", lua.LTrue)
+			if _, err := dec.Token(); err != nil { // consume '}'
+				return nil, err
+			}
+			return pairs, nil
+		case '[':
+			arr := ls.NewTable()
+			i := 1
+			for dec.More() {
+				v, err := decodeOrderedValue(ls, dec)
+				if err != nil {
+					return nil, err
+				}
+				arr.RawSetInt(i, v)
+				i++
+			}
+			if _, err := dec.Token(); err != nil { // consume ']'
+				return nil, err
+			}
+			return arr, nil
+		}
+		return nil, fmt.Errorf("unexpected delimiter %v", t)
+	case string:
+		return lua.LString(t), nil
+	case json.Number:
+		f, err := strconv.ParseFloat(string(t), 64)
+		if err != nil {
+			return nil, err
+		}
+		return lua.LNumber(f), nil
+	case bool:
+		return lua.LBool(t), nil
+	case nil:
+		return jsonNullSentinel(ls), nil
+	default:
+		return nil, fmt.Errorf("unexpected token %v", tok)
+	}
 }
 
 // jsonNullSentinel returns this state's json.null value (see registerHosts).

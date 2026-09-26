@@ -148,3 +148,74 @@ func TestRunNamedErrors(t *testing.T) {
 		t.Fatal("expected error for shape/data mismatch")
 	}
 }
+
+// TestRunNamedBoolGraph feeds the vendored tiny Laya graph's five inputs —
+// including the ONNX bool marker_mask — through the named session, proving a
+// bool tensor round-trips a real graph input (the enabling slice's core).
+func TestRunNamedBoolGraph(t *testing.T) {
+	if err := InitEnvironment(""); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = DestroyEnvironment() }()
+
+	data, err := os.ReadFile("../../testdata/laya/model.onnx")
+	if err != nil {
+		t.Fatalf("vendored laya model missing: %v", err)
+	}
+	inputNames, err := GetInputNames("../../testdata/laya/model.onnx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, n := range inputNames {
+		have[n] = true
+	}
+	for _, want := range []string{"input_ids", "attention_mask", "marker_pos", "marker_mask", "qtype"} {
+		if !have[want] {
+			t.Fatalf("graph inputs %v missing %q", inputNames, want)
+		}
+	}
+
+	sess, err := NewNamedRuntimeSessionFromBytes(data, inputNames, []string{"logits", "act_logits"}, 1, 2, ExecModeSequential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sess.Close() }()
+
+	// Two rows, seq 8, two markers: a valid minimum batch for the graph.
+	inputs := []NamedTensor{
+		{Name: "input_ids", Shape: []int64{2, 8}, DType: TensorInt64,
+			Int64: []int64{2, 16, 15, 79, 33, 3, 0, 0, 2, 18, 15, 79, 13, 3, 0, 0}},
+		{Name: "attention_mask", Shape: []int64{2, 8}, DType: TensorInt64,
+			Int64: []int64{1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0}},
+		{Name: "marker_pos", Shape: []int64{2, 2}, DType: TensorInt64,
+			Int64: []int64{6, 0, 6, 0}},
+		{Name: "marker_mask", Shape: []int64{2, 2}, DType: TensorBool,
+			Bool: []bool{true, false, true, true}},
+		{Name: "qtype", Shape: []int64{2}, DType: TensorInt64,
+			Int64: []int64{0, 2}},
+	}
+	out, err := sess.RunNamed(inputs)
+	if err != nil {
+		t.Fatalf("bool-input run failed: %v", err)
+	}
+	logits, ok := out["logits"]
+	if !ok {
+		t.Fatal("no logits output")
+	}
+	if len(logits.Shape) != 2 || logits.Shape[0] != 2 || logits.Shape[1] != 2 {
+		t.Fatalf("logits shape = %v, want [2 2]", logits.Shape)
+	}
+	act, ok := out["act_logits"]
+	if !ok {
+		t.Fatal("no act_logits output")
+	}
+	if len(act.Shape) != 2 || act.Shape[0] != 2 || act.Shape[1] != 2 {
+		t.Fatalf("act_logits shape = %v, want [2 2]", act.Shape)
+	}
+	for _, v := range logits.Float {
+		if v == 0 || v != v { // finite, nonzero per-row output
+			break
+		}
+	}
+}

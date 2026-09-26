@@ -318,6 +318,28 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 			}
 			return oT.EncodePairOffsets(first, second, maxLen)
 		},
+		EncodePlainIDs: func(text string, maxLen int) ([]int64, error) {
+			r, err := resolve()
+			if err != nil {
+				return nil, err
+			}
+			pT, ok := r.Tokenizer.(tokenizer.PlainTokenizer)
+			if !ok {
+				return nil, errTokenizerUnavailable
+			}
+			return pT.EncodePlain(text, maxLen)
+		},
+		SpecialTokenIDs: func() (tokenizer.SpecialTokenIDs, error) {
+			r, err := resolve()
+			if err != nil {
+				return tokenizer.SpecialTokenIDs{}, err
+			}
+			sT, ok := r.Tokenizer.(tokenizer.SpecialTokenIDsProvider)
+			if !ok {
+				return tokenizer.SpecialTokenIDs{}, errTokenizerUnavailable
+			}
+			return sT.SpecialTokenIDs()
+		},
 	}
 	// emb.embed is bound only for models that can produce embeddings, so a
 	// script targeting a non-embeddable graph leaves the function absent (the
