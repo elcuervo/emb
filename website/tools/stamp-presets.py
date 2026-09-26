@@ -41,6 +41,10 @@ PRESETS = {
     "between": ("minilm", "website/repl/presets/between.lua"),
     "graph": ("minilm", "website/repl/presets/graph.lua"),
     "zeroshot": ("clip", "website/repl/presets/zeroshot.lua"),
+    # The canonical file lives at the repo root (emb-laya ships it); the
+    # sandbox preset is a symlink to it, so one set of bytes is hashed and
+    # shipped.
+    "laya": ("laya", "scripts/laya.lua"),
 }
 
 SANDBOX_CONFIG = "website/repl/sandbox.yaml"
@@ -55,6 +59,7 @@ TARGETS = [
     "website/demos/function.html",
     "website/demos/image.html",
     "website/demos/graph.html",
+    "website/demos/laya.html",
 ]
 
 # Leftmost-longest, and narrow: only the marker attribute's own value is

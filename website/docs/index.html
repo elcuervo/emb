@@ -106,6 +106,7 @@
         <li><a href="#benchmarks"><span class="doc-toc__n">07</span><span>Benchmarks</span></a></li>
         <li><a href="#clients"><span class="doc-toc__n">08</span><span>Clients</span></a></li>
         <li><a href="#status"><span class="doc-toc__n">09</span><span>Status and version</span></a></li>
+        <li><a href="#laya"><span class="doc-toc__n">10</span><span>Laya decision models</span></a></li>
       </ol>
     </nav>
   </div>
@@ -888,6 +889,82 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         <dt>SOURCE</dt>
         <dd><a href="https://github.com/elcuervo/emb" rel="noopener">github.com/elcuervo/emb</a></dd>
       </dl>
+    </div>
+  </div>
+  </div>
+</section>
+
+    <!-- ═════════════════════════════════════════════════════ 10 · LAYA -->
+    <section class="block block--paper" id="laya" aria-labelledby="laya-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="laya-h">10 · Laya decision models</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        <a href="https://github.com/NandhaKishorM/laya" rel="noopener">Laya</a> is a
+        non-autoregressive decision engine, exported to ONNX and served through
+        the scripted-model path: one checkpoint, a round of typed questions
+        (<code>choice</code> / <code>score</code> / <code>noul</code>), and all answers in
+        one forward pass with calibrated confidence. The preset is
+        <code>scripts/laya.lua</code>; it ports the reference's sequence construction,
+        temperature calibration and answer assembly, and is pinned byte-for-byte
+        against the vendored corpus (see <a href="../demos/laya.html">the decision</a>
+        plate and the <a href="../README.md">README's Laya section</a>).
+      </p>
+
+      <h3 class="doc-h3">Mount an export bundle</h3>
+      <p class="doc-prose">
+        A Laya export (from <code>codenamev/laya-onnx</code>: <code>english</code>,
+        <code>multilingual</code>, <code>typed-decisions</code>) mounts like any
+        scripted model — <code>onnx:</code> + <code>tokenizer:</code>, the preset
+        preloaded — and answers over <code>EMB.EVSHA</code>.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">models:</span>
+  <span class="t-str">laya</span>:
+    <span class="t-cmd">onnx</span>:      <span class="t-str">./models/laya-english/model.onnx</span>
+    <span class="t-cmd">tokenizer</span>: <span class="t-str">./models/laya-english/tokenizer/tokenizer.json</span>
+    <span class="t-cmd">script_preload</span>: <span class="t-str">true</span>
+    <span class="t-cmd">scripts</span>:
+      <span class="t-dim">-</span> <span class="t-str">./scripts/laya.lua</span></pre>
+      </figure>
+
+      <h3 class="doc-h3">The wire contract</h3>
+      <p class="doc-prose">
+        One <code>EMB.EVSHA &lt;model&gt; &lt;laya.lua sha1&gt; 1 &lt;state&gt; &lt;questions&gt; [&lt;config&gt;]</code>
+        answers every question. The state is <code>KEYS[1]</code>: a plain string passes
+        through, and a structured state must be Python-style JSON — spaces after
+        every comma and colon (<code>{"from": "a@b", "body": "x"}</code>), because the
+        checkpoints were trained on exactly those strings. <code>ARGV[1]</code> is the
+        questions object; criteria label order is significant (marker order maps
+        to label order), so criteria objects arrive as JSON objects in document
+        order. <code>ARGV[2]</code> is the checkpoint's optional config envelope:
+        <code>max_len</code>, <code>head_max_len</code>, <code>min_seq</code>, <code>min_markers</code>,
+        <code>temperature</code> (choice/score/noul) and
+        <code>temperature_by_options</code> (buckets <code>2</code>, <code>3-5</code>, <code>6-10</code>,
+        <code>11+</code>). Calibration clamps follow the reference: temperatures outside
+        [0.5, 5.0] clamp, non-numeric values answer with 1.0.
+      </p>
+
+      <h3 class="doc-h3">The question schema</h3>
+      <dl class="doc-cmds">
+        <dt><code>choice</code></dt>
+        <dd>One winner: criteria as a label → description object (or an array of labels). The reply is the winning label, the full probability distribution, and confidence.</dd>
+        <dt><code>score</code></dt>
+        <dd>A place on an ordered rubric: criteria as an array of level descriptions, index 0 first. The reply is the expectation over levels, the legend, and confidence.</dd>
+        <dt><code>noul</code></dt>
+        <dd>A yes/no statement: optional <code>true</code>/<code>false</code> descriptions. The reply is the probability of <code>true</code> and confidence as the distance from a coin flip.</dd>
+      </dl>
+
+      <p class="doc-prose">
+        Every answer carries an <code>action.act_probability</code> from the model's
+        action head. The website sandbox serves a 32-hidden miniature of the
+        architecture — random weights, real mechanism — so its demo shows the
+        shapes, not judgments; point the same config at the published checkpoints
+        for real answers.
+      </p>
     </div>
   </div>
   </div>

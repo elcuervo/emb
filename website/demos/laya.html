@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — the decision: one call, six typed answers</title>
+<link rel="canonical" href="https://emb.is/demos/laya.html">
+<meta name="description" content="A support ticket arrives; one command asks five typed questions at once — which team, how urgent, is it a refund, is it a scam, will they churn — and a single forward pass returns a decision sheet, not a vector.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — the decision: one call, six typed answers">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="One EMB.EVSHA, five typed questions, one forward pass, a decision sheet. The scripting layer's last step: answering instead of embedding.">
+<meta property="og:url" content="https://emb.is/demos/laya.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — the decision: one call, six typed answers">
+<meta name="twitter:description" content="One EMB.EVSHA, five typed questions, one forward pass, a decision sheet.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the preset and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The decision</h1>
+          <p class="plate__teaches">
+            A support ticket arrives; one command asks five typed questions at once —
+            which team, how urgent, is it a refund, is it a scam, will they churn —
+            and a single forward pass returns a decision sheet, not a vector.
+          </p>
+        <p class="tldr">Six answers, one call: a scripted model answers typed questions in a single forward pass, with calibrated confidence.</p>
+        </div>
+        <div>
+          <p class="fig"><b>THE DECISION</b>
+            · <b>1</b> model
+            · <b data-fig-qs>5</b> questions
+            · <b>1</b> forward pass
+            · <b data-fig-tokens>0</b> input tokens · <b>32-dim</b> sandbox miniature · real checkpoints 421M</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+            <p class="block__deck">An inbox, a round of questions, one pass. The plate picks a support email, sends it with the app's five questions in one <span class="t-cmd">EMB.EVSHA</span>, and draws the reply as a decision sheet: a distribution for the choice, a place on a ruler for the score, a split for each yes/no — every answer carrying its confidence.</p>
+            <p class="block__deck"><b>The honesty bar:</b> the sandbox runs a 32-hidden miniature of the Laya architecture, whose weights are random. It exercises the real mechanism — the sequence template, the five graph inputs, the calibration, the reply shapes — and its numbers are shapes, not judgments. The same command against the published checkpoints is the integration the end of this page shows.</p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
+
+            <div data-live class="rig" data-rig="laya" data-emb-preset-laya="0d1d7a3b91d3978da0eacc05d78f517b64e3dd2a">
+              <div class="tickets" data-tickets role="radiogroup" aria-label="Choose a support email"></div>
+              <form class="rig__form" data-form>
+                <button class="rig__go" type="submit">Answer the five questions</button>
+              </form>
+              <p class="rig__state" data-state>ready when you are</p>
+              <div class="rig__out" data-out hidden>
+                <p class="rig__readout" data-readout></p>
+                <div class="sheet" data-sheet aria-live="polite"></div>
+              </div>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
+            </div>
+
+      </div></div>
+    </section>
+
+    <!-- the massif, as a reading break: the same cut-out the gallery plates
+         use. Its name is the plate's thesis. -->
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-pass.png" width="1200" height="150" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+            <p class="block__deck">One command carried the whole round: the email as <span class="t-cmd">KEYS</span>, the five questions as <span class="t-cmd">ARGV[1]</span>, the checkpoint's budgets and temperatures as <span class="t-cmd">ARGV[2]</span>. The preset built one sequence per question — <span class="t-cmd">[CLS] … [SEP] [MASK] option [SEP] state [SEP]</span> — gathered every option's marker into one batch, and the model scored them all in a single pass.</p>
+            <p class="block__deck">The six rows appear together because they came back together: one reply, one decision sheet. Each row is the model's own tempered probabilities — a choice row draws them as bars, a score row as a position on its legend, a yes/no row as a split — rounded the way the calibration contract says, with the action probability in the sheet's head.</p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+            <p class="block__deck">A classifier zoo is a pipeline: one model per label set, glued together, impossible to keep calibrated. A decision model is one checkpoint and one call — the questions are data, so the app's question set lives in the repo, diffs in review, and the whole triage is one round trip from a Redis client you already have.</p>
+            <p class="block__deck">The sheet's confidence is the model's own calibration: a question type and option count pick a fitted temperature, and the answer reports how decided the distribution is. Nothing hallucinates a label wholesale — every option is scored.</p>
+
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+            <p class="block__deck">The exact call the plate just made — plus the production-shaped version: same command, same questions, the real checkpoint's budgets.</p>
+<figure class="code"><pre class="code__body"><code>EMB.EVSHA laya &lt;laya.lua sha1&gt; 1 \
+  '{ "subject": "duplicate charge on invoice", "body": "we were charged twice …" }' \
+  '{ "department": { "type": "choice", "instructions": "which team should handle this?",
+                      "criteria": { "billing": "invoices, payments, refunds",
+                                    "technical": "bugs, outages, system errors",
+                                    "other": null } },
+     "urgency":    { "type": "score", "instructions": "how urgent is this?",
+                      "criteria": [ "not urgent", "soon", "critical deadline" ] },
+     "refund":     { "type": "noul", "instructions": "does the customer ask for money back?" },
+     "phishing":   { "type": "noul", "instructions": "is this a phishing attempt?" },
+     "churn":      { "type": "noul", "instructions": "does the customer threaten to cancel?" } }' \
+  '{ "max_len": 64, "head_max_len": 32, "min_seq": 8, "min_markers": 2,
+     "temperature": [1.6, 1.25, 1.98],
+     "temperature_by_options": { "choice:2": 1.9, "choice:3-5": 1.76, "choice:11+": 0.1006,
+                                 "noul:2": 1.98 } }'
+# -> {"answers":{"department":{"type":"choice","choice":"billing",…,"confidence":0.91,
+#     "action":{"act_probability":0.83}},…},
+#     "usage":{"input_tokens":351,"output_tokens":0}}
+
+# production: point the same model entry at the published checkpoint and drop
+# the config envelope's budgets to the checkpoint's own (max_len 512,
+# head_max_len 192), again in any Redis client -- one command, five answers.</code></pre>
+        <figcaption class="code__cap">One <span class="t-cmd">EMB.EVSHA</span> per ticket: the state, the app's questions, the checkpoint's calibration. The answers arrive as one JSON reply; the sandbox's 64-token miniature is shown here, the production shape in the comment.</figcaption>
+      </figure>
+      </div></div>
+    </section>
+
+  <div class="shell">
+    <nav class="plate-nav" aria-label="The gallery">
+      <a class="plate-nav__link" href="graph.html"><span class="plate-nav__k">Previous</span><span class="plate-nav__t">The graph</span></a>
+      <a class="plate-nav__link plate-nav__link--next" href="index.html"><span class="plate-nav__k">Gallery</span><span class="plate-nav__t">The twelve plates</span></a>
+    </nav>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, mechanism, playStages, tween, unfold } from '../assets/js/demos.js';
+
+const g = gallery();
+const MODEL = 'laya';
+const root = document.querySelector('[data-rig="laya"]');
+const form = root.querySelector('[data-form]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const sheet = root.querySelector('[data-sheet]');
+const go = root.querySelector('.rig__go');
+const ticketsEl = root.querySelector('[data-tickets]');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'a ticket arrives' },
+  { glyph: 'labels', label: 'five typed questions' },
+  { glyph: 'passes', label: 'one forward pass' },
+  { glyph: 'reply', label: 'a decision sheet' }
+]);
+mech.all();
+
+/* The app's question set. These are the questions the model is trained to
+ * answer, in the shape the wire contract documents: choice takes a label ->
+ * description object (its ORDER matters: marker order maps to label order),
+ * score takes an ordered list of levels, noul takes true/false questions.
+ * Question ids, not a schema: the set lives in the app and diffs like code. */
+const QUESTIONS = {
+  department: { type: 'choice', instructions: 'which team should handle this?',
+    criteria: { billing: 'invoices, payments, refunds',
+                technical: 'bugs, outages, system errors',
+                other: null } },
+  urgency: { type: 'score', instructions: 'how urgent is this?',
+    criteria: ['not urgent', 'soon', 'critical deadline'] },
+  refund: { type: 'noul', instructions: 'does the customer ask for money back?' },
+  phishing: { type: 'noul', instructions: 'is this a phishing attempt?' },
+  churn: { type: 'noul', instructions: 'does the customer threaten to cancel?' },
+};
+const ORDER = Object.keys(QUESTIONS);
+
+/* The checkpoint the sandbox serves: the vendored miniature's own budgets and
+ * temperatures (the same values testdata/laya/rl_agent_config.json carries).
+ * A real deployment sends its checkpoint's envelope -- see the exact commands. */
+const CONFIG = {
+  max_len: 64, head_max_len: 32, min_seq: 8, min_markers: 2,
+  temperature: [1.6, 1.25, 1.98],
+  temperature_by_options: { 'choice:2': 1.9, 'choice:3-5': 1.76, 'choice:11+': 0.1006, 'noul:2': 1.98 },
+};
+
+/* Four emails out of the queue. Structured states are sent Python-style JSON —
+ * spaces after every comma and colon, because those are the strings the
+ * checkpoints were trained on -- and a plain-string state passes through
+ * verbatim. */
+const TICKETS = [
+  { name: 'duplicate charge on invoice', meta: 'billing · refund · churn',
+    state: '{"from": "hello@world", "subject": "duplicate charge on invoice", "body": "we were charged twice for the invoice please refund the money back today"}' },
+  { name: 'refund the first month', meta: 'refund · churn',
+    state: '{"from": "b.winters@example.com", "subject": "refund my first month", "body": "please refund the first month or i am cancelling today"}' },
+  { name: 'confirm your password', meta: 'phishing',
+    state: '{"from": "security@verification.example", "subject": "confirm your password", "body": "your account was locked, send the password to unlock it immediately"}' },
+  { name: 'cannot log in after the update', meta: 'technical · urgency',
+    state: '{"from": "a@b.com", "subject": "account locked", "body": "the login page errors out after the update and i need access today"}' },
+];
+
+let current = 0;
+
+/* The queue: a ruled list; the selected ticket is the paper bar. */
+function drawTickets() {
+  ticketsEl.replaceChildren();
+  TICKETS.forEach((t, i) => {
+    const li = document.createElement('div');
+    li.className = 'tickets__i';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tickets__btn';
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', String(i === current));
+    btn.append(
+      el('span', { class: 'tickets__n', text: String(i + 1).padStart(2, '0') }),
+      el('span', { class: 'tickets__q', text: t.name }),
+      el('span', { class: 'tickets__meta', text: t.meta })
+    );
+    btn.addEventListener('click', () => {
+      if (current === i) { return; }
+      current = i;
+      hideSheet();
+      drawTickets();
+      setState('ready');
+    });
+    li.appendChild(btn);
+    ticketsEl.appendChild(li);
+  });
+}
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); run(); });
+}
+
+function hideSheet() {
+  out.hidden = true;
+  sheet.replaceChildren();
+}
+
+/* ── the decision sheet ───────────────────────────────────────────── */
+/* One row per question, all drawn by the same tween: the rows appear
+ * together because the answers arrived together. Choice draws a per-option
+ * distribution (the winner in the accent), score draws a position on its
+ * ruler, noul draws a split. Every row carries the model's confidence. */
+
+function fmt(value) { return value.toFixed(4); }
+
+function rowHead(n, id, type) {
+  const head = el('div', { class: 'sheet__rowhead' }, [
+    el('span', { class: 'sheet__n', text: String(n).padStart(2, '0') }),
+    el('span', { class: 'sheet__name', text: id }),
+    el('span', { class: 'sheet__type', text: type }),
+  ]);
+  return head;
+}
+
+function optionBar(label, p, win) {
+  const fill = el('div', { class: 'sheet__fill' + (win ? ' is-win' : '') });
+  const bar = el('div', { class: 'sheet__track' }, [fill]);
+  const barEl = el('div', { class: 'sheet__opt' + (win ? ' is-win' : '') }, [
+    el('span', { class: 'sheet__label', text: label }),
+    bar,
+    el('span', { class: 'sheet__val', text: fmt(p) }),
+  ]);
+  return [barEl, fill];
+}
+
+function noulRow(id, ans, n) {
+  const p = Number(ans.noul);
+  const left = el('div', { class: 'sheet__fill' });
+  const split = el('div', { class: 'sheet__track sheet__track--split' }, [left]);
+  return {
+    row: el('div', { class: 'sheet__row sheet__row--noul' }, [
+      rowHead(n, id, 'noul'),
+      el('div', { class: 'sheet__main' }, [
+        split,
+        el('div', { class: 'sheet__split-labels' }, [
+          el('span', { class: 'sheet__k', text: 'true · ' + fmt(p) }),
+          el('span', { class: 'sheet__k', text: 'false · 1 − p' }),
+        ]),
+      ]),
+      el('div', { class: 'sheet__conf', text: 'conf ' + fmt(Number(ans.confidence)) }),
+    ]),
+    left,
+    p,
+  };
+}
+
+function choiceRow(id, ans, n) {
+  const labels = ans.probabilities && Object.keys(ans.probabilities);
+  const maxP = Math.max(0.0001, ...(labels || [1]).map((l) => Number(ans.probabilities[l])));
+  const fills = [];
+  const opts = el('div', { class: 'sheet__opts' });
+  (labels || []).forEach((label) => {
+    const p = Number(ans.probabilities[label]);
+    const win = label === String(ans.choice);
+    const [barEl, fill] = optionBar(label, p, win);
+    opts.appendChild(barEl);
+    fills.push([fill, (p / maxP) * 100]);
+  });
+  return {
+    row: el('div', { class: 'sheet__row sheet__row--choice' }, [
+      rowHead(n, id, 'choice'),
+      el('div', { class: 'sheet__main' }, [opts]),
+      el('div', { class: 'sheet__conf', text: 'conf ' + fmt(Number(ans.confidence)) }),
+    ]),
+    fills,
+  };
+}
+
+function scoreRow(id, ans, n) {
+  const levels = ans.legend ? Object.keys(ans.legend).map(Number).sort((a, b) => a - b) : [];
+  const k = Math.max(1, levels.length);
+  const score = Number(ans.score);
+  const pos = k > 1 ? Math.max(0, Math.min(k - 1, score)) : 0;
+  const ticks = [];
+  const ruler = el('div', { class: 'sheet__ruler' }, [
+    el('div', { class: 'sheet__marker', style: 'left:' + ((pos / (k - 1)) * 100).toFixed(1) + '%' }),
+  ]);
+  for (let i = 0; i < k; i++) {
+    ruler.appendChild(el('span', { class: 'sheet__tick', style: 'left:' + ((i / (k - 1)) * 100).toFixed(1) + '%' }));
+    ticks.push([i, i / (k - 1)]);
+  }
+  const legend = el('div', { class: 'sheet__legend' });
+  levels.forEach((i) => {
+    legend.appendChild(el('span', { class: 'sheet__lvl', text: String(i) + ' · ' + String(ans.legend[i]) }));
+  });
+  return {
+    row: el('div', { class: 'sheet__row sheet__row--score' }, [
+      rowHead(n, id, 'score'),
+      el('div', { class: 'sheet__main' }, [
+        ruler,
+        legend,
+      ]),
+      el('div', { class: 'sheet__conf', text: fmt(score) + ' · conf ' + fmt(Number(ans.confidence)) }),
+    ]),
+    ticks,
+  };
+}
+
+/* The whole sheet renders in one pass and one tween: rows are built first,
+ * appended together, then every bar and the score marker grow to their final
+ * position in lock-step. */
+function drawSheet(reply) {
+  const answers = reply.answers || {};
+  const usage = reply.usage || {};
+  const rows = [];
+  const grows = [];
+  ORDER.forEach((id, n) => {
+    const ans = answers[id];
+    if (!ans) { return; }
+    const drawn = ans.type === 'choice' ? choiceRow(id, ans, n + 1)
+      : ans.type === 'score' ? scoreRow(id, ans, n + 1)
+      : noulRow(id, ans, n + 1);
+    rows.push(drawn.row || drawn);
+    if (drawn.fills) { grows.push(...drawn.fills); }
+    if (drawn.left) { grows.push([drawn.left, drawn.p * 100]); }
+  });
+  const head = el('div', { class: 'sheet__head' }, [
+    el('span', { class: 'sheet__head-q', text: ORDER.length + ' questions · ' + (usage.input_tokens || 0) + ' input tokens' }),
+    el('span', { class: 'sheet__head-p', text: 'one forward pass' }),
+  ]);
+  sheet.append(head);
+  rows.forEach((row) => sheet.appendChild(row));
+  out.hidden = false;
+  setState('ready');
+  /* one authored moment: the sheet's bars and the score markers grow into
+   * place together -- the reply arrived whole, and the drawing says so. */
+  tween(480, (t) => {
+    grows.forEach(([fill, width]) => { fill.style.width = (width * t).toFixed(1) + '%'; });
+  });
+}
+
+async function run() {
+  g.begin();
+  go.disabled = true;
+  setState('running');
+  mech.reset(); playStages(mech, 150, 60);
+  hideSheet();
+  try {
+    const digest = root.getAttribute('data-emb-preset-laya');
+    const ticket = TICKETS[current];
+    const replyText = await g.preset(MODEL, digest, [ticket.state], [JSON.stringify(QUESTIONS), JSON.stringify(CONFIG)]);
+    const reply = JSON.parse(replyText);
+    document.querySelector('[data-fig-qs]').textContent = ORDER.length;
+    document.querySelector('[data-fig-tokens]').textContent = (reply.usage || {}).input_tokens || 0;
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'ticket ' }),
+      el('b', { text: ticket.name }),
+      el('span', { text: ' · ' }),
+      el('span', { class: 'k', text: 'questions ' }),
+      el('b', { text: String(ORDER.length) }),
+      el('span', { text: '\n' }),
+      el('span', { class: 'k', text: 'model ' }),
+      el('b', { text: 'laya — 32-hidden miniature' }),
+      el('span', { text: ' · same mechanism, random weights · the published checkpoints are the production swap\n' }),
+      el('span', { class: 'k', text: 'one forward pass · ' }),
+      el('b', { text: (reply.usage || {}).input_tokens || 0 }),
+      el('span', { text: ' input tokens · every answer carries its calibrated confidence' })
+    );
+    drawSheet(reply);
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    go.disabled = false;
+    unfold(root, g.trace());
+  }
+}
+
+form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+drawTickets();
+
+</script>
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>

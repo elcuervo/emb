@@ -478,6 +478,7 @@ website-dev port="8080" bridge="8081" upstream="6379" bind="0.0.0.0": sandbox-bu
     cfg=website/repl/.sandbox-dev.yaml; \
     sed -e 's|^listen: .*|listen: "127.0.0.1:{{upstream}}"|' \
         -e "s|/data/models|$PWD/models|" \
+        -e "s|/etc/emb/laya-model|$PWD/testdata/laya|" \
         -e 's|^cache_file: .*|cache_file: ""|' \
         -e 's|^cache_save: .*|cache_save: ""|' \
         website/repl/sandbox.yaml > "$cfg"; \
@@ -708,6 +709,7 @@ website-demos models="minilm,bge-small": build
     port=16389; \
     if [ -z "{{ort_lib}}" ]; then echo "website-demos: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
     sed -e "s|^listen: .*|listen: \"127.0.0.1:$port\"|" -e "s|/data/models|$PWD/models|" \
+        -e "s|/etc/emb/laya-model|$PWD/testdata/laya|" \
         -e 's|^cache_file: .*|cache_file: ""|' -e 's|^cache_save: .*|cache_save: ""|' \
         website/repl/sandbox.yaml > "$cfg"; \
     for onnx in $(grep -E '^[[:space:]]+onnx:' "$cfg" | awk '{print $2}'); do \

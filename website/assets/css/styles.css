@@ -3070,3 +3070,162 @@ html.js.is-ready .hero__prose{
 }
 .plate-nav__link:hover .plate-nav__t{ color: var(--accent-ink); }
 .plate-nav__link:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
+
+/* ── the decision plate ────────────────────────────────────────────────
+   The queue is a ruled list on the dark ground; the sheet is a paper bar
+   inside it taking the paper's ink back (the `.examples__group` pattern):
+   black ink, hairline rules, orange for the winning option only, mono
+   throughout. Everything is drawn from the world's own tokens. */
+
+.tickets{
+  display: grid;
+  margin: clamp(14px, 1.6vw, 22px) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule-dark);
+}
+.tickets__i{ border-bottom: 1px solid var(--rule-dark); }
+.tickets__btn{
+  display: grid;
+  grid-template-columns: clamp(26px, 3vw, 44px) minmax(0, 1fr) auto;
+  gap: 6px 16px;
+  align-items: baseline;
+  width: 100%;
+  padding: 10px clamp(10px, 1.4vw, 18px);
+  background: transparent;
+  color: var(--bg);
+  border: 0;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.05vw, 14px);
+  text-align: left;
+  cursor: pointer;
+}
+.tickets__btn:hover{ color: var(--accent); }
+.tickets__btn:focus-visible{ outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.tickets__n{ color: var(--rule); letter-spacing: .08em; }
+.tickets__btn[aria-checked="true"]{ background: var(--bg); color: var(--fg); }
+.tickets__btn[aria-checked="true"] .tickets__n{ color: var(--accent-ink); }
+.tickets__btn[aria-checked="true"] .tickets__meta{ color: var(--muted); }
+.tickets__q{ font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tickets__meta{ color: var(--rule); letter-spacing: .04em; }
+.block--dark .tickets__btn[aria-checked="true"] .tickets__meta{ color: #6B6963; }
+
+.sheet{
+  margin-top: clamp(14px, 1.6vw, 22px);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1vw, 13px);
+}
+.sheet__head{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px 24px;
+  flex-wrap: wrap;
+  padding: 6px clamp(12px, 1.5vw, 20px);
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+.sheet__row{
+  display: grid;
+  grid-template-columns: clamp(26px, 3vw, 44px) minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding: 12px clamp(12px, 1.5vw, 20px);
+  border-bottom: 1px solid var(--rule);
+}
+.sheet__row:last-child{ border-bottom: 0; }
+.sheet__rowhead{ display: contents; }
+.sheet__n{ color: var(--muted); letter-spacing: .08em; }
+.sheet__name{ font-weight: 700; }
+.sheet__type{ color: var(--muted); letter-spacing: .06em; }
+.sheet__main{ min-width: 0; }
+.sheet__opts{ display: grid; gap: 4px; }
+.sheet__opt{
+  display: grid;
+  grid-template-columns: clamp(120px, 22vw, 240px) minmax(48px, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  font-size: clamp(11px, 0.95vw, 12.5px);
+}
+.sheet__label{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111110;
+}
+.sheet__opt.is-win .sheet__label{ font-weight: 700; }
+.sheet__track{
+  position: relative;
+  height: 10px;
+  background: var(--rule-soft);
+}
+.sheet__track--split::after{
+  content: "";
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+.sheet__fill{
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0;
+  background: #0B0B0B;
+}
+.sheet__opt.is-win .sheet__fill,
+.sheet__row--choice .sheet__fill.is-win{ background: var(--accent); }
+.sheet__row--noul .sheet__fill{ background: var(--accent); }
+.sheet__val{ color: #6B6963; text-align: right; }
+.sheet__split-labels{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  color: #6B6963;
+  font-size: clamp(10.5px, 0.9vw, 12px);
+}
+.sheet__ruler{
+  position: relative;
+  height: 16px;
+  border-bottom: 1px solid #0B0B0B;
+}
+.sheet__tick{
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 5px;
+  background: #0B0B0B;
+}
+.sheet__marker{
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  height: 16px;
+  background: var(--accent);
+}
+.sheet__legend{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 6px;
+  color: #6B6963;
+  font-size: clamp(10.5px, 0.9vw, 12px);
+}
+.sheet__conf{
+  text-align: right;
+  color: #6B6963;
+  white-space: nowrap;
+  font-size: clamp(11px, 0.95vw, 12.5px);
+}
+.block--dark .sheet .t-cmd{ color: inherit; }
+@media (max-width: 640px){
+  .sheet__row{ grid-template-columns: clamp(24px, 7vw, 34px) minmax(0, 1fr); }
+  .sheet__conf{ grid-column: 2; text-align: left; }
+  .tickets__btn{ grid-template-columns: clamp(24px, 7vw, 34px) minmax(0, 1fr); }
+  .tickets__meta{ grid-column: 2; }
+  .sheet__opt{ grid-template-columns: minmax(0, 1fr) auto; }
+  .sheet__track{ grid-column: 1 / -1; grid-row: 2; }
+}

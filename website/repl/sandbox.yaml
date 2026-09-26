@@ -129,3 +129,16 @@ models:
       std: [0.26862954, 0.26130258, 0.27577711]
     scripts:
       - presets/zeroshot.lua
+
+  # The decision model: a 32-hidden miniature of the Laya architecture shipped
+  # inside the image (testdata/laya) rather than downloaded. Its weights are
+  # random, so the decision plate runs the real mechanism and answers nothing
+  # real -- the prose and the figure say so, and the docs point at the
+  # published checkpoints for production. The preset is scripts/laya.lua,
+  # copied into the image beside the other presets.
+  laya:
+    onnx: /etc/emb/laya-model/model.onnx
+    tokenizer: /etc/emb/laya-model/tokenizer/tokenizer.json
+    script_preload: true
+    scripts:
+      - presets/laya.lua

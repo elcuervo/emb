@@ -83,6 +83,13 @@ COPY --from=builder /emb-top /usr/local/bin/emb-top
 # files to build the digest manifest it accepts EMB.EVSHA for.
 COPY --from=builder /src/website/repl/sandbox.yaml /etc/emb/sandbox.yaml
 COPY --from=builder /src/website/repl/presets /etc/emb/presets
+# The decision miniature + its preset travel in the image, so the decision
+# plate needs no download and no volume write. `downloadModel` early-returns
+# when the configured onnx file exists, so the sandbox entry needs no
+# `model_repo` for it. The preset copy is the same bytes `stamp-presets.py`
+# hashes (the repo preset is a symlink to scripts/laya.lua).
+COPY --from=builder /src/testdata/laya /etc/emb/laya-model
+COPY --from=builder /src/scripts/laya.lua /etc/emb/presets/laya.lua
 COPY --from=builder /src/website/repl/run.sh /usr/local/bin/run.sh
 RUN chmod +x /usr/local/bin/run.sh && ldconfig
 
