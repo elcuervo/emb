@@ -959,6 +959,18 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
       </dl>
 
       <p class="doc-prose">
+        The reference implementations ship ready-made question sets as their canonical
+        examples — <code>Laya::Presets.*</code> in the gem and <code>laya.presets.*</code>
+        upstream, byte-identical: <code>triage_questions</code> (intent, urgency,
+        frustration, refund, churn), <code>email_questions</code> (category, spam,
+        phishing, urgency, needs-reply — the set <a href="../demos/laya.html">the decision</a>
+        plate runs verbatim), <code>guard_questions</code> (jailbreak, injection,
+        sensitive data, harm, topic), <code>moderation_questions</code>, and
+        <code>router_questions</code>. They are JSON the same way any question set is —
+        copy one, or write your own with the schema above.
+      </p>
+
+      <p class="doc-prose">
         Every answer carries an <code>action.act_probability</code> from the model's
         action head. The website sandbox serves a 32-hidden miniature of the
         architecture — random weights, real mechanism — so its demo shows the
