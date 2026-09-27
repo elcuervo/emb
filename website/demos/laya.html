@@ -100,6 +100,7 @@
 
             <p class="block__deck">An inbox, a round of questions, one pass. The plate picks a support email, sends it with the five questions the original implementation ships for inbound email triage — <span class="t-cmd">Presets.email_questions</span>, verbatim: a six-team <em>category</em> choice, an <em>is_spam</em> and <em>is_phishing</em> yes/no, a three-level <em>urgency</em> score, and a <em>needs_reply</em> yes/no — in one <span class="t-cmd">EMB.EVSHA</span>, and draws the reply as a decision sheet: a distribution for the choice, a place on a ruler for the score, a split for each yes/no — every answer carrying its confidence.</p>
             <p class="block__deck"><b>What you're watching is the ONNX model:</b> its typed head (the three question types it scores), the option markers it gathers from the sequence, the fitted temperature its calibration picks per question type and option count, its action head, and the single forward pass that answers all five at once.</p>
+            <p class="block__deck"><b>Reading the confidence before you run it:</b> on a <em>choice</em> or <em>score</em>, confidence <b>0.0000</b> is the undecided floor — every option equally likely, the most ambiguous possible answer; on a <em>yes/no</em> the floor is <b>0.5000</b> (a coin flip between yes and no); <b>1.0000</b> is fully decided. A triage-trained checkpoint spreads across this scale, and a real 0.0000 is the genuinely ambiguous email — the ticket a confidence threshold routes to a human.</p>
             <p class="block__deck"><b>The honesty bar:</b> the sandbox runs a 32-hidden miniature of the Laya architecture, whose weights are random. It exercises the real mechanism — the sequence template, the five graph inputs, the calibration, the reply shapes — and its numbers are shapes, not judgments. The same command against the published checkpoints is the integration the end of this page shows.</p>
 
       </div></div>
@@ -446,8 +447,32 @@ function drawSheet(reply) {
     el('span', { class: 'sheet__head-q', text: ORDER.length + ' questions · ' + (usage.input_tokens || 0) + ' input tokens' }),
     el('span', { class: 'sheet__head-p', text: 'one forward pass' }),
   ]);
+  const scope = el('div', { class: 'sheet__scope' }, [
+    el('p', { class: 'sheet__scope-line' }, [
+      el('span', { text: 'CONFIDENCE · choice / score:  ' }),
+      el('b', { text: '0.0000' }),
+      el('span', { text: ' = a coin flip between the options → ' }),
+      el('b', { text: '1.0000' }),
+      el('span', { text: ' = decided' }),
+    ]),
+    el('p', { class: 'sheet__scope-line' }, [
+      el('span', { text: 'yes / no:  ' }),
+      el('b', { text: '0.5000' }),
+      el('span', { text: ' = a coin flip between yes and no → ' }),
+      el('b', { text: '1.0000' }),
+      el('span', { text: ' = decided · one option: ' }),
+      el('b', { text: '1.0000' }),
+      el('span', { text: ', always — nothing to be undecided about' }),
+    ]),
+    el('p', { class: 'sheet__scope-line sheet__scope-line--note' }, [
+      el('span', { text: 'The miniature sits on its floors — every row, every ticket — because random weights answer nothing. That is the honest signature; a triage-trained checkpoint spreads across this scale, and a real ' }),
+      el('b', { text: '0.0000' }),
+      el('span', { text: ' is the genuinely ambiguous email, the ticket a threshold routes to a human.' }),
+    ]),
+  ]);
   sheet.append(head);
   rows.forEach((row) => sheet.appendChild(row));
+  sheet.appendChild(scope);
   out.hidden = false;
   setState('ready');
   /* one authored moment: the sheet's bars and the score markers grow into

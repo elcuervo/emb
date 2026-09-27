@@ -972,7 +972,17 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
 
       <p class="doc-prose">
         Every answer carries an <code>action.act_probability</code> from the model's
-        action head. The website sandbox serves a 32-hidden miniature of the
+        action head. Reading confidence: a <code>choice</code> or <code>score</code>
+        sits on the 0–1 scale — <b>0.0000</b> is the undecided floor (a uniform
+        distribution, the genuinely ambiguous input), <b>1.0000</b> is fully decided;
+        a <code>noul</code>'s scale bottoms out at <b>0.5000</b> (a coin flip between
+        yes and no) and a single-option question is always <b>1.0000</b>. A confidence
+        threshold on the multi-option scale is how you route the undecided tickets to
+        a human.
+      </p>
+
+      <p class="doc-prose">
+        The website sandbox serves a 32-hidden miniature of the
         architecture — random weights, real mechanism — so its demo shows the
         shapes, not judgments; point the same config at the published checkpoints
         for real answers.

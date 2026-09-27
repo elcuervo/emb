@@ -3229,3 +3229,19 @@ html.js.is-ready .hero__prose{
   .sheet__opt{ grid-template-columns: minmax(0, 1fr) auto; }
   .sheet__track{ grid-column: 1 / -1; grid-row: 2; }
 }
+
+.sheet__scope{
+  margin-top: 6px;
+  padding: 8px clamp(12px, 1.5vw, 20px) 10px;
+  border-top: 1px solid var(--rule);
+  color: #6B6963;
+  font-size: clamp(10.5px, 0.92vw, 12px);
+  font-family: var(--mono);
+  letter-spacing: .02em;
+  line-height: 1.6;
+}
+.sheet__scope-line{ margin: 0 0 4px; }
+.sheet__scope-line:last-child{ margin-bottom: 0; }
+.sheet__scope b{ color: #0B0B0B; font-weight: 700; }
+.sheet__scope-line--note{ color: #6B6963; }
+.sheet__scope-line--note b{ color: var(--accent-ink); }
