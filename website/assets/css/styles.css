@@ -3230,18 +3230,107 @@ html.js.is-ready .hero__prose{
   .sheet__track{ grid-column: 1 / -1; grid-row: 2; }
 }
 
-.sheet__scope{
-  margin-top: 6px;
-  padding: 8px clamp(12px, 1.5vw, 20px) 10px;
-  border-top: 1px solid var(--rule);
-  color: #6B6963;
-  font-size: clamp(10.5px, 0.92vw, 12px);
-  font-family: var(--mono);
-  letter-spacing: .02em;
-  line-height: 1.6;
+/* The retrieval leg: a ruled list on the dark ground, real minilm cosines.
+   The closest case carries the accent; bars grow with the retrieval tween. */
+.past{
+  margin-top: clamp(14px, 1.6vw, 22px);
+  border-top: 1px solid var(--rule-dark);
 }
-.sheet__scope-line{ margin: 0 0 4px; }
-.sheet__scope-line:last-child{ margin-bottom: 0; }
-.sheet__scope b{ color: #0B0B0B; font-weight: 700; }
-.sheet__scope-line--note{ color: #6B6963; }
-.sheet__scope-line--note b{ color: var(--accent-ink); }
+.past__label{
+  margin: 0;
+  padding: 6px clamp(10px, 1.4vw, 18px) 0;
+  color: var(--rule);
+  font-family: var(--mono);
+  font-size: clamp(10.5px, 0.92vw, 12px);
+  letter-spacing: .06em;
+}
+.past__list{ margin-top: 4px; }
+.past__row{
+  display: grid;
+  grid-template-columns: clamp(24px, 2.6vw, 36px) minmax(0, 1fr) minmax(60px, 34%) auto;
+  gap: 6px 14px;
+  align-items: center;
+  padding: 7px clamp(10px, 1.4vw, 18px);
+  border-bottom: 1px solid var(--rule-dark);
+  font-family: var(--mono);
+  font-size: clamp(11.5px, 1vw, 13px);
+  color: var(--bg);
+}
+.past__row.is-hit{ color: var(--accent); }
+.past__row.is-hit .past__n{ color: var(--accent); }
+.past__n{ color: var(--rule); letter-spacing: .08em; }
+.past__name{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.past__track{ position: relative; height: 8px; background: var(--rule-dark); }
+.past__fill{
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0;
+  background: var(--rule);
+}
+.past__fill.is-hit{ background: var(--accent); }
+.past__val{ color: var(--rule); text-align: right; }
+.past__row.is-hit .past__val{ color: var(--accent); }
+.past__note{
+  margin: 0;
+  padding: 1px clamp(10px, 1.4vw, 18px) 6px;
+  color: var(--rule);
+  font-family: var(--mono);
+  font-size: clamp(10.5px, 0.9vw, 11.5px);
+}
+.past__row.is-hit + .past__note{ color: var(--accent); }
+@media (max-width: 640px){
+  .past__row{ grid-template-columns: clamp(22px, 6vw, 30px) minmax(0, 1fr) auto; }
+  .past__track{ grid-column: 2 / 3; grid-row: 2; }
+  .past__val{ grid-column: 3; grid-row: 2; }
+  .past__note{ grid-column: 2 / -1; }
+}
+
+/* The confidence axis: one ruler, the floors named once, the sheet's own
+   confidences plotted as dots that light with the row tween. The axis is an
+   instrument, not prose. */
+.sheet__axis{
+  position: relative;
+  margin: 0 clamp(12px, 1.5vw, 20px) 14px;
+  height: 30px;
+}
+.sheet__axis-rule{
+  position: absolute;
+  left: 0; right: 0; top: 8px;
+  height: 1px;
+  background: var(--rule);
+}
+.sheet__axis-tick{
+  position: absolute;
+  top: 4px;
+  width: 1px;
+  height: 9px;
+  background: var(--rule);
+}
+.sheet__axis-n{
+  position: absolute;
+  top: 15px;
+  transform: translateX(-50%);
+  color: #6B6963;
+  font-family: var(--mono);
+  font-size: clamp(10px, 0.9vw, 11.5px);
+}
+.sheet__axis-n:first-of-type{ transform: none; }
+.sheet__axis-l{
+  position: absolute;
+  top: 26px;
+  transform: translateX(-50%);
+  color: #6B6963;
+  font-family: var(--mono);
+  font-size: clamp(9.5px, 0.85vw, 11px);
+  letter-spacing: .04em;
+}
+.sheet__axis-l:first-of-type{ transform: none; }
+.sheet__axis-dot{
+  position: absolute;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: var(--accent);
+  opacity: 0;
+}

@@ -14,6 +14,11 @@ The gallery SHALL include a plate that demonstrates the decision surface: one sc
 - **WHEN** the plate sends its questions
 - **THEN** they match the reference implementation's shipped preset for the example (same ids, instructions, and criteria, in order), and the plate says which preset it runs
 
+#### Scenario: A second model retrieves real similarities beside the decision leg
+
+- **WHEN** the plate's run includes a retrieval leg (e.g. ranking example states against a real embedding model)
+- **THEN** that leg calls a real embedding-model preset by its own digest, draws the real similarities, labels which leg is real and which runs the stand-in decision model, and the decide leg still sends the reference preset verbatim in one forward pass
+
 #### Scenario: The answers differ in shape by question type
 
 - **WHEN** the plate renders a `choice`, a `score`, and a `noul` answer
