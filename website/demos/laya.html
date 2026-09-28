@@ -77,17 +77,16 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The decision</h1>
           <p class="plate__teaches">
-            An email arrives; a real bi-encoder finds the most similar resolved
-            tickets, and one command answers the original implementation's own
-            five questions. Two models, one server: retrieval and decision.
+            An email arrives; one command asks the original implementation's own five
+            questions — which team, is it spam, is it phishing, how urgent, does it
+            need a reply — and a single forward pass returns a decision sheet.
           </p>
-        <p class="tldr">Two models, one inbox: retrieval finds the similar case, a single forward pass decides the new one.</p>
+        <p class="tldr">Five answers, one call: a scripted model answers typed questions in a single forward pass, with calibrated confidence.</p>
         </div>
         <div>
           <p class="fig"><b>THE DECISION</b>
-            · <b>2</b> models
+            · <b>1</b> model
             · <b data-fig-qs>5</b> questions
-            · <b>real</b> retrieval
             · <b>1</b> forward pass
             · <b data-fig-tokens>0</b> input tokens · <b>32-dim</b> decision miniature</p>
         </div>
@@ -99,8 +98,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">Two models, one inbox. A real bi-encoder — <span class="t-cmd">minilm</span> — finds the past resolved tickets most similar to the new email (the gem's own shortlist idea, with a retriever the gem tells you to supply). Then the decision model answers the gem's <span class="t-cmd">Presets.email_questions</span> verbatim, all five questions in one forward pass.</p>
-            <p class="block__deck"><b>The honesty bar:</b> the retrieval leg is real — those cosines are minilm's. The decision leg runs a 32-hidden miniature of the Laya architecture (random weights, real mechanism): its answers are shapes, and the production swap is one model path.</p>
+            <p class="block__deck">The gem's own question set for inbound email triage — <span class="t-cmd">Presets.email_questions</span>, verbatim — sent with one email in one <span class="t-cmd">EMB.EVSHA</span>: a six-team <em>category</em> choice, an <em>is_spam</em> and <em>is_phishing</em> yes/no, a three-level <em>urgency</em> score, a <em>needs_reply</em> yes/no. One forward pass returns them all, drawn as a decision sheet.</p>
+            <p class="block__deck"><b>The honesty bar:</b> the sandbox runs a 32-hidden miniature of the Laya architecture (random weights, real mechanism): its answers are shapes, and the production swap is one model path. The axis under the sheet reads the confidences — a choice's <b>0</b> and a yes/no's <b>0.5</b> are the undecided floor, <b>1</b> is decided.</p>
 
       </div></div>
     </section>
@@ -110,15 +109,14 @@
         <h2 class="sec__h" id="try-it-h">TRY IT</h2>
         <div class="mech" data-mech></div>
 
-            <div data-live class="rig" data-rig="laya" data-emb-preset-laya="0d1d7a3b91d3978da0eacc05d78f517b64e3dd2a" data-emb-preset-embed="31ae705431ba2704197bbc59230d929d01411445">
+            <div data-live class="rig" data-rig="laya" data-emb-preset-laya="0d1d7a3b91d3978da0eacc05d78f517b64e3dd2a">
               <div class="tickets" data-tickets role="radiogroup" aria-label="Choose a support email"></div>
               <form class="rig__form" data-form>
-                <button class="rig__go" type="submit">Retrieve, then decide</button>
+                <button class="rig__go" type="submit">Answer the five questions</button>
               </form>
               <p class="rig__state" data-state>ready when you are</p>
               <div class="rig__out" data-out hidden>
                 <p class="rig__readout" data-readout></p>
-                <div class="past" data-past aria-live="polite"></div>
                 <div class="sheet" data-sheet aria-live="polite"></div>
               </div>
               <details class="cmds" data-cmds hidden>
@@ -140,8 +138,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">First the retrieval leg: the email, embedded once and compared with five past resolved tickets — <span class="t-cmd">EMB.EVSHA minilm &lt;embed.lua sha1&gt; 1 "&lt;email&gt;" "&lt;past ticket&gt;"</span> per candidate, real cosines, drawn as bars with the closest case lit.</p>
-            <p class="block__deck">Then the decision leg: one <span class="t-cmd">EMB.EVSHA laya &lt;laya.lua sha1&gt; 1 "&lt;email&gt;" "&lt;questions&gt;" "&lt;config&gt;"</span> — every question scored in one pass, so the five rows come back together. The axis under the sheet reads the confidences without words: the dots land at the floors (a choice's <b>0</b>, a yes/no's <b>0.5</b>) because this checkpoint decides nothing, and <b>1</b> is a decided answer.</p>
+            <p class="block__deck">One command carried the whole round: the email as <span class="t-cmd">KEYS</span>, the five questions as <span class="t-cmd">ARGV[1]</span>, the checkpoint's budgets and temperatures as <span class="t-cmd">ARGV[2]</span>. The preset built one sequence per question, gathered every option's marker into one batch, and the model scored them all in a single pass — so the five rows come back together.</p>
+            <p class="block__deck">The axis under the sheet is the confidence scale as an instrument: the dots land at the floors (a choice's <b>0</b>, a yes/no's <b>0.5</b>) because this checkpoint decides nothing, <b>1</b> is a decided answer, and a trained checkpoint spreads across it.</p>
 
       </div></div>
     </section>
@@ -150,7 +148,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Retrieval finds the similar case; decisions route the new one — two models, one server, and each leg is one round trip from a Redis client you already have. The questions are data, so the preset lives in the repo and diffs in review.</p>
+            <p class="block__deck">A classifier zoo is a pipeline of glued-together models; a decision model is one checkpoint and one call — the questions are data, so the preset lives in the repo and diffs in review, and the whole triage is one round trip from a Redis client you already have.</p>
             <p class="block__deck">The sheet's confidence has a floor — <b>0</b> (or <b>0.5</b> for a yes/no) means a coin flip, the genuinely ambiguous email — so a threshold on it routes ambiguity to a human, and every option was scored, not hallucinated.</p>
 
       </div></div>
@@ -160,7 +158,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-            <p class="block__deck">The two legs' exact commands — <span class="t-cmd">embed.lua</span> for the similarities (one call per past ticket), <span class="t-cmd">laya.lua</span> for the decision (one call for all five questions). Point the decision call at a published checkpoint and it is the production integration.</p>
+            <p class="block__deck">The exact command — the state, the original implementation's <span class="t-cmd">Presets.email_questions</span> verbatim, the miniature's calibration envelope. Point the same three arguments at a published checkpoint and the command is the production integration.</p>
 <figure class="code"><pre class="code__body"><code>EMB.EVSHA laya &lt;laya.lua sha1&gt; 1 \
   '{ "from": "hello@world", "subject": "duplicate charge on invoice",
      "body": "we were charged twice for the invoice please refund the money back today" }' \
@@ -228,12 +226,10 @@ const state = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
 const sheet = root.querySelector('[data-sheet]');
-const past = root.querySelector('[data-past]');
 const go = root.querySelector('.rig__go');
 const ticketsEl = root.querySelector('[data-tickets]');
 const mech = mechanism(document.querySelector('[data-mech]'), [
   { glyph: 'text', label: 'an email arrives' },
-  { glyph: 'search', label: 'the embedder finds similar past tickets' },
   { glyph: 'labels', label: 'five typed questions' },
   { glyph: 'passes', label: 'one forward pass' },
   { glyph: 'reply', label: 'a decision sheet' }
@@ -289,24 +285,6 @@ const TICKETS = [
 
 let current = 0;
 
-/* The resolved cases a support team might quote: a tiny knowledge base the
- * retrieval leg embeds the new email against. Similarity here is minilm's
- * real cosine -- this leg is not the stand-in. A past ticket carries its own
- * py-JSON state text (the same strings the decision model is trained on) and
- * the one-line resolution history wrote for it. */
-const PAST_TICKETS = [
-  { name: 'duplicate charge on invoice', resolution: 'confirmed double charge · refunded the second',
-    state: '{"from": "pay@corp.example", "subject": "charged twice on invoice 4411", "body": "we were billed twice in march, please refund the duplicate"}' },
-  { name: 'refund the first month', resolution: 'pro-rated refund issued',
-    state: '{"from": "m.z@example.com", "subject": "first month refund", "body": "cancel the plan and give me the first month back"}' },
-  { name: 'login errors after the update', resolution: 'credentials reset · session repaired',
-    state: '{"from": "dev@example.com", "subject": "login broken after update", "body": "the login page errors out after the release"}' },
-  { name: 'mass email about watches', resolution: 'marked spam · filtered',
-    state: '{"from": "deals@offers.example", "subject": "50% off luxury watches", "body": "limited offer on watches this weekend only"}' },
-  { name: 'password reset from an unknown address', resolution: 'phishing reported · account secured',
-    state: '{"from": "noreply@secure-verify.example", "subject": "your password needs resetting", "body": "click the link to confirm your password"}' },
-];
-
 /* The queue: a ruled list; the selected ticket is the paper bar. */
 function drawTickets() {
   ticketsEl.replaceChildren();
@@ -326,7 +304,7 @@ function drawTickets() {
     btn.addEventListener('click', () => {
       if (current === i) { return; }
       current = i;
-      hideSheet();
+      hidePanels();
       drawTickets();
       setState('ready');
     });
@@ -342,36 +320,6 @@ function setState(next, message) {
 function hidePanels() {
   out.hidden = true;
   sheet.replaceChildren();
-  past.replaceChildren();
-}
-
-/* ── the retrieval leg ────────────────────────────────────────────── */
-/* Real similarities: the email embedded once per past ticket by the sandbox's
- * own minilm (embed.lua, a real bi-encoder -- the retriever the gem's
- * Shortlist module tells you to supply). The closest case lights in the
- * accent; the bars grow together. */
-function drawPast(sims) {
-  const order = PAST_TICKETS.map((p, i) => ({ p: p, s: sims[i] }))
-    .sort((a, b) => b.s - a.s);
-  past.appendChild(el('p', { class: 'past__label', text: 'SIMILAR PAST TICKETS — real cosine, minilm (the closest is lit)' }));
-  const list = el('div', { class: 'past__list' });
-  const fills = [];
-  order.forEach((item, i) => {
-    const fill = el('div', { class: 'past__fill' + (i === 0 ? ' is-hit' : '') });
-    const row = el('div', { class: 'past__row' + (i === 0 ? ' is-hit' : '') }, [
-      el('span', { class: 'past__n', text: String(i + 1).padStart(2, '0') }),
-      el('span', { class: 'past__name', text: item.p.name }),
-      el('div', { class: 'past__track' }, [fill]),
-      el('span', { class: 'past__val', text: item.s.toFixed(3) }),
-    ]);
-    list.appendChild(row);
-    list.appendChild(el('p', { class: 'past__note', text: 'resolved · ' + item.p.resolution }));
-    fills.push([fill, Math.max(1.5, item.s * 100)]);
-  });
-  past.appendChild(list);
-  tween(420, (t) => {
-    fills.forEach(([fill, width]) => { fill.style.width = (width * t).toFixed(1) + '%'; });
-  });
 }
 
 async function run() {
@@ -382,18 +330,8 @@ async function run() {
   hidePanels();
   try {
     const digest = root.getAttribute('data-emb-preset-laya');
-    const embedDigest = root.getAttribute('data-emb-preset-embed');
     const ticket = TICKETS[current];
-    // Leg A: the embedder ranks the email against the past tickets -- one
-    // call each, sequential (the same honesty as the languages plate: what
-    // the page says is what it sent).
-    const sims = [];
-    for (const past of PAST_TICKETS) {
-      const r = await g.preset('minilm', embedDigest, [ticket.state], [past.state]);
-      sims.push(Number(r.similarity));
-    }
-    drawPast(sims);
-    // Leg B: one call, all five questions, one forward pass.
+    // One call: all five questions, one forward pass.
     const replyText = await g.preset(MODEL, digest, [ticket.state], [JSON.stringify(QUESTIONS), JSON.stringify(CONFIG)]);
     const reply = JSON.parse(replyText);
     document.querySelector('[data-fig-qs]').textContent = ORDER.length;
@@ -402,15 +340,12 @@ async function run() {
       el('span', { class: 'k', text: 'email ' }),
       el('b', { text: ticket.name }),
       el('span', { text: ' · ' }),
-      el('span', { class: 'k', text: 'retrieved ' }),
-      el('b', { text: String(PAST_TICKETS.length) }),
-      el('span', { text: ' past tickets · ' }),
       el('span', { class: 'k', text: 'questions ' }),
       el('b', { text: String(ORDER.length) }),
       el('span', { text: '\n' }),
-      el('span', { class: 'k', text: 'two models ' }),
-      el('b', { text: 'minilm + laya' }),
-      el('span', { text: ' · the decision leg is the 32-hidden miniature (mechanism, not judgment) · the production swap is one model path\n' }),
+      el('span', { class: 'k', text: 'model ' }),
+      el('b', { text: 'laya — 32-hidden miniature' }),
+      el('span', { text: ' · same mechanism, random weights · the published checkpoints are the production swap\n' }),
       el('span', { class: 'k', text: 'one forward pass · ' }),
       el('b', { text: (reply.usage || {}).input_tokens || 0 }),
       el('span', { text: ' input tokens · the axis under the sheet reads the confidences' })
