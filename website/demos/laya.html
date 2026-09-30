@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>emb — the decision: one call, five typed answers</title>
+<title>emb — the decision engine: typed questions, one forward pass</title>
 <link rel="canonical" href="https://emb.is/demos/laya.html">
-<meta name="description" content="A support email arrives; one command asks the original implementation's own five questions — which team, is it spam, is it phishing, how urgent, does it need a reply — and a single forward pass returns a decision sheet, not a vector.">
+<meta name="description" content="Laya is a decision model. A state goes in; a tree of typed questions — choice, score, noul — is answered by one forward pass. See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="emb — the decision: one call, five typed answers">
+<meta property="og:title" content="emb — the decision engine: typed questions, one forward pass">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="One EMB.EVSHA, five typed questions, one forward pass, a decision sheet. The scripting layer's last step: answering instead of embedding.">
+<meta property="og:description" content="One state, a tree of typed questions, one forward pass, typed answers. Snake, an inbox, and the smallest round — with the model's own probabilities.">
 <meta property="og:url" content="https://emb.is/demos/laya.html">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="emb — the decision: one call, five typed answers">
-<meta name="twitter:description" content="One EMB.EVSHA, five typed questions, one forward pass, a decision sheet.">
+<meta name="twitter:title" content="emb — the decision engine: typed questions, one forward pass">
+<meta name="twitter:description" content="One state, a tree of typed questions, one forward pass, typed answers.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 
@@ -64,7 +64,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the preset and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything that explains it — the three types, the tree, the exact commands — is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -75,128 +75,244 @@
     <section class="plate" aria-labelledby="plate-h">
       <div class="plate__head">
         <div>
-          <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The decision</h1>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The decision engine</h1>
           <p class="plate__teaches">
-            An email arrives; one command asks the original implementation's own five
-            questions — which team, is it spam, is it phishing, how urgent, does it
-            need a reply — and a single forward pass returns a decision sheet.
+            Not an embedding model, and it writes nothing: a <b>state</b> goes in, a
+            <b>tree of typed questions</b> is answered by <b>one forward pass</b>, every
+            option scored at once. The three types, then three examples — a game loop,
+            an inbox, the smallest round.
           </p>
-        <p class="tldr">Five answers, one call: a scripted model answers typed questions in a single forward pass, with calibrated confidence.</p>
+          <p class="tldr">Laya answers typed questions about a state — choice, score, noul — in one forward pass, with calibrated probabilities and zero generated tokens.</p>
         </div>
         <div>
-          <p class="fig"><b>THE DECISION</b>
+          <p class="fig"><b>THE DECISION ENGINE</b>
             · <b>1</b> model
-            · <b data-fig-qs>5</b> questions
+            · <b>3</b> question types
+            · <b>3</b> examples
             · <b>1</b> forward pass
-            · <b data-fig-tokens>0</b> input tokens · <b>32-dim</b> decision miniature</p>
+            · <b data-fig-tokens>0</b> input tokens · <b>0</b> output tokens</p>
         </div>
       </div>
     </section>
   </div>
 
-    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
-      <div class="shell block__inner"><div class="block__body">
-        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+  <!-- ─────────────────────────────────────────────── THE THREE TYPES -->
+  <section class="block block--paper sec" aria-labelledby="types-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="types-h">THE THREE TYPES</h2>
+      <p class="block__deck">Its whole vocabulary is three questions. The <b>type</b> decides the criteria you send and the shape you get back; ask any number, in any order, and they are answered together.</p>
 
-            <p class="block__deck">The gem's own question set for inbound email triage — <span class="t-cmd">Presets.email_questions</span>, verbatim — sent with one email in one <span class="t-cmd">EMB.EVSHA</span>: a six-team <em>category</em> choice, an <em>is_spam</em> and <em>is_phishing</em> yes/no, a three-level <em>urgency</em> score, a <em>needs_reply</em> yes/no. One forward pass returns them all, drawn as a decision sheet.</p>
-            <p class="block__deck"><b>The honesty bar:</b> the sandbox runs a 32-hidden miniature of the Laya architecture (random weights, real mechanism): its answers are shapes, and the production swap is one model path. The axis under the sheet reads the confidences — a choice's <b>0</b> and a yes/no's <b>0.5</b> are the undecided floor, <b>1</b> is decided.</p>
+      <div class="types">
+        <article class="type">
+          <header class="type__head">
+            <span class="type__name">choice</span>
+            <span class="type__job">pick one of N labels</span>
+          </header>
+          <figure class="code"><pre class="code__body"><code>{ "type": "choice",
+  "instructions": "Which department should handle this email?",
+  "criteria": {
+    "billing":   "invoices, payments, refunds",
+    "technical": "bugs, outages, system errors",
+    "sales":     "pricing, new contracts"
+  } }</code></pre></figure>
+          <p class="type__ret">→ one label wins, and <b>every</b> label carries a probability:</p>
+          <figure class="code"><pre class="code__body"><code>{ "type": "choice",
+  "choice": "billing",
+  "probabilities": { "billing": 0.71, "technical": 0.19, "sales": 0.10 },
+  "confidence": 0.34, "action": { "act_probability": 0.62 } }</code></pre></figure>
+        </article>
 
-      </div></div>
-    </section>
+        <article class="type">
+          <header class="type__head">
+            <span class="type__name">score</span>
+            <span class="type__job">place the state on an ordered scale</span>
+          </header>
+          <figure class="code"><pre class="code__body"><code>{ "type": "score",
+  "instructions": "How urgent is this request?",
+  "criteria": ["not urgent", "soon", "critical deadline or blocking issue"] }</code></pre></figure>
+          <p class="type__ret">→ one position on the scale, plus the distribution over levels:</p>
+          <figure class="code"><pre class="code__body"><code>{ "type": "score",
+  "score": 1.36,
+  "legend": { "0": "not urgent", "1": "soon", "2": "critical deadline or blocking issue" },
+  "probabilities": { "0": 0.24, "1": 0.46, "2": 0.30 },
+  "confidence": 0.12, "action": { "act_probability": 0.48 } }</code></pre></figure>
+        </article>
 
-    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
-      <div class="shell block__inner"><div class="block__body">
-        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
-        <div class="mech" data-mech></div>
+        <article class="type">
+          <header class="type__head">
+            <span class="type__name">noul</span>
+            <span class="type__job">is this true? — with an "I don't know"</span>
+          </header>
+          <figure class="code"><pre class="code__body"><code>{ "type": "noul",
+  "instructions": "Does the customer ask for money back?" }</code></pre></figure>
+          <p class="type__ret">→ the probability of <b>true</b>; confidence is distance from a coin flip:</p>
+          <figure class="code"><pre class="code__body"><code>{ "type": "noul",
+  "noul": 0.72,
+  "confidence": 0.72, "action": { "act_probability": 0.55 } }</code></pre></figure>
+        </article>
+      </div>
 
-            <div data-live class="rig" data-rig="laya" data-emb-preset-laya="0d1d7a3b91d3978da0eacc05d78f517b64e3dd2a">
-              <div class="tickets" data-tickets role="radiogroup" aria-label="Choose a support email"></div>
-              <form class="rig__form" data-form>
-                <button class="rig__go" type="submit">Answer the five questions</button>
-              </form>
-              <p class="rig__state" data-state>ready when you are</p>
-              <div class="rig__out" data-out hidden>
-                <p class="rig__readout" data-readout></p>
-                <div class="sheet" data-sheet aria-live="polite"></div>
-              </div>
-              <details class="cmds" data-cmds hidden>
-                <summary class="cmds__h">the commands this run sent</summary>
-                <div class="cmds__body" data-cmds-body></div>
-              </details>
+      <p class="block__deck">Every answer also carries <span class="t-cmd">action.act_probability</span> — a second head reading the same row as <em>act on it</em> or <em>escalate it</em>. It is not part of the question.</p>
+    </div></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────── THE TREE -->
+  <section class="block block--paper sec" aria-labelledby="tree-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="tree-h">THE TREE</h2>
+      <p class="block__deck">A question is a branch. The state is the root, each option is a leaf, and <b>one forward pass scores every leaf</b> — there is no depth-first walk, only one wide read.</p>
+
+      <figure class="tree">
+        <div class="qtree qtree--static">
+          <div class="qtree__inner">
+            <div class="qtree__state">
+              <span class="qtree__k">state</span>
+              <p class="qtree__text">an email · a board · a ticket — whatever the questions are about</p>
             </div>
-
-      </div></div>
-    </section>
-
-    <!-- the massif, as a reading break: the same cut-out the gallery plates
-         use. Its name is the plate's thesis. -->
-    <section class="ridge ridge--band" aria-hidden="true">
-      <img class="ridge__art" src="../assets/img/terrain-pass.png" width="1200" height="150" alt="" decoding="async" fetchpriority="low">
-    </section>
-
-    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
-      <div class="shell block__inner"><div class="block__body">
-        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-
-            <p class="block__deck">One command carried the whole round: the email as <span class="t-cmd">KEYS</span>, the five questions as <span class="t-cmd">ARGV[1]</span>, the checkpoint's budgets and temperatures as <span class="t-cmd">ARGV[2]</span>. The preset built one sequence per question, gathered every option's marker into one batch, and the model scored them all in a single pass — so the five rows come back together.</p>
-            <p class="block__deck">The axis under the sheet is the confidence scale as an instrument: the dots land at the floors (a choice's <b>0</b>, a yes/no's <b>0.5</b>) because this checkpoint decides nothing, <b>1</b> is a decided answer, and a trained checkpoint spreads across it.</p>
-
-      </div></div>
-    </section>
-
-    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
-      <div class="shell block__inner"><div class="block__body">
-        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-
-            <p class="block__deck">A classifier zoo is a pipeline of glued-together models; a decision model is one checkpoint and one call — the questions are data, so the preset lives in the repo and diffs in review, and the whole triage is one round trip from a Redis client you already have.</p>
-            <p class="block__deck">The sheet's confidence has a floor — <b>0</b> (or <b>0.5</b> for a yes/no) means a coin flip, the genuinely ambiguous email — so a threshold on it routes ambiguity to a human, and every option was scored, not hallucinated.</p>
-
-      </div></div>
-    </section>
-
-    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
-      <div class="shell block__inner"><div class="block__body">
-        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
-
-            <p class="block__deck">The exact command — the state, the original implementation's <span class="t-cmd">Presets.email_questions</span> verbatim, the miniature's calibration envelope. Point the same three arguments at a published checkpoint and the command is the production integration.</p>
-<figure class="code"><pre class="code__body"><code>EMB.EVSHA laya &lt;laya.lua sha1&gt; 1 \
-  '{ "from": "hello@world", "subject": "duplicate charge on invoice",
-     "body": "we were charged twice for the invoice please refund the money back today" }' \
-  '{ "category":   { "type": "choice", "instructions": "Which team should handle the email in `body`?",
-                      "criteria": { "billing":   "invoices, payments, refunds",
-                                     "technical": "bugs, outages, integrations",
-                                     "sales":     "pricing, demos, new purchases",
-                                     "security":  "phishing, scams, account compromise",
-                                     "hr":        "hiring, leave, payroll",
-                                     "other":     "none of the above" } },
-     "is_spam":     { "type": "noul", "instructions": "Is this email unsolicited spam or bulk marketing?" },
-     "is_phishing": { "type": "noul", "instructions": "Is this email a phishing or scam attempt to steal money, credentials, or personal data?",
-                       "criteria": { "true": "phishing, scam, or fraud", "false": "a legitimate email" } },
-     "urgency":     { "type": "score", "instructions": "How urgent is the request in `body`?",
-                       "criteria": [ "no time pressure", "needs attention soon", "blocking issue or hard deadline" ] },
-     "needs_reply": { "type": "noul", "instructions": "Does the sender expect a reply?" } }' \
-  '{ "max_len": 64, "head_max_len": 32, "min_seq": 8, "min_markers": 2,
-     "temperature": [1.6, 1.25, 1.98],
-     "temperature_by_options": { "choice:2": 1.9, "choice:3-5": 1.76, "choice:11+": 0.1006,
-                                 "noul:2": 1.98 } }'
-# -> {"answers":{"category":{"action":{"act_probability":0.6958},"choice":"sales","confidence":0,
-#       "probabilities":{"billing":0.1655,"hr":0.1671,"other":0.1656,"sales":0.1679,"security":0.1674,"technical":0.1665},"type":"choice"},
-#     "is_phishing":{"action":{"act_probability":0.1333},"confidence":0.5014,"noul":0.4986,"type":"noul"},
-#     "is_spam":{"action":{"act_probability":0.0792},"confidence":0.5017,"noul":0.5017,"type":"noul"},
-#     "needs_reply":{"action":{"act_probability":0.0598},"confidence":0.5036,"noul":0.5036,"type":"noul"},
-#     "urgency":{"action":{"act_probability":0.0076},"confidence":0,
-#       "legend":{"0":"no time pressure","1":"needs attention soon","2":"blocking issue or hard deadline"},
-#       "probabilities":{"0":0.3358,"1":0.3299,"2":0.3343},"score":0.9985,"type":"score"}},
-#     "usage":{"input_tokens":320,"output_tokens":0}}
-# (the plate's own run; the reply above is the sandbox's real bytes for this email)
-
-# production: point the same model entry at the published checkpoint and drop
-# the config envelope's budgets to the checkpoint's own (max_len 512,
-# head_max_len 192), again in any Redis client -- one command, five answers.</code></pre>
-        <figcaption class="code__cap">One <span class="t-cmd">EMB.EVSHA</span> per email: the state, the original implementation's questions verbatim, the checkpoint's calibration. The answers arrive as one JSON reply — <em>category</em> as a six-way distribution, <em>urgency</em> as a position on its legend, the three yes/no questions as splits; the 64-token miniature's real bytes are shown here, the production shape in the comment.</figcaption>
+            <div class="qtree__branches">
+              <div class="qtree__branch qtree__branch--choice">
+                <div class="qtree__node"><span class="qtree__type">choice</span><span class="qtree__id">category</span></div>
+                <p class="qtree__ins">Which team should handle it?</p>
+                <ul class="qtree__leaves">
+                  <li class="qtree__leaf"><span class="qtree__label">billing</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                  <li class="qtree__leaf"><span class="qtree__label">technical</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                  <li class="qtree__leaf"><span class="qtree__label">sales</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                </ul>
+              </div>
+              <div class="qtree__branch qtree__branch--score">
+                <div class="qtree__node"><span class="qtree__type">score</span><span class="qtree__id">urgency</span></div>
+                <p class="qtree__ins">How urgent is it?</p>
+                <ul class="qtree__leaves">
+                  <li class="qtree__leaf"><span class="qtree__label">0 · not urgent</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                  <li class="qtree__leaf"><span class="qtree__label">1 · soon</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                  <li class="qtree__leaf"><span class="qtree__label">2 · blocking</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                </ul>
+              </div>
+              <div class="qtree__branch qtree__branch--noul">
+                <div class="qtree__node"><span class="qtree__type">noul</span><span class="qtree__id">is_spam</span></div>
+                <p class="qtree__ins">Is it true?</p>
+                <ul class="qtree__leaves">
+                  <li class="qtree__leaf"><span class="qtree__label">false</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                  <li class="qtree__leaf"><span class="qtree__label">true</span><span class="qtree__track"></span><span class="qtree__p">—</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="tree__cap"><b>Breadth, not depth</b>: every branch and leaf is in the same batch, so the answers come back in one reply — a decision model is a single call, not a pipeline. The leaves are empty here; below they carry the model's probabilities.</figcaption>
       </figure>
-      </div></div>
-    </section>
+    </div></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── TRY IT -->
+  <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+      <div class="mech" data-mech></div>
+
+      <div data-live class="rig lab" data-rig="laya" data-emb-preset-laya="0768a9a9c734cf082613ba3267713703529220e9" data-emb-preset-snake="1cd56d6c6dc1a35b06bca51ea87f8c2f3b022543">
+        <div class="lab__switch" data-switch role="group" aria-label="Choose an example"></div>
+        <p class="lab__blurb" data-blurb></p>
+        <div class="lab__stage" data-stage></div>
+        <p class="rig__state" data-state>ready when you are</p>
+        <div class="rig__out" data-out hidden>
+          <p class="rig__readout" data-readout aria-live="polite"></p>
+          <div class="qtree" data-tree></div>
+        </div>
+        <details class="cmds" data-cmds hidden>
+          <summary class="cmds__h">the commands this run sent</summary>
+          <div class="cmds__body" data-cmds-body></div>
+        </details>
+        <p class="lab__honest" data-honest>All three run the sandbox's <b>32-hidden miniature</b> — random weights, real mechanism; its probabilities are shapes, not judgments. Inbox and Quickstart make one call per round; Snake makes one call per episode and animates locally. Identical requests hit the server's reply cache.</p>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- the massif, as a reading break -->
+  <section class="ridge ridge--band" aria-hidden="true">
+    <img class="ridge__art" src="../assets/img/terrain-pass.png" width="1200" height="150" alt="" decoding="async" fetchpriority="low">
+  </section>
+
+  <!-- ──────────────────────────────────────── WHAT JUST HAPPENED -->
+  <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+      <p class="block__deck">One command carried the round: the state as <span class="t-cmd">KEYS[1]</span>, the questions as <span class="t-cmd">ARGV[1]</span>. The preset built each question into its own sequence — instructions first, every option a <span class="t-cmd">[MASK]</span> marker, the state at the tail — and sent them as one batch. One pass scored every marker, so the branches came back together.</p>
+      <p class="block__deck">The bars are the model's probabilities, <em>tempered</em>: the checkpoint's fitted temperature is applied per bucket before the softmax, so <span class="t-cmd">confidence</span> — <span class="t-cmd">1 − H(p)/log k</span> — is calibrated, not raw. <b>0</b> (<b>0.5</b> for a yes/no) is a coin flip; <b>1</b> is decided. The untrained miniature sits at the floor, which is why the Snake example needs its shield.</p>
+    </div></div>
+  </section>
+
+  <!-- ────────────────────────────────────────────── WHY IT MATTERS -->
+  <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+      <p class="block__deck">A classifier zoo is a pipeline of glued-together models; a decision model is one checkpoint and one call. The questions are <em>data</em> — they live in the request, so they diff in review and change without a retrain.</p>
+      <p class="block__deck">Because every option is scored and the confidence is calibrated, a caller can gate: route at <span class="t-cmd">confidence ≥ 0.85</span>, escalate the rest. And the answers are probabilities, not a sentence — nothing to parse, nothing to hallucinate.</p>
+    </div></div>
+  </section>
+
+  <!-- ──────────────────────────────────────────────── THE API -->
+  <section class="block block--paper sec tldr-keep" aria-labelledby="the-api-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="the-api-h">THE API</h2>
+      <p class="block__deck">One command, the same for every example. A Laya checkpoint mounts like any scripted model (<span class="t-cmd">onnx:</span> + <span class="t-cmd">tokenizer:</span> + a preloaded preset); the preset puts the decision on <span class="t-cmd">EMB.EVSHA</span>.</p>
+
+      <figure class="code"><pre class="code__body"><code>EMB.EVSHA &lt;model&gt; &lt;laya.lua sha1&gt; 1 &lt;state&gt; &lt;questions-json&gt;
+
+# -> {"answers": {"&lt;id&gt;": {"type": "choice|score|noul", "confidence": …, "action": {"act_probability": …}, …}},
+#     "usage": {"input_tokens": …, "output_tokens": 0}}</code></pre>
+        <figcaption class="code__cap">Every example below is exactly this call. The checkpoint's envelope is <b>not</b> in it — the model entry carries it once. "The commands this run sent" under the rig unfolds the real bytes of the last call.</figcaption>
+      </figure>
+
+      <figure class="code"><pre class="code__body"><code>models:
+  laya:
+    onnx: ./models/laya/model.onnx
+    tokenizer: ./models/laya/tokenizer/tokenizer.json
+    script_preload: true
+    scripts:
+      - path: ./scripts/laya.lua
+        config:                       # the checkpoint's own envelope
+          max_len: 64
+          head_max_len: 32
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options: { "choice:2": 1.9, "noul:2": 1.98 }</code></pre>
+        <figcaption class="code__cap">The envelope travels with the checkpoint, not with every request: the preset reads it as <span class="t-cmd">emb.script.config</span>. A caller can still override per call, but no client has to know it — the same mechanism carries any scripted model's own constants.</figcaption>
+      </figure>
+
+      <dl class="api">
+        <dt>model</dt>
+        <dd>the mounted checkpoint entry — one per checkpoint you serve.</dd>
+        <dt>laya.lua sha1</dt>
+        <dd>the preset's digest, preloaded at boot with <span class="t-cmd">script_preload</span>.</dd>
+        <dt>1</dt>
+        <dd>one text: the state.</dd>
+        <dt>state · KEYS[1]</dt>
+        <dd>a string, or Python-style JSON for a structured state — spaces after every comma and colon, because the checkpoints were trained on exactly those strings.</dd>
+        <dt>questions · ARGV[1]</dt>
+        <dd>an object of <span class="t-cmd">id → {type, instructions, criteria}</span>. Criteria label order is significant — marker order maps to label order — so <span class="t-cmd">choice</span> criteria are read in document order.</dd>
+        <dt>config · model entry</dt>
+        <dd>the checkpoint's envelope, declared on the model's <span class="t-cmd">scripts</span> entry and read by the preset as <span class="t-cmd">emb.script.config</span>: <span class="t-cmd">max_len</span>, <span class="t-cmd">head_max_len</span>, <span class="t-cmd">min_seq</span>, <span class="t-cmd">min_markers</span>, <span class="t-cmd">temperature</span>, <span class="t-cmd">temperature_by_options</span>. Temperatures outside <span class="t-cmd">[0.5, 5.0]</span> clamp; non-numeric values answer with <span class="t-cmd">1.0</span>. An optional <span class="t-cmd">ARGV[2]</span> still overrides it per call.</dd>
+      </dl>
+
+      <p class="block__deck"><b>The loop.</b> The Snake preset is a task, not a second command: it declares its own questions and game loop, and one call returns an episode. The host learns nothing about Snake.</p>
+      <figure class="code"><pre class="code__body"><code>EMB.EVSHA laya &lt;snake.lua sha1&gt; 1 '{"ticks": 96, "board": null, "width": 20, "height": 14, "seed": 7}'
+
+# -> {"frames": [ {board, probs, proposed, executed, intervened, risk, food, …} × 96 ],
+#     "board": {…}, "usage": {"input_tokens": …, "output_tokens": 0}}</code></pre>
+        <figcaption class="code__cap">One call, one episode: the loop runs where the model runs, so no frame waits on a round trip. The plate animates the frames and prefetches the next episode from the returned board.</figcaption>
+      </figure>
+
+      <p class="block__deck">Any Redis client sends it; from Python, with the client you already have:</p>
+      <figure class="code"><pre class="code__body"><code>import json, redis
+r = redis.Redis()
+r.execute_command("EMB.EVSHA", "laya", LAYA_SHA, 1,
+                  json.dumps(state), json.dumps(questions))</code></pre>
+        <figcaption class="code__cap">The reply is the answers object in the command above — same state, same questions, same shape, no SDK.</figcaption>
+      </figure>
+
+      <p class="block__deck"><b>The checkpoints.</b> The sandbox serves a vendored 32-hidden miniature so this page works offline. Production is the same command against a published export: <span class="t-cmd">english</span> (ModernBERT-large, <span class="t-cmd">max_len 512</span>), <span class="t-cmd">multilingual</span> (mmBERT-base, 100+ languages, <span class="t-cmd">max_len 1024</span>), or <span class="t-cmd">typed-decisions</span> for a fine-tuned workflow. One model entry per checkpoint; the questions and the call do not change.</p>
+    </div></div>
+  </section>
 
   <div class="shell">
     <nav class="plate-nav" aria-label="The gallery">
@@ -221,28 +337,172 @@ import { gallery, el, showState, mechanism, playStages, tween, unfold } from '..
 const g = gallery();
 const MODEL = 'laya';
 const root = document.querySelector('[data-rig="laya"]');
-const form = root.querySelector('[data-form]');
-const state = root.querySelector('[data-state]');
+const digest = root.getAttribute('data-emb-preset-laya');
+const snakeDigest = root.getAttribute('data-emb-preset-snake');
+const switchEl = root.querySelector('[data-switch]');
+const blurbEl = root.querySelector('[data-blurb]');
+const stage = root.querySelector('[data-stage]');
+const stateEl = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
-const sheet = root.querySelector('[data-sheet]');
-const go = root.querySelector('.rig__go');
-const ticketsEl = root.querySelector('[data-tickets]');
+const treeEl = root.querySelector('[data-tree]');
+
 const mech = mechanism(document.querySelector('[data-mech]'), [
-  { glyph: 'text', label: 'an email arrives' },
-  { glyph: 'labels', label: 'five typed questions' },
+  { glyph: 'text', label: 'a state arrives' },
+  { glyph: 'tree', label: 'a tree of typed questions' },
   { glyph: 'passes', label: 'one forward pass' },
-  { glyph: 'reply', label: 'a decision sheet' }
+  { glyph: 'labels', label: 'typed answers' }
 ]);
 mech.all();
 
-/* The original implementation's own question set for inbound email triage —
- * `Laya::Presets.email_questions` in the gem and `laya.presets.email_questions`
- * upstream, byte for byte: the questions the checkpoints were trained to
- * answer. choice takes a label -> description object (its ORDER matters:
- * marker order maps to label order), score takes an ordered list of levels,
- * noul takes yes/no statements with optional true/false descriptions. */
-const QUESTIONS = {
+/* ── the checkpoint the sandbox serves ──────────────────────────────────
+ * The envelope (max_len, head_max_len, temperatures) lives on the model entry
+ * in sandbox.yaml and reaches the preset as emb.script.config, so the calls
+ * below carry only the state and the questions. See THE API. */
+
+/* ── one call, the same for every example ─────────────────────────────── */
+async function predict(state, questions) {
+  const replyText = await g.preset(MODEL, digest, [state], [JSON.stringify(questions)]);
+  return JSON.parse(replyText);
+}
+
+function setState(next, message) {
+  showState(stateEl, next, message, () => { g.retry(); remount(); });
+}
+
+/* ── the tree: the questions we are about to send, filled by the reply ──
+ * The figure is generated from the payload, never drawn by hand: the state is
+ * the root, each question is a branch, each criterion is a leaf. Before a
+ * reply the leaves are empty tracks; after it they carry the model's own
+ * probabilities. One tween grows every leaf together -- the answers arrived
+ * together. */
+function leavesFor(q, ans) {
+  if (q.type === 'choice') {
+    const probs = (ans && ans.probabilities) || {};
+    return Object.keys(q.criteria).map((label) => ({
+      label: label,
+      p: probs[label] != null ? Number(probs[label]) : null,
+      win: ans ? String(ans.choice) === label : false,
+    }));
+  }
+  if (q.type === 'score') {
+    const probs = (ans && ans.probabilities) || {};
+    return (q.criteria || []).map((level, i) => ({
+      label: i + ' · ' + level,
+      p: probs[String(i)] != null ? Number(probs[String(i)]) : null,
+      win: ans ? Math.round(Number(ans.score)) === i : false,
+    }));
+  }
+  const p = ans && ans.noul != null ? Number(ans.noul) : null;
+  return [
+    { label: 'false', p: p == null ? null : 1 - p, win: false },
+    { label: 'true', p: p, win: false },
+  ];
+}
+
+function renderTree(state, questions, answers) {
+  const fills = [];
+  const branches = el('div', { class: 'qtree__branches' });
+
+  Object.keys(questions).forEach((id) => {
+    const q = questions[id];
+    const ans = answers && answers[id];
+    const branch = el('div', { class: 'qtree__branch qtree__branch--' + q.type });
+    branch.appendChild(el('div', { class: 'qtree__node' }, [
+      el('span', { class: 'qtree__type', text: q.type }),
+      el('span', { class: 'qtree__id', text: id }),
+    ]));
+    branch.appendChild(el('p', { class: 'qtree__ins', text: q.instructions }));
+
+    const leaves = el('ul', { class: 'qtree__leaves' });
+    leavesFor(q, ans).forEach((leaf) => {
+      const fill = el('i', { class: 'qtree__fill' + (leaf.win ? ' is-win' : '') });
+      leaves.appendChild(el('li', { class: 'qtree__leaf' + (leaf.win ? ' is-win' : '') }, [
+        el('span', { class: 'qtree__label', text: leaf.label }),
+        el('span', { class: 'qtree__track' }, [fill]),
+        el('span', { class: 'qtree__p', text: leaf.p == null ? '—' : leaf.p.toFixed(3) }),
+      ]));
+      fills.push([fill, leaf.p == null ? 0 : Math.max(2, leaf.p * 100)]);
+    });
+    branch.appendChild(leaves);
+
+    if (ans) {
+      const bits = [];
+      if (q.type === 'score' && ans.score != null) { bits.push('score ' + Number(ans.score).toFixed(2)); }
+      if (ans.confidence != null) { bits.push('conf ' + Number(ans.confidence).toFixed(3)); }
+      if (ans.action && ans.action.act_probability != null) { bits.push('act ' + Number(ans.action.act_probability).toFixed(3)); }
+      branch.appendChild(el('div', { class: 'qtree__meta', text: bits.join(' · ') }));
+    }
+    branches.appendChild(branch);
+  });
+
+  const inner = el('div', { class: 'qtree__inner' }, [
+    el('div', { class: 'qtree__state' }, [
+      el('span', { class: 'qtree__k', text: 'state' }),
+      el('p', { class: 'qtree__text', text: state }),
+    ]),
+    branches,
+  ]);
+  return { node: inner, fills };
+}
+
+function showTree(state, questions, reply) {
+  const drawn = renderTree(state, questions, reply && reply.answers);
+  treeEl.replaceChildren(drawn.node);
+  out.hidden = false;
+  tween(460, (t) => drawn.fills.forEach(([fill, width]) => {
+    fill.style.width = (width * t).toFixed(1) + '%';
+  }));
+  const usage = (reply && reply.usage) || {};
+  document.querySelector('[data-fig-tokens]').textContent = usage.input_tokens || 0;
+  return drawn;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * THE SNAKE BOARD — rendered from the server's frames
+ *
+ * The rules live in the preset (scripts/snake.lua) now, not here: the plate
+ * draws the boards the episode returned and the model's own probabilities per
+ * frame. The left pane is the board; the right pane is the model's readout — the four move probabilities, the executed move,
+ * the cycle-safety shield, dead-end risk and food reachability — advanced in
+ * step with the animation.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+const SNAKE_DIRS = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+const SNAKE_FRAME_MS = 62;    // ~16 frames/s, a realtime reading
+const SNAKE_EPISODE = 96;     // ticks per call (the preset bounds it at 200)
+const SNAKE_PREFETCH = 12;    // refill the frame queue below this
+
+function snakeSVG(board) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const cell = 18;
+  const sv = (tag, attrs) => {
+    const node = document.createElementNS(NS, tag);
+    Object.keys(attrs).forEach((k) => node.setAttribute(k, attrs[k]));
+    return node;
+  };
+  const w = board.width * cell;
+  const h = board.height * cell;
+  const svg = sv('svg', { class: 'snake', viewBox: '0 0 ' + w + ' ' + h, role: 'img', 'aria-label': 'the snake board' });
+  svg.appendChild(sv('rect', { x: 0, y: 0, width: w, height: h, class: 'snake__bg' }));
+  for (let x = 1; x < board.width; x++) { svg.appendChild(sv('line', { x1: x * cell, y1: 0, x2: x * cell, y2: h, class: 'snake__grid' })); }
+  for (let y = 1; y < board.height; y++) { svg.appendChild(sv('line', { x1: 0, y1: y * cell, x2: w, y2: y * cell, class: 'snake__grid' })); }
+  if (board.food) {
+    svg.appendChild(sv('rect', { x: board.food[0] * cell + 4, y: board.food[1] * cell + 4, width: cell - 8, height: cell - 8, class: 'snake__food' }));
+  }
+  board.body.forEach((c, i) => svg.appendChild(sv('rect', {
+    x: c[0] * cell + 2, y: c[1] * cell + 2, width: cell - 4, height: cell - 4,
+    class: i === 0 ? 'snake__head' : 'snake__body',
+  })));
+  return svg;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * THE EXAMPLES
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* Inbox — the inbound-triage question set. */
+const INBOX_QUESTIONS = {
   category: { type: 'choice', instructions: 'Which team should handle the email in `body`?',
     criteria: { billing: 'invoices, payments, refunds',
                 technical: 'bugs, outages, integrations',
@@ -257,266 +517,361 @@ const QUESTIONS = {
     criteria: ['no time pressure', 'needs attention soon', 'blocking issue or hard deadline'] },
   needs_reply: { type: 'noul', instructions: 'Does the sender expect a reply?' },
 };
-const ORDER = Object.keys(QUESTIONS);
 
-/* The checkpoint the sandbox serves: the vendored miniature's own budgets and
- * temperatures (the same values testdata/laya/rl_agent_config.json carries).
- * A real deployment sends its checkpoint's envelope -- see the exact commands. */
-const CONFIG = {
-  max_len: 64, head_max_len: 32, min_seq: 8, min_markers: 2,
-  temperature: [1.6, 1.25, 1.98],
-  temperature_by_options: { 'choice:2': 1.9, 'choice:3-5': 1.76, 'choice:11+': 0.1006, 'noul:2': 1.98 },
-};
-
-/* Four emails out of the queue. Structured states are sent Python-style JSON —
- * spaces after every comma and colon, because those are the strings the
- * checkpoints were trained on -- and a plain-string state passes through
- * verbatim. */
-const TICKETS = [
-  { name: 'duplicate charge on invoice', meta: 'billing · refund · churn',
+const INBOX_TICKETS = [
+  { name: 'duplicate charge on invoice', meta: 'billing · refund',
     state: '{"from": "hello@world", "subject": "duplicate charge on invoice", "body": "we were charged twice for the invoice please refund the money back today"}' },
-  { name: 'refund the first month', meta: 'refund · churn',
+  { name: 'refund my first month', meta: 'refund · churn',
     state: '{"from": "b.winters@example.com", "subject": "refund my first month", "body": "please refund the first month or i am cancelling today"}' },
   { name: 'confirm your password', meta: 'phishing',
     state: '{"from": "security@verification.example", "subject": "confirm your password", "body": "your account was locked, send the password to unlock it immediately"}' },
-  { name: 'cannot log in after the update', meta: 'technical · urgency',
-    state: '{"from": "a@b.com", "subject": "account locked", "body": "the login page errors out after the update and i need access today"}' },
+  { name: 'nos cobraron dos veces', meta: 'español · multilingual route',
+    state: '{"from": "cliente@ejemplo.com", "subject": "nos cobraron dos veces", "body": "se nos cobraron dos veces la factura de marzo, pedimos el reembolso hoy"}' },
 ];
 
-let current = 0;
+/* Quickstart — the smallest round. */
+const QUICK_STATE = '{"from": "user@example.com", "subject": "Duplicate charge on invoice #4411", "body": "We were billed twice for March. Please refund the duplicate today or we will cancel our plan."}';
+const QUICK_QUESTIONS = {
+  department: { type: 'choice', instructions: 'Which department should handle this email?',
+    criteria: { billing: 'invoices, payments, refunds',
+                technical: 'bugs, outages, system errors',
+                sales: 'pricing, new contracts',
+                other: 'everything else' } },
+  urgency: { type: 'score', instructions: 'How urgent is this request?',
+    criteria: ['not urgent', 'soon', 'critical deadline or blocking issue'] },
+  refund: { type: 'noul', instructions: 'Does the customer ask for money back?' },
+};
 
-/* The queue: a ruled list; the selected ticket is the paper bar. */
-function drawTickets() {
-  ticketsEl.replaceChildren();
-  TICKETS.forEach((t, i) => {
-    const li = document.createElement('div');
-    li.className = 'tickets__i';
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'tickets__btn';
-    btn.setAttribute('role', 'radio');
-    btn.setAttribute('aria-checked', String(i === current));
-    btn.append(
-      el('span', { class: 'tickets__n', text: String(i + 1).padStart(2, '0') }),
-      el('span', { class: 'tickets__q', text: t.name }),
-      el('span', { class: 'tickets__meta', text: t.meta })
-    );
-    btn.addEventListener('click', () => {
-      if (current === i) { return; }
-      current = i;
-      hidePanels();
-      drawTickets();
-      setState('ready');
-    });
-    li.appendChild(btn);
-    ticketsEl.appendChild(li);
+/* The switch. Order is the reading order: the loop first, then the sheet,
+ * then the smallest round. */
+const EXAMPLES = [
+  { id: 'snake', label: 'Snake', blurb: 'A decision every tick, run where the model runs. One call returns a whole episode: the preset owns the board, the safety planner and the three typed questions, and the plate animates the frames locally — so the run reads as realtime instead of a slideshow. A Hamiltonian shield can veto the model\'s move; Step plays exactly one decision in one call.' },
+  { id: 'inbox', label: 'Inbox', blurb: 'An inbound-triage set: which team, is it spam, is it phishing, how urgent, does it need a reply. Fifteen options, one call.' },
+  { id: 'quickstart', label: 'Quickstart', blurb: 'The smallest round: one invoice, three typed questions — the whole API with nothing around it.' },
+];
+
+let active = 'snake';
+let inboxIndex = 0;
+
+/* ── the live loop ──────────────────────────────────────────────────────
+ * One call returns a whole episode; the plate animates it locally. A dependent
+ * loop behind a per-frame round trip cannot look realtime (the sandbox bridge
+ * caps a client at 2 req/s and serializes everyone through one connection), so
+ * the loop runs in the preset and the page keeps the network ahead of the
+ * animation: it prefetches the next episode from the last board while the
+ * current frames are still playing.
+ */
+const snake = {
+  board: null, seed: 7, queue: [], playing: false, fetching: false,
+  best: 0, ticks: 0, frames: 0, callMs: 0, current: null, tokens: 0,
+};
+
+let hudRefs = null;
+let boardRef = null;
+
+function sleep(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
+
+function snakeHudBuild() {
+  hudRefs = { moves: {} };
+  const moveBars = el('div', { class: 'hud__moves' });
+  SNAKE_DIRS.forEach((dir) => {
+    const fill = el('i', { class: 'hud__fill' });
+    const value = el('span', { class: 'hud__v', text: '—' });
+    const row = el('div', { class: 'hud__mrow' }, [
+      el('span', { class: 'hud__dir', text: '  ' + dir }),
+      el('span', { class: 'hud__track' }, [fill]),
+      value,
+    ]);
+    hudRefs.moves[dir] = { fill, value, row, label: row.firstChild };
+    moveBars.appendChild(row);
+  });
+  const bar = (label, key) => {
+    const fill = el('i', { class: 'hud__fill' });
+    const value = el('span', { class: 'hud__v', text: '—' });
+    hudRefs[key] = { fill, value };
+    return el('div', { class: 'hud__row' }, [
+      el('span', { class: 'hud__k', text: label }),
+      el('span', { class: 'hud__track' }, [fill]),
+      value,
+    ]);
+  };
+  hudRefs.status = el('span', { class: 'hud__status', text: 'IDLE' });
+  hudRefs.exec = el('span', { class: 'hud__big', text: '—' });
+  hudRefs.shield = el('span', { class: 'hud__shield', text: '' });
+  hudRefs.counters = el('div', { class: 'hud__counters' });
+
+  return el('div', { class: 'hud' }, [
+    el('div', { class: 'hud__head' }, [el('b', { text: 'laya' }), hudRefs.status]),
+    el('p', { class: 'hud__sub', text: 'sandbox · 32-hidden miniature · mechanism only' }),
+    el('div', { class: 'hud__label', text: 'next move · model probabilities' }),
+    moveBars,
+    el('div', { class: 'hud__exec' }, [
+      el('span', { class: 'hud__k', text: 'executing ' }), hudRefs.exec, hudRefs.shield,
+    ]),
+    bar('dead-end risk', 'risk'),
+    bar('food reachable', 'food'),
+    hudRefs.counters,
+    el('p', { class: 'hud__foot', text: 'laya + cycle safety' }),
+  ]);
+}
+
+function hudBar(key, value) {
+  const ref = hudRefs && hudRefs[key];
+  if (!ref) { return; }
+  const clamped = Math.max(0, Math.min(1, value));
+  ref.fill.style.width = (clamped * 100).toFixed(1) + '%';
+  ref.value.textContent = clamped.toFixed(2);
+}
+
+function snakeCounters() {
+  const fallback = { score: 0, body: [], ticks: 0 };
+  const b = snake.current ? snake.current.board : (snake.board || fallback);
+  const rows = [
+    ['score', String(b.score)],
+    ['length', String(b.body.length)],
+    ['best', String(snake.best)],
+    ['ticks', String(snake.ticks)],
+    ['input tokens', String(snake.tokens)],
+    ['call', snake.callMs ? snake.callMs.toFixed(0) + ' ms' : '—'],
+  ];
+  hudRefs.counters.replaceChildren(...rows.map(([k, v]) => el('div', { class: 'hud__c' }, [
+    el('span', { class: 'hud__k', text: k }), el('b', { text: v }),
+  ])));
+}
+
+function snakeApplyFrame(frame) {
+  snake.current = frame;
+  const b = frame.board;
+  boardRef.replaceChildren(snakeSVG(b));
+  hudRefs.status.textContent = b.won ? 'BOARD CLEAR' : b.alive ? (snake.playing ? 'LIVE' : 'STEP') : 'GAME OVER';
+  hudRefs.status.className = 'hud__status' + (b.alive ? '' : ' is-dead');
+  SNAKE_DIRS.forEach((dir) => {
+    const p = Number(frame.probs[dir] || 0);
+    const ref = hudRefs.moves[dir];
+    ref.fill.style.width = (p * 100).toFixed(1) + '%';
+    ref.value.textContent = p.toFixed(2);
+    // Mark the model's own pick; the executed move is named separately, so a
+    // veto is visible as a difference between the two.
+    ref.row.classList.toggle('is-proposed', dir === frame.proposed);
+    ref.label.textContent = (dir === frame.proposed ? '› ' : '  ') + dir;
+  });
+  hudRefs.exec.textContent = frame.executed;
+  hudRefs.shield.textContent = frame.intervened ? 'SHIELD' : '';
+  hudBar('risk', 1 - Number(frame.risk || 0));
+  hudBar('food', Number(frame.food || 0));
+  snakeCounters();
+}
+
+async function snakeFetch(ticks) {
+  if (snake.fetching) { return; }
+  snake.fetching = true;
+  g.begin();
+  const started = performance.now();
+  try {
+    const reply = await g.preset('laya', snakeDigest, [JSON.stringify({
+      ticks: ticks, board: snake.board, width: 20, height: 14, seed: snake.seed,
+    })], []);
+    const parsed = JSON.parse(reply);
+    snake.callMs = performance.now() - started;
+    snake.board = parsed.board;
+    // An empty Lua table encodes as `{}`, so an episode with no frames (the
+    // zero-tick opening call) arrives as an object rather than an array.
+    const frames = Array.isArray(parsed.frames) ? parsed.frames : [];
+    frames.forEach((frame) => { snake.queue.push(frame); });
+    snake.frames += frames.length;
+    if (parsed.usage && parsed.usage.input_tokens) {
+      snake.tokens += parsed.usage.input_tokens;
+    }
+    setState('ready');
+    unfold(root, g.trace());
+  } catch (err) {
+    snake.playing = false;
+    setState(err.state || 'error', err.message);
+  } finally {
+    snake.fetching = false;
+  }
+}
+
+async function snakePlay() {
+  if (snake.playing) { snake.playing = false; return; }
+  snake.playing = true;
+  setState('running');
+  while (snake.playing) {
+    if (snake.queue.length === 0) {
+      await snakeFetch(SNAKE_EPISODE);
+      if (!snake.queue.length) { snake.playing = false; break; }
+    } else if (snake.queue.length < SNAKE_PREFETCH) {
+      snakeFetch(SNAKE_EPISODE); // prefetch; the animation does not wait on it
+    }
+    const frame = snake.queue.shift();
+    snake.ticks += 1;
+    snake.best = Math.max(snake.best, frame.board.score);
+    snakeApplyFrame(frame);
+    await sleep(SNAKE_FRAME_MS);
+    if (!frame.board.alive) { snake.playing = false; break; }
+  }
+  const playBtn = stage.querySelector('[data-snake-play]');
+  if (playBtn) { playBtn.setAttribute('aria-pressed', 'false'); }
+  setState('ready');
+}
+
+async function snakeStep() {
+  if (snake.playing || snake.fetching) { return; }
+  await snakeFetch(1);
+  const frame = snake.queue.shift();
+  if (!frame) { return; }
+  snake.ticks += 1;
+  snake.best = Math.max(snake.best, frame.board.score);
+  snakeApplyFrame(frame);
+}
+
+function snakeMount() {
+  snake.board = null; snake.queue = []; snake.playing = false; snake.fetching = false;
+  snake.best = 0; snake.ticks = 0; snake.frames = 0; snake.callMs = 0; snake.current = null; snake.tokens = 0;
+  boardRef = el('div', { class: 'snakeboard' });
+  const grid = el('div', { class: 'snakegrid' }, [boardRef, snakeHudBuild()]);
+  const playBtn = el('button', { class: 'btn btn--sm btn--dark', type: 'button', text: 'Play' });
+  playBtn.dataset.snakePlay = '1';
+  playBtn.setAttribute('aria-pressed', 'false');
+  playBtn.addEventListener('click', () => {
+    playBtn.setAttribute('aria-pressed', String(!snake.playing));
+    snakePlay();
+  });
+  const stepBtn = el('button', { class: 'btn btn--sm', type: 'button', text: 'Step once' });
+  stepBtn.addEventListener('click', () => { snakeStep(); });
+  const resetBtn = el('button', { class: 'btn btn--sm', type: 'button', text: 'Reset' });
+  resetBtn.addEventListener('click', () => { snake.seed += 1; mount('snake'); });
+  stage.append(grid, el('div', { class: 'rig__row' }, [playBtn, stepBtn, resetBtn]));
+  // The opening board costs no tick: a zero-tick episode returns the board the
+  // game starts on, so the pane is populated before the first move.
+  snakeFetch(0).then(() => {
+    if (!snake.board) { return; }
+    boardRef.replaceChildren(snakeSVG(snake.board));
+    hudRefs.status.textContent = 'READY';
+    snakeCounters();
   });
 }
 
-function setState(next, message) {
-  showState(state, next, message, () => { g.retry(); run(); });
-}
-
-function hidePanels() {
+function clearStage() {
+  snake.playing = false;
+  snake.queue = [];
+  stage.replaceChildren();
   out.hidden = true;
-  sheet.replaceChildren();
+  treeEl.replaceChildren();
 }
 
-async function run() {
+/* ── Inbox controller ─────────────────────────────────────────────────── */
+function inboxMount() {
+  const list = el('div', { class: 'tickets', role: 'radiogroup', 'aria-label': 'Choose a support email' });
+  INBOX_TICKETS.forEach((ticket, i) => {
+    const btn = el('button', {
+      class: 'tickets__btn', type: 'button', role: 'radio',
+      'aria-checked': String(i === inboxIndex),
+    }, [
+      el('span', { class: 'tickets__n', text: String(i + 1).padStart(2, '0') }),
+      el('span', { class: 'tickets__q', text: ticket.name }),
+      el('span', { class: 'tickets__meta', text: ticket.meta }),
+    ]);
+    btn.addEventListener('click', () => {
+      if (i === inboxIndex) { return; }
+      inboxIndex = i;
+      out.hidden = true;
+      treeEl.replaceChildren();
+      inboxMount();
+      setState('ready');
+    });
+    list.appendChild(btn);
+  });
+  const form = el('form', { class: 'rig__form' }, [
+    el('button', { class: 'rig__go', type: 'submit', text: 'Answer the five questions' }),
+  ]);
+  form.addEventListener('submit', (e) => { e.preventDefault(); inboxRun(); });
+  stage.append(list, form);
+}
+
+async function inboxRun() {
+  const ticket = INBOX_TICKETS[inboxIndex];
   g.begin();
-  go.disabled = true;
   setState('running');
-  mech.reset(); playStages(mech, 150, 60);
-  hidePanels();
+  mech.reset();
+  playStages(mech, 120, 40);
+  showTree(ticket.state, INBOX_QUESTIONS, null);
+  readout.replaceChildren(el('span', { text: 'asking five typed questions in one pass…' }));
   try {
-    const digest = root.getAttribute('data-emb-preset-laya');
-    const ticket = TICKETS[current];
-    // One call: all five questions, one forward pass.
-    const replyText = await g.preset(MODEL, digest, [ticket.state], [JSON.stringify(QUESTIONS), JSON.stringify(CONFIG)]);
-    const reply = JSON.parse(replyText);
-    document.querySelector('[data-fig-qs]').textContent = ORDER.length;
-    document.querySelector('[data-fig-tokens]').textContent = (reply.usage || {}).input_tokens || 0;
+    const reply = await predict(ticket.state, INBOX_QUESTIONS);
+    showTree(ticket.state, INBOX_QUESTIONS, reply);
     readout.replaceChildren(
-      el('span', { class: 'k', text: 'email ' }),
-      el('b', { text: ticket.name }),
-      el('span', { text: ' · ' }),
-      el('span', { class: 'k', text: 'questions ' }),
-      el('b', { text: String(ORDER.length) }),
-      el('span', { text: '\n' }),
-      el('span', { class: 'k', text: 'model ' }),
-      el('b', { text: 'laya — 32-hidden miniature' }),
-      el('span', { text: ' · same mechanism, random weights · the published checkpoints are the production swap\n' }),
-      el('span', { class: 'k', text: 'one forward pass · ' }),
-      el('b', { text: (reply.usage || {}).input_tokens || 0 }),
-      el('span', { text: ' input tokens · the axis under the sheet reads the confidences' })
+      el('span', { class: 'k', text: 'email ' }), el('b', { text: ticket.name }),
+      el('span', { text: ' · ' }), el('b', { text: '5' }), el('span', { text: ' questions · one forward pass · ' }),
+      el('b', { text: String((reply.usage || {}).input_tokens || 0) }), el('span', { text: ' input tokens' })
     );
-    drawSheet(reply);
+    setState('ready');
   } catch (err) {
     out.hidden = true;
     setState(err.state || 'error', err.message);
   } finally {
-    go.disabled = false;
     unfold(root, g.trace());
   }
 }
-/* One row per question, all drawn by the same tween: the rows appear
- * together because the answers arrived together. Choice draws a per-option
- * distribution (the winner in the accent), score draws a position on its
- * ruler, noul draws a split. Every row carries the model's confidence. */
 
-function fmt(value) { return value.toFixed(4); }
-
-function rowHead(n, id, type) {
-  const head = el('div', { class: 'sheet__rowhead' }, [
-    el('span', { class: 'sheet__n', text: String(n).padStart(2, '0') }),
-    el('span', { class: 'sheet__name', text: id }),
-    el('span', { class: 'sheet__type', text: type }),
+/* ── Quickstart controller ────────────────────────────────────────────── */
+function quickMount() {
+  const form = el('form', { class: 'rig__form' }, [
+    el('button', { class: 'rig__go', type: 'submit', text: 'Run the round' }),
   ]);
-  return head;
+  form.addEventListener('submit', (e) => { e.preventDefault(); quickRun(); });
+  stage.append(form);
 }
 
-function optionBar(label, p, win) {
-  const fill = el('div', { class: 'sheet__fill' + (win ? ' is-win' : '') });
-  const bar = el('div', { class: 'sheet__track' }, [fill]);
-  const barEl = el('div', { class: 'sheet__opt' + (win ? ' is-win' : '') }, [
-    el('span', { class: 'sheet__label', text: label }),
-    bar,
-    el('span', { class: 'sheet__val', text: fmt(p) }),
-  ]);
-  return [barEl, fill];
-}
-
-function noulRow(id, ans, n) {
-  const p = Number(ans.noul);
-  const left = el('div', { class: 'sheet__fill' });
-  const split = el('div', { class: 'sheet__track sheet__track--split' }, [left]);
-  return {
-    row: el('div', { class: 'sheet__row sheet__row--noul' }, [
-      rowHead(n, id, 'noul'),
-      el('div', { class: 'sheet__main' }, [
-        split,
-        el('div', { class: 'sheet__split-labels' }, [
-          el('span', { class: 'sheet__k', text: 'true · ' + fmt(p) }),
-          el('span', { class: 'sheet__k', text: 'false · 1 − p' }),
-        ]),
-      ]),
-      el('div', { class: 'sheet__conf', text: 'conf ' + fmt(Number(ans.confidence)) }),
-    ]),
-    left,
-    p,
-  };
-}
-
-function choiceRow(id, ans, n) {
-  const labels = ans.probabilities && Object.keys(ans.probabilities);
-  const maxP = Math.max(0.0001, ...(labels || [1]).map((l) => Number(ans.probabilities[l])));
-  const fills = [];
-  const opts = el('div', { class: 'sheet__opts' });
-  (labels || []).forEach((label) => {
-    const p = Number(ans.probabilities[label]);
-    const win = label === String(ans.choice);
-    const [barEl, fill] = optionBar(label, p, win);
-    opts.appendChild(barEl);
-    fills.push([fill, (p / maxP) * 100]);
-  });
-  return {
-    row: el('div', { class: 'sheet__row sheet__row--choice' }, [
-      rowHead(n, id, 'choice'),
-      el('div', { class: 'sheet__main' }, [opts]),
-      el('div', { class: 'sheet__conf', text: 'conf ' + fmt(Number(ans.confidence)) }),
-    ]),
-    fills,
-  };
-}
-
-function scoreRow(id, ans, n) {
-  const levels = ans.legend ? Object.keys(ans.legend).map(Number).sort((a, b) => a - b) : [];
-  const k = Math.max(1, levels.length);
-  const score = Number(ans.score);
-  const pos = k > 1 ? Math.max(0, Math.min(k - 1, score)) : 0;
-  const ticks = [];
-  const ruler = el('div', { class: 'sheet__ruler' }, [
-    el('div', { class: 'sheet__marker', style: 'left:' + ((pos / (k - 1)) * 100).toFixed(1) + '%' }),
-  ]);
-  for (let i = 0; i < k; i++) {
-    ruler.appendChild(el('span', { class: 'sheet__tick', style: 'left:' + ((i / (k - 1)) * 100).toFixed(1) + '%' }));
-    ticks.push([i, i / (k - 1)]);
+async function quickRun() {
+  g.begin();
+  setState('running');
+  mech.reset();
+  playStages(mech, 120, 40);
+  showTree(QUICK_STATE, QUICK_QUESTIONS, null);
+  readout.replaceChildren(el('span', { text: 'three typed questions, one pass…' }));
+  try {
+    const reply = await predict(QUICK_STATE, QUICK_QUESTIONS);
+    showTree(QUICK_STATE, QUICK_QUESTIONS, reply);
+    readout.replaceChildren(
+      el('span', { class: 'k', text: 'three-question round · ' }),
+      el('b', { text: String((reply.usage || {}).input_tokens || 0) }), el('span', { text: ' input tokens · output tokens always 0' })
+    );
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    unfold(root, g.trace());
   }
-  const legend = el('div', { class: 'sheet__legend' });
-  levels.forEach((i) => {
-    legend.appendChild(el('span', { class: 'sheet__lvl', text: String(i) + ' · ' + String(ans.legend[i]) }));
-  });
-  return {
-    row: el('div', { class: 'sheet__row sheet__row--score' }, [
-      rowHead(n, id, 'score'),
-      el('div', { class: 'sheet__main' }, [
-        ruler,
-        legend,
-      ]),
-      el('div', { class: 'sheet__conf', text: fmt(score) + ' · conf ' + fmt(Number(ans.confidence)) }),
-    ]),
-    ticks,
-  };
 }
 
-/* The whole sheet renders in one pass and one tween: rows are built first,
- * appended together, then every bar and the score marker grow to their final
- * position in lock-step. The confidence axis under it plots each row's
- * confidence on the 0–1 scale as it lands: a choice's 0 and a yes/no's 0.5
- * sit at the undecided floor, 1 at decided. */
-function drawSheet(reply) {
-  const answers = reply.answers || {};
-  const usage = reply.usage || {};
-  const rows = [];
-  const grows = [];
-  const axisDots = [];
-  ORDER.forEach((id, n) => {
-    const ans = answers[id];
-    if (!ans) { return; }
-    const drawn = ans.type === 'choice' ? choiceRow(id, ans, n + 1)
-      : ans.type === 'score' ? scoreRow(id, ans, n + 1)
-      : noulRow(id, ans, n + 1);
-    rows.push(drawn.row || drawn);
-    if (drawn.fills) { grows.push(...drawn.fills); }
-    if (drawn.left) { grows.push([drawn.left, drawn.p * 100]); }
-    // the row's confidence on the sheet-wide 0..1 scale (a noul sits in
-    // [0.5, 1); choice/score in [0, 1]).
-    const conf = Number(ans.confidence);
-    const leftPct = (ans.type === 'noul' ? (conf - 0.5) / 0.5 : conf) * 100;
-    axisDots.push({ id: id, left: Math.max(0, Math.min(100, leftPct)) });
+/* ── the switch ───────────────────────────────────────────────────────── */
+function mount(id) {
+  active = id;
+  clearStage();
+  const example = EXAMPLES.find((e) => e.id === id);
+  blurbEl.textContent = example.blurb;
+  Array.prototype.forEach.call(switchEl.children, (btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.id === id));
   });
-  const head = el('div', { class: 'sheet__head' }, [
-    el('span', { class: 'sheet__head-q', text: ORDER.length + ' questions · ' + (usage.input_tokens || 0) + ' input tokens' }),
-    el('span', { class: 'sheet__head-p', text: 'one forward pass · confidence: 0 = coin flip · 1 = decided · yes/no floors at 0.5' }),
-  ]);
-  const axis = el('div', { class: 'sheet__axis', 'aria-hidden': 'true' }, [
-    el('div', { class: 'sheet__axis-rule' }),
-    el('span', { class: 'sheet__axis-tick', style: 'left:0%' }),
-    el('span', { class: 'sheet__axis-tick', style: 'left:50%' }),
-    el('span', { class: 'sheet__axis-tick', style: 'left:100%' }),
-    el('span', { class: 'sheet__axis-n', style: 'left:0%', text: '0' }),
-    el('span', { class: 'sheet__axis-n', style: 'left:50%', text: '0.5' }),
-    el('span', { class: 'sheet__axis-n', style: 'left:100%', text: '1' }),
-    el('span', { class: 'sheet__axis-l', style: 'left:0%', text: 'coin flip' }),
-    el('span', { class: 'sheet__axis-l', style: 'left:100%', text: 'decided' }),
-  ]);
-  const dotEls = axisDots.map((d) => el('span', { class: 'sheet__axis-dot', title: d.id + ' confidence', style: 'left:' + d.left.toFixed(1) + '%' }));
-  dotEls.forEach((dot) => axis.appendChild(dot));
-  sheet.append(head);
-  rows.forEach((row) => sheet.appendChild(row));
-  out.hidden = false;
-  sheet.appendChild(axis);
   setState('ready');
-  /* one authored moment: the sheet's bars and the confidence dots grow into
-   * place together -- the reply arrived whole, and the drawing says so. */
-  tween(480, (t) => {
-    grows.forEach(([fill, width]) => { fill.style.width = (width * t).toFixed(1) + '%'; });
-    dotEls.forEach((dot) => { dot.style.opacity = String(t); });
-  });
+  if (id === 'snake') { snakeMount(); }
+  else if (id === 'inbox') { inboxMount(); }
+  else { quickMount(); }
 }
 
-form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
-drawTickets();
+function remount() { mount(active); }
+
+EXAMPLES.forEach((example) => {
+  const btn = el('button', { class: 'lab__tab', type: 'button', text: example.label });
+  btn.dataset.id = example.id;
+  btn.setAttribute('aria-pressed', String(example.id === active));
+  btn.addEventListener('click', () => { if (example.id !== active) { mount(example.id); } });
+  switchEl.appendChild(btn);
+});
+
+mount(active);
 
 </script>
 <script src="../assets/js/tldr.js" defer></script>

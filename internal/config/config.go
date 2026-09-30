@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -181,6 +182,29 @@ type BatchingConfig struct {
 	MaxBatchTokens *int `yaml:"max_batch_tokens"`
 }
 
+// ScriptEntry declares one preloaded Lua preset: the source file and, when the
+// preset needs them, the checkpoint constants it reads as `emb.script.config`.
+// The YAML form is either a bare path string or a mapping with `path` and
+// `config`. The config is opaque to the server — a contract between the
+// operator and the script — and is exposed to that script alone.
+type ScriptEntry struct {
+	Path   string         `yaml:"path"`
+	Config map[string]any `yaml:"config"`
+}
+
+// UnmarshalYAML accepts the shorthand: a bare scalar is `{path: <value>}`.
+func (e *ScriptEntry) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		return node.Decode(&e.Path)
+	}
+	type plain ScriptEntry
+	return node.Decode((*plain)(e))
+}
+
+// MaxScriptConfigBytes bounds a script's declared config so it cannot become a
+// large per-evaluation cost; the host rebuilds the table on every run.
+const MaxScriptConfigBytes = 64 << 10
+
 type ModelConfig struct {
 	ONNX         string `yaml:"onnx"`
 	Tokenizer    string `yaml:"tokenizer"`
@@ -212,10 +236,10 @@ type ModelConfig struct {
 	// ScriptPreload warms the scripted session + tokenizer at load time
 	// instead of on the first script evaluation.
 	ScriptPreload bool `yaml:"script_preload"`
-	// Scripts is a list of file paths to Lua scripts that the server SHALL
-	// preload at boot. Relative paths are resolved against the config file's
-	// directory; absolute paths are used as-is.
-	Scripts []string `yaml:"scripts"`
+	// Scripts is a list of Lua presets to preload at boot. Each entry is a path
+	// (resolved against the config file's directory) with an optional per-script
+	// config exposed to that script as emb.script.config.
+	Scripts []ScriptEntry `yaml:"scripts"`
 	// Image opts the model into server-side image embedding (EMB.IMG); nil means
 	// the model is text-only and rejects image commands.
 	Image *ImageConfig `yaml:"image"`
@@ -255,12 +279,19 @@ func Load(path string) (*Config, error) {
 
 	configDir := filepath.Dir(path)
 	for name, m := range cfg.Models {
-		for i, sp := range m.Scripts {
-			if !filepath.IsAbs(sp) {
-				m.Scripts[i] = filepath.Join(configDir, sp)
+		for i := range m.Scripts {
+			if !filepath.IsAbs(m.Scripts[i].Path) {
+				m.Scripts[i].Path = filepath.Join(configDir, m.Scripts[i].Path)
 			}
 		}
 		cfg.Models[name] = m
+	}
+	for name, m := range cfg.Models {
+		for _, entry := range m.Scripts {
+			if err := validateScriptConfig(name, entry); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -268,6 +299,48 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// validateScriptConfig enforces the shape the host promises: a mapping of
+// finite numbers, bounded in size. Keys are never interpreted here — that is
+// what keeps the mechanism general across models.
+func validateScriptConfig(model string, entry ScriptEntry) error {
+	if entry.Config == nil {
+		return nil
+	}
+	if err := checkFiniteNumbers(entry.Config); err != nil {
+		return fmt.Errorf("model %q script %q: %w", model, entry.Path, err)
+	}
+	data, err := json.Marshal(entry.Config)
+	if err != nil {
+		return fmt.Errorf("model %q script %q: config is not encodable: %w", model, entry.Path, err)
+	}
+	if len(data) > MaxScriptConfigBytes {
+		return fmt.Errorf("model %q script %q: config is %d bytes, above the %d-byte cap", model, entry.Path, len(data), MaxScriptConfigBytes)
+	}
+	return nil
+}
+
+func checkFiniteNumbers(v any) error {
+	switch t := v.(type) {
+	case float64:
+		if math.IsNaN(t) || math.IsInf(t, 0) {
+			return fmt.Errorf("config contains a non-finite number")
+		}
+	case map[string]any:
+		for _, nested := range t {
+			if err := checkFiniteNumbers(nested); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, nested := range t {
+			if err := checkFiniteNumbers(nested); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // validate applies the checks shared by the YAML loader and the CLI parser:

@@ -140,7 +140,7 @@ Reply formats, `EMB.IMG` semantics, and RESP3 differences are documented in
 
 ## Laya decision models
 
-[Laya](https://github.com/NandhaKishorM/laya) is a multilingual, non-autoregressive System 1 decision engine: typed decisions (`choice`/`score`/`noul`) over any state in one forward pass, with calibrated probabilities. Mount one of the ONNX exports from [`codenamev/laya-onnx`](https://huggingface.co/codenamev/laya-onnx) (`english` ModernBERT-large, `multilingual` mmBERT-base, `typed-decisions`) the way the gem does, and preload the preset:
+[Laya](https://github.com/NandhaKishorM/laya) is a multilingual, non-autoregressive System 1 decision engine: typed decisions (`choice`/`score`/`noul`) over any state in one forward pass, with calibrated probabilities. The reference implementations serve three ONNX checkpoints (exports of `convaiinnovations/laya*` in [`codenamev/laya-onnx`](https://huggingface.co/codenamev/laya-onnx)): `english` (ModernBERT-large, 421M, context 512), `multilingual` (mmBERT-base, 322M, context 1024 — 100+ languages), and `typed-decisions` (ModernBERT-large, fine-tuned workflows). Mount one the way the gem does, and preload the preset:
 
 ```yaml
 # config.yaml
@@ -163,11 +163,17 @@ redis-cli -p 6379 EMB.EVSHA laya "$EMBSHA" 1 \
 # → {"answers":{"department":{"action":{"act_probability":0.3582},"choice":"technical","confidence":0,
 #     "probabilities":{"billing":0.3333,"other":0.33,"technical":0.3367},"type":"choice"}},
 #     "usage":{"input_tokens":32,"output_tokens":0}}
-# (The production checkpoints take max_len 512 / head_max_len 192 and answer
-# meaningfully; the same command shape carries them.)
+# (The production checkpoints take max_len 512 / head_max_len 192 — 1024 / 192 for
+# multilingual — and answer meaningfully; the same command shape carries them.)
 ```
 
 Every question in a request is answered in one forward pass. The reply is a JSON bulk with one answer per question id, the gem's payload shapes, and `usage.input_tokens` accounting.
+
+The input is a decision tree drawn as rows — breadth, not depth: each question becomes its own sequence (`[CLS] <question> [SEP]`, every option a `[MASK]` marker, the state at the tail), all rows are batched, and one pass scores every marker at its own position. No question waits on another's answer, so the whole round is one call and one reply (see [the decision](website/demos/laya.html) plate).
+
+Which checkpoint reads a ticket is a routing decision made before the call — the gem's `Laya::Router` detects script and language (Devanagari, Han, Spanish…) and sends non-English tickets to `multilingual`; the same state, questions and config envelope work against any of the three model entries, so a deployment just picks the entry by the ticket's language. In the reference client, that is `Laya.load("convaiinnovations/laya", subfolder: "multilingual")`.
+
+Every answer also carries `action.act_probability`, the act/escalate head's read on the same answer (act on it, or escalate it). The reference gating pattern reads **confidence** against a threshold — `>= 0.85` routes automatically, below goes to a human — because confidence has a true floor (0 for a uniform choice, 0.5 for a yes/no coin flip).
 
 The reference implementations' own question sets are the canonical starting points — `Laya::Presets.triage_questions` / `email_questions` / `guard_questions` / `moderation_questions` / `router_questions` in the gem, byte-identical to upstream `laya.presets.*`; the site demo runs `email_questions` verbatim.
 

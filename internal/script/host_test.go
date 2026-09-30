@@ -172,6 +172,38 @@ return #out.words .. "|" .. out.words[2] .. "|" .. out.starts[3]`
 	}
 }
 
+func TestHostScriptConfig(t *testing.T) {
+	src := `
+local cfg = emb.script.config
+return type(cfg) .. "|" .. tostring(cfg.max_len) .. "|" .. tostring(cfg.temperature[2])
+  .. "|" .. tostring(cfg.temperature_by_options["choice:2"]) .. "|" .. tostring(cfg.missing)`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{Config: map[string]any{
+		"max_len":                float64(64),
+		"temperature":            []any{1.6, 1.25, 1.98},
+		"temperature_by_options": map[string]any{"choice:2": 1.9},
+	}}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "table|64|1.25|1.9|nil" {
+		t.Fatalf("unexpected config read %q", v.String())
+	}
+}
+
+func TestHostScriptConfigAbsentIsEmptyTable(t *testing.T) {
+	src := `
+local cfg = emb.script.config
+return type(cfg) .. "|" .. tostring(cfg.max_len or 512)`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An absent config must be a table, so `or` fallbacks read cleanly.
+	if v.String() != "table|512" {
+		t.Fatalf("unexpected absent-config read %q", v.String())
+	}
+}
+
 // offsetTokenizerHosts binds the real minilm tokenizer's plain/pair encode so
 // scripts can slice surface text via byte offsets.
 func offsetTokenizerHosts(t *testing.T) Hosts {

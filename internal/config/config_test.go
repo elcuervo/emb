@@ -492,11 +492,81 @@ models:
 		t.Fatalf("expected 2 scripts, got %d", len(m.Scripts))
 	}
 	wantRel := filepath.Join(dir, "scripts", "classify.lua")
-	if m.Scripts[0] != wantRel {
-		t.Fatalf("relative path: got %q, want %q", m.Scripts[0], wantRel)
+	if m.Scripts[0].Path != wantRel {
+		t.Fatalf("relative path: got %q, want %q", m.Scripts[0].Path, wantRel)
 	}
-	if m.Scripts[1] != "/absolute/script.lua" {
-		t.Fatalf("absolute path: got %q, want /absolute/script.lua", m.Scripts[1])
+	if m.Scripts[1].Path != "/absolute/script.lua" {
+		t.Fatalf("absolute path: got %q, want /absolute/script.lua", m.Scripts[1].Path)
+	}
+}
+
+// TestLoadScriptEntryConfig covers the two YAML forms: a bare path string and a
+// mapping with per-script config, and the shape validation the host promises.
+func TestLoadScriptEntryConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  test:
+    onnx: ./model.onnx
+    scripts:
+      - ./presets/embed.lua
+      - path: ./scripts/laya.lua
+        config:
+          max_len: 64
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Models["test"]
+	if len(m.Scripts) != 2 {
+		t.Fatalf("expected 2 scripts, got %d", len(m.Scripts))
+	}
+	if m.Scripts[0].Config != nil {
+		t.Fatalf("shorthand entry should have no config, got %#v", m.Scripts[0].Config)
+	}
+	if m.Scripts[1].Config["max_len"] == nil {
+		t.Fatalf("mapping entry lost its config: %#v", m.Scripts[1].Config)
+	}
+	temps, ok := m.Scripts[1].Config["temperature"].([]any)
+	if !ok || len(temps) != 3 {
+		t.Fatalf("temperature should decode as a 3-element sequence, got %#v", m.Scripts[1].Config["temperature"])
+	}
+	byOptions, ok := m.Scripts[1].Config["temperature_by_options"].(map[string]any)
+	if !ok || byOptions["choice:2"] == nil {
+		t.Fatalf("nested mapping lost: %#v", m.Scripts[1].Config["temperature_by_options"])
+	}
+}
+
+func TestLoadScriptConfigRejectsNonFiniteNumber(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  test:
+    onnx: ./model.onnx
+    scripts:
+      - path: ./scripts/laya.lua
+        config:
+          temperature: .nan
+`), 0644)
+	if _, err := Load(cfgPath); err == nil {
+		t.Fatal("expected a non-finite number to be rejected")
+	}
+}
+
+func TestLoadScriptConfigRejectsOversize(t *testing.T) {
+	dir := t.TempDir()
+	big := strings.Repeat("x", MaxScriptConfigBytes+1)
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte("\nmodels:\n  test:\n    onnx: ./model.onnx\n    scripts:\n      - path: ./scripts/laya.lua\n        config:\n          blob: "+big+"\n"), 0644)
+	if _, err := Load(cfgPath); err == nil {
+		t.Fatal("expected an oversize config to be rejected")
 	}
 }
 
@@ -522,8 +592,8 @@ models:
 		t.Fatalf("expected 1 script, got %d", len(m.Scripts))
 	}
 	want := filepath.Join(dir, "scripts", "nonexistent.lua")
-	if m.Scripts[0] != want {
-		t.Fatalf("resolved path: got %q, want %q", m.Scripts[0], want)
+	if m.Scripts[0].Path != want {
+		t.Fatalf("resolved path: got %q, want %q", m.Scripts[0].Path, want)
 	}
 }
 

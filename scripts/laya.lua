@@ -16,12 +16,14 @@
 --             significant (marker order maps to label order), so criteria
 --             objects must be sent as JSON objects and are read back in
 --             document order via json.decode_ordered.
---   ARGV[2]   optional config JSON from the checkpoint's rl_agent_config.json
---             / onnx_config.json: {max_len, head_max_len, min_seq,
---             min_markers, temperature = [c, s, n], temperature_by_options =
---             {"choice:2": ..., ...}}. Buckets: k <= 2 "2", <= 5 "3-5",
---             <= 10 "6-10", else "11+". Values outside [0.5, 5.0] clamp;
---             non-numeric values answer with 1.0 — exactly the gem's rules.
+--   ARGV[2]   optional per-call config JSON that overrides the checkpoint
+--             envelope declared on the model entry (emb.script.config). The
+--             envelope itself — max_len, head_max_len, min_seq, min_markers,
+--             temperature, temperature_by_options — normally lives on the
+--             model's scripts config, so a client sends only state + questions.
+--             Buckets: k <= 2 "2", <= 5 "3-5", <= 10 "6-10", else "11+".
+--             Values outside [0.5, 5.0] clamp; non-numeric values answer with
+--             1.0 — exactly the gem's rules.
 --
 -- One forward pass answers every question. The reply is
 --
@@ -523,24 +525,31 @@ local cfg = {
   temperature = { 1.0, 1.0, 1.0 },
   temperature_by_options = {},
 }
-if ARGV[2] then
-  local c = json.decode(ARGV[2])
-  if type(c) == "table" then
-    if type(c.max_len) == "number" and c.max_len >= 1 then cfg.max_len = c.max_len end
-    if type(c.head_max_len) == "number" and c.head_max_len >= 1 then cfg.head_max_len = c.head_max_len end
-    if type(c.min_seq) == "number" and c.min_seq >= 1 then cfg.min_seq = c.min_seq end
-    if type(c.min_markers) == "number" and c.min_markers >= 1 then cfg.min_markers = c.min_markers end
-    if type(c.temperature) == "table" then
-      for i = 1, math.min(3, #c.temperature) do
-        cfg.temperature[i] = clamp_temperature(c.temperature[i])
-      end
-    end
-    if type(c.temperature_by_options) == "table" then
-      for k, v in pairs(c.temperature_by_options) do
-        cfg.temperature_by_options[k] = clamp_temperature(v)
-      end
+-- apply_config layers a decoded envelope over the defaults. It is called first
+-- with the model entry's own config (emb.script.config, the checkpoint's facts)
+-- and then with ARGV[2] if present, so a per-call value overrides the model's.
+local function apply_config(c, target)
+  if type(c) ~= "table" then
+    return
+  end
+  if type(c.max_len) == "number" and c.max_len >= 1 then target.max_len = c.max_len end
+  if type(c.head_max_len) == "number" and c.head_max_len >= 1 then target.head_max_len = c.head_max_len end
+  if type(c.min_seq) == "number" and c.min_seq >= 1 then target.min_seq = c.min_seq end
+  if type(c.min_markers) == "number" and c.min_markers >= 1 then target.min_markers = c.min_markers end
+  if type(c.temperature) == "table" then
+    for i = 1, math.min(3, #c.temperature) do
+      target.temperature[i] = clamp_temperature(c.temperature[i])
     end
   end
+  if type(c.temperature_by_options) == "table" then
+    for k, v in pairs(c.temperature_by_options) do
+      target.temperature_by_options[k] = clamp_temperature(v)
+    end
+  end
+end
+apply_config(emb.script and emb.script.config or nil, cfg)
+if ARGV[2] then
+  apply_config(json.decode(ARGV[2]), cfg)
 end
 
 validate(questions)

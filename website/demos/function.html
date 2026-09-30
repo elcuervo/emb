@@ -169,7 +169,7 @@
 
             <p class="block__deck">The four answers are four products. A vector store wants the first, a reranker the third, a moderation filter or sentiment badge the fourth. If your server can only return vectors, each is a separate service and a separate deployment — and the models are the expensive part, not the HTTP.</p>
             <p class="block__deck">Scripting inside the server is also what keeps it fast: the script runs beside the model, over the same buffers, sharing the same batcher and cache, so <span class="t-cmd">classify.lua</span> costs one model call and one round trip.</p>
-            <p class="block__deck">One step further, the scripted model can <em>answer</em>: five typed questions in one forward pass, calibrated and drawn as a decision sheet — <a href="laya.html">the decision</a>.</p>
+            <p class="block__deck">One step further, the scripted model can <em>answer</em>: five typed questions, every option a marker on one tree, a single forward pass scoring them all — <a href="laya.html">the decision</a>.</p>
 </div></div>
     </section>
     <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">

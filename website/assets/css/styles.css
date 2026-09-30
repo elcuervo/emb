@@ -3279,3 +3279,312 @@ html.js.is-ready .hero__prose{
   background: var(--accent);
   opacity: 0;
 }
+
+/* ═══ THE DECISION — the question tree's caption and the ticket routes ═══ */
+
+.tree{ margin-top: clamp(18px, 2vw, 30px); }
+.tree__cap{
+  margin-top: clamp(10px, 1vw, 14px);
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: clamp(13px, 0.95vw, 14.5px);
+  line-height: 1.55;
+}
+.tree__cap b{ color: var(--fg); font-weight: 600; }
+
+.tickets__route{
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 7px;
+  border: 1px solid var(--rule-dark);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .07em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.tickets__btn[aria-checked="true"] .tickets__route{
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+
+/* ═══ THE DECISION ENGINE — the three types, the question tree, the examples ═══ */
+
+/* THE THREE TYPES: three ruled cards, one per question type, each carrying the
+   request it takes and the reply shape it returns. */
+.types{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: clamp(16px, 1.8vw, 26px);
+  margin-top: clamp(18px, 2vw, 28px);
+}
+.type{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 2px solid var(--fg);
+  padding-top: 12px;
+  min-width: 0;
+}
+.type__head{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.type__name{
+  font-family: var(--mono);
+  font-size: clamp(14px, 1.2vw, 16.5px);
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--accent-ink);
+}
+.type__job{ color: var(--muted); font-size: clamp(13px, .95vw, 14.5px); }
+.type .code{ margin: 0; }
+.type .code__body{ font-size: clamp(10.5px, .85vw, 12px); }
+.type__ret{
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(12px, .92vw, 13.5px);
+  line-height: 1.5;
+}
+.type__ret b{ color: var(--fg); }
+
+/* THE LAB: the example switch, the shared stage, and the honesty line, all on
+   the dark instrument plate. */
+.lab{ margin-top: clamp(16px, 1.8vw, 26px); }
+.lab__switch{
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--rule-dark);
+}
+.lab__tab{
+  min-height: 44px;
+  padding: 0 clamp(12px, 1.4vw, 20px);
+  background: transparent;
+  color: var(--rule);
+  border: 0;
+  border-left: 1px solid var(--rule-dark);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.lab__tab:first-child{ border-left: 0; }
+.lab__tab:hover{ color: var(--accent); }
+.lab__tab[aria-pressed="true"]{ background: var(--accent); color: var(--fg); }
+.lab__tab[aria-pressed="true"]:hover{ color: var(--fg); }
+.lab__tab:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.lab__blurb{
+  margin: 14px 0 0;
+  max-width: 82ch;
+  color: var(--rule);
+  font-size: clamp(13.5px, 1vw, 15.5px);
+  line-height: 1.55;
+}
+.lab__stage{ margin-top: clamp(14px, 1.6vw, 22px); }
+.lab__honest{
+  margin: clamp(16px, 1.8vw, 26px) 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-dark);
+  max-width: 86ch;
+  color: var(--rule);
+  font-size: clamp(12.5px, .95vw, 14px);
+  line-height: 1.55;
+}
+.lab__honest b{ color: var(--bg); }
+
+/* SNAKE: the board and its readings, side by side. */
+.snakegrid{
+  display: grid;
+  grid-template-columns: minmax(0, 620px) minmax(150px, 1fr);
+  gap: clamp(14px, 1.6vw, 22px);
+  align-items: start;
+}
+.snakeboard{ min-width: 0; }
+.snake{
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule-dark);
+  background: #111110;
+}
+.snake__bg{ fill: #111110; }
+.snake__grid{ stroke: #23221e; stroke-width: 1; }
+.snake__body{ fill: #3f6b58; }
+.snake__head{ fill: var(--accent); }
+.snake__food{ fill: var(--bg); }
+.snakestats{ margin: 0; }
+.snakestats__line{
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 13px);
+  color: var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+.snakestats__line b{ color: var(--bg); font-weight: 500; }
+.snakestats__line .k{ color: var(--accent); }
+.snakestats__status{ text-transform: uppercase; letter-spacing: .08em; }
+.shield{ color: var(--accent); }
+
+/* The Auto toggle reads as on, so a running loop is visible. */
+.lab .btn[aria-pressed="true"]{ background: var(--accent); border-color: var(--accent); color: var(--fg); }
+
+/* THE QUESTION TREE: a paper card inside the dark rig. The state is the root,
+   one column per typed question, one ruled track per option leaf. */
+.qtree{ margin-top: clamp(14px, 1.6vw, 22px); }
+.qtree__inner{
+  padding: clamp(12px, 1.5vw, 18px);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 12.5px);
+}
+.qtree__state{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 14px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.qtree__k{
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.qtree__text{
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.qtree__branches{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: clamp(14px, 1.6vw, 22px);
+  margin-top: 14px;
+}
+.qtree__branch{ min-width: 0; border-top: 2px solid var(--fg); padding-top: 8px; }
+.qtree__branch--choice{ border-top-color: var(--accent); }
+.qtree__branch--noul{ border-top-color: var(--rule); }
+.qtree__node{ display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.qtree__type{
+  padding: 1px 6px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.qtree__branch--choice .qtree__type{ background: var(--accent); color: var(--fg); }
+.qtree__branch--noul .qtree__type{ background: var(--rule-dark); color: var(--bg); }
+.qtree__id{ font-weight: 700; }
+.qtree__ins{ margin: 6px 0 8px; color: var(--muted); line-height: 1.45; }
+.qtree__leaves{ display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.qtree__leaf{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
+.qtree__label{ color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qtree__leaf.is-win .qtree__label{ font-weight: 700; }
+.qtree__track{
+  grid-column: 1 / -1;
+  grid-row: 2;
+  position: relative;
+  height: 8px;
+  background: var(--rule-soft);
+}
+.qtree__fill{ position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--fg); }
+.qtree__leaf.is-win .qtree__fill{ background: var(--accent); }
+.qtree__p{ color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.qtree__meta{
+  margin-top: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--rule-soft);
+  color: var(--muted);
+  font-size: clamp(10.5px, .85vw, 12px);
+  letter-spacing: .04em;
+}
+.block--dark .qtree .t-cmd{ color: inherit; }
+@media (max-width: 720px){
+  .snakegrid{ grid-template-columns: minmax(0, 1fr); }
+  .qtree__branches{ grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The board reads at its own scale: a capped column, so the readings sit
+   beside it rather than a mile away. */
+.snakeboard{ max-width: 620px; }
+
+/* THE API: the call's arguments, defined once. A mono term column, the prose
+   in the muted voice, one rule per definition. */
+.api{
+  display: grid;
+  grid-template-columns: minmax(130px, auto) minmax(0, 1fr);
+  gap: 8px 22px;
+  margin: clamp(14px, 1.6vw, 22px) 0 0;
+  padding-top: clamp(12px, 1.4vw, 18px);
+  border-top: 1px solid var(--rule);
+}
+.api dt{
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 13px);
+  letter-spacing: .02em;
+  color: var(--accent-ink);
+}
+.api dd{
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(13px, .95vw, 14.5px);
+  line-height: 1.5;
+}
+@media (max-width: 640px){
+  .api{ grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .api dd{ margin-bottom: 10px; }
+}
+
+/* THE SNAKE READOUT — the reference implementation's right pane, beside the
+   board: the four move probabilities, the executed move, the cycle-safety
+   shield, dead-end risk and food reachability, advanced frame by frame. */
+.hud{
+  border: 1px solid var(--rule-dark);
+  padding: clamp(12px, 1.4vw, 18px);
+  font-family: var(--mono);
+  font-size: clamp(11px, .9vw, 12.5px);
+  color: var(--bg);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.hud__head{ display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hud__head b{ font-weight: 700; letter-spacing: .06em; color: var(--accent); }
+.hud__status{ letter-spacing: .1em; }
+.hud__status.is-dead{ color: var(--accent); }
+.hud__sub{ margin: 4px 0 12px; color: var(--rule); font-size: .92em; }
+.hud__label{ color: var(--rule); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+.hud__moves{ display: grid; gap: 4px; }
+.hud__mrow{ display: grid; grid-template-columns: 48px minmax(0, 1fr) 40px; gap: 8px; align-items: center; color: var(--rule); }
+.hud__mrow.is-proposed{ color: var(--bg); }
+.hud__mrow.is-proposed .hud__v{ color: var(--accent); }
+.hud__dir{ letter-spacing: .04em; }
+.hud__track{ position: relative; height: 8px; background: #23221e; min-width: 24px; }
+.hud__fill{ position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--rule); }
+.hud__mrow.is-proposed .hud__fill{ background: var(--accent); }
+.hud__v{ text-align: right; color: var(--rule); }
+.hud__row{ display: grid; grid-template-columns: 108px minmax(0, 1fr) 40px; gap: 8px; align-items: center; margin-top: 6px; }
+.hud__k{ color: var(--rule); }
+.hud__row .hud__fill{ background: var(--accent); }
+.hud__exec{ display: flex; align-items: baseline; gap: 8px; margin: 12px 0 4px; }
+.hud__big{ font-weight: 700; color: var(--bg); }
+.hud__shield{ color: var(--fg); background: var(--accent); padding: 0 6px; font-size: .9em; letter-spacing: .06em; }
+.hud__counters{
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px; margin: 12px 0 0; padding-top: 10px;
+  border-top: 1px solid var(--rule-dark);
+}
+.hud__c{ display: flex; justify-content: space-between; gap: 8px; }
+.hud__c b{ color: var(--bg); font-weight: 500; }
+.hud__foot{ margin: 12px 0 0; color: var(--rule); }
+@media (max-width: 520px){
+  .hud__row{ grid-template-columns: 90px minmax(0, 1fr) 40px; }
+  .hud__counters{ grid-template-columns: minmax(0, 1fr); }
+}

@@ -98,6 +98,11 @@ type Hosts struct {
 	// Image binds the model's image preprocessing plan to the sandbox
 	// (emb.image.preprocess / emb.image.info). Nil leaves emb.image absent.
 	Image *ImageHost
+	// Config is the running script's own declared config, exposed as
+	// emb.script.config. It is opaque to the server: the host validates only
+	// shape (a mapping) at load and never interprets a key. Nil is an empty
+	// table, so `emb.script.config.x or fallback` reads the fallback.
+	Config map[string]any
 }
 
 // ImageHost exposes a model's image preprocessing to scripts. Plan resolves
@@ -154,6 +159,13 @@ func registerHosts(ls *lua.LState, h Hosts) {
 		return specialIDsHost(ls, h)
 	}))
 	emb.RawSetString("tokenize", tok)
+
+	// emb.script: the running script's own facts. `config` is the checkpoint
+	// constants declared on the script's model entry; the server never reads a
+	// key, so the namespace stays general across models.
+	scriptTab := ls.NewTable()
+	scriptTab.RawSetString("config", luaFromAny(ls, h.Config))
+	emb.RawSetString("script", scriptTab)
 	registerMath(emb, ls)
 	if h.Image != nil {
 		img := ls.NewTable()
@@ -192,6 +204,46 @@ func registerHosts(ls *lua.LState, h Hosts) {
 // float32. Input specs also accept fill for constant tensors (see
 // namedTensorFromLua). Field names are processed in sorted order so identical
 // tables map to identical tensor orders.
+// luaFromAny converts a decoded config value (YAML/JSON shape: map[string]any,
+// []any, string, bool, and the numeric types both decoders produce) into a Lua
+// value. Nil becomes an empty table so `emb.script.config` is always a table;
+// an unexpected shape degrades to its string form rather than erroring, because
+// the config is operator data the script is responsible for reading.
+func luaFromAny(ls *lua.LState, v any) lua.LValue {
+	switch t := v.(type) {
+	case nil:
+		return ls.NewTable()
+	case bool:
+		return lua.LBool(t)
+	case string:
+		return lua.LString(t)
+	case float64:
+		return lua.LNumber(t)
+	case float32:
+		return lua.LNumber(t)
+	case int:
+		return lua.LNumber(t)
+	case int64:
+		return lua.LNumber(t)
+	case uint64:
+		return lua.LNumber(t)
+	case map[string]any:
+		tab := ls.NewTable()
+		for k, nested := range t {
+			tab.RawSetString(k, luaFromAny(ls, nested))
+		}
+		return tab
+	case []any:
+		tab := ls.NewTable()
+		for i, nested := range t {
+			tab.RawSetInt(i+1, luaFromAny(ls, nested))
+		}
+		return tab
+	default:
+		return lua.LString(fmt.Sprint(t))
+	}
+}
+
 func runHost(ls *lua.LState, h Hosts) int {
 	if h.Run == nil {
 		ls.RaiseError("emb.run is unavailable for this model")

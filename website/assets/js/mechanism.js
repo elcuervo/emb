@@ -68,6 +68,13 @@ function mechGlyph(kind) {
     case 'labels': /* a distribution over candidates */
       [[10, 9], [19, 20], [28, 13], [37, 6]].forEach(([x, h], i) => bar(x, 32 - h, 6, h, i === 1 ? 'g-accent-fill' : null));
       line(8, 32, 48, 32); break;
+    case 'tree': /* a decision tree drawn, not walked: one stem, every
+                    option a marked leaf, all scored in the same pass */
+      line(9, 22, 17, 22); line(17, 22, 17, 11); line(17, 22, 17, 33);
+      line(17, 11, 30, 6); line(17, 11, 30, 16); line(17, 22, 30, 22);
+      line(17, 33, 30, 28); line(17, 33, 30, 38);
+      dot(30, 6, 2.6); dot(30, 16, 2.6); dot(30, 22, 2.6, 'g-accent-fill');
+      dot(30, 28, 2.6); dot(30, 38, 2.6); break;
     case 'passes': /* many inputs, one pass */
       for (let i = 0; i < 6; i++) { bar(9 + i * 7, 11, 4, 8); }
       bar(9, 27, 38, 4, 'g-accent-fill'); break;

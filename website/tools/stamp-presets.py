@@ -45,6 +45,8 @@ PRESETS = {
     # sandbox preset is a symlink to it, so one set of bytes is hashed and
     # shipped.
     "laya": ("laya", "scripts/laya.lua"),
+    # The Snake task preset owns its own loop (bounded episode per call).
+    "snake": ("laya", "scripts/snake.lua"),
 }
 
 SANDBOX_CONFIG = "website/repl/sandbox.yaml"

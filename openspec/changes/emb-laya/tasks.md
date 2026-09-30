@@ -18,6 +18,8 @@
 - [x] 3.3 Add a RESP round-trip parity test (serveScriptModel pattern from `internal/server/script_runtime_parity_test.go`) that mounts the vendored tiny model and asserts every `expected.json` case — single-option choice, 12-option `choice:11+` temperature clamp (0.1006→0.5), noul confidence, score, long-state truncation, `action.act_probability`, `input_tokens` — byte-matching the fixture payloads. 
 - [x] 3.4 Add `test-laya.yaml` (example config mounting the export bundle with `script_preload`) and verify boot + `EMB.EVSHA` smoke test against the tiny model inside `nix develop`. 
 - [x] 3.5 Document the operator flow in `README.md` ("Laya decision models" section: download an export from `codenamev/laya-onnx`, mount it, preload the script, call `EMB.EVSHA`), including real-checkpoint golden regeneration steps. 
+- [x] 3.6 Move the checkpoint envelope onto the model entry: declare the budgets and temperatures as the `scripts` entry's `config` (the `script-config` capability) and expose them to `laya.lua` as `emb.script.config`, so the wire call drops `ARGV[2]`. `ARGV[2]` remains a per-call override, and the vendored parity corpus still passes. 
+- [x] 3.7 Add the task-preset path alongside the generic preset: `scripts/snake.lua` (see `laya-live-loop`) is the first preset that owns a loop, proving the generic `laya.lua` and a task preset coexist without any model-specific host code.
 
 ## 4. Validation and integration
 
