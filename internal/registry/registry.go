@@ -45,6 +45,15 @@ type ModelEntry struct {
 	// ModelSize is the on-disk size of the resolved weights file.
 	ModelSize int64
 
+	// BatchDeterminism and BatchDeterminismReason report the load-time
+	// probe outcome: verdict "passed" (graph batch-invariant), "failed"
+	// (dynamic activation quantization detected → served unbatched), or
+	// "untested" (batching disabled / never loaded); reason is
+	// "dql_batch_dependence" or "probe_error" on failure, else the verdict
+	// itself. Written once by ensurePool before pool publication.
+	BatchDeterminism       string
+	BatchDeterminismReason string
+
 	once      sync.Once
 	cfg       config.ModelConfig
 	poolReady atomic.Bool
@@ -288,6 +297,13 @@ func effectiveEmbeddingSessions(cfg *config.ModelConfig) int {
 	return n
 }
 
+// newRuntimeSession creates one inference session from weights bytes. It is a
+// package var so tests can inject counting/batch-sensitive fakes and prove
+// the probe runs exactly once per model lifetime.
+var newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int) (onnx.Session, error) {
+	return onnx.NewRuntimeSessionFromBytes(data, inputNames, outputNames, dim, rank, intraOpThreads, interOpThreads, execMode)
+}
+
 func (e *ModelEntry) ensurePool() error {
 	if e.loaded.Load() {
 		return nil
@@ -359,7 +375,7 @@ func (e *ModelEntry) ensurePool() error {
 	}
 
 	sessionFactory := func() (onnx.Session, error) {
-		return onnx.NewRuntimeSessionFromBytes(
+		return newRuntimeSession(
 			modelData,
 			inputNames,
 			[]string{cfg.OutputTensor},
@@ -383,6 +399,33 @@ func (e *ModelEntry) ensurePool() error {
 	if cfg.Batching.Timeout != nil {
 		timeoutMS = *cfg.Batching.Timeout
 	}
+
+	// Batch-determinism gating (default behavior, no config flag): whenever
+	// batching would be enabled, verify the graph's output is independent of
+	// batch composition; when it is not (dynamic activation quantization),
+	// degrade to the worker pool — the deterministic single-row path the
+	// explicit timeout: 0 configures today — and log a stable, greppable
+	// line for operators and CI/deploy gates. "untested" only when batching
+	// is off by config (nothing to gate). The verdict is computed at most
+	// once per model lifetime.
+	// Batch-determinism gating (default behavior, no config flag); see the
+	// fields' comment for the verdict contract. ensurePool runs at most once
+	// per model lifetime (GetOrInit's once / the Preload path), so the probe
+	// runs once; keep it that way.
+	if timeoutMS <= 0 {
+		e.BatchDeterminism, e.BatchDeterminismReason = "untested", "untested"
+	} else if err := pipeline.ProbeBatchDeterminism(sessionFactory, tok, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling); err != nil {
+		reason := "probe_error"
+		if errors.Is(err, pipeline.ErrBatchDependence) {
+			reason = "dql_batch_dependence"
+		}
+		e.BatchDeterminism, e.BatchDeterminismReason = "failed", reason
+		log.Printf("  %s: batch determinism probe failed (%v) — degrading to unbatched (worker pool); batch_determinism=failed reason=%s", e.Name, err, reason)
+		timeoutMS = 0
+	} else {
+		e.BatchDeterminism, e.BatchDeterminismReason = "passed", "passed"
+	}
+
 	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, timeoutMS, cfg.Batching.MaxBatch, maxBatchTokens, tokenizeWorkers)
 	if err != nil {
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
