@@ -12,7 +12,7 @@
 
 - [x] 2.1 Add the `snake` preset to `website/repl/sandbox.yaml` (mounted beside `laya.lua`) and copy it into the image in `website/repl/Dockerfile`; the `just website-dev` derivation carries it through unchanged.
 - [x] 2.2 Stamp its digest into the plate's `data-emb-preset-snake` attribute via the existing `website-presets` mechanism; `just website-presets-check` passes (8 digests current).
-- [ ] 2.3 Add a preset test (the `internal/server` scripted-model pattern) proving one evaluation returns `ticks` frames, that the shield intervenes on an unsafe top-1, and that the episode is bounded. **Not done** — the episode was verified live against the vendored model (8- and 96-tick calls, shield veto observed) and by the plate's browser pass, but there is no Go test pinning it.
+- [x] 2.3 Add a preset test (`TestLayaSnakeEpisode` in `internal/server/laya_parity_test.go`): one call returns `ticks` frames with four move probabilities each, the shield's contract holds (`intervened == (proposed != executed)`), `risk`/`food` stay in [0,1], the returned board chains the next episode, a zero-tick call returns the opening board with no frames, and an unbounded request is clamped to ≤ 200.
 
 ## 3. The plate
 
@@ -29,4 +29,4 @@
 ## 5. Validation
 
 - [x] 5.1 Live pass against `just website-dev`: a played run animated to 322 ticks without stalling (score 5, length 11), `Step` showed one decision in one call (proposed `UP`, executed `DOWN`, `SHIELD`), and the command disclosure showed one episode call.
-- [ ] 5.2 Confirm the plate degrades honestly with the sandbox down and with JS off; run `just lint`, `just test`, `openspec validate laya-live-loop`. Lint/tests/validate pass; the JS-off and sandbox-down passes are still owed.
+- [x] 5.2 The plate degrades honestly with JS off (the noscript hides the rig; the types, tree and API are static and complete in the served bytes) and with the sandbox down (the state line names it and the rig draws no frame). `just lint` (0 issues), `go test ./...`, and `openspec validate` all pass.

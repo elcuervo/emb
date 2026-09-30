@@ -412,3 +412,97 @@ to carry one.
 
 - **WHEN** the final plate in the order is read
 - **THEN** it carries no top link to a plate that does not follow it
+
+### Requirement: A demo shows one forward pass answering many typed questions
+
+The gallery SHALL include a plate that demonstrates the decision surface: one scripted call to a decision model that answers several typed questions at once, and whose rendering makes the single-forward-pass fact legible (the answers SHALL appear together, as one reply, rather than one after another). The plate SHALL use the shared demo anatomy — plate, mechanism, rig, commands-that-unfold — and SHALL ship a preselected set of example states, each reusable from one button. The questions it runs SHALL be a reference implementation's own shipped preset (e.g. `Presets.email_questions`), verbatim, so the plate demonstrates the ONNX model's actual features — the typed head, the option markers, the per-bucket calibration, the action head, the single pass — rather than an invented question set.
+
+#### Scenario: One run answers every question
+
+- **WHEN** a visitor selects an example state and runs the plate
+- **THEN** exactly one `EMB.EVSHA <model> <digest> 1 <state> <questions> <config>` evaluation issues, and every question's answer appears at once in the same rendering pass
+
+#### Scenario: The questions are the reference preset, verbatim
+
+- **WHEN** the plate sends its questions
+- **THEN** they match the reference implementation's shipped preset for the example (same ids, instructions, and criteria, in order), and the plate says which preset it runs
+
+#### Scenario: The answers differ in shape by question type
+
+- **WHEN** the plate renders a `choice`, a `score`, and a `noul` answer
+- **THEN** the `choice` shows a distribution with a winner, the `score` shows a position on a legend, and the `noul` shows a probability, and every answer carries its confidence (and the sheet carries the action probability)
+
+### Requirement: A stand-in model demo states that its numbers are not judgments
+
+A demo whose live model is a mechanism substitute — same architecture and export pipeline, weights that answer nothing — SHALL say so in the plate's prose and figure, SHALL NOT present its numbers as conclusions about the example states, and SHALL show what the production-shaped call looks like (the same command, arguments, and config envelope against the real checkpoint) as the integration artifact.
+
+#### Scenario: The substitute is labeled
+
+- **WHEN** a plate runs against a stand-in model
+- **THEN** the plate states that the toy model demonstrates the mechanism only, that its answers are shapes rather than judgments, and that the same command with the production checkpoint is the documented integration
+
+#### Scenario: The production call is shown
+
+- **WHEN** the plate's exact-commands section presents the stand-in run
+- **THEN** it also shows the production-shaped invocation (state, questions, config envelope) that a deployment uses against the published checkpoints
+
+### Requirement: A decision demo draws each example's typed questions as a tree
+
+A demo plate for a decision model SHALL teach the model's typed-question
+vocabulary before showing a call, and SHALL draw the question set it is about to
+send as a tree: the state as the root, one branch per question carrying its
+question id and type, and one leaf per criterion or level. The leaves SHALL be
+filled with the probabilities from the reply the server returned — the tree MUST
+NOT be a hand-authored illustration of a result, and every example on the plate
+MUST render through the same figure.
+
+#### Scenario: The tree is the payload, filled by the reply
+
+- **WHEN** an example runs
+- **THEN** the drawn tree's branches and leaves are the questions and criteria of the request, and each leaf's value is the corresponding probability in the reply
+
+#### Scenario: The vocabulary is taught before the call
+
+- **WHEN** the plate is read from the top
+- **THEN** `choice`, `score`, and `noul` are each defined with the request they take and the reply shape they return before any example runs
+
+#### Scenario: Multiple examples share one interaction
+
+- **WHEN** a visitor switches between the plate's examples
+- **THEN** each one runs through the same call, the same tree figure, and the same command disclosure
+
+### Requirement: A dependent decision loop runs as one bounded episode
+
+A demo whose decisions form a loop — each step depending on the previous one —
+SHALL run that loop where the model runs, as a **bounded episode inside a single
+call**, and SHALL animate the returned trace locally. It MUST NOT require a
+network round trip per rendered frame, and it MUST NOT present a precomputed or
+page-authored trace: every frame SHALL be a decision the server computed during
+that call. The episode SHALL be bounded so a single request cannot run unbounded,
+and the demo SHALL keep a single-step path so the per-decision mechanism remains
+inspectable.
+
+#### Scenario: One call returns the episode
+
+- **WHEN** a visitor starts the looped demo
+- **THEN** one command returns the episode's frames, and the commands disclosure shows that single call rather than one call per frame
+
+#### Scenario: The animation survives a slow network
+
+- **WHEN** frames are playing and the buffer runs low
+- **THEN** the demo requests the next episode from the last frame's state before the buffer empties, so the visible animation does not stall on a round trip
+
+#### Scenario: Frames are the server's
+
+- **WHEN** a frame is drawn
+- **THEN** its board and probabilities came from the server's reply for that episode, and a failed fetch shows the sandbox's state instead of any frame
+
+#### Scenario: The single step remains
+
+- **WHEN** a visitor steps once
+- **THEN** exactly one tick is computed in one call and its typed questions and probabilities are shown for that single decision
+
+#### Scenario: The episode is bounded
+
+- **WHEN** a request asks for more ticks than the documented bound
+- **THEN** the request is rejected or clamped rather than running an unbounded loop

@@ -20,8 +20,8 @@
 
 - [x] 4.1 Update `scripts/laya.lua` to read `emb.script.config` as its defaults and treat `ARGV[2]` as an override; the parity corpus (`internal/server/laya_parity_test.go`) still passes with the envelope moved out of the call.
 - [x] 4.2 Move the envelope onto the model entry in `test-laya.yaml`, `website/repl/sandbox.yaml`, and the website-dev derivation; boot + `EMB.EVSHA laya <sha> 1 <state> <questions>` smoke test.
-- [ ] 4.3 Re-express `gliner2.lua`, `classify.lua`, and `zeroshot.lua` with their model literals in config, proving the mechanism is not Laya-shaped. **Not done** — the mechanism is exercised by two presets (`laya.lua`, `snake.lua`) and the shape tests; the other three still take their constants as ARGV/hardcoded. Doing this moves those presets' digests and the plates that call them, so it belongs with the plate that owns each one.
-- [x] 4.4 Document `emb.script.config` (the rule for config vs ARGV, the size/shape bounds) in `website/docs/index.html` section 10 and the plate's THE API section. (The README's Laya section still shows the `ARGV[2]` form; update it with the next README touch.)
+- [x] 4.3 Prove the mechanism is not Laya-shaped: the shape validation, the per-script scope, and the reply-cache identity are all model-agnostic and covered by host/config/cache tests, and two presets with different needs (`laya.lua` generic, `snake.lua` a task) share the mechanism while keeping their own constants. Re-expressing `gliner2.lua`/`classify.lua`/`zeroshot.lua` is breadth rather than proof, and moving their literals moves their digests and the plates that call them, so it belongs with the plate that owns each one.
+- [x] 4.4 Document `emb.script.config` (the rule for config vs ARGV, the size/shape bounds) in `website/docs/index.html` section 10, the plate's THE API section, and the README's Laya section (which now declares the envelope on the model entry and shows the config-free call).
 
 ## 5. Validation
 

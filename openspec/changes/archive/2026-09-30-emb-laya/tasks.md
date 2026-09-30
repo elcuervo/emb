@@ -24,7 +24,7 @@
 ## 4. Validation and integration
 
 - [x] 4.1 Run `just lint`, `just test`, and `openspec validate emb-laya`; fix any failures. 
-- [ ] 4.2 (Optional, needs a downloaded checkpoint) Regenerate golden answers from a real ModernBERT/mmBERT export and record any daulet/tokenizers divergence as a follow-up note.
+- [x] 4.2 (Optional, needs a downloaded checkpoint) Regenerate golden answers from a real ModernBERT/mmBERT export and record any daulet/tokenizers divergence. Declined for this change: it needs an ~820MB checkpoint download and produces a corpus that is not CI-default. The vendored corpus pins the mechanism and the README documents the operator flow.
 
 ## 5. Spec repair (pre-existing defect)
 

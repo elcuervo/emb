@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -355,5 +358,153 @@ func TestLayaValidationErrors(t *testing.T) {
 		if tok.kind != "error" {
 			t.Fatalf("questions %s: expected an error, got %+v", questions, tok)
 		}
+	}
+}
+
+// redisCmdBig reads a bulk reply of any size. The shared redisCmd helper reads
+// one 4 KiB chunk (fine for every other reply in these tests), but an episode's
+// frames are tens of kilobytes.
+func redisCmdBig(t *testing.T, addr string, args ...string) string {
+	t.Helper()
+	c := dial(t, addr)
+	defer c.Close()
+	if _, err := c.Write(respCommand(args...)); err != nil {
+		t.Fatal(err)
+	}
+	r := bufio.NewReader(c)
+	header, err := r.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	if header[0] == '-' {
+		t.Fatalf("error reply: %s", strings.TrimRight(header, "\r\n"))
+	}
+	if header[0] != '$' {
+		t.Fatalf("unexpected bulk header %q", header)
+	}
+	n, err := strconv.Atoi(strings.TrimRight(header[1:], "\r\n"))
+	if err != nil {
+		t.Fatalf("bad bulk length %q", header)
+	}
+	body := make([]byte, n)
+	if _, err := io.ReadFull(r, body); err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+// TestLayaSnakeEpisode pins the task preset's loop: one call returns a bounded
+// episode of frames, each carrying the model's probabilities and the shield's
+// result, and the returned board chains into the next episode. The envelope
+// rides on the model entry, so the calls carry no config argument -- the wire
+// the decision plate uses.
+func TestLayaSnakeEpisode(t *testing.T) {
+	addr, srv := serveLaya(t, "")
+
+	src, err := os.ReadFile("../../scripts/snake.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(layaConfigJSON(t)), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	sha, err := srv.PreloadScriptConfig("laya-tiny", string(src), cfg)
+	if err != nil {
+		t.Fatalf("preloading snake.lua: %v", err)
+	}
+
+	episode := func(t *testing.T, ticks int, board any) map[string]any {
+		t.Helper()
+		request, err := json.Marshal(map[string]any{
+			"ticks": ticks, "board": board, "width": 20, "height": 14, "seed": 7,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tok := redisCmd(t, addr, "EMB.EVSHA", "laya-tiny", sha, "1", string(request))
+		if tok.kind != "bulk" {
+			t.Fatalf("EVSHA reply = %+v", tok)
+		}
+		var out map[string]any
+		if err := json.Unmarshal([]byte(tok.val.(string)), &out); err != nil {
+			t.Fatalf("parsing reply %v: %v", tok.val, err)
+		}
+		return out
+	}
+
+	dirs := map[string]bool{"UP": true, "DOWN": true, "LEFT": true, "RIGHT": true}
+	first := episode(t, 8, nil)
+	frames, ok := first["frames"].([]any)
+	if !ok || len(frames) != 8 {
+		t.Fatalf("episode returned %v frames, want 8", first["frames"])
+	}
+	for i, raw := range frames {
+		frame, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("frame %d is not an object", i)
+		}
+		probs, ok := frame["probs"].(map[string]any)
+		if !ok || len(probs) != 4 {
+			t.Fatalf("frame %d: move probabilities = %v, want four", i, frame["probs"])
+		}
+		sum := 0.0
+		for dir, p := range probs {
+			if !dirs[dir] {
+				t.Fatalf("frame %d: unknown direction %q", i, dir)
+			}
+			sum += p.(float64)
+		}
+		if math.Abs(sum-1) > 1e-3 {
+			t.Fatalf("frame %d: move probabilities sum to %v", i, sum)
+		}
+		proposed, executed := frame["proposed"].(string), frame["executed"].(string)
+		if !dirs[proposed] || !dirs[executed] {
+			t.Fatalf("frame %d: proposed %q executed %q", i, proposed, executed)
+		}
+		// The shield's contract: the executed move differs from the model's own
+		// pick exactly when the shield intervened.
+		if intervened := frame["intervened"].(bool); intervened != (proposed != executed) {
+			t.Fatalf("frame %d: intervened=%v but proposed=%q executed=%q", i, intervened, proposed, executed)
+		}
+		for _, key := range []string{"risk", "food"} {
+			v := frame[key].(float64)
+			if v < 0 || v > 1 {
+				t.Fatalf("frame %d: %s = %v, want [0,1]", i, key, v)
+			}
+		}
+	}
+	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 {
+		t.Fatalf("usage = %v", usage)
+	}
+
+	// The returned board chains: a one-tick episode resumes from it.
+	board := first["board"].(map[string]any)
+	next := episode(t, 1, board)["board"].(map[string]any)
+	if next["ticks"].(float64) != board["ticks"].(float64)+1 {
+		t.Fatalf("chained board ticks = %v, want %v", next["ticks"], board["ticks"].(float64)+1)
+	}
+
+	// An unbounded request is clamped to the preset's ceiling rather than run.
+	// The reply is tens of kilobytes, so it needs the full-bulk reader.
+	var bounded map[string]any
+	if err := json.Unmarshal([]byte(redisCmdBig(t, addr, "EMB.EVSHA", "laya-tiny", sha, "1",
+		`{"ticks": 9999, "width": 20, "height": 14, "seed": 7}`)), &bounded); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(bounded["frames"].([]any)); got > 200 {
+		t.Fatalf("episode frames = %d, want <= 200", got)
+	}
+
+	// A zero-tick call returns the opening board and no frames (the plate's
+	// opening render); an empty Lua table encodes as `{}`, so accept either.
+	opening := episode(t, 0, nil)
+	switch f := opening["frames"].(type) {
+	case nil, []any, map[string]any:
+	default:
+		t.Fatalf("unexpected frames type %T", f)
+	}
+	if _, ok := opening["board"].(map[string]any); !ok {
+		t.Fatalf("zero-tick episode returned no board: %v", opening)
 	}
 }

@@ -150,7 +150,12 @@ models:
     tokenizer: ./models/laya-english/tokenizer/tokenizer.json
     script_preload: true
     scripts:
-      - ./scripts/laya.lua
+      - path: ./scripts/laya.lua
+        config:                 # the checkpoint's envelope, read as emb.script.config
+          max_len: 64
+          head_max_len: 32
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options: { "choice:2": 1.9 }
 ```
 
 ```bash
@@ -158,13 +163,12 @@ models:
 EMBSHA=$(redis-cli -p 6379 EMB.SCRIPT LOAD laya "$(cat scripts/laya.lua)")
 redis-cli -p 6379 EMB.EVSHA laya "$EMBSHA" 1 \
   '"we were charged twice for the invoice please refund"' \
-  '{"department": {"type": "choice", "instructions": "which team", "criteria": {"billing": "invoices, refunds", "technical": "bugs, outages", "other": null}}}' \
-  '{"max_len": 64, "head_max_len": 32, "temperature": [1.6, 1.25, 1.98], "temperature_by_options": {"choice:2": 1.9}}'
+  '{"department": {"type": "choice", "instructions": "which team", "criteria": {"billing": "invoices, refunds", "technical": "bugs, outages", "other": null}}}'
 # → {"answers":{"department":{"action":{"act_probability":0.3582},"choice":"technical","confidence":0,
 #     "probabilities":{"billing":0.3333,"other":0.33,"technical":0.3367},"type":"choice"}},
 #     "usage":{"input_tokens":32,"output_tokens":0}}
 # (The production checkpoints take max_len 512 / head_max_len 192 — 1024 / 192 for
-# multilingual — and answer meaningfully; the same command shape carries them.)
+# multilingual — and answer meaningfully; the envelope on the model entry carries them.)
 ```
 
 Every question in a request is answered in one forward pass. The reply is a JSON bulk with one answer per question id, the gem's payload shapes, and `usage.input_tokens` accounting.
@@ -181,9 +185,11 @@ The reference implementations' own question sets are the canonical starting poin
 
 - `KEYS[1]` is the state, serialized Python-style — a plain string passes through; a JSON object/array must use spaces after every comma and colon (`{"from": "a@b", "body": "x"}`, not `{"from":"a@b","body":"x"}`) because the checkpoints were trained on exactly those strings.
 - `ARGV[1]` is the questions JSON; criteria label order is significant (marker order maps to label order), so criteria objects are sent as JSON objects (not pre-sorted).
-- `ARGV[2]` (optional) is the checkpoint's config envelope: `max_len`, `head_max_len`, `min_seq`, `min_markers`, `temperature` (choice/score/noul), `temperature_by_options` (bucket → value, buckets `2`/`3-5`/`6-10`/`11+`). Shell it into a wrapper — a Ruby client or `redis-cli` one-liner — or bake the defaults for your checkpoint. Calibration clamps follow the gem: temperatures outside [0.5, 5.0] clamp, non-numeric values answer with 1.0.
+- `ARGV[2]` (optional) overrides the checkpoint's config envelope for one call. The envelope itself — `max_len`, `head_max_len`, `min_seq`, `min_markers`, `temperature` (choice/score/noul), `temperature_by_options` (bucket → value, buckets `2`/`3-5`/`6-10`/`11+`) — is declared once on the model entry's `scripts` config and read by the preset as `emb.script.config`, so a client sends only the state and the questions. Calibration clamps follow the gem: temperatures outside [0.5, 5.0] clamp, non-numeric values answer with 1.0.
 
 `scripts/laya.lua` ports the gem's `build_sequence`, marker accounting, temperature calibration, softmax/confidence and answer assembly; the vendored corpus (`testdata/laya/expected.json`) pins it byte-for-byte over the wire (`TestLayaParityCorpus`). The decision graph is a scripted model like GLiNER: there is no new command — `EMB.EVAL`/`EMB.EVSHA` and the script reply cache (keyed on state + questions + config) do the work. `test-laya.yaml` is the running example, with the vendored tiny export in `testdata/laya/`.
+
+A decision *loop* runs where the model runs. `scripts/snake.lua` is the worked example: it owns the board, a Hamiltonian safety planner and three typed questions, and one `EMB.EVSHA laya <snake-sha> 1 '{"ticks": 96, "board": null}'` returns 96 frames — each with the move probabilities and the shielded result — plus the board to resume from. The host learns nothing about Snake; a second task keeps its own rules the same way.
 
 ## Development
 
