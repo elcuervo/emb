@@ -58,3 +58,22 @@ displayed.
 
 - **WHEN** the readout's bar labels are drawn
 - **THEN** each label stays on one line and its bar and value remain aligned to it
+
+### Requirement: A typed-question demo states each question's chosen answer
+
+A demo that answers typed questions SHALL state the chosen answer for each
+question alongside that question's distribution, leading with the decision the way
+a looped demo leads with its executed move. The chosen answer SHALL be the argmax
+of the reply's distribution for that question, and the marked leaf MUST be the one
+that answer selects. The example set SHALL cover the plate's question vocabulary
+with distinct inputs rather than one repeated shape.
+
+#### Scenario: Each question names its decision
+
+- **WHEN** a typed-question reply is shown
+- **THEN** every question names the option the reply chose, and that option is the marked leaf
+
+#### Scenario: The set covers the vocabulary
+
+- **WHEN** the typed-question examples are listed
+- **THEN** they exercise different subjects, so a reader sees the mechanism over varied input rather than one repeated ticket

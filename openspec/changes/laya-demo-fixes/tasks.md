@@ -26,3 +26,9 @@
 - [x] 5.1 Restamp the preset digests with `python3 website/tools/stamp-presets.py`; verify `--check` exits 0
 - [x] 5.2 Run `just lint`, `just verify-harness`, and the focused Go suites inside `nix develop`; verify all pass
 - [x] 5.3 Drive the local rig end to end — step and play Snake, step and play Pac-Man, switch every Inbox ticket and Quickstart — and verify no duplicate controls, no wrapped rows, and no console errors
+
+## 6. Inbox decisions, variety, and aligned bars
+
+- [x] 6.1 Expand the Inbox example set so it covers the plate's question vocabulary with distinct tickets; verify the plate lists the added tickets
+- [x] 6.2 Lead the typed-question demos with a `decided` strip (argmax per question, matching the marked leaf), mirroring the loops' DECIDED line; verify every question names its chosen option
+- [x] 6.3 Share one grid for the readout bars so `ghost near` / `routes clear` (and Snake's pair) start at the same x; verify the bars align in the browser

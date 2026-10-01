@@ -3475,6 +3475,15 @@ html.js.is-ready .hero__prose{
   font-family: var(--mono);
   font-size: clamp(11.5px, .95vw, 12.5px);
 }
+.qtree__decided{
+  display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: baseline;
+  padding-bottom: 10px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.qtree__decidedk{ color: var(--accent-ink); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+.qtree__chip{ display: inline-flex; gap: 6px; align-items: baseline; }
+.qtree__chip i{ color: var(--muted); font-style: normal; }
+.qtree__chip b{ color: var(--fg); font-weight: 700; }
 .qtree__state{
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -3609,7 +3618,10 @@ html.js.is-ready .hero__prose{
 .hud__fill{ position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--rule); }
 .hud__mrow.is-decided .hud__fill{ background: var(--accent); }
 .hud__v{ text-align: right; color: var(--rule); }
-.hud__row{ display: grid; grid-template-columns: max-content minmax(24px, 1fr) 40px; gap: 8px; align-items: center; margin-top: 6px; }
+/* One grid for the readout bars, so the label column is shared and the bars
+   start at the same x however long a label is. */
+.hud__bars{ display: grid; grid-template-columns: max-content minmax(24px, 1fr) 40px; gap: 4px 8px; align-items: center; margin-top: 6px; }
+.hud__row{ display: contents; }
 .hud__k{ color: var(--rule); white-space: nowrap; }
 .hud__row .hud__fill{ background: var(--accent); }
 /* The decision leads: the executed move in the big voice, the model's proposal

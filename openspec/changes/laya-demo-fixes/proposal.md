@@ -23,6 +23,10 @@ they show and how they name the decision.
   probabilities over the **legal** moves only (Snake joins Pac-Man), the HUD leads
   with the move that was actually executed, and the model's proposal is named
   beside it rather than being the highlight.
+- **The typed-question demos show their decisions.** Inbox and Quickstart lead with
+  each question's chosen answer (the argmax of its distribution, matching the
+  marked leaf), and the Inbox set covers the question vocabulary with varied
+  tickets instead of one repeated shape.
 - **Consistent readout and copy.** Both loops render the same figure through one
   builder; the blurbs, caption and labels are shortened to decisional copy.
 

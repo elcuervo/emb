@@ -377,13 +377,42 @@ function setState(next, message) {
  * reply the leaves are empty tracks; after it they carry the model's own
  * probabilities. One tween grows every leaf together -- the answers arrived
  * together. */
+// The question's chosen option: the argmax of the reply's distribution. The
+// loops lead with their executed move; the typed-question demos lead with this
+// so every example shows a decision, not only a distribution.
+function decidedFor(q, ans) {
+  if (!ans) { return null; }
+  if (q.type === 'choice') {
+    const probs = ans.probabilities || {};
+    let best = null;
+    Object.keys(q.criteria || {}).forEach((label) => {
+      if (best === null || Number(probs[label] || 0) > Number(probs[best] || 0)) { best = label; }
+    });
+    return best === null ? null : { value: best, label: best };
+  }
+  if (q.type === 'score') {
+    const probs = ans.probabilities || {};
+    let best = null;
+    (q.criteria || []).forEach((level, i) => {
+      if (best === null || Number(probs[String(i)] || 0) > Number(probs[String(best)] || 0)) { best = i; }
+    });
+    if (best === null) { return null; }
+    return { value: String(best), label: best + ' · ' + q.criteria[best] };
+  }
+  const p = ans.noul != null ? Number(ans.noul) : null;
+  if (p === null) { return null; }
+  const value = p >= 0.5 ? 'true' : 'false';
+  return { value: value, label: value };
+}
+
 function leavesFor(q, ans) {
+  const decided = decidedFor(q, ans);
   if (q.type === 'choice') {
     const probs = (ans && ans.probabilities) || {};
     return Object.keys(q.criteria).map((label) => ({
       label: label,
       p: probs[label] != null ? Number(probs[label]) : null,
-      win: ans ? String(ans.choice) === label : false,
+      win: decided ? decided.value === label : false,
     }));
   }
   if (q.type === 'score') {
@@ -391,13 +420,13 @@ function leavesFor(q, ans) {
     return (q.criteria || []).map((level, i) => ({
       label: i + ' · ' + level,
       p: probs[String(i)] != null ? Number(probs[String(i)]) : null,
-      win: ans ? Math.round(Number(ans.score)) === i : false,
+      win: decided ? decided.value === String(i) : false,
     }));
   }
   const p = ans && ans.noul != null ? Number(ans.noul) : null;
   return [
-    { label: 'false', p: p == null ? null : 1 - p, win: false },
-    { label: 'true', p: p, win: false },
+    { label: 'false', p: p == null ? null : 1 - p, win: decided ? decided.value === 'false' : false },
+    { label: 'true', p: p, win: decided ? decided.value === 'true' : false },
   ];
 }
 
@@ -439,13 +468,27 @@ function renderTree(state, questions, answers) {
     branches.appendChild(branch);
   });
 
-  const inner = el('div', { class: 'qtree__inner' }, [
+  const children = [];
+  if (answers) {
+    children.push(el('div', { class: 'qtree__decided' }, [
+      el('span', { class: 'qtree__decidedk', text: 'decided' }),
+      ...Object.keys(questions).map((id) => {
+        const d = decidedFor(questions[id], answers[id]);
+        return el('span', { class: 'qtree__chip' }, [
+          el('i', { text: id }),
+          el('b', { text: d ? d.label : '—' }),
+        ]);
+      }),
+    ]));
+  }
+  children.push(
     el('div', { class: 'qtree__state' }, [
       el('span', { class: 'qtree__k', text: 'state' }),
       el('p', { class: 'qtree__text', text: state }),
     ]),
     branches,
-  ]);
+  );
+  const inner = el('div', { class: 'qtree__inner' }, children);
   return { node: inner, groups };
 }
 
@@ -615,8 +658,16 @@ const INBOX_TICKETS = [
     state: '{"from": "hello@world", "subject": "duplicate charge on invoice", "body": "we were charged twice for the invoice please refund the money back today"}' },
   { name: 'refund my first month', meta: 'refund · churn',
     state: '{"from": "b.winters@example.com", "subject": "refund my first month", "body": "please refund the first month or i am cancelling today"}' },
+  { name: 'prod cluster down after deploy', meta: 'technical · outage',
+    state: '{"from": "ops@startup.io", "subject": "prod cluster down after deploy", "body": "after the latest deploy our production cluster returns 502 for every request and customers are leaving"}' },
+  { name: 'pricing for fifty seats', meta: 'sales · expansion',
+    state: '{"from": "buyer@corp.com", "subject": "pricing for fifty seats", "body": "we are evaluating you against two vendors, can you send enterprise pricing for fifty seats and a demo this week"}' },
   { name: 'confirm your password', meta: 'phishing',
     state: '{"from": "security@verification.example", "subject": "confirm your password", "body": "your account was locked, send the password to unlock it immediately"}' },
+  { name: 'someone logged into my account', meta: 'security · compromise',
+    state: '{"from": "user@gmail.com", "subject": "someone logged into my account", "body": "i got a login alert from a country i have never visited and my account looks compromised, please help"}' },
+  { name: 'missing march payslip', meta: 'hr · payroll',
+    state: '{"from": "ana@company.com", "subject": "missing march payslip", "body": "my march payslip never arrived and the payroll portal shows nothing, i have a mortgage due friday"}' },
   { name: 'nos cobraron dos veces', meta: 'español · multilingual route',
     state: '{"from": "cliente@ejemplo.com", "subject": "nos cobraron dos veces", "body": "se nos cobraron dos veces la factura de marzo, pedimos el reembolso hoy"}' },
 ];
@@ -730,7 +781,7 @@ function hudBuild(refs, bigRows, bars, foot) {
     proposedLine,
     el('div', { class: 'hud__label', text: 'model probabilities · legal moves' }),
     moveBars,
-    ...bars.map(([label, key]) => bar(label, key)),
+    el('div', { class: 'hud__bars' }, bars.map(([label, key]) => bar(label, key))),
     meters,
     el('p', { class: 'hud__foot', text: foot }),
   ]);
