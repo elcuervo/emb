@@ -148,3 +148,37 @@ func TestConfigDigestStableAndEmpty(t *testing.T) {
 		t.Fatal("a changed config must change the digest")
 	}
 }
+
+// TestEncodeReplyNullAndError covers the reply shapes the live writer tests
+// skip: a cached null (nil / false) and an error table must serialize to the
+// same bytes the live connection writes, since EncodeReply's output is replayed
+// verbatim from the script reply cache.
+func TestEncodeReplyNullAndError(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"nil", `return nil`, "$-1\r\n"},
+		{"false", `return false`, "$-1\r\n"},
+		{"error", `return {err = "boom"}`, "-boom\r\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := Eval(tc.src, nil, nil, EvalOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := EncodeReply(v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(encoded) != tc.want {
+				t.Fatalf("EncodeReply = %q, want %q", encoded, tc.want)
+			}
+			buf := &respBuffer{}
+			if err := Convert(buf, v); err != nil {
+				t.Fatal(err)
+			}
+			if buf.b.String() != tc.want {
+				t.Fatalf("Convert = %q, want %q", buf.b.String(), tc.want)
+			}
+		})
+	}
+}

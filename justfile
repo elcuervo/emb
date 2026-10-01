@@ -42,10 +42,17 @@ deadcode:
     fi; \
     echo "✓ no unreachable production functions outside deadcode-allow.txt"
 
-# Per-package statement coverage plus an overall total (visibility, no gate).
+# Cross-package statement coverage: per-package plus the production total
+# (excluding cmd/* and bench/*) and the whole-repository total. Measurement
+# and floors are documented in docs/testing.md; the gate lives in
+# coverage-floors.txt. See `just coverage-gate` to enforce it.
 cover:
-    @go test -coverprofile=/tmp/emb-cover.out -covermode=atomic ./... 2>/dev/null | grep -E "coverage:" | sort
-    @go tool cover -func=/tmp/emb-cover.out | tail -1
+    @bash scripts/coverage.sh report
+
+# Enforce coverage-floors.txt: fail when a production package is below its
+# recorded floor or has no recorded floor.
+coverage-gate:
+    @bash scripts/coverage.sh gate
 
 # Run all benchmarks (no baseline comparison)
 bench:

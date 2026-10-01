@@ -4,17 +4,13 @@ import (
 	"testing"
 
 	"github.com/elcuervo/emb/internal/config"
-	"github.com/elcuervo/emb/internal/onnx"
 )
 
 // scriptFixture loads the real minilm model with the given scripted config;
 // skips when the model files are absent (run: just download-model).
 func scriptFixture(t *testing.T, workers int, preload bool) *ModelEntry {
 	t.Helper()
-	if err := onnx.InitEnvironment(""); err != nil {
-		t.Skipf("onnx runtime unavailable: %v", err)
-	}
-	t.Cleanup(func() { _ = onnx.DestroyEnvironment() })
+	initORT(t)
 
 	entry, err := LoadModel(config.ModelConfig{
 		ONNX:          "../../models/minilm/model.onnx",
@@ -29,9 +25,9 @@ func scriptFixture(t *testing.T, workers int, preload bool) *ModelEntry {
 	if err != nil {
 		t.Skipf("test model not present: %v (run: just download-model)", err)
 	}
-	// Close any scripted sessions/tokenizer the test opens before the ONNX
-	// environment is destroyed (cleanups run LIFO: registering this after
-	// DestroyEnvironment means it runs first).
+	// Close any scripted sessions/tokenizer the test opens. The shared ONNX
+	// environment is initialized once for the binary (initORT) and never torn
+	// down, so this only releases the model's own resources.
 	t.Cleanup(func() {
 		if entry.scriptRes == nil {
 			return

@@ -55,6 +55,8 @@ type respOps interface {
 	WriteBulk([]byte)
 	WriteString(string)
 	WriteInt(int)
+	WriteInt64(int64)
+	WriteUint64(uint64)
 	WriteNull()
 	WriteArray(int)
 	WriteDouble(float64)
@@ -66,6 +68,7 @@ type respOps interface {
 	WriteAttribute(int)
 	WriteVerbatim(string, string)
 	WriteBlobError(string)
+	WriteAny(any)
 }
 
 func respText(ver int, op func(respOps)) string {
@@ -98,6 +101,8 @@ func TestCountingBytesExact(t *testing.T) {
 		{"blob error RESP3", 3, func(c respOps) { c.WriteBlobError("boom") }, len("!4\r\nboom\r\n")},
 		{"bulk RESP2", 2, func(c respOps) { c.WriteBulk([]byte{1, 2, 3, 4, 5}) }, len("$5\r\n\x01\x02\x03\x04\x05\r\n")},
 		{"int RESP2", 2, func(c respOps) { c.WriteInt(1234) }, len(":1234\r\n")},
+		{"int64 negative RESP2", 2, func(c respOps) { c.WriteInt64(-1234567890123) }, len(":-1234567890123\r\n")},
+		{"uint64 max RESP2", 2, func(c respOps) { c.WriteUint64(18446744073709551615) }, len(":18446744073709551615\r\n")},
 		{"array header RESP2", 2, func(c respOps) { c.WriteArray(3) }, len("*3\r\n")},
 		{"string RESP2", 2, func(c respOps) { c.WriteString("hi") }, len("+hi\r\n")},
 		{"verbatim RESP2 stays bulk-style sized", 2, func(c respOps) { c.WriteVerbatim("txt", "hello") }, len("=9\r\ntxt:hello\r\n")},
@@ -124,12 +129,19 @@ func TestCountingMatchesWireForAll(t *testing.T) {
 			"bulk":     func(c respOps) { c.WriteBulk([]byte{1, 2, 3}) },
 			"string":   func(c respOps) { c.WriteString("ok") },
 			"int":      func(c respOps) { c.WriteInt(9) },
+			"int64":    func(c respOps) { c.WriteInt64(-9007199254740993) },
+			"uint64":   func(c respOps) { c.WriteUint64(18446744073709551615) },
 			"null":     func(c respOps) { c.WriteNull() },
 			"array2":   func(c respOps) { c.WriteArray(2) },
 			"double":   func(c respOps) { c.WriteDouble(1.5) },
+			"inf":      func(c respOps) { c.WriteDouble(math.Inf(1)) },
+			"neg_inf":  func(c respOps) { c.WriteDouble(math.Inf(-1)) },
+			"nan":      func(c respOps) { c.WriteDouble(math.NaN()) },
 			"map":      func(c respOps) { c.WriteMap(3) },
 			"verbatim": func(c respOps) { c.WriteVerbatim("txt", "x") },
 			"bloberr":  func(c respOps) { c.WriteBlobError("e") },
+			"any_int":  func(c respOps) { c.WriteAny(int64(42)) },
+			"any_str":  func(c respOps) { c.WriteAny("hi") },
 		}
 		for name, op := range ops {
 			f := &fakeConn{ver: ver}

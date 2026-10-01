@@ -54,10 +54,11 @@ jobs:
           CGO_ENABLED: "0"
 
       - name: Test (CGo)
-        run: go test -short ./internal/pipeline/... ./internal/registry/...
+        run: go test -short ./internal/... ./website/repl/
         env:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
+          LD_LIBRARY_PATH: /opt/onnxruntime/lib
 
   build-linux-amd64:
     needs: [test, test-gems]

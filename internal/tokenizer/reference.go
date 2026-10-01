@@ -25,28 +25,11 @@ func NewTokenizer(path string, padOutput bool) (*RefTokenizer, error) {
 }
 
 func (t *RefTokenizer) Encode(text string, maxLength int) ([]int64, []int64, error) {
-	enc := t.tk.EncodeWithOptions(text, true, tokenizers.WithReturnAttentionMask())
+	enc := t.tk.EncodeWithOptions(text, true,
+		tokenizers.WithReturnAttentionMask(),
+		tokenizers.WithReturnSpecialTokensMask())
 	ids := enc.IDs
 	mask := enc.AttentionMask
-
-	if t.padOutput {
-		realLen := 0
-		for _, m := range mask {
-			if m == 1 {
-				realLen++
-			}
-		}
-		if realLen > maxLength {
-			realLen = maxLength
-		}
-		inputIDs := make([]int64, maxLength)
-		attnMask := make([]int64, maxLength)
-		for i := 0; i < realLen; i++ {
-			inputIDs[i] = int64(ids[i])
-			attnMask[i] = 1
-		}
-		return inputIDs, attnMask, nil
-	}
 
 	realLen := 0
 	for _, m := range mask {
@@ -55,18 +38,36 @@ func (t *RefTokenizer) Encode(text string, maxLength int) ([]int64, []int64, err
 		}
 	}
 
-	ids = ids[:realLen]
-	if len(ids) > maxLength {
-		ids = ids[:maxLength]
+	// Real tokens occupy the leading window (right-padding trimmed); keep
+	// special tokens (e.g. the trailing <eos> a post-processor appends) in
+	// place when truncating, matching the reference truncation semantics.
+	real := make([]int64, realLen)
+	for i := 0; i < realLen; i++ {
+		real[i] = int64(ids[i])
+	}
+	real = truncatePreservingSpecialTokens(real, compactSpecials(enc.SpecialTokensMask, realLen), maxLength)
+
+	if t.padOutput {
+		// Truncation preserves special tokens even when they alone exceed
+		// maxLength, but the padded output is allocated to exactly maxLength:
+		// reject the impossible request instead of indexing past the buffer.
+		if len(real) > maxLength {
+			return nil, nil, fmt.Errorf("tokenizer produced %d tokens (including special tokens) for max_length %d", len(real), maxLength)
+		}
+		inputIDs := make([]int64, maxLength)
+		attnMask := make([]int64, maxLength)
+		for i, id := range real {
+			inputIDs[i] = id
+			attnMask[i] = 1
+		}
+		return inputIDs, attnMask, nil
 	}
 
-	inputIDs := make([]int64, len(ids))
-	attnMask := make([]int64, len(ids))
-	for i, id := range ids {
-		inputIDs[i] = int64(id)
+	attnMask := make([]int64, len(real))
+	for i := range real {
 		attnMask[i] = 1
 	}
-	return inputIDs, attnMask, nil
+	return real, attnMask, nil
 }
 
 func (t *RefTokenizer) Close() error {

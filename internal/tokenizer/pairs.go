@@ -11,7 +11,10 @@ import (
 // kept ids, a ones mask, and each token's byte span into text. Offsets of
 // added/special tokens are typically [0, 0); scripts use the real-token spans.
 func (t *RefTokenizer) EncodeOffsets(text string, maxLength int) ([]int64, []int64, [][2]int, error) {
-	enc := t.tk.EncodeWithOptions(text, true, tokenizers.WithReturnOffsets(), tokenizers.WithReturnAttentionMask())
+	enc := t.tk.EncodeWithOptions(text, true,
+		tokenizers.WithReturnOffsets(),
+		tokenizers.WithReturnAttentionMask(),
+		tokenizers.WithReturnSpecialTokensMask())
 	return slicesFromEncoding(&enc, maxLength)
 }
 
@@ -111,7 +114,18 @@ func slicesFromEncoding(enc *tokenizers.Encoding, maxLength int) ([]int64, []int
 		return nil, nil, nil, fmt.Errorf("encode produced no tokens")
 	}
 	if maxLength > 0 && len(ids) > maxLength {
-		ids, off = truncatePairPart(ids, off, maxLength)
+		// Truncate like the reference stacks do: keep special tokens in
+		// place, drop content, and keep offsets cardinally aligned.
+		keep := specialKeepIndexes(len(ids), compactSpecials(enc.SpecialTokensMask, len(ids)), maxLength)
+		if keep != nil {
+			outIDs := make([]int64, len(keep))
+			outOff := make([][2]int, len(keep))
+			for j, i := range keep {
+				outIDs[j] = ids[i]
+				outOff[j] = off[i]
+			}
+			ids, off = outIDs, outOff
+		}
 	}
 	mask := make([]int64, len(ids))
 	for i := range mask {

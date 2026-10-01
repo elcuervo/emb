@@ -198,7 +198,8 @@ just format          # Format all Go code (gofmt + goimports)
 just lint            # Linters (golangci-lint + go vet)
 just test            # Run tests
 just deadcode        # Fail on unreachable production functions
-just cover           # Per-package statement coverage + total
+just cover           # Cross-package statement coverage (production + whole-repo totals)
+just coverage-gate   # Enforce coverage-floors.txt
 just bench           # Run Go benchmarks (just bench-all for the redis-benchmark suite)
 just build           # Build the emb binary
 just dev             # Build and run the server
