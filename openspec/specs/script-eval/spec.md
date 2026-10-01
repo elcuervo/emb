@@ -108,18 +108,20 @@ When the server cache is enabled, scripted replies SHALL be cached under a conte
 
 #### Scenario: Same script and labels hit the cache
 
-- **WHEN** `EMB.EVSHA` is sent twice with the same model, SHA1, args, and text
+- **WHEN** `EMB.EVSHA` is sent twice with the same model, SHA1, args, KEYS count, and text
 - **THEN** the second reply is served from cache with identical bytes
 
 #### Scenario: Different labels miss the cache
 
-- **WHEN** the same script and text are sent with different label args
-- **THEN** each distinct arg set is executed and cached separately
+- **WHEN** the script is evaluated with a different arg set
+- **THEN** the evaluation runs the script again and stores under a different key
 
 #### Scenario: Repeated KEYS bypass the reply cache
 
-- **WHEN** an evaluation's KEYS contain the same text more than once
-- **THEN** the server SHALL NOT look up or store a reply-cache entry for that evaluation
+- **GIVEN** the server cache is enabled and a position-dependent script returning `[1, 2]` for `KEYS=[x, x]`
+- **WHEN** that exact request is sent twice
+- **THEN** the second reply SHALL equal the first (`[1, 2]`), because a repeated text makes the evaluation uncacheable
+- **AND** neither request SHALL leave a per-text cache entry for `x`
 
 ### Requirement: Math helper functions
 
@@ -218,7 +220,7 @@ For a model configured with an `image:` block, the server SHALL provide `emb.ima
 
 ### Requirement: Bounded script reply-cache keys
 
-The content-addressed script reply-cache key SHALL NOT inline large text payloads. When a KEYS element exceeds a small documented threshold, the key SHALL incorporate a digest of that element instead of its raw bytes, so image-sized KEYS do not retain megabytes per cache entry. Hit/miss semantics SHALL be unchanged: identical KEYS and args always map to the same key, and distinct KEYS always map to distinct keys. Short text elements SHALL continue to produce the same keys as before, so existing cached text entries remain reachable.
+The content-addressed script reply-cache key SHALL NOT inline large text payloads. When a KEYS element exceeds a small documented threshold, the key SHALL incorporate a digest of that element instead of its raw bytes, so image-sized KEYS do not retain megabytes per cache entry. Short text elements SHALL be inlined unchanged in the key. The key SHALL be deterministic and content-addressed: identical inputs (model, script SHA1, args, KEYS count, text) always map to the same key, and distinct inputs map to distinct keys. Because the key encodes the evaluation's call shape, its bytes MAY change when the key derivation is extended (for example to add the KEYS count); a changed key is a cache miss, never a wrong hit.
 
 #### Scenario: Image KEYS do not bloat the key
 
@@ -228,9 +230,22 @@ The content-addressed script reply-cache key SHALL NOT inline large text payload
 #### Scenario: Text keys are unchanged
 
 - **WHEN** a short text scripted request is cached
-- **THEN** its key matches the pre-change key format and previously cached entries still hit
+- **THEN** the text payload SHALL be inlined in the key exactly as provided (not digested)
+- **AND** the same inputs SHALL always produce the same key
 
 #### Scenario: Distinct images remain distinct entries
 
 - **WHEN** two different images are embedded through the same script
 - **THEN** they occupy distinct cache entries and each returns its own embedding
+
+#### Scenario: Arity separates entries
+
+- **WHEN** the same script is evaluated with one text and again with two texts that include that text
+- **THEN** the two evaluations SHALL use different cache keys
+
+#### Scenario: Arity change does not replay a stale reply
+
+- **GIVEN** the server cache is enabled and a script whose reply depends on `#KEYS`
+- **WHEN** the script is evaluated with one text, then with two texts, and then with that first text again
+- **THEN** the third evaluation SHALL return the same value a cold single-text evaluation returns
+- **AND** it SHALL NOT return the value cached during the two-text evaluation
