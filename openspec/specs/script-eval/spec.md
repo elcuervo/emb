@@ -246,6 +246,6 @@ The content-addressed script reply-cache key SHALL NOT inline large text payload
 #### Scenario: Arity change does not replay a stale reply
 
 - **GIVEN** the server cache is enabled and a script whose reply depends on `#KEYS`
-- **WHEN** the script is evaluated with one text, then with two texts, and then with that first text again
+- **WHEN** the script is evaluated with one text, then with two texts, then with that first text again
 - **THEN** the third evaluation SHALL return the same value a cold single-text evaluation returns
 - **AND** it SHALL NOT return the value cached during the two-text evaluation
