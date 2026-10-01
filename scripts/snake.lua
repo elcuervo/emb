@@ -35,6 +35,11 @@ local DEFAULT_HEIGHT = 14
 local DEFAULT_SEED = 7
 local DEFAULT_LENGTH = 6
 
+-- The board is a client-supplied spec (new game and resumed board alike), so
+-- both dimensions are capped before cycle() allocates width x height cells: a
+-- 10,000 x 10,000 request would otherwise build 100M Lua tables.
+local MAX_SIDE = 64
+
 -- ── the checkpoint envelope ─────────────────────────────────────────────────
 local cfg = {
   max_len = 64,
@@ -76,6 +81,11 @@ if ARGV[1] then apply_config(json.decode(ARGV[1]), cfg) end
 -- visits every cell once, and a move is "safe" when it advances along it
 -- without crossing the tail or skipping the food.
 local function cycle(width, height)
+  if type(width) ~= "number" or type(height) ~= "number"
+    or width % 1 ~= 0 or height % 1 ~= 0
+    or width > MAX_SIDE or height > MAX_SIDE then
+    error("board dimensions must be whole numbers no larger than " .. MAX_SIDE, 0)
+  end
   if math.min(width, height) < 4 or (width % 2 == 1 and height % 2 == 1) then
     error("board dimensions must be >= 4 with one even side", 0)
   end

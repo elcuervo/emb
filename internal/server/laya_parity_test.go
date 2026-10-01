@@ -208,7 +208,12 @@ func nearEqual(a, b any) bool {
 	switch av := a.(type) {
 	case float64:
 		bv, ok := b.(float64)
-		return ok && math.Abs(av-bv) < 1e-6
+		// The corpus rounds to four places, so a value can sit on either side
+		// of a rounding boundary between inference builds (nix 1.26/arm64 vs
+		// CI 1.27/amd64) and differ by one corpus unit. 1.5e-4 absorbs that
+		// single-boundary flip while still flagging drift of two units or more;
+		// input_tokens is compared separately and exactly.
+		return ok && math.Abs(av-bv) < 1.5e-4
 	case string:
 		bv, ok := b.(string)
 		return ok && av == bv
@@ -506,6 +511,15 @@ func TestLayaSnakeEpisode(t *testing.T) {
 	// An unbounded request is clamped to the preset's ceiling rather than run.
 	if got := len(episode(9999, nil)["frames"].([]any)); got > 200 {
 		t.Fatalf("episode frames = %d, want <= 200", got)
+	}
+
+	// A board past the dimension cap is refused before it allocates.
+	raw, err := json.Marshal(map[string]any{"ticks": 1, "width": 100000, "height": 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok := redisCmd(t, addr, "EMB.EVSHA", "laya-tiny", sha, "1", string(raw)); tok.kind != "error" {
+		t.Fatalf("oversized board reply = %+v, want an error", tok)
 	}
 
 	// A zero-tick call returns the opening board and no frames (the plate's

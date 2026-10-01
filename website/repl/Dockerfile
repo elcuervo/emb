@@ -91,6 +91,7 @@ COPY --from=builder /src/website/repl/presets /etc/emb/presets
 COPY --from=builder /src/testdata/laya /etc/emb/laya-model
 COPY --from=builder /src/scripts/laya.lua /etc/emb/presets/laya.lua
 COPY --from=builder /src/scripts/snake.lua /etc/emb/presets/snake.lua
+COPY --from=builder /src/scripts/pacman.lua /etc/emb/presets/pacman.lua
 COPY --from=builder /src/website/repl/run.sh /usr/local/bin/run.sh
 RUN chmod +x /usr/local/bin/run.sh && ldconfig
 
