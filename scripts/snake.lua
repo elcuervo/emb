@@ -425,7 +425,7 @@ local function decide(specials, game)
     rows[#rows + 1] = { ids = ids, markers = markers, qtype = QTYPES[q.type], q = q }
   end
   local batch, marker_count = collate(rows, specials)
-  local out = emb.run(batch, { outputs = { "logits", "act_logits" } })
+  local out, inference_ms = emb.run(batch, { outputs = { "logits", "act_logits" } })
   local logits = out.logits.data
 
   local probs_by_dir, frame = {}, {}
@@ -468,6 +468,7 @@ local function decide(specials, game)
   frame.intervened = proposed ~= executed
   frame.safe = #safe
   frame.input_tokens = tokens
+  frame.inference_ms = inference_ms
   return frame
 end
 
@@ -492,7 +493,7 @@ local function board_of(g)
   }
 end
 
-local frames, total_tokens = {}, 0
+local frames, total_tokens, total_inference = {}, 0, 0
 for _ = 1, ticks do
   if not game.alive or game.won then break end
   local frame = decide(specials, game)
@@ -502,11 +503,12 @@ for _ = 1, ticks do
   frame.board = board_of(game)
   step(game, frame.executed)
   total_tokens = total_tokens + frame.input_tokens
+  total_inference = total_inference + frame.inference_ms
   frames[#frames + 1] = frame
 end
 
 return json.encode({
   frames = frames,
   board = board_of(game),
-  usage = { input_tokens = total_tokens, output_tokens = 0 },
+  usage = { input_tokens = total_tokens, output_tokens = 0, inference_ms = total_inference },
 })

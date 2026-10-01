@@ -210,7 +210,7 @@
       <h2 class="sec__h" id="try-it-h">TRY IT</h2>
       <div class="mech" data-mech></div>
 
-      <div data-live class="rig lab" data-rig="laya" data-emb-preset-laya="0768a9a9c734cf082613ba3267713703529220e9" data-emb-preset-snake="b1f28f4c34c937b406b40a624d8307335eaf4a73" data-emb-preset-pacman="9822c8f02e6c90c8e473cb46633ba727fd8b7d60">
+      <div data-live class="rig lab" data-rig="laya" data-emb-preset-laya="529cf880f327f83e52924998d9a465cb59fe0071" data-emb-preset-snake="4061f9e001c04f8067800b8ddabbd17cff92ad6c" data-emb-preset-pacman="9cf527643823ce7b041164a0b798096103310277">
         <div class="lab__switch" data-switch role="group" aria-label="Choose an example"></div>
         <p class="lab__blurb" data-blurb></p>
         <div class="lab__stage" data-stage></div>
@@ -402,7 +402,7 @@ function leavesFor(q, ans) {
 }
 
 function renderTree(state, questions, answers) {
-  const fills = [];
+  const groups = [];
   const branches = el('div', { class: 'qtree__branches' });
 
   Object.keys(questions).forEach((id) => {
@@ -416,6 +416,7 @@ function renderTree(state, questions, answers) {
     branch.appendChild(el('p', { class: 'qtree__ins', text: q.instructions }));
 
     const leaves = el('ul', { class: 'qtree__leaves' });
+    const branchFills = [];
     leavesFor(q, ans).forEach((leaf) => {
       const fill = el('i', { class: 'qtree__fill' + (leaf.win ? ' is-win' : '') });
       leaves.appendChild(el('li', { class: 'qtree__leaf' + (leaf.win ? ' is-win' : '') }, [
@@ -423,9 +424,10 @@ function renderTree(state, questions, answers) {
         el('span', { class: 'qtree__track' }, [fill]),
         el('span', { class: 'qtree__p', text: leaf.p == null ? '—' : leaf.p.toFixed(3) }),
       ]));
-      fills.push([fill, leaf.p == null ? 0 : Math.max(2, leaf.p * 100)]);
+      branchFills.push([fill, leaf.p == null ? 0 : Math.max(2, leaf.p * 100)]);
     });
     branch.appendChild(leaves);
+    groups.push(branchFills);
 
     if (ans) {
       const bits = [];
@@ -444,18 +446,33 @@ function renderTree(state, questions, answers) {
     ]),
     branches,
   ]);
-  return { node: inner, fills };
+  return { node: inner, groups };
+}
+
+// The reply is one forward pass, so "realtime" here is an ordered reveal: the
+// tree is drawn complete, then each question's leaves fill in turn. Every value
+// is the reply's; the reveal only staggers the drawing, and reduced motion draws
+// it in one frame.
+function revealGroups(groups) {
+  const n = Math.max(1, groups.length);
+  groups.forEach((fills, i) => {
+    const from = i / n;
+    const to = (i + 1) / n;
+    tween(520, (t) => {
+      const local = Math.max(0, Math.min(1, (t - from) / (to - from)));
+      fills.forEach(([fill, width]) => { fill.style.width = (width * local).toFixed(1) + '%'; });
+    });
+  });
 }
 
 function showTree(state, questions, reply) {
   const drawn = renderTree(state, questions, reply && reply.answers);
   treeEl.replaceChildren(drawn.node);
   out.hidden = false;
-  tween(460, (t) => drawn.fills.forEach(([fill, width]) => {
-    fill.style.width = (width * t).toFixed(1) + '%';
-  }));
+  revealGroups(drawn.groups);
   const usage = (reply && reply.usage) || {};
-  document.querySelector('[data-fig-tokens]').textContent = usage.input_tokens || 0;
+  const figTokens = document.querySelector('[data-fig-tokens]');
+  if (figTokens) { figTokens.textContent = usage.input_tokens || 0; }
   return drawn;
 }
 
@@ -486,7 +503,7 @@ const PAC_RUN_MS = 3 * 60 * 1000;
 
 const pacman = {
   game: null, seed: 7, queue: [], playing: false, fetching: false,
-  ticks: 0, callMs: 0, current: null, tokens: 0, playedMs: 0,
+  ticks: 0, current: null, tokens: 0, playedMs: 0,
 };
 let pacHudRefs = null;
 let pacBoardRef = null;
@@ -639,7 +656,7 @@ let inboxIndex = 0;
  */
 const snake = {
   board: null, seed: 7, queue: [], playing: false, fetching: false,
-  best: 0, ticks: 0, frames: 0, callMs: 0, current: null, tokens: 0,
+  best: 0, ticks: 0, frames: 0, current: null, tokens: 0,
 };
 
 let hudRefs = null;
@@ -647,9 +664,11 @@ let boardRef = null;
 
 function sleep(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
 
-// One HUD for both loops: the move bars, the executed move, two readout bars and
-// the counters are the same figure; only the bar labels and the footer differ.
-function hudBuild(refs, bars, foot) {
+// One HUD for both loops, in the reference's order: status, the big counters,
+// the model's move probabilities with the proposal marked, the executed move and
+// shield, the two readout bars, then the per-decision meters. The figures are
+// per frame — `inference` is the model call's own time, never the request.
+function hudBuild(refs, bigRows, bars, foot) {
   refs.moves = {};
   const moveBars = el('div', { class: 'hud__moves' });
   DIRS.forEach((dir) => {
@@ -673,28 +692,47 @@ function hudBuild(refs, bars, foot) {
       value,
     ]);
   };
+
   refs.status = el('span', { class: 'hud__status', text: 'IDLE' });
   refs.exec = el('span', { class: 'hud__big', text: '—' });
   refs.shield = el('span', { class: 'hud__shield', text: '' });
-  refs.counters = el('div', { class: 'hud__counters' });
+  refs.big = {};
+  const stats = el('div', { class: 'hud__stats' }, bigRows.map(([label, key]) => {
+    const value = el('b', { class: 'hud__statv', text: '—' });
+    refs.big[key] = value;
+    return el('div', { class: 'hud__stat' }, [el('span', { class: 'hud__statk', text: label }), value]);
+  }));
+  refs.inference = el('b', { text: '—' });
+  refs.rate = el('b', { text: '—' });
+  refs.tokens = el('b', { text: '—' });
+  const meter = (label, value) => el('div', { class: 'hud__meter' }, [el('span', { class: 'hud__k', text: label }), value]);
+  const meters = el('div', { class: 'hud__meters' }, [
+    meter('inference', refs.inference),
+    meter('decisions/s', refs.rate),
+    meter('input tokens', refs.tokens),
+  ]);
 
   return el('div', { class: 'hud' }, [
     el('div', { class: 'hud__head' }, [el('b', { text: 'laya' }), refs.status]),
     el('p', { class: 'hud__sub', text: 'sandbox · 32-hidden miniature · mechanism only' }),
+    stats,
     el('div', { class: 'hud__label', text: 'next move · model probabilities' }),
     moveBars,
     el('div', { class: 'hud__exec' }, [
       el('span', { class: 'hud__k', text: 'executing ' }), refs.exec, refs.shield,
     ]),
     ...bars.map(([label, key]) => bar(label, key)),
-    refs.counters,
+    meters,
     el('p', { class: 'hud__foot', text: foot }),
   ]);
 }
 
 function snakeHudBuild() {
   hudRefs = {};
-  return hudBuild(hudRefs, [['dead-end risk', 'risk'], ['food reachable', 'food']], 'laya + cycle safety');
+  return hudBuild(hudRefs,
+    [['score', 'score'], ['length', 'length'], ['best', 'best']],
+    [['dead-end risk', 'risk'], ['food reachable', 'food']],
+    'laya + cycle safety');
 }
 
 function hudBar(refs, key, value) {
@@ -705,23 +743,28 @@ function hudBar(refs, key, value) {
   ref.value.textContent = clamped.toFixed(2);
 }
 
-function renderCounters(refs, rows) {
-  refs.counters.replaceChildren(...rows.map(([k, v]) => el('div', { class: 'hud__c' }, [
-    el('span', { class: 'hud__k', text: k }), el('b', { text: v }),
-  ])));
+function renderBig(refs, rows) {
+  rows.forEach(([key, v]) => { if (refs.big[key]) { refs.big[key].textContent = v; } });
+}
+
+// The per-decision meters. `decisions/s` is derived from the model's own time,
+// not from the animation, so it reads as throughput rather than playback.
+function renderMeters(refs, inferenceMs, tokens) {
+  refs.inference.textContent = inferenceMs > 0 ? (inferenceMs < 10 ? inferenceMs.toFixed(1) : inferenceMs.toFixed(0)) + ' ms' : '—';
+  refs.rate.textContent = inferenceMs > 0 ? Math.round(1000 / inferenceMs).toLocaleString('en-US') + ' /s' : '—';
+  refs.tokens.textContent = String(tokens || 0);
 }
 
 function snakeCounters() {
   const fallback = { score: 0, body: [], ticks: 0 };
   const b = snake.current ? snake.current.board : (snake.board || fallback);
-  renderCounters(hudRefs, [
+  renderBig(hudRefs, [
     ['score', String(b.score)],
     ['length', String(b.body.length)],
     ['best', String(snake.best)],
-    ['ticks', String(snake.ticks)],
-    ['input tokens', String(snake.tokens)],
-    ['call', snake.callMs ? snake.callMs.toFixed(0) + ' ms' : '—'],
   ]);
+  const frame = snake.current;
+  renderMeters(hudRefs, frame ? Number(frame.inference_ms || 0) : 0, frame ? frame.input_tokens : 0);
 }
 
 function snakeApplyFrame(frame) {
@@ -751,13 +794,11 @@ async function snakeFetch(ticks) {
   if (snake.fetching) { return; }
   snake.fetching = true;
   g.begin();
-  const started = performance.now();
   try {
     const reply = await g.preset('laya', snakeDigest, [JSON.stringify({
       ticks: ticks, board: snake.board, width: 20, height: 14, seed: snake.seed,
     })], []);
     const parsed = JSON.parse(reply);
-    snake.callMs = performance.now() - started;
     snake.board = parsed.board;
     // An empty Lua table encodes as `{}`, so an episode with no frames (the
     // zero-tick opening call) arrives as an object rather than an array.
@@ -812,7 +853,7 @@ async function snakeStep() {
 
 function snakeMount() {
   snake.board = null; snake.queue = []; snake.playing = false; snake.fetching = false;
-  snake.best = 0; snake.ticks = 0; snake.frames = 0; snake.callMs = 0; snake.current = null; snake.tokens = 0;
+  snake.best = 0; snake.ticks = 0; snake.frames = 0; snake.current = null; snake.tokens = 0;
   boardRef = el('div', { class: 'snakeboard' });
   const grid = el('div', { class: 'snakegrid' }, [boardRef, snakeHudBuild()]);
   const playBtn = el('button', { class: 'btn btn--sm btn--dark', type: 'button', text: 'Play' });
@@ -849,19 +890,21 @@ function pacStatus(text, dead) {
 
 function pacHudBuild() {
   pacHudRefs = {};
-  return hudBuild(pacHudRefs, [['ghost within 1 tile', 'danger'], ['pellets reachable', 'clear']], 'laya + a move planner');
+  return hudBuild(pacHudRefs,
+    [['score', 'score'], ['lives', 'lives'], ['pellets', 'pellets']],
+    [['ghost within 1 tile', 'danger'], ['pellets reachable', 'clear']],
+    'laya + a move planner');
 }
 
 function pacCounters() {
   const b = (pacman.current ? pacman.current.board : pacman.game) || {};
-  renderCounters(pacHudRefs, [
+  renderBig(pacHudRefs, [
     ['score', String(b.score || 0)],
     ['lives', String(b.lives != null ? b.lives : 0)],
-    ['pellets left', String(b.dots != null ? b.dots : 0)],
-    ['ticks', String(pacman.ticks)],
-    ['input tokens', String(pacman.tokens)],
-    ['call', pacman.callMs ? pacman.callMs.toFixed(0) + ' ms' : '—'],
+    ['pellets', String(b.dots != null ? b.dots : 0)],
   ]);
+  const frame = pacman.current;
+  renderMeters(pacHudRefs, frame ? Number(frame.inference_ms || 0) : 0, frame ? frame.input_tokens : 0);
 }
 
 function pacmanApplyFrame(frame) {
@@ -887,13 +930,11 @@ async function pacmanFetch(ticks) {
   if (pacman.fetching) { return; }
   pacman.fetching = true;
   g.begin();
-  const started = performance.now();
   try {
     const reply = await g.preset('laya', pacmanDigest, [JSON.stringify({
       ticks: ticks, game: pacman.game, seed: pacman.seed,
     })], []);
     const parsed = JSON.parse(reply);
-    pacman.callMs = performance.now() - started;
     pacman.game = parsed.game;
     // An empty Lua table encodes as `{}`, so a zero-tick opening call arrives
     // with an object rather than an array of frames.
@@ -970,7 +1011,7 @@ window.addEventListener('blur', pacmanFocusPause);
 
 function pacmanMount() {
   pacman.game = null; pacman.queue = []; pacman.playing = false; pacman.fetching = false;
-  pacman.ticks = 0; pacman.callMs = 0; pacman.current = null;
+  pacman.ticks = 0; pacman.current = null;
   pacman.tokens = 0; pacman.playedMs = 0;
   pacBoardRef = el('div', { class: 'pacboard' });
   const grid = el('div', { class: 'pacgrid' }, [pacBoardRef, pacHudBuild()]);
@@ -1034,8 +1075,17 @@ function inboxMount() {
   stage.append(list, form);
 }
 
+// A repeated single-pass request is served from the server's reply cache, so its
+// stored inference figure is the first run's. Remember the exact payload and mark
+// the repeat rather than presenting a stored number as fresh.
+const lastPayload = {};
+function payloadKey(state, questions) { return state + '\u0000' + JSON.stringify(questions); }
+
 async function inboxRun() {
   const ticket = INBOX_TICKETS[inboxIndex];
+  const key = payloadKey(ticket.state, INBOX_QUESTIONS);
+  const cached = lastPayload.inbox === key;
+  lastPayload.inbox = key;
   g.begin();
   setState('running');
   mech.reset();
@@ -1045,10 +1095,13 @@ async function inboxRun() {
   try {
     const reply = await predict(ticket.state, INBOX_QUESTIONS);
     showTree(ticket.state, INBOX_QUESTIONS, reply);
+    const usage = reply.usage || {};
     readout.replaceChildren(
       el('span', { class: 'k', text: 'email ' }), el('b', { text: ticket.name }),
       el('span', { text: ' · ' }), el('b', { text: '5' }), el('span', { text: ' questions · one forward pass · ' }),
-      el('b', { text: String((reply.usage || {}).input_tokens || 0) }), el('span', { text: ' input tokens' })
+      el('b', { text: String(usage.input_tokens || 0) }), el('span', { text: ' input tokens · ' }),
+      el('b', { text: Number(usage.inference_ms || 0).toFixed(1) }), el('span', { text: ' ms inference' }),
+      ...(cached ? [el('span', { text: ' · repeat · served from cache' })] : [])
     );
     setState('ready');
   } catch (err) {
@@ -1069,6 +1122,9 @@ function quickMount() {
 }
 
 async function quickRun() {
+  const key = payloadKey(QUICK_STATE, QUICK_QUESTIONS);
+  const cached = lastPayload.quick === key;
+  lastPayload.quick = key;
   g.begin();
   setState('running');
   mech.reset();
@@ -1078,9 +1134,12 @@ async function quickRun() {
   try {
     const reply = await predict(QUICK_STATE, QUICK_QUESTIONS);
     showTree(QUICK_STATE, QUICK_QUESTIONS, reply);
+    const usage = reply.usage || {};
     readout.replaceChildren(
       el('span', { class: 'k', text: 'three-question round · ' }),
-      el('b', { text: String((reply.usage || {}).input_tokens || 0) }), el('span', { text: ' input tokens · output tokens always 0' })
+      el('b', { text: String(usage.input_tokens || 0) }), el('span', { text: ' input tokens · ' }),
+      el('b', { text: Number(usage.inference_ms || 0).toFixed(1) }), el('span', { text: ' ms inference · output tokens always 0' }),
+      ...(cached ? [el('span', { text: ' · repeat · served from cache' })] : [])
     );
     setState('ready');
   } catch (err) {

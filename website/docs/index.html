@@ -507,9 +507,9 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
 
       <dl class="doc-cmds">
         <dt>emb.run({name = {shape, data|fill, dtype?}, …})</dt>
-        <dd>Named-tensor inference, returning <code>{name = {shape, data}}</code> per output.</dd>
+        <dd>Named-tensor inference, returning <code>{name = {shape, data}}</code> per output and, as a second value, the model call's duration in milliseconds.</dd>
         <dt>emb.run_batch({item, …})</dt>
-        <dd>One model call for N items, padded into a single session run.</dd>
+        <dd>One model call for N items, padded into a single session run; its second return value is that call's duration in milliseconds.</dd>
         <dt>emb.tokenize.encode(text, max_len)</dt>
         <dd>The model tokenizer's own pipeline, returning <code>{ids, mask, offsets}</code>.</dd>
         <dt>emb.tokenize.encode_pair(a, b, max_len)</dt>
@@ -973,7 +973,12 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         episode. The host learns nothing about Snake: it is a task preset, and
         <code>scripts/pacman.lua</code> is a second one — its own maze, pellets and
         ghosts, the same one-call contract — so a third task would keep its own rules
-        the same way.
+        the same way. Every frame carries the model call's own duration
+        (<code>inference_ms</code>): the host measures <code>emb.run</code> around the
+        session run and returns it as a second value, so the page shows model time,
+        never the request round trip. Pac-Man's planner prefers the shortest path to
+        the nearest pellet and refuses an immediate reversal, so the random-weight
+        checkpoint clears pellets instead of oscillating in place.
       </p>
 
       <h3 class="doc-h3">Mount an export bundle</h3>

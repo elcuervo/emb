@@ -3613,15 +3613,21 @@ html.js.is-ready .hero__prose{
 .hud__exec{ display: flex; align-items: baseline; gap: 8px; margin: 12px 0 4px; }
 .hud__big{ font-weight: 700; color: var(--bg); }
 .hud__shield{ color: var(--fg); background: var(--accent); padding: 0 6px; font-size: .9em; letter-spacing: .06em; }
-.hud__counters{
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 16px; margin: 12px 0 0; padding-top: 10px;
-  border-top: 1px solid var(--rule-dark);
+/* The readout's order mirrors the reference: status, the big counters, the
+   probability table, the executing move, the readout bars, then the meters. */
+.hud__stats{
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px; margin: 10px 0 14px; padding: 10px 0;
+  border-top: 1px solid var(--rule-dark); border-bottom: 1px solid var(--rule-dark);
 }
-.hud__c{ display: flex; justify-content: space-between; gap: 8px; }
-.hud__c b{ color: var(--bg); font-weight: 500; }
+.hud__stat{ display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hud__statk{ color: var(--rule); font-size: .82em; letter-spacing: .1em; text-transform: uppercase; }
+.hud__statv{ color: var(--bg); font-weight: 700; font-size: 1.7em; line-height: 1; font-variant-numeric: tabular-nums; }
+.hud__meters{ display: grid; gap: 3px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule-dark); }
+.hud__meter{ display: flex; justify-content: space-between; gap: 8px; }
+.hud__meter b{ color: var(--bg); font-weight: 500; font-variant-numeric: tabular-nums; }
 .hud__foot{ margin: 12px 0 0; color: var(--rule); }
 @media (max-width: 520px){
   .hud__row{ grid-template-columns: 90px minmax(0, 1fr) 40px; }
-  .hud__counters{ grid-template-columns: minmax(0, 1fr); }
+  .hud__statv{ font-size: 1.4em; }
 }

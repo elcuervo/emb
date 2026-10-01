@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 
@@ -244,6 +245,16 @@ func luaFromAny(ls *lua.LState, v any) lua.LValue {
 	}
 }
 
+// timeRun measures one session run and returns the model call's own duration in
+// milliseconds. The clock wraps only the run, so tensor marshalling, output
+// selection and the script's own math are excluded — this is the value the
+// script-tensor-io spec calls the inference duration.
+func timeRun(run func([]onnx.NamedTensor) (map[string]onnx.NamedTensor, error), inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, float64, error) {
+	started := time.Now()
+	out, err := run(inputs)
+	return out, float64(time.Since(started).Microseconds()) / 1000, err
+}
+
 func runHost(ls *lua.LState, h Hosts) int {
 	if h.Run == nil {
 		ls.RaiseError("emb.run is unavailable for this model")
@@ -280,7 +291,7 @@ func runHost(ls *lua.LState, h Hosts) int {
 		inputs = append(inputs, t)
 	}
 
-	outputs, err := h.Run(inputs)
+	outputs, runMs, err := timeRun(h.Run, inputs)
 	if err != nil {
 		ls.RaiseError("emb.run: %v", err)
 		return 0
@@ -300,7 +311,8 @@ func runHost(ls *lua.LState, h Hosts) int {
 		result.RawSetString(n, renderTensor(ls, outputs[n], opts.packed))
 	}
 	ls.Push(result)
-	return 1
+	ls.Push(lua.LNumber(runMs))
+	return 2
 }
 
 // tokenizeWordsHost implements emb.tokenize.words(text) → {words = {...},

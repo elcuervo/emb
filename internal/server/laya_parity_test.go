@@ -333,6 +333,15 @@ func TestLayaParityCorpus(t *testing.T) {
 			if !tokensEqual {
 				t.Fatalf("input_tokens mismatch: got %v want %v", got.Usage, want.Usage)
 			}
+			gu, ok := got.Usage.(map[string]any)
+			if !ok {
+				t.Fatalf("reply usage is not an object: %v", got.Usage)
+			}
+			// The empty-questions case runs no forward pass, so it reports a real
+			// zero; every other case must report a positive duration.
+			if ms, ok := gu["inference_ms"].(float64); !ok || ms < 0 {
+				t.Fatalf("reply inference_ms = %v, want a non-negative number", gu["inference_ms"])
+			}
 		})
 	}
 }
@@ -474,6 +483,11 @@ func assertLayaFrames(t *testing.T, frames []any, reads ...string) {
 				t.Fatalf("frame %d: %s = %v, want [0,1]", i, key, v)
 			}
 		}
+		// Every frame carries the model call's own duration, from the host's
+		// emb.run timing — never a client clock.
+		if ms, ok := frame["inference_ms"].(float64); !ok || ms <= 0 {
+			t.Fatalf("frame %d: inference_ms = %v, want a positive number", i, frame["inference_ms"])
+		}
 	}
 }
 
@@ -497,7 +511,7 @@ func TestLayaSnakeEpisode(t *testing.T) {
 		t.Fatalf("episode returned %v frames, want 8", first["frames"])
 	}
 	assertLayaFrames(t, frames, "risk", "food")
-	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 {
+	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 || usage["inference_ms"].(float64) <= 0 {
 		t.Fatalf("usage = %v", usage)
 	}
 
@@ -551,7 +565,7 @@ func TestLayaPacmanEpisode(t *testing.T) {
 		t.Fatalf("episode returned %v frames, want 6", first["frames"])
 	}
 	assertLayaFrames(t, frames, "danger", "clear")
-	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 {
+	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 || usage["inference_ms"].(float64) <= 0 {
 		t.Fatalf("usage = %v", usage)
 	}
 
@@ -577,5 +591,46 @@ func TestLayaPacmanEpisode(t *testing.T) {
 	}
 	if _, ok := opening["game"].(map[string]any); !ok {
 		t.Fatalf("zero-tick episode returned no game: %v", opening)
+	}
+}
+
+// TestLayaPacmanPlannerMakesProgress pins the progress policy: a bounded run
+// from a fresh game clears pellets rather than locking into a left/right loop,
+// and the shield keeps consecutive reversals rare.
+func TestLayaPacmanPlannerMakesProgress(t *testing.T) {
+	addr, srv := serveLaya(t, "")
+	sha := layaPreload(t, srv, "../../scripts/pacman.lua")
+	ep := layaEpisode(t, addr, sha, map[string]any{"ticks": 200, "game": nil, "seed": 7})
+	frames, ok := ep["frames"].([]any)
+	if !ok || len(frames) == 0 {
+		t.Fatalf("episode returned %v frames", ep["frames"])
+	}
+	assertLayaFrames(t, frames, "danger", "clear")
+
+	startDots := frames[0].(map[string]any)["board"].(map[string]any)["dots"].(float64)
+	endDots := ep["game"].(map[string]any)["dots"].(float64)
+	if cleared := startDots - endDots; cleared < 5 {
+		t.Fatalf("cleared %v pellets in %d ticks (start %v, end %v): the planner stalled", cleared, len(frames), startDots, endDots)
+	}
+
+	// Consecutive executed moves must not alternate indefinitely: the shield
+	// vetoes an immediate reversal whenever another safe move exists, so a long
+	// streak is the left/right lock the policy is meant to prevent.
+	reverse := map[string]string{"UP": "DOWN", "DOWN": "UP", "LEFT": "RIGHT", "RIGHT": "LEFT"}
+	streak, worst, prev := 0, 0, ""
+	for _, raw := range frames {
+		dir := raw.(map[string]any)["executed"].(string)
+		if prev != "" && dir == reverse[prev] {
+			streak++
+		} else {
+			streak = 0
+		}
+		if streak > worst {
+			worst = streak
+		}
+		prev = dir
+	}
+	if worst >= 8 {
+		t.Fatalf("longest reversal streak = %d, want the planner to avoid a left/right lock", worst)
 	}
 }

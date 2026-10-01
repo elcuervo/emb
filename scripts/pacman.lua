@@ -34,6 +34,12 @@ local MAX_TICKS = 400
 local DEFAULT_SEED = 7
 local DEFAULT_TICKS = 120
 
+-- Decisions without a pellet before the planner takes over from the model. The
+-- served weights are random, so a model-only player can wander in place; the
+-- demo's subject is the loop, so a stalled run is steered rather than left to
+-- oscillate.
+local STALL_LIMIT = 24
+
 -- ── the maze ────────────────────────────────────────────────────────────────
 -- 19 x 13, bordered, symmetric, every open cell reachable and no dead ends (a
 -- dead end has one exit; the player would be trapped there). `#` wall, `.`
@@ -126,7 +132,7 @@ local function new_game(seed)
   local game = {
     width = W, height = H, seed = seed, cursor = (seed % 2147483647) + 1,
     wall = wall, pellet = pellet, dots = dots,
-    lives = LIVES, score = 0, frightened = 0, ticks = 0,
+    lives = LIVES, score = 0, frightened = 0, ticks = 0, stall = 0, reversed = false,
     alive = true, won = false, ghosts = {},
   }
   game.pac = { x = PAC_START[1], y = PAC_START[2], dir = "LEFT" }
@@ -155,6 +161,8 @@ local function load_game(spec)
   game.score = b.score or 0
   game.frightened = b.frightened or 0
   game.ticks = b.ticks or 0
+  game.stall = b.stall or 0
+  game.reversed = b.reversed == true
   game.alive = b.alive ~= false
   game.won = b.won or false
   if type(b.pac) == "table" then
@@ -190,7 +198,9 @@ local function game_of(g)
     ghosts = ghosts,
     grid = table.concat(grid),
     dots = g.dots, lives = g.lives, score = g.score,
-    frightened = g.frightened, ticks = g.ticks, alive = g.alive, won = g.won,
+    frightened = g.frightened, ticks = g.ticks, stall = g.stall,
+    reversed = g.reversed == true,
+    alive = g.alive, won = g.won,
   }
 end
 
@@ -208,14 +218,34 @@ local function legal_dirs(g)
   return out
 end
 
-local function nearest_pellet_distance(g)
-  local best
-  for i, _ in pairs(g.pellet) do
-    local px, py = i % W, math.floor(i / W)
-    local d = math.abs(px - g.pac.x) + math.abs(py - g.pac.y)
-    if best == nil or d < best then best = d end
+-- BFS over non-wall tiles from the player: the distance to every reachable
+-- cell, the first step of a shortest path to the nearest pellet, and that
+-- pellet's distance. Manhattan distance is wrong across walls, so progress is
+-- measured on this real path, never on the coordinate delta.
+local function pellet_path(g)
+  local dist, step = {}, {}
+  local start = idx(g.pac.x, g.pac.y)
+  dist[start] = 0
+  local queue, head, tail = { { g.pac.x, g.pac.y } }, 1, 1
+  local preferred, nearest
+  while head <= tail do
+    local cell = queue[head]; head = head + 1
+    local i = idx(cell[1], cell[2])
+    if i ~= start and g.pellet[i] and (nearest == nil or dist[i] < nearest) then
+      nearest, preferred = dist[i], step[i]
+    end
+    for _, d in ipairs(DIRS) do
+      local nx, ny = cell[1] + VEC[d][1], cell[2] + VEC[d][2]
+      local ni = idx(nx, ny)
+      if not is_wall(g, nx, ny) and dist[ni] == nil then
+        dist[ni] = dist[i] + 1
+        step[ni] = (i == start) and d or step[i]
+        tail = tail + 1
+        queue[tail] = { nx, ny }
+      end
+    end
   end
-  return best
+  return dist, preferred, nearest
 end
 local function all_pellets_reachable(g)
   local seen = { [idx(g.pac.x, g.pac.y)] = true }
@@ -337,6 +367,7 @@ end
 local function respawn(g)
   g.lives = g.lives - 1
   g.frightened = 0
+  g.stall = 0
   g.pac = { x = PAC_START[1], y = PAC_START[2], dir = "LEFT" }
   for i, home in ipairs(GHOST_HOMES) do
     g.ghosts[i] = { x = home[1], y = home[2], dir = DIRS[((i - 1) % 4) + 1], hx = home[1], hy = home[2] }
@@ -349,20 +380,26 @@ local function step(g, direction)
   g.ticks = g.ticks + 1
   if g.frightened > 0 then g.frightened = g.frightened - 1 end
 
+  local was = g.pac.dir
   local nx, ny = g.pac.x + VEC[direction][1], g.pac.y + VEC[direction][2]
   if is_wall(g, nx, ny) then direction = REVERSE[g.pac.dir] end
   nx, ny = g.pac.x + VEC[direction][1], g.pac.y + VEC[direction][2]
   if not is_wall(g, nx, ny) then
     g.pac.x, g.pac.y, g.pac.dir = nx, ny, direction
+    g.reversed = direction == REVERSE[was]
   end
 
   local pi = idx(g.pac.x, g.pac.y)
   local pellet = g.pellet[pi]
   if pellet == 1 then
     g.score = g.score + DOT_SCORE; g.pellet[pi] = nil; g.dots = g.dots - 1
+    g.stall = 0
   elseif pellet == 2 then
     g.score = g.score + POWER_SCORE; g.pellet[pi] = nil; g.dots = g.dots - 1
     g.frightened = FRIGHT_TICKS
+    g.stall = 0
+  else
+    g.stall = g.stall + 1
   end
   if g.dots <= 0 then g.won = true; return end
 
@@ -502,15 +539,8 @@ local function decide(specials, g)
   local safe = safe_dirs(g)
   local safe_map = {}
   for _, d in ipairs(safe) do safe_map[d] = true end
-  local nearest = nearest_pellet_distance(g)
+  local dist, preferred, nearest = pellet_path(g)
   local reachable = all_pellets_reachable(g)
-
-  -- The preferred route is the first safe step that eats; the planner only
-  -- needs to name it in the criteria, the model still chooses.
-  local preferred = safe[1]
-  for _, d in ipairs(safe) do
-    if g.pellet[idx(g.pac.x + VEC[d][1], g.pac.y + VEC[d][2])] then preferred = d; break end
-  end
 
   local state = "Pellets left: " .. g.dots
     .. ". Nearest pellet " .. (nearest or 0) .. " tiles away."
@@ -545,7 +575,7 @@ local function decide(specials, g)
     rows[#rows + 1] = { ids = ids, markers = markers, qtype = QTYPES[q.type], q = q }
   end
   local batch, marker_count = collate(rows, specials)
-  local out = emb.run(batch, { outputs = { "logits", "act_logits" } })
+  local out, inference_ms = emb.run(batch, { outputs = { "logits", "act_logits" } })
   local logits = out.logits.data
 
   local probs_by_dir, frame = {}, {}
@@ -572,19 +602,61 @@ local function decide(specials, g)
     if proposed == nil or (probs_by_dir[d] or 0) > (probs_by_dir[proposed] or 0) then proposed = d end
   end
   proposed = proposed or DIRS[1]
-  local executed = proposed
-  if not safe_map[proposed] then
-    executed = nil
-    for _, d in ipairs(safe) do
-      if executed == nil or (probs_by_dir[d] or 0) > (probs_by_dir[executed] or 0) then executed = d end
+
+  -- The planner's pool: safe moves minus an immediate reversal when another
+  -- safe move exists (the left/right attractor), narrowed to the moves that
+  -- step onto a shortest path to the nearest pellet when any such move is safe.
+  -- ponytail: the planner is greedy — BFS to the *nearest* pellet, not a full
+  -- tour, so it can still walk into a pocket while a farther pellet waits. The
+  -- reversal veto and the stall watchdog keep that from reading as a loop; swap
+  -- in a whole-maze tour (or a learned policy) if a run ever deadlocks.
+  local rev = REVERSE[g.pac.dir]
+  local pool = {}
+  for _, d in ipairs(safe) do
+    local ni = idx(g.pac.x + VEC[d][1], g.pac.y + VEC[d][2])
+    local on_path = nearest ~= nil and dist[ni] ~= nil and dist[ni] < nearest
+    -- No reversal while another safe move exists, and never two reversals in a
+    -- row: that single rule is what a two-cell left/right loop cannot survive.
+    if not (d == rev and (#safe > 1 or g.reversed)) then
+      pool[#pool + 1] = { d = d, on_path = on_path }
     end
-    executed = executed or proposed
+  end
+  if #pool == 0 then
+    -- Boxed in: take the farthest-from-ghost legal move other than the reversal
+    -- just made, so the loop breaks even when every forward cell is threatened.
+    local best, best_dist
+    for _, d in ipairs(legal) do
+      if d ~= rev or #legal == 1 then
+        local gd = nearest_ghost_distance(g, g.pac.x + VEC[d][1], g.pac.y + VEC[d][2])
+        if best == nil or gd > best_dist then best, best_dist = d, gd end
+      end
+    end
+    pool[#pool + 1] = { d = best or legal[1] }
+  end
+  local progress = {}
+  for _, c in ipairs(pool) do if c.on_path then progress[#progress + 1] = c end end
+  local choices = #progress > 0 and progress or pool
+
+  local executed = proposed
+  local allowed = false
+  for _, c in ipairs(choices) do if c.d == proposed then allowed = true end end
+  if not allowed then
+    executed = choices[1].d
+    for _, c in ipairs(choices) do
+      if (probs_by_dir[c.d] or 0) > (probs_by_dir[executed] or 0) then executed = c.d end
+    end
+  end
+  -- Stalled: the model's picks are not clearing pellets, so the planner takes
+  -- the shortest path until one is eaten.
+  if g.stall >= STALL_LIMIT and preferred and safe_map[preferred] then
+    executed = preferred
   end
 
   frame.proposed = proposed
   frame.executed = executed
   frame.intervened = proposed ~= executed
   frame.input_tokens = tokens
+  frame.inference_ms = inference_ms
   return frame
 end
 
@@ -598,18 +670,19 @@ if ticks > MAX_TICKS then ticks = MAX_TICKS end
 local specials = emb.tokenize.special_ids()
 local game = load_game(spec)
 
-local frames, total_tokens = {}, 0
+local frames, total_tokens, total_inference = {}, 0, 0
 for _ = 1, ticks do
   if not game.alive or game.won then break end
   local frame = decide(specials, game)
   frame.board = game_of(game)
   step(game, frame.executed)
   total_tokens = total_tokens + frame.input_tokens
+  total_inference = total_inference + frame.inference_ms
   frames[#frames + 1] = frame
 end
 
 return json.encode({
   frames = frames,
   game = game_of(game),
-  usage = { input_tokens = total_tokens, output_tokens = 0 },
+  usage = { input_tokens = total_tokens, output_tokens = 0, inference_ms = total_inference },
 })

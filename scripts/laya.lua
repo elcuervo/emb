@@ -513,7 +513,9 @@ end
 if next(questions) == nil then
   return json.encode({
     answers = {},
-    usage = { input_tokens = 0, output_tokens = 0 },
+    -- No question means no forward pass: the inference figure is a real zero,
+    -- not a missing field.
+    usage = { input_tokens = 0, output_tokens = 0, inference_ms = 0 },
   })
 end
 
@@ -602,7 +604,7 @@ for i = 1, #rows do
   tokens = tokens + #rows[i].ids
 end
 
-local out = emb.run(batch, { outputs = { "logits", "act_logits" } })
+local out, inference_ms = emb.run(batch, { outputs = { "logits", "act_logits" } })
 local logits, act_logits = out.logits.data, out.act_logits.data
 
 local answers = {}
@@ -633,5 +635,5 @@ end
 
 return json.encode({
   answers = answers,
-  usage = { input_tokens = tokens, output_tokens = 0 },
+  usage = { input_tokens = tokens, output_tokens = 0, inference_ms = inference_ms },
 })
