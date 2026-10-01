@@ -1211,8 +1211,12 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			if v := m.BatchDeterminism; v != "" && v != "untested" {
 				det = v
 			}
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s%s",
-				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize, det, batchInfo))
+			// Always surface the verdict, reason, and effective timeout (0 when
+			// batching is off or degraded): the batch-determinism spec requires
+			// both in EMB.STATS regardless of gating outcome.
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s",
+				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize,
+				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo))
 		}
 	}
 

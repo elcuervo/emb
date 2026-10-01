@@ -75,13 +75,15 @@ func (s *fakeSession) Close() error { return nil }
 var _ onnx.Session = (*fakeSession)(nil)
 
 // modelConfigOnMinilm returns a config that resolves and validates against the
-// vendored minilm int8 export (metadata-only reads; inference sessions are
-// faked through the newRuntimeSession seam), with the given batching timeout.
+// vendored minilm fixture (metadata-only reads; inference sessions are faked
+// through the newRuntimeSession seam), with the given batching timeout. It uses
+// the fp32 export CI downloads (models/minilm), not the local int8 weights, so
+// the tests execute on a clean runner.
 func modelConfigOnMinilm(timeoutMS int, workers int) config.ModelConfig {
 	t := timeoutMS
 	return config.ModelConfig{
-		ONNX:         "../../models/int8/minilm/model_quantized.onnx",
-		Tokenizer:    "../../models/int8/minilm/tokenizer.json",
+		ONNX:         "../../models/minilm/model.onnx",
+		Tokenizer:    "../../models/minilm/tokenizer.json",
 		Quantize:     "off",
 		OutputTensor: "last_hidden_state",
 		Pooling:      "mean",

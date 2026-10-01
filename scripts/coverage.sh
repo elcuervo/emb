@@ -15,7 +15,7 @@ profile=${EMB_COVER_PROFILE:-/tmp/emb-cover.out}
 floors=${EMB_COVER_FLOORS:-coverage-floors.txt}
 
 if [ "${EMB_COVER_SKIP:-}" != "1" ]; then
-  go test -coverpkg=./... -coverprofile="$profile" -covermode=atomic ./... >/dev/null 2>&1 || true
+  go test -coverpkg=./... -coverprofile="$profile" -covermode=atomic ./...
 fi
 
 # Collapse duplicate profile rows: under -coverpkg every test binary emits every

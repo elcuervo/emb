@@ -407,11 +407,8 @@ func (e *ModelEntry) ensurePool() error {
 	// explicit timeout: 0 configures today — and log a stable, greppable
 	// line for operators and CI/deploy gates. "untested" only when batching
 	// is off by config (nothing to gate). The verdict is computed at most
-	// once per model lifetime.
-	// Batch-determinism gating (default behavior, no config flag); see the
-	// fields' comment for the verdict contract. ensurePool runs at most once
-	// per model lifetime (GetOrInit's once / the Preload path), so the probe
-	// runs once; keep it that way.
+	// once per model lifetime: ensurePool runs once (GetOrInit's once / the
+	// Preload path).
 	if timeoutMS <= 0 {
 		e.BatchDeterminism, e.BatchDeterminismReason = "untested", "untested"
 	} else if err := pipeline.ProbeBatchDeterminism(sessionFactory, tok, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling); err != nil {

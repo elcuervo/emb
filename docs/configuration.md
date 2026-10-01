@@ -206,8 +206,7 @@ nothing needed gating.
 
 If the int8 dynamic-quantized export fails the probe, the documented path to
 regain batching without quadrupling memory is a **static-quantized (QDQ)**
-export: activation scales baked as constants from a calibration pass (optimum
-`ORTOptimizer.quantize(static=True)` over a representative corpus), which
+export: activation scales baked as constants from a calibration pass (optimum `ORTQuantizer.fit` with an `is_static=True` quantization config over a representative corpus, then `ORTQuantizer.quantize`), which
 contains no batch-sensitive op and passes the probe. fp32 exports are the
 zero-effort alternative (larger, slower, but batch-invariant and
 byte-deterministic).

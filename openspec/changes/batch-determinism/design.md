@@ -76,8 +76,9 @@ batch-sensitive. Operators who need fail-loud assert the degradation log line
 ### Deterministic-export strategy (deployment side)
 
 To keep batching *and* int8-size memory: serve static-quantization (QDQ)
-exports produced from a calibration pass (optimum `ORTOptimizer`/
-`ORTOptimizer.quantize(static=True)` over a representative corpus). QDQ bakes
+exports produced from a calibration pass (optimum `ORTQuantizer.fit` with an
+`is_static=True` quantization config over a representative corpus, then
+`ORTQuantizer.quantize`). QDQ bakes
 per-layer scales as constants → no DQL → probe passes → batching enabled. fp32
 exports are the zero-effort fallback (bigger + slower, probe passes). The
 deployment-side export/config changes are tracked in tasks; emb itself only

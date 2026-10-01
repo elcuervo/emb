@@ -44,6 +44,12 @@ func (t *RefTokenizer) Encode(text string, maxLength int) ([]int64, []int64, err
 	real = truncatePreservingSpecialTokens(real, compactSpecials(enc.SpecialTokensMask, realLen), maxLength)
 
 	if t.padOutput {
+		// Truncation preserves special tokens even when they alone exceed
+		// maxLength, but the padded output is allocated to exactly maxLength:
+		// reject the impossible request instead of indexing past the buffer.
+		if len(real) > maxLength {
+			return nil, nil, fmt.Errorf("tokenizer produced %d tokens (including special tokens) for max_length %d", len(real), maxLength)
+		}
 		inputIDs := make([]int64, maxLength)
 		attnMask := make([]int64, maxLength)
 		for i, id := range real {

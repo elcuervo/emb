@@ -25,11 +25,11 @@ var probeTexts = [2]string{
 }
 
 // ProbeBatchDeterminism verifies that a model's output bytes are independent
-// of batch composition: it embeds two probe texts alone (1-row runs) and
-// co-batched (1 2-row run) on a freshly opened session, padding every run to
-// the same sequence length so the comparison isolates batch composition from
-// padding, then byte-compares each text's alone vs co-batched output (exact,
-// no tolerance — same process/build, so any difference is batch dependence).
+// of batch composition: it embeds two probe texts alone (1-row runs at their
+// natural lengths) and co-batched (1 2-row run, where the short row is padded
+// to the long row's width exactly as serving pads a multi-text request), then
+// byte-compares each text's alone vs co-batched output (exact, no tolerance —
+// same process/build, so any difference is batch or padding dependence).
 //
 // It returns nil for batch-invariant graphs and ErrBatchDependence otherwise.
 // Cost: one session + three small runs, intended to run once per model at load.
@@ -44,32 +44,23 @@ func ProbeBatchDeterminism(sessionFactory func() (onnx.Session, error), tok toke
 	}
 	defer func() { _ = sess.Close() }()
 
-	// Tokenize both probe texts and pad to a common sequence length: native
-	// padding (PadEncodings) re-pads per run, which would make the solo and
-	// co-batched runs differ in width for batch-invariant graphs too (mean
-	// pooling over a longer padded sequence changes bytes deterministically).
+	// Tokenize both probe texts and keep their natural lengths: the solo runs
+	// must use the exact shape a solo request uses, and the co-batched run lets
+	// PadEncodings pad the short row to the long row's width, which is exactly
+	// how a multi-text request is served. Pre-padding the solo runs would hide
+	// graphs whose output depends on the padded sequence length (dynamic
+	// quantization over the full [batch, seq, dim] tensor), letting a model that
+	// changes bytes beside a longer text pass the probe.
 	encs := make([][]Encoding, len(probeTexts))
-	seqLen := 0
 	for i, text := range probeTexts {
 		ids, mask, err := tok.Encode(text, maxLen)
 		if err != nil {
 			return fmt.Errorf("probe tokenization: %w", err)
 		}
-		if len(ids) > seqLen {
-			seqLen = len(ids)
+		if len(ids) == 0 {
+			return errors.New("probe tokenization produced empty encodings")
 		}
 		encs[i] = []Encoding{{InputIDs: ids, AttentionMask: mask}}
-	}
-	if seqLen == 0 {
-		return errors.New("probe tokenization produced empty encodings")
-	}
-	for i := range encs {
-		id, mask := encs[i][0].InputIDs, encs[i][0].AttentionMask
-		for len(id) < seqLen {
-			id = append(id, 0)
-			mask = append(mask, 0)
-		}
-		encs[i][0].InputIDs, encs[i][0].AttentionMask = id, mask
 	}
 
 	aloneA, _, err := runEncodings(sess, encs[0], dim, normalize, pooling)

@@ -65,13 +65,24 @@ func (w *Worker) run() {
 	}
 }
 
+// process runs one single-row inference per text. A worker-pool model is the
+// unbatched path (explicit timeout: 0, or degraded after a failed determinism
+// probe): co-batching a request's texts in one run would reintroduce exactly
+// the batch dependence the probe exists to reject.
 func (w *Worker) process(texts []string) Response {
-	embeddings, totalTokens, err := processBatch(w.session, w.tokenizer, texts, w.dim, w.maxLen, w.normalize, w.pooling)
-	w.tokens.Add(int64(totalTokens))
-	if err != nil {
-		w.errors.Add(1)
-		return Response{Err: err}
+	embeddings := make([][]byte, 0, len(texts))
+	var totalTokens int
+	for _, text := range texts {
+		emb, toks, err := processBatch(w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
+		totalTokens += toks
+		if err != nil {
+			w.tokens.Add(int64(totalTokens))
+			w.errors.Add(1)
+			return Response{Err: err}
+		}
+		embeddings = append(embeddings, emb...)
 	}
+	w.tokens.Add(int64(totalTokens))
 	return Response{Embeddings: embeddings}
 }
 

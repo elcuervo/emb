@@ -105,10 +105,10 @@ func TestProbeBatchDeterminismFailsSensitiveGraph(t *testing.T) {
 }
 
 // TestProbeBatchDeterminismRunsExactlyThreeRuns locks the probe's run shape:
-// two 1-row runs and one 2-row run, all padded to the SAME sequence length.
-// Equal seqLen across runs is what isolates batch composition from padding —
-// a batch-invariant graph must pass with byte-identical outputs, which is only
-// true while the padding is identical across all three runs.
+// two 1-row runs at the probe texts' own lengths and one 2-row run padded to
+// the longer text — the same shapes a solo request and a two-text request are
+// served with. Comparing equal-sequence-length runs instead would hide graphs
+// whose output depends on the padded sequence length.
 func TestProbeBatchDeterminismRunsExactlyThreeRuns(t *testing.T) {
 	sess := &invariantSession{}
 	err := ProbeBatchDeterminism(
@@ -124,8 +124,15 @@ func TestProbeBatchDeterminismRunsExactlyThreeRuns(t *testing.T) {
 	if sess.calls[0].batchSize != 1 || sess.calls[1].batchSize != 1 || sess.calls[2].batchSize != 2 {
 		t.Fatalf("probe batch sizes = %+v, want [1 1 2]", sess.calls)
 	}
-	if sess.calls[0].seqLen != sess.calls[1].seqLen || sess.calls[1].seqLen != sess.calls[2].seqLen {
-		t.Fatalf("probe sequence lengths differ across runs: %+v (padding must be identical)", sess.calls)
+	if sess.calls[0].seqLen == sess.calls[1].seqLen {
+		t.Fatalf("probe solo runs should keep their natural lengths: %+v", sess.calls)
+	}
+	wantCo := sess.calls[0].seqLen
+	if sess.calls[1].seqLen > wantCo {
+		wantCo = sess.calls[1].seqLen
+	}
+	if sess.calls[2].seqLen != wantCo {
+		t.Fatalf("co-batched seqLen = %d, want %d (max of solo lengths)", sess.calls[2].seqLen, wantCo)
 	}
 }
 

@@ -248,6 +248,13 @@ jobs:
             exit 1
           fi
 
+      - name: Coverage gate
+        env:
+          CGO_ENABLED: "1"
+          CGO_LDFLAGS: "-L/opt/libtokenizers"
+          LD_LIBRARY_PATH: /opt/onnxruntime/lib
+        run: bash scripts/coverage.sh gate
+
   # The sandbox bridge's own tests. It lives under `website/` but is a Go
   # program: a change to it, its presets, or its deployment configuration runs
   # these, and so does any change outside the site directory (which could have
