@@ -344,10 +344,16 @@ func hotW(width int) int {
 	if width <= 0 {
 		width = 80
 	}
-	if w := width - 26; w > 10 {
+	// Reserve the model label (14) and the row's rate column (2+colHeat).
+	if w := width - 38; w > 10 {
 		return w
 	}
 	return 10
+}
+
+// heatContentW is the heatmap panel's inner width: label + strip + rate column.
+func (m tuiModel) heatContentW() int {
+	return 13 + 1 + m.hotW() + 2 + colHeat
 }
 
 func (m *tuiModel) sparkW() int {
@@ -466,19 +472,31 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 	m.sampler.PushEvents(res.Events)
 	p := m.sampler.Push(res)
 
-	// Reconcile known models (EMB.MODELS each tick; EMB.INFO for the new
-	// names starts next round).
-	m.known = m.known[:0]
-	m.modelOrder = m.modelOrder[:0]
+	// Reconcile known models with a stable first-seen order. The server's
+	// EMB.MODELS order is not something to render by: keep rows where they are,
+	// append newly discovered models, and drop the ones that vanished, so
+	// traffic can never make a row jump.
+	announced := make(map[string]bool, len(res.Models))
 	for _, mod := range res.Models {
-		if _, ok := m.sparks[mod.Name]; !ok {
-			sp := sparkline.New(m.sparkW(), 1,
-				sparkline.WithStyle(modelStyle(len(m.modelOrder))))
-			m.sparks[mod.Name] = &sp
-		}
-		m.known = append(m.known, mod.Name)
-		m.modelOrder = append(m.modelOrder, mod.Name)
+		announced[mod.Name] = true
 	}
+	kept := m.modelOrder[:0]
+	for _, name := range m.modelOrder {
+		if announced[name] {
+			kept = append(kept, name)
+		}
+	}
+	m.modelOrder = kept
+	for _, mod := range res.Models {
+		if slices.Contains(m.modelOrder, mod.Name) {
+			continue
+		}
+		m.modelOrder = append(m.modelOrder, mod.Name)
+		sp := sparkline.New(m.sparkW(), 1,
+			sparkline.WithStyle(modelStyle(len(m.modelOrder)-1)))
+		m.sparks[mod.Name] = &sp
+	}
+	m.known = append(m.known[:0], m.modelOrder...)
 	for name := range m.sparks {
 		if !slices.Contains(m.modelOrder, name) {
 			delete(m.sparks, name)
@@ -619,35 +637,25 @@ func (m tuiModel) headerView() string {
 	if p.UptimeSecs > 0 {
 		uptime = fmt.Sprintf("uptime %s", fmtDuration(p.UptimeSecs))
 	}
-	status := warnStyle.Render("○ connecting")
-	if m.connected {
-		status = okStyle.Render("● connected")
-	} else if m.lastGood.Unix() > 0 {
-		status = errStyle.Render("● reconnecting")
-	}
+	// Health (connection, rates, latency) lives in the banner immediately
+	// below; the header is identity only, so it does not repeat it.
 	line := headerStyle.Render("emb-top v"+version) +
 		" · " + labelStyle.Render(m.client.Addr()) +
 		" · " + uptime +
 		" · " + fmt.Sprint(p.RegisteredModels) + " models" +
 		" · poll " + m.interval.String()
-	if p.ReqRate > 0 {
-		line += " · " + labelStyle.Render(fmtRate(p.ReqRate)+" r/s")
-	}
-	if _, _, p95, ok := m.sampler.Latency(); ok {
-		line += " · p95 " + dimStyle.Render(fmtLatency(p95))
-	}
-	line += " · " + status
 	if m.paused {
 		line += " " + warnStyle.Render("(paused)")
 	}
 	return lipgloss.NewStyle().Width(m.width).Render(line)
 }
 
-// heatmapView renders a hand-rolled model-activity heatmap: rows = models
-// (busiest on top), columns = recent polls, cell = colored block intensity by
-// req/s. Built by hand because lipgloss v1 does not style whitespace-only
-// cells (the ntcharts heatmap widget colors space cells, which render as
-// unstyled), so each cell is a colored non-space rune.
+// heatmapView renders a hand-rolled model-activity heatmap: rows = models in
+// stable first-seen order, columns = recent polls, cell = colored block
+// intensity by req/s, with each row's current rate spelled out. Built by hand
+// because lipgloss v1 does not style whitespace-only cells (the ntcharts
+// heatmap widget colors space cells, which render as unstyled), so each cell is
+// a colored non-space rune.
 func (m tuiModel) heatmapView() string {
 	if len(m.modelOrder) == 0 {
 		return dimStyle.Render("no models loaded on node")
@@ -674,24 +682,38 @@ func (m tuiModel) heatmapView() string {
 			Width(13).Render(name) + " "
 		if len(pts) == 0 || maxV <= 0 {
 			line += dimStyle.Render(strings.Repeat(cell, w))
-			lines = append(lines, line)
-			continue
-		}
-		for x := 0; x < w; x++ {
-			idx := x * len(pts) / w
-			if idx >= len(pts) {
-				idx = len(pts) - 1
+		} else {
+			for x := 0; x < w; x++ {
+				idx := x * len(pts) / w
+				if idx >= len(pts) {
+					idx = len(pts) - 1
+				}
+				frac := pts[idx].ReqRate / maxV
+				line += heatCellStyle(frac).Render(cell)
 			}
-			frac := pts[idx].ReqRate / maxV
-			line += heatCellStyle(frac).Render(cell)
 		}
-		lines = append(lines, line)
+		// The current rate is the row's readable value; the cells are the trend.
+		value, _ := fixedCol(labelStyle, fmtRate(latestRate(pts))+" r/s", colHeat)
+		lines = append(lines, line+"  "+value)
 	}
-	legend := " " + labelStyle.Render("req/s · models × recent polls") + "  "
+	ramp := ""
 	for _, c := range heatColors {
-		legend += lipgloss.NewStyle().Background(c).Foreground(c).Render(heatCellBlock)
+		ramp += lipgloss.NewStyle().Background(c).Foreground(c).Render(heatCellBlock)
 	}
+	legend := " " + labelStyle.Render("req/s per model") + dimStyle.Render(" · older ") + ramp + dimStyle.Render(" newer")
+	if n := len(m.modelOrder) - len(rows); n > 0 {
+		legend += dimStyle.Render(fmt.Sprintf("   (+%d more)", n))
+	}
+	legend = lipgloss.NewStyle().MaxWidth(m.heatContentW()).Render(legend)
 	return legend + "\n" + strings.Join(lines, "\n")
+}
+
+// latestRate returns the last sampled req/s for a model, or 0.
+func latestRate(pts []embtop.ModelPoint) float64 {
+	if len(pts) == 0 {
+		return 0
+	}
+	return pts[len(pts)-1].ReqRate
 }
 
 // heatCellBlock is the rune used per heatmap cell.
@@ -740,6 +762,7 @@ const (
 	colRate = 12
 	colLat  = 12
 	colErr  = 10
+	colHeat = 10
 )
 
 // fixedCol renders plain text right-aligned in a constant-width column and

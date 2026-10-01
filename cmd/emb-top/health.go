@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -160,7 +161,11 @@ func (m tuiModel) bannerView() string {
 
 	chips := make([]string, 0, len(sigs))
 	for _, s := range sigs {
-		chips = append(chips, styleFor(s.level).Render(s.text))
+		text := s.text
+		if s.text == "reconnecting" && !m.lastGood.IsZero() {
+			text += " · last sample " + fmtDuration(int64(time.Since(m.lastGood).Seconds())) + " ago"
+		}
+		chips = append(chips, styleFor(s.level).Render(text))
 	}
 	line := dot + " " + headerStyle.Render(healthLabel(st)) + "  " +
 		strings.Join(chips, dimStyle.Render(" │ "))

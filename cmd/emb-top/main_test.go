@@ -178,6 +178,38 @@ func TestModelRowsStayInServerOrder(t *testing.T) {
 	}
 }
 
+func TestModelRowsStayStableAcrossServerReorders(t *testing.T) {
+	m := newSizedTUI(120, 40)
+	poll := func(names ...string) *embtop.PollResult {
+		res := fakePoll(10, 100, 0, 0)
+		res.Models = nil
+		res.PerModel = map[string]*embtop.ModelStats{}
+		for _, n := range names {
+			res.Models = append(res.Models, embtop.ModelListEntry{Name: n, Dim: 1, Status: "ready"})
+			res.PerModel[n] = &embtop.ModelStats{Dim: 1, Requests: 10, Tokens: 100, Pooling: "mean"}
+		}
+		return res
+	}
+	m.applyResult(poll("minilm", "bge", "e5"))
+	first := strings.Join(m.modelOrder, ",")
+	// The server's EMB.MODELS order is unspecified; the client must not follow it.
+	for _, order := range [][]string{
+		{"e5", "minilm", "bge"},
+		{"bge", "e5", "minilm"},
+		{"minilm", "bge", "e5"},
+	} {
+		m.applyResult(poll(order...))
+		if got := strings.Join(m.modelOrder, ","); got != first {
+			t.Fatalf("rows moved after server reorder %v: %q, want %q", order, got, first)
+		}
+	}
+	// A model discovered later appends; existing rows stay put.
+	m.applyResult(poll("jina", "minilm", "bge", "e5"))
+	if got, want := strings.Join(m.modelOrder, ","), first+",jina"; got != want {
+		t.Fatalf("new model order = %q, want %q", got, want)
+	}
+}
+
 func TestEmitFrameIsOneJSONLine(t *testing.T) {
 	var buf bytes.Buffer
 	frame := "line one\x1b[31m red\x1b[0m\nline two"

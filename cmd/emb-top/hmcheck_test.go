@@ -17,7 +17,7 @@ func TestHeatmapGridRendered(t *testing.T) {
 	view := m.View()
 	// Heatmap legend + labeled block rows render (colors are applied by
 	// lipgloss only in a real terminal; structure is what we assert here).
-	if !strings.Contains(view, "req/s · models × recent polls") {
+	if !strings.Contains(view, "req/s per model") {
 		t.Fatalf("missing heatmap title")
 	}
 	if !strings.Contains(view, "█") {
