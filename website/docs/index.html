@@ -910,13 +910,14 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         <code>scripts/laya.lua</code>; it ports the reference's sequence construction,
         temperature calibration and answer assembly, and is pinned byte-for-byte
         against the vendored corpus (see <a href="../demos/laya.html">the decision engine</a>
-        plate and the <a href="../README.md">README's Laya section</a>). The plate
-        runs three rounds over the same call: a <b>Snake loop</b> that runs a whole
+        plate and the <a href="https://github.com/elcuervo/emb/blob/main/README.md" rel="noopener">README's Laya section</a>). The plate
+        runs four rounds over the same call: a <b>Snake loop</b> that runs a whole
         bounded episode in one call — the preset owns the board, the planner and the
         three typed questions, and the plate animates the frames beside the
         reference's own probability readout (ported from
         <a href="https://github.com/mizorewww/laya-coreml" rel="noopener">laya-coreml</a>),
-        the <b>email-triage</b> set, and the <b>smallest</b> three-question round.
+        a <b>Pac-Man loop</b> on the same contract with its own maze, pellets and
+        ghosts, the <b>email-triage</b> set, and the <b>smallest</b> three-question round.
       </p>
 
       <h3 class="doc-h3">The three checkpoints</h3>
@@ -969,8 +970,10 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         <code>EMB.EVSHA ... 1 '{"ticks": 96, "board": null}'</code> returns 96 frames
         (each with the move probabilities and the shielded result) plus the board to
         resume from. The page animates the frames locally and prefetches the next
-        episode. The host learns nothing about Snake: it is a task preset, and a
-        second task would keep its own rules the same way.
+        episode. The host learns nothing about Snake: it is a task preset, and
+        <code>scripts/pacman.lua</code> is a second one — its own maze, pellets and
+        ghosts, the same one-call contract — so a third task would keep its own rules
+        the same way.
       </p>
 
       <h3 class="doc-h3">Mount an export bundle</h3>

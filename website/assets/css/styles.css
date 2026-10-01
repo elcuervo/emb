@@ -2611,6 +2611,20 @@ html.js.is-ready .hero__prose{
 .ord__t{ font-family: var(--display), var(--sans), sans-serif; font-size: clamp(17px, 1.35vw, 24px); }
 .ord__t a{ color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--rule); }
 .ord__t a:hover{ color: var(--accent-ink); border-bottom-color: var(--accent-ink); }
+/* The `new` mark, in the gallery and the plate: one chip, a span in the list and
+   generated content on the tab (its aria-label keeps the mark out of the
+   accessible name). */
+.chip-new,
+.lab__tab[data-new]::after{
+  padding: 0 .3em;
+  border: 1px solid currentColor;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  vertical-align: .14em;
+}
+.chip-new{ display: inline-block; margin-left: .5em; color: var(--accent-ink); }
 .ord__w{ font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--muted); }
 .ord__w b{ color: var(--fg); font-weight: 500; letter-spacing: .05em; }
 .ord__start{ color: var(--accent-ink); }
@@ -3373,6 +3387,9 @@ html.js.is-ready .hero__prose{
 .lab__tab[aria-pressed="true"]{ background: var(--accent); color: var(--fg); }
 .lab__tab[aria-pressed="true"]:hover{ color: var(--fg); }
 .lab__tab:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The `new` mark is generated, not markup: the tab keeps its own text, and its
+   aria-label keeps the mark out of the accessible name. */
+.lab__tab[data-new]::after{ content: "new"; margin-left: .55em; }
 .lab__blurb{
   margin: 14px 0 0;
   max-width: 82ch;
@@ -3393,7 +3410,7 @@ html.js.is-ready .hero__prose{
 .lab__honest b{ color: var(--bg); }
 
 /* SNAKE: the board and its readings, side by side. */
-.snakegrid{
+.snakegrid, .pacgrid{
   display: grid;
   grid-template-columns: minmax(0, 620px) minmax(150px, 1fr);
   gap: clamp(14px, 1.6vw, 22px);
@@ -3412,6 +3429,25 @@ html.js.is-ready .hero__prose{
 .snake__body{ fill: #3f6b58; }
 .snake__head{ fill: var(--accent); }
 .snake__food{ fill: var(--bg); }
+
+/* PAC-MAN: the same dark board, a different vocabulary. Walls reuse the snake's
+   green, dots the paper, the player the accent, and the ghosts the rule grey —
+   no new colour enters the world. Frightened ghosts read as paper. */
+.pac{
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule-dark);
+  background: #111110;
+}
+.pac__bg{ fill: #111110; }
+.pac__wall{ fill: #3f6b58; }
+.pac__dot{ fill: var(--bg); }
+.pac__power{ fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+.pac__player{ fill: var(--accent); }
+.pac__ghost{ fill: var(--rule); }
+.pac__ghost.is-frightened{ fill: var(--bg); }
+.pac__eye{ fill: #111110; }
 .snakestats{ margin: 0; }
 .snakestats__line{
   margin: 0 0 6px;
@@ -3508,13 +3544,14 @@ html.js.is-ready .hero__prose{
 }
 .block--dark .qtree .t-cmd{ color: inherit; }
 @media (max-width: 720px){
-  .snakegrid{ grid-template-columns: minmax(0, 1fr); }
+  .snakegrid, .pacgrid{ grid-template-columns: minmax(0, 1fr); }
   .qtree__branches{ grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The board reads at its own scale: a capped column, so the readings sit
    beside it rather than a mile away. */
 .snakeboard{ max-width: 620px; }
+.pacboard{ max-width: 620px; }
 
 /* THE API: the call's arguments, defined once. A mono term column, the prose
    in the muted voice, one rule per definition. */

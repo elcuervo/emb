@@ -393,15 +393,11 @@ func redisCmdBig(t *testing.T, addr string, args ...string) string {
 	return string(body)
 }
 
-// TestLayaSnakeEpisode pins the task preset's loop: one call returns a bounded
-// episode of frames, each carrying the model's probabilities and the shield's
-// result, and the returned board chains into the next episode. The envelope
-// rides on the model entry, so the calls carry no config argument -- the wire
-// the decision plate uses.
-func TestLayaSnakeEpisode(t *testing.T) {
-	addr, srv := serveLaya(t, "")
-
-	src, err := os.ReadFile("../../scripts/snake.lua")
+// layaPreload loads a task preset the way the sandbox does and returns the
+// digest EMB.EVSHA will accept.
+func layaPreload(t *testing.T, srv *Server, path string) string {
+	t.Helper()
+	src, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,42 +407,42 @@ func TestLayaSnakeEpisode(t *testing.T) {
 	}
 	sha, err := srv.PreloadScriptConfig("laya-tiny", string(src), cfg)
 	if err != nil {
-		t.Fatalf("preloading snake.lua: %v", err)
+		t.Fatalf("preloading %s: %v", path, err)
 	}
+	return sha
+}
 
-	episode := func(t *testing.T, ticks int, board any) map[string]any {
-		t.Helper()
-		request, err := json.Marshal(map[string]any{
-			"ticks": ticks, "board": board, "width": 20, "height": 14, "seed": 7,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		tok := redisCmd(t, addr, "EMB.EVSHA", "laya-tiny", sha, "1", string(request))
-		if tok.kind != "bulk" {
-			t.Fatalf("EVSHA reply = %+v", tok)
-		}
-		var out map[string]any
-		if err := json.Unmarshal([]byte(tok.val.(string)), &out); err != nil {
-			t.Fatalf("parsing reply %v: %v", tok.val, err)
-		}
-		return out
+// layaEpisode sends one EMB.EVSHA and parses the reply. An episode carries every
+// frame, so the reply can be large and needs the full-bulk reader.
+func layaEpisode(t *testing.T, addr, sha string, request map[string]any) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
 	}
+	reply := redisCmdBig(t, addr, "EMB.EVSHA", "laya-tiny", sha, "1", string(raw))
+	var out map[string]any
+	if err := json.Unmarshal([]byte(reply), &out); err != nil {
+		t.Fatalf("parsing reply %v: %v", reply, err)
+	}
+	return out
+}
 
+// assertLayaFrames pins the frame contract both loop presets share: one to four
+// move probabilities summing to one, an executed move that differs from the
+// proposed one exactly when the planner intervened, and the named readout
+// probabilities in [0,1].
+func assertLayaFrames(t *testing.T, frames []any, reads ...string) {
+	t.Helper()
 	dirs := map[string]bool{"UP": true, "DOWN": true, "LEFT": true, "RIGHT": true}
-	first := episode(t, 8, nil)
-	frames, ok := first["frames"].([]any)
-	if !ok || len(frames) != 8 {
-		t.Fatalf("episode returned %v frames, want 8", first["frames"])
-	}
 	for i, raw := range frames {
 		frame, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("frame %d is not an object", i)
 		}
 		probs, ok := frame["probs"].(map[string]any)
-		if !ok || len(probs) != 4 {
-			t.Fatalf("frame %d: move probabilities = %v, want four", i, frame["probs"])
+		if !ok || len(probs) == 0 || len(probs) > 4 {
+			t.Fatalf("frame %d: move probabilities = %v", i, frame["probs"])
 		}
 		sum := 0.0
 		for dir, p := range probs {
@@ -462,43 +458,59 @@ func TestLayaSnakeEpisode(t *testing.T) {
 		if !dirs[proposed] || !dirs[executed] {
 			t.Fatalf("frame %d: proposed %q executed %q", i, proposed, executed)
 		}
-		// The shield's contract: the executed move differs from the model's own
-		// pick exactly when the shield intervened.
+		// The planner's contract: the executed move differs from the model's own
+		// pick exactly when the planner intervened.
 		if intervened := frame["intervened"].(bool); intervened != (proposed != executed) {
 			t.Fatalf("frame %d: intervened=%v but proposed=%q executed=%q", i, intervened, proposed, executed)
 		}
-		for _, key := range []string{"risk", "food"} {
+		for _, key := range reads {
 			v := frame[key].(float64)
 			if v < 0 || v > 1 {
 				t.Fatalf("frame %d: %s = %v, want [0,1]", i, key, v)
 			}
 		}
 	}
+}
+
+// TestLayaSnakeEpisode pins the task preset's loop: one call returns a bounded
+// episode of frames, each carrying the model's probabilities and the shield's
+// result, and the returned board chains into the next episode. The envelope
+// rides on the model entry, so the calls carry no config argument -- the wire
+// the decision plate uses.
+func TestLayaSnakeEpisode(t *testing.T) {
+	addr, srv := serveLaya(t, "")
+	sha := layaPreload(t, srv, "../../scripts/snake.lua")
+	episode := func(ticks int, board any) map[string]any {
+		return layaEpisode(t, addr, sha, map[string]any{
+			"ticks": ticks, "board": board, "width": 20, "height": 14, "seed": 7,
+		})
+	}
+
+	first := episode(8, nil)
+	frames, ok := first["frames"].([]any)
+	if !ok || len(frames) != 8 {
+		t.Fatalf("episode returned %v frames, want 8", first["frames"])
+	}
+	assertLayaFrames(t, frames, "risk", "food")
 	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 {
 		t.Fatalf("usage = %v", usage)
 	}
 
 	// The returned board chains: a one-tick episode resumes from it.
 	board := first["board"].(map[string]any)
-	next := episode(t, 1, board)["board"].(map[string]any)
+	next := episode(1, board)["board"].(map[string]any)
 	if next["ticks"].(float64) != board["ticks"].(float64)+1 {
 		t.Fatalf("chained board ticks = %v, want %v", next["ticks"], board["ticks"].(float64)+1)
 	}
 
 	// An unbounded request is clamped to the preset's ceiling rather than run.
-	// The reply is tens of kilobytes, so it needs the full-bulk reader.
-	var bounded map[string]any
-	if err := json.Unmarshal([]byte(redisCmdBig(t, addr, "EMB.EVSHA", "laya-tiny", sha, "1",
-		`{"ticks": 9999, "width": 20, "height": 14, "seed": 7}`)), &bounded); err != nil {
-		t.Fatal(err)
-	}
-	if got := len(bounded["frames"].([]any)); got > 200 {
+	if got := len(episode(9999, nil)["frames"].([]any)); got > 200 {
 		t.Fatalf("episode frames = %d, want <= 200", got)
 	}
 
 	// A zero-tick call returns the opening board and no frames (the plate's
 	// opening render); an empty Lua table encodes as `{}`, so accept either.
-	opening := episode(t, 0, nil)
+	opening := episode(0, nil)
 	switch f := opening["frames"].(type) {
 	case nil, []any, map[string]any:
 	default:
@@ -506,5 +518,50 @@ func TestLayaSnakeEpisode(t *testing.T) {
 	}
 	if _, ok := opening["board"].(map[string]any); !ok {
 		t.Fatalf("zero-tick episode returned no board: %v", opening)
+	}
+}
+
+// TestLayaPacmanEpisode pins the second task preset's loop. It shares the
+// contract above; the preset is not snake's: the readouts are danger/clear and
+// the chained state is a game, not a board.
+func TestLayaPacmanEpisode(t *testing.T) {
+	addr, srv := serveLaya(t, "")
+	sha := layaPreload(t, srv, "../../scripts/pacman.lua")
+	episode := func(ticks int, game any) map[string]any {
+		return layaEpisode(t, addr, sha, map[string]any{"ticks": ticks, "game": game, "seed": 7})
+	}
+
+	first := episode(6, nil)
+	frames, ok := first["frames"].([]any)
+	if !ok || len(frames) != 6 {
+		t.Fatalf("episode returned %v frames, want 6", first["frames"])
+	}
+	assertLayaFrames(t, frames, "danger", "clear")
+	if usage := first["usage"].(map[string]any); usage["input_tokens"].(float64) <= 0 {
+		t.Fatalf("usage = %v", usage)
+	}
+
+	// The returned game chains: a one-tick episode resumes from it.
+	game := first["game"].(map[string]any)
+	next := episode(1, game)["game"].(map[string]any)
+	if next["ticks"].(float64) != game["ticks"].(float64)+1 {
+		t.Fatalf("chained game ticks = %v, want %v", next["ticks"], game["ticks"].(float64)+1)
+	}
+
+	// An unbounded request is clamped to the preset's ceiling rather than run.
+	if got := len(episode(9999, nil)["frames"].([]any)); got > 400 {
+		t.Fatalf("episode frames = %d, want <= 400", got)
+	}
+
+	// A zero-tick call returns the opening game and no frames; an empty Lua table
+	// encodes as `{}`, so accept either.
+	opening := episode(0, nil)
+	switch f := opening["frames"].(type) {
+	case nil, []any, map[string]any:
+	default:
+		t.Fatalf("unexpected frames type %T", f)
+	}
+	if _, ok := opening["game"].(map[string]any); !ok {
+		t.Fatalf("zero-tick episode returned no game: %v", opening)
 	}
 }
