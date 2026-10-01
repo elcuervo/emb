@@ -33,5 +33,5 @@
 
 - [x] 5.1 Update `website/docs/index.html` §10 and the Laya section of `README.md` to name the per-decision inference reading and the Pac-Man progress policy; verify the named behavior matches the presets
 - [x] 5.2 Restamp the changed preset digests with `python3 website/tools/stamp-presets.py`; verify `python3 website/tools/stamp-presets.py --check` and `python3 website/tools/published-tree.py` both exit 0
-- [ ] 5.3 Run the full local gate inside `nix develop`: `just lint`, `just verify-harness`, and `go test ./internal/... ./website/repl/ -count=1`; verify all pass
+- [x] 5.3 Run the full local gate inside `nix develop`: `just lint`, `just verify-harness`, and `go test ./internal/... ./website/repl/ -count=1`; verify all pass
 - [ ] 5.4 After merge, `just sandbox-deploy` and verify the live plate answers an episode with positive `inference_ms` and a Pac-Man run that clears pellets
