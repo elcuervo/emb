@@ -1097,11 +1097,15 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	stats := entry.Pool.Stats()
+	verdict, reason := entry.BatchDeterminism, entry.BatchDeterminismReason
+	if verdict == "" {
+		verdict, reason = "untested", "untested"
+	}
 
 	if s.cache != nil {
-		writePairs(conn, 27)
+		writePairs(conn, 29)
 	} else {
-		writePairs(conn, 20)
+		writePairs(conn, 22)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1131,6 +1135,10 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(stats.BatchingMaxBatch)
 	conn.WriteBulkString("batching_max_tokens")
 	conn.WriteInt(stats.BatchingMaxTokens)
+	conn.WriteBulkString("batch_determinism")
+	conn.WriteBulkString(verdict)
+	conn.WriteBulkString("batch_determinism_reason")
+	conn.WriteBulkString(reason)
 	conn.WriteBulkString("padding_efficiency")
 	conn.WriteBulkString(fmt.Sprintf("%.4f", stats.PaddingEfficiency))
 	conn.WriteBulkString("quantization")
@@ -1199,8 +1207,16 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 				batchInfo = fmt.Sprintf(" batch=%d/%d budget=%d eff=%.3f",
 					st.BatchingTimeout, st.BatchingMaxBatch, st.BatchingMaxTokens, st.PaddingEfficiency)
 			}
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t%s",
-				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize, batchInfo))
+			det := "untested"
+			if v := m.BatchDeterminism; v != "" && v != "untested" {
+				det = v
+			}
+			// Always surface the verdict, reason, and effective timeout (0 when
+			// batching is off or degraded): the batch-determinism spec requires
+			// both in EMB.STATS regardless of gating outcome.
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s",
+				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize,
+				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo))
 		}
 	}
 

@@ -37,13 +37,10 @@ const parityTokenizerPath = "../../models/minilm/tokenizer.json"
 // the fixture is absent, mirroring scriptFixture.
 func loadModelFixture(t *testing.T, cfg config.ModelConfig) (*Registry, *ModelEntry) {
 	t.Helper()
-	if err := onnx.InitEnvironment(""); err != nil {
-		t.Skipf("onnx runtime unavailable: %v", err)
-	}
+	initORT(t)
 	reg := New()
 	t.Cleanup(func() {
 		_ = reg.Close()
-		_ = onnx.DestroyEnvironment()
 	})
 	cfg.ONNX = parityModelPath
 	cfg.Tokenizer = parityTokenizerPath

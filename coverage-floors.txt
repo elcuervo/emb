@@ -1,0 +1,26 @@
+# Coverage floors for `just coverage-gate`, measured cross-package with
+# `go test -coverpkg=./... ./...`. One line per production package plus
+# TOTAL_PROD (the production total, excluding cmd/* and bench/*).
+#
+# Regenerate from a clean run on the reference toolchain with:
+#   bash scripts/coverage.sh report
+# and set each floor to the measured percentage rounded down by one point, so
+# ordinary platform/toolchain jitter does not trip the gate. Lowering a floor
+# requires a recorded justification in the change that does it.
+#
+# Format: <package><whitespace><floor-percent>
+TOTAL_PROD	86
+github.com/elcuervo/emb/internal/bounded	96
+github.com/elcuervo/emb/internal/config	91
+github.com/elcuervo/emb/internal/embtop	91
+github.com/elcuervo/emb/internal/embverify	92
+github.com/elcuervo/emb/internal/hfhub	90
+github.com/elcuervo/emb/internal/imageproc	81
+github.com/elcuervo/emb/internal/onnx	78
+github.com/elcuervo/emb/internal/pipeline	87
+github.com/elcuervo/emb/internal/registry	78
+github.com/elcuervo/emb/internal/resp	78
+github.com/elcuervo/emb/internal/script	85
+github.com/elcuervo/emb/internal/server	90
+github.com/elcuervo/emb/internal/tokenizer	87
+github.com/elcuervo/emb/website/repl	78

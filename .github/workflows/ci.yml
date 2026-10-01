@@ -169,6 +169,92 @@ jobs:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
 
+  # The CGo-dependent suites: server, registry, pipeline, ONNX, script,
+  # image-processing, emb-top, and the sandbox bridge. They need the ONNX
+  # runtime (link- and run-time) and the minilm fixture, which the CGo-free
+  # `test` job does not provide. This is the job that turns `just cover`'s
+  # numbers into an enforced check instead of a local-only report: a failing
+  # test here fails the pull request, and the skip count is reported so a green
+  # run cannot mean "the model-dependent tests did not run".
+  test-cgo:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Source versions
+        run: cat .github/versions.env >> $GITHUB_ENV
+
+      - name: Install libtokenizers
+        run: |
+          sudo mkdir -p /opt/libtokenizers
+          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.linux-x86_64.tar.gz" \
+            -o /tmp/libtokenizers.tgz
+          sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
+          rm /tmp/libtokenizers.tgz
+
+      - name: Install ONNX Runtime
+        run: |
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
+            -o /tmp/onnx.tgz
+          sudo mkdir -p /opt/onnxruntime
+          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          rm /tmp/onnx.tgz
+
+      - name: Cache the minilm fixture
+        uses: actions/cache@v4
+        with:
+          path: models/minilm
+          key: minilm-v1
+
+      - name: Download the minilm fixture
+        run: |
+          # Mirrors `just download-model` (Xenova/all-MiniLM-L6-v2); the cache
+          # above makes this a no-op on a hit.
+          mkdir -p models/minilm
+          base=https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main
+          [ -s models/minilm/model.onnx ] || curl -fsSL "$base/onnx/model.onnx" -o models/minilm/model.onnx
+          [ -s models/minilm/tokenizer.json ] || curl -fsSL "$base/tokenizer.json" -o models/minilm/tokenizer.json
+          [ -s models/minilm/config.json ] || curl -fsSL "$base/config.json" -o models/minilm/config.json
+
+      - name: Test (CGo suites)
+        env:
+          CGO_ENABLED: "1"
+          CGO_LDFLAGS: "-L/opt/libtokenizers"
+          LD_LIBRARY_PATH: /opt/onnxruntime/lib
+        run: |
+          set -o pipefail
+          budget=1200
+          start=$SECONDS
+          go test -json ./internal/... ./website/repl/ | tee /tmp/emb-test.json
+          elapsed=$((SECONDS - start))
+
+          skips=$(jq -s '[.[] | select(.Action == "skip")] | length' /tmp/emb-test.json)
+          echo "skipped tests: $skips"
+          if [ "$skips" -gt 0 ]; then
+            jq -r 'select(.Action == "skip") | "  \(.Package) \(.Test // "")"' /tmp/emb-test.json | sort -u
+            echo "::warning::$skips test(s) skipped; this run is not fully executed"
+          fi
+
+          echo "suite wall-clock: ${elapsed}s (budget ${budget}s)"
+          if [ "$elapsed" -gt "$budget" ]; then
+            echo "::error::suite wall-clock ${elapsed}s exceeds the ${budget}s budget"
+            exit 1
+          fi
+
+      - name: Coverage gate
+        env:
+          CGO_ENABLED: "1"
+          CGO_LDFLAGS: "-L/opt/libtokenizers"
+          LD_LIBRARY_PATH: /opt/onnxruntime/lib
+        run: bash scripts/coverage.sh gate
+
   # The sandbox bridge's own tests. It lives under `website/` but is a Go
   # program: a change to it, its presets, or its deployment configuration runs
   # these, and so does any change outside the site directory (which could have

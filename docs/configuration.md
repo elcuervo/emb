@@ -106,7 +106,7 @@ models:
 | `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
 | `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
 | `image_preload` | `false` | Warm the image named-session pool at startup instead of on first `EMB.IMG` |
-| `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies |
+| `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies. Batching is batch-determinism gated automatically (no flag): dynamic-quantized int8 graphs degrade to the worker pool at load (see *Batch determinism*) |
 
 ## Image models and preprocessing parity
 
@@ -164,6 +164,52 @@ pairs) into shared ONNX runs, a token budget bounds each run, and dedicated
 tokenizer workers hide tokenization behind inference. `timeout: 0` opts out.
 `EMB.MULTI` processes pairs with bounded concurrency (≤ the machine's `GOMAXPROCS`),
 so request storms can't spawn unbounded goroutines that starve inference.
+
+## Batch determinism (automatic, no config)
+
+Embeddings served by a batched model are guaranteed to be a deterministic
+function of the input text: the same text returns **byte-identical bytes**
+regardless of which other texts share its inference batch. Most graphs satisfy
+this out of the box — fp32 exports, and int8 exports with static (baked)
+activation scales (QDQ). Dynamic-quantized int8 exports do **not**: they
+derive activation scales from the whole batch tensor's min/max
+(`DynamicQuantizeLinear`), so each text's vector shifts slightly depending on
+batch composition.
+
+No configuration is needed — determinism is enforced by construction at load
+time. Whenever a model loads with a batching window enabled, emb runs a
+one-shot probe (two canned texts, embedded once each alone and once co-batched,
+byte-compared; milliseconds, cached for the model's lifetime):
+
+- **Probe passes** (fp32 / static-QDQ graphs): batching stays enabled.
+- **Probe fails** (dynamic-quantized int8 graphs): the model automatically
+  degrades to the unbatched worker pool (single-row inference — deterministic),
+  with a logged warning; `batching.timeout: 0` is *not* required and provides
+  no additional determinism.
+
+There is no flag to re-enable batching on a failing graph. Operators who must
+keep batching *and* determinism should serve a deterministic export (see
+below), and can gate deployments on the boot-log degradation line:
+
+```
+batch_determinism=failed reason=dql_batch_dependence
+```
+
+The verdict is observable per model: `EMB.INFO <model>` reports
+`batch_determinism` (`passed` | `failed` | `untested`) and
+`batch_determinism_reason`, and the effective `batching_timeout_ms` (0 when a
+model degraded or was configured unbatched). `EMB.STATS` reports the verdict
+per loaded model. `untested` means batching is off by config (`timeout: 0`), so
+nothing needed gating.
+
+### Keeping int8 size *and* batching (deployment guidance)
+
+If the int8 dynamic-quantized export fails the probe, the documented path to
+regain batching without quadrupling memory is a **static-quantized (QDQ)**
+export: activation scales baked as constants from a calibration pass (optimum `ORTQuantizer.fit` with an `is_static=True` quantization config over a representative corpus, then `ORTQuantizer.quantize`), which
+contains no batch-sensitive op and passes the probe. fp32 exports are the
+zero-effort alternative (larger, slower, but batch-invariant and
+byte-deterministic).
 
 ## Caching
 

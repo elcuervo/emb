@@ -1,0 +1,66 @@
+BATCH DETERMINISM: int8 dynamic quantization vs your search
+(same text, different vector — depending on who else arrived
+ in the same 1ms batching window)
+
+1) THE MECHANICS — the batch shifts the quantization grid
+----------------------------------------------------------
+   SOLO (1 row)                        BATCH (8 rows)
+   +------------------+                +-----------------------+
+   |  +------------+  |                |  +-----------------+  |
+   |  | your text  |  |                |  | your text       |  |
+   |  +------------+  |                |  +-----------------+  |
+   | grid from your   |                |  | text B …min/max |  |
+   | text's min/max   |                |  : text C          |  |
+   +------------------+                |  : text D          |  |
+   grid A: --|----|----|               +-----------------------+
+   your text -> V1                     grid B: -|-----|-----|---
+                                       your text -> V2  (V2 != V1)
+   "arriving together" moves the grid -> different bytes
+
+2) "ARRIVING AT THE SAME TIME" DECIDES YOUR VECTOR
+---------------------------------------------------
+   t0                           t0 + 1 ms (batcher window)
+   req A --+
+   req B --+-- coalesced --> batch[A,B,C] --> grid 1 (busy moment)
+   req C --+
+   req D ----------------> solo run       --> grid 2 (quiet moment)
+
+   -> not reproducible: a function of traffic coincidences
+
+3) MEASURED MAGNITUDE
+---------------------
+   cos(V1, V2) ~ 0.9991  .  worst case 0.9988 (<= 1.24e-3 off)
+   angle ~ 2.4-2.9 deg   ->   99.9% similar to itself:
+                               not "wrong", just unstable.
+
+4) WHERE IT ENTERS YOUR SEARCH
+------------------------------
+   query -> EMB(int8,batched) -> OpenSearch kNN(k=1000) -> gate 0.55
+                                       |
+                                       v
+                   score ##########################
+                   0.55  ## band +-1.24e-3 ## <- flips here
+   candidates inside the band change membership per batch pattern;
+   near-ties reorder run to run. Far from the gate: unaffected.
+
+5) POSSIBLE EFFECTS
+-------------------
+   . gate flips           memberships change per instance / over time
+   . ranking churn        near-ties give slightly different orders
+   . index drift          new extractions baked under different traffic
+   . reproducibility      "why did results change with no data change?"
+   . recall (byte store)  ~30% dims flip byte bins; self-distance
+                          12-21 ~ neighbor distances
+
+6) THE FIX — probe at load, automatic, no config
+------------------------------------------------
+   A alone . B alone . A+B co-batched -- byte-compare --> identical?
+        | yes                                             | no
+        v                                                 v
+   batch-invariant                              dynamic-quantized int8
+   (fp32 / static-QDQ)                           auto-degrade -> worker pool
+   batching stays on                             (single-row = deterministic)
+                                                  log: batch_determinism=failed
+                                                     reason=dql_batch_dependence
+
+   After the fix: the same text always lands on the same grid.
