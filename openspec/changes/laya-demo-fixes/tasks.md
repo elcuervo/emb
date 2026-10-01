@@ -32,3 +32,9 @@
 - [x] 6.1 Expand the Inbox example set so it covers the plate's question vocabulary with distinct tickets; verify the plate lists the added tickets
 - [x] 6.2 Lead the typed-question demos with a `decided` strip (argmax per question, matching the marked leaf), mirroring the loops' DECIDED line; verify every question names its chosen option
 - [x] 6.3 Share one grid for the readout bars so `ghost near` / `routes clear` (and Snake's pair) start at the same x; verify the bars align in the browser
+
+## 7. Answer semantics and decision-only highlight
+
+- [x] 7.1 Derive each typed-question answer to match the checkpoint's own semantics — choice argmax, score label from the rounded expected value, noul true only above 0.5 — and mark the leaf that answer selects; verify against `ruby-laya`'s `Answer` semantics and in the browser
+- [x] 7.2 State each answer with its value (probability / expected score / noul probability) so a near-coin-flip reads as one; verify the Inbox strip shows the probability beside every answer
+- [x] 7.3 Stop highlighting readout bars that are not the decision: keep the neutral tone for the readout bars and reserve the accent for the executed move; verify in the browser that only the decided move's bar is accented

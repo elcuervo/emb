@@ -42,6 +42,11 @@ proposal SHALL be named beside it whether or not the safety layer overrode it.
 - **WHEN** the safety layer overrides the model's proposal
 - **THEN** the readout names the executed move, names the proposal it replaced, and marks the intervention
 
+#### Scenario: Only the decision is highlighted
+
+- **WHEN** the readout draws a bar for a value that is not the decision
+- **THEN** that bar carries the neutral tone, and only the executed move's bar carries the accent
+
 ### Requirement: The readout does not reflow as its values change
 
 A demo readout SHALL keep its layout as its values change. A longest permitted
@@ -63,15 +68,29 @@ displayed.
 
 A demo that answers typed questions SHALL state the chosen answer for each
 question alongside that question's distribution, leading with the decision the way
-a looped demo leads with its executed move. The chosen answer SHALL be the argmax
-of the reply's distribution for that question, and the marked leaf MUST be the one
-that answer selects. The example set SHALL cover the plate's question vocabulary
-with distinct inputs rather than one repeated shape.
+a looped demo leads with its executed move. The chosen answer SHALL follow the
+checkpoint's own answer semantics — a `choice` is the highest-probability option, a
+`score` is the rubric level nearest its rounded expected value, and a `noul` is
+true only above 0.5 — and the marked leaf MUST be the one that answer selects. The
+stated answer SHALL carry its value (the option's probability, the expected score,
+or the noul probability), so a low-confidence answer reads as one. The example set
+SHALL cover the plate's question vocabulary with distinct inputs rather than one
+repeated shape.
 
 #### Scenario: Each question names its decision
 
 - **WHEN** a typed-question reply is shown
 - **THEN** every question names the option the reply chose, and that option is the marked leaf
+
+#### Scenario: The answer follows the checkpoint's semantics
+
+- **WHEN** a typed-question reply is shown
+- **THEN** the choice is the top option, the score's label is the rubric nearest its rounded expected value, and a noul is true only above 0.5
+
+#### Scenario: A near-coin-flip reads as one
+
+- **WHEN** an answer's probability is close to even
+- **THEN** the stated answer carries that probability, so it is not presented as a confident decision
 
 #### Scenario: The set covers the vocabulary
 

@@ -3623,7 +3623,6 @@ html.js.is-ready .hero__prose{
 .hud__bars{ display: grid; grid-template-columns: max-content minmax(24px, 1fr) 40px; gap: 4px 8px; align-items: center; margin-top: 6px; }
 .hud__row{ display: contents; }
 .hud__k{ color: var(--rule); white-space: nowrap; }
-.hud__row .hud__fill{ background: var(--accent); }
 /* The decision leads: the executed move in the big voice, the model's proposal
    beside it, and the table below as the distribution over the legal moves. */
 .hud__decision{ display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }

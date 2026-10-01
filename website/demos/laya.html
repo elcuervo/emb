@@ -377,9 +377,11 @@ function setState(next, message) {
  * reply the leaves are empty tracks; after it they carry the model's own
  * probabilities. One tween grows every leaf together -- the answers arrived
  * together. */
-// The question's chosen option: the argmax of the reply's distribution. The
-// loops lead with their executed move; the typed-question demos lead with this
-// so every example shows a decision, not only a distribution.
+// The chosen answer, matching ruby-laya's Answer semantics: a choice is the
+// argmax label, a score's label is the rubric nearest its rounded expected score,
+// and a noul is true only above 0.5. `text` carries the value, because the
+// reference prints the probability beside every answer and a near-coin-flip
+// should read as one.
 function decidedFor(q, ans) {
   if (!ans) { return null; }
   if (q.type === 'choice') {
@@ -388,21 +390,19 @@ function decidedFor(q, ans) {
     Object.keys(q.criteria || {}).forEach((label) => {
       if (best === null || Number(probs[label] || 0) > Number(probs[best] || 0)) { best = label; }
     });
-    return best === null ? null : { value: best, label: best };
+    if (best === null) { return null; }
+    return { value: best, text: best + ' · ' + (Number(probs[best]) * 100).toFixed(1) + '%' };
   }
   if (q.type === 'score') {
-    const probs = ans.probabilities || {};
-    let best = null;
-    (q.criteria || []).forEach((level, i) => {
-      if (best === null || Number(probs[String(i)] || 0) > Number(probs[String(best)] || 0)) { best = i; }
-    });
-    if (best === null) { return null; }
-    return { value: String(best), label: best + ' · ' + q.criteria[best] };
+    const levels = q.criteria || [];
+    const score = Number(ans.score) || 0;
+    const idx = Math.max(0, Math.min(levels.length - 1, Math.round(score)));
+    return { value: String(idx), text: score.toFixed(2) + ' · ' + (levels[idx] != null ? levels[idx] : '—') };
   }
   const p = ans.noul != null ? Number(ans.noul) : null;
   if (p === null) { return null; }
-  const value = p >= 0.5 ? 'true' : 'false';
-  return { value: value, label: value };
+  const value = p > 0.5 ? 'true' : 'false';
+  return { value: value, text: value + ' · ' + (p * 100).toFixed(1) + '%' };
 }
 
 function leavesFor(q, ans) {
@@ -476,7 +476,7 @@ function renderTree(state, questions, answers) {
         const d = decidedFor(questions[id], answers[id]);
         return el('span', { class: 'qtree__chip' }, [
           el('i', { text: id }),
-          el('b', { text: d ? d.label : '—' }),
+          el('b', { text: d ? d.text : '—' }),
         ]);
       }),
     ]));
