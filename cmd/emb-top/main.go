@@ -20,7 +20,6 @@ import (
 	"net"
 	"os"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -56,7 +55,8 @@ var heatColors = []lipgloss.Color{
 
 var (
 	reqLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))  // blue
-	p95LineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("13")) // magenta
+	latBandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))  // magenta band
+	latP95Style  = lipgloss.NewStyle().Foreground(lipgloss.Color("13")) // bright p95 line
 	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))  // cyan
 	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	errStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true) // red
@@ -263,8 +263,12 @@ type tuiModel struct {
 	lastSeq    uint64   // last MONITOR event seq seen
 
 	reqChart streamlinechart.Model
-	latChart streamlinechart.Model
 	sparks   map[string]*sparkline.Model
+
+	window  int
+	polls   int
+	latHist []latSample
+	p95Base int64 // slow EMA of observed p95, for relative latency health
 
 	cacheBar barchart.Model
 	cpuBar   barchart.Model
@@ -277,6 +281,7 @@ func newTUI(client dashboardClient, interval time.Duration, window int) tuiModel
 		interval: interval,
 		sampler:  embtop.NewSampler(window),
 		sparks:   map[string]*sparkline.Model{},
+		window:   window,
 	}
 	m.initCharts(80, 24)
 	// Init returns the first tick, so record it as scheduled.
@@ -289,9 +294,6 @@ func (m *tuiModel) initCharts(w, h int) {
 	m.reqChart = streamlinechart.New(chartW, chartH,
 		streamlinechart.WithStyles(runes.ArcLineStyle, reqLineStyle),
 		streamlinechart.WithLineChart(yFmtChart(chartW, chartH, yFmtRate)))
-	m.latChart = streamlinechart.New(chartW, chartH,
-		streamlinechart.WithStyles(runes.ArcLineStyle, p95LineStyle),
-		streamlinechart.WithLineChart(yFmtChart(chartW, chartH, yFmtLatency)))
 	m.cacheBar = bar(100)
 	m.cpuBar = bar(100)
 	m.memBar = bar(0) // 0: autoscale
@@ -311,11 +313,8 @@ func yFmtChart(w, h int, fmtV func(float64) string) *linechart.Model {
 	return &lc
 }
 
-// yFmtRate / yFmtLatency are the Y-axis label formatters for the req/s and
-// latency (µs-valued) stream charts.
+// yFmtRate is the Y-axis label formatter for the req/s stream chart.
 func yFmtRate(v float64) string { return fmtRate(v) }
-
-func yFmtLatency(v float64) string { return fmtLatency(int64(v)) }
 
 // bar builds a horizontal gauge barchart; max 0 means autoscale.
 func bar(max float64) barchart.Model {
@@ -486,13 +485,18 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 		}
 	}
 
-	// Stream charts: aggregate req/s and p95 latency.
+	// Stream chart: aggregate req/s.
 	pushStream(&m.reqChart, p.ReqRate)
-	if _, _, p95, ok := m.sampler.Latency(); ok {
-		pushStream(&m.latChart, float64(p95))
+
+	// Latency band: one percentile sample per poll; a zero sample keeps the
+	// columns aligned with polls when no events have arrived yet.
+	if p50, p95, p99, ok := m.sampler.Latency(); ok {
+		m.pushLat(latSample{p50: p50, p95: p95, p99: p99})
+		m.observeP95(p95)
 	} else {
-		pushStream(&m.latChart, 0)
+		m.pushLat(latSample{})
 	}
+	m.polls++
 
 	// Per-model sparklines (req/s).
 	for _, name := range m.modelOrder {
@@ -519,14 +523,6 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 	m.memBar.Draw()
 }
 
-func latestRate(hist map[string][]embtop.ModelPoint, name string) float64 {
-	pts := hist[name]
-	if len(pts) == 0 {
-		return 0
-	}
-	return pts[len(pts)-1].ReqRate
-}
-
 // pushStream pushes a value into a stream chart and guards against a
 // degenerate all-zero Y range (idle node).
 func pushStream(ch *streamlinechart.Model, v float64) {
@@ -543,9 +539,9 @@ func (m *tuiModel) reset() {
 	m.reqChart.ClearAllData()
 	m.reqChart.Clear()
 	m.reqChart.Draw()
-	m.latChart.ClearAllData()
-	m.latChart.Clear()
-	m.latChart.Draw()
+	m.latHist = nil
+	m.p95Base = 0
+	m.polls = 0
 	for _, sp := range m.sparks {
 		sp.Clear()
 		sp.Draw()
@@ -562,7 +558,6 @@ func (m *tuiModel) layoutCharts() {
 	}
 	chartW, chartH := streamDims(m.width, m.height)
 	m.reqChart.Resize(chartW, chartH)
-	m.latChart.Resize(chartW, chartH)
 	gw := (m.width - 8) / 3
 	if gw < 10 {
 		gw = 10
@@ -574,7 +569,6 @@ func (m *tuiModel) layoutCharts() {
 		sp.Resize(m.sparkW(), 1)
 	}
 	m.reqChart.Draw()
-	m.latChart.Draw()
 	m.cacheBar.Draw()
 	m.cpuBar.Draw()
 	m.memBar.Draw()
@@ -592,6 +586,8 @@ func (m tuiModel) View() string {
 	var b strings.Builder
 	b.WriteString(m.headerView())
 	b.WriteString("\n")
+	b.WriteString(m.bannerView())
+	b.WriteString("\n")
 
 	if len(m.modelOrder) > 0 {
 		b.WriteString(borderStyle.Render(m.heatmapView()))
@@ -600,7 +596,7 @@ func (m tuiModel) View() string {
 
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
 		borderStyle.Render(m.reqChart.View()),
-		borderStyle.Render(m.latChart.View()),
+		borderStyle.Render(m.latBandView()),
 	))
 	b.WriteString("\n")
 
@@ -719,12 +715,10 @@ func heatCellStyle(frac float64) lipgloss.Style {
 	return lipgloss.NewStyle().Background(heatColors[i]).Foreground(heatColors[i])
 }
 
-// hotRows returns model names in heatmap row order (busiest first), capped.
+// hotRows returns the heatmap's model rows in stable server EMB.MODELS order,
+// capped to the visible height. Rows never reorder as traffic fluctuates.
 func (m tuiModel) hotRows() []string {
 	rows := append([]string(nil), m.modelOrder...)
-	sort.SliceStable(rows, func(i, j int) bool {
-		return latestRate(m.sampler.ModHist, rows[i]) > latestRate(m.sampler.ModHist, rows[j])
-	})
 	if len(rows) > 8 {
 		rows = rows[:8]
 	}
@@ -740,12 +734,31 @@ func modelColorIdx(name string, order []string) string {
 	return modelColors[0]
 }
 
+// Fixed column widths (plain-text) for per-model metric segments, so a value
+// changing width cannot shift the columns after it.
+const (
+	colRate = 12
+	colLat  = 12
+	colErr  = 10
+)
+
+// fixedCol renders plain text right-aligned in a constant-width column and
+// returns the styled segment plus the column width it occupies.
+func fixedCol(style lipgloss.Style, plain string, width int) (string, int) {
+	if n := width - len(plain); n > 0 {
+		plain = strings.Repeat(" ", n) + plain
+	} else if n < 0 {
+		plain = string([]rune(plain)[:width])
+	}
+	return style.Render(plain), width
+}
+
 func (m tuiModel) modelsView() []string {
 	if len(m.modelOrder) == 0 {
 		return []string{dimStyle.Render("  no models loaded on node")}
 	}
 	// Reserve vertical space for header + heatmap + charts + gauges + ticker.
-	maxRows := m.height - 20
+	maxRows := m.height - 22 // header + banner + heatmap + charts + gauges + ticker + footer
 	if maxRows < 1 {
 		maxRows = 1
 	}
@@ -759,11 +772,8 @@ func (m tuiModel) modelsView() []string {
 	if m.scroll < 0 {
 		m.scroll = 0
 	}
-	// Display sorted by req/s (busiest first).
-	rows := append([]string(nil), m.modelOrder...)
-	sort.SliceStable(rows, func(i, j int) bool {
-		return latestRate(m.sampler.ModHist, rows[i]) > latestRate(m.sampler.ModHist, rows[j])
-	})
+	// Stable server EMB.MODELS order: rows never reorder as rates fluctuate.
+	rows := m.modelOrder
 	var out []string
 	for i := m.scroll; i < m.scroll+maxRows && i < len(rows); i++ {
 		name := rows[i]
@@ -772,37 +782,54 @@ func (m tuiModel) modelsView() []string {
 			mp.At = time.Now()
 		}
 		sp := m.sparks[name]
+		mh := modelHealth(m.sampler.ModHist[name])
 
-		row := lipgloss.NewStyle().Foreground(lipgloss.Color(modelColorIdx(name, m.modelOrder))).Bold(true).
-			Width(13).Render(trimModel(name))
+		row := healthDot(mh) + " " +
+			lipgloss.NewStyle().Foreground(lipgloss.Color(modelColorIdx(name, m.modelOrder))).Bold(true).
+				Width(13).Render(trimModel(name))
 		row += " " + sp.View()
 
-		// Fit the row to the terminal: append segments while they fit so the
-		// numbers never wrap mid-row.
+		// Fit the row to the terminal: append fixed-width segments while they
+		// fit so numbers never wrap and columns never shift mid-row.
 		budget := m.width
 		if budget <= 0 {
 			budget = 120
 		}
-		appendSeg := func(seg string, plain int) {
-			if lipgloss.Width(row)+1+plain > budget {
+		appendSeg := func(seg string, width int) {
+			if lipgloss.Width(row)+1+width > budget {
 				return
 			}
 			row += " " + seg
 		}
-		appendSeg(labelStyle.Render(fmtRate(mp.ReqRate)+" r/s"), len(fmtRate(mp.ReqRate))+4)
-		appendSeg(labelStyle.Render(fmtRate(mp.TokRate)+" t/s"), len(fmtRate(mp.TokRate))+4)
+		rateSeg, rateW := fixedCol(labelStyle, fmtRate(mp.ReqRate)+" r/s", colRate)
+		appendSeg(rateSeg, rateW)
+		tokSeg, tokW := fixedCol(labelStyle, fmtRate(mp.TokRate)+" t/s", colRate)
+		appendSeg(tokSeg, tokW)
+
+		latArrow := " "
+		if mh.latRise {
+			latArrow = "↑"
+		}
 		if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
-			appendSeg(dimStyle.Render("p50 "+fmtLatency(p50)), 4+len(fmtLatency(p50)))
-			appendSeg(labelStyle.Render("p95 "+fmtLatency(p95)), 4+len(fmtLatency(p95)))
+			p50Seg, p50W := fixedCol(dimStyle, "p50 "+fmtLatency(p50), colLat)
+			appendSeg(p50Seg, p50W)
+			p95Seg, p95W := fixedCol(labelStyle, "p95 "+fmtLatency(p95)+latArrow, colLat)
+			appendSeg(p95Seg, p95W)
 		} else {
-			appendSeg(dimStyle.Render("avg "+fmtLatency(mp.AvgLatencyUs)), 4+len(fmtLatency(mp.AvgLatencyUs)))
+			avgSeg, avgW := fixedCol(dimStyle, "avg "+fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
+			appendSeg(avgSeg, avgW)
 		}
-		errTxt := fmt.Sprintf("err %d", mp.Errors)
-		if mp.ErrRate > 0 {
-			appendSeg(errStyle.Render(errTxt+" ↑"), len(errTxt)+2)
-		} else {
-			appendSeg(dimStyle.Render(errTxt), len(errTxt))
+
+		errArrow := " "
+		if mh.errRise {
+			errArrow = "↑"
 		}
+		errText := fmt.Sprintf("err %d%s", mp.Errors, errArrow)
+		errSeg, errW := fixedCol(dimStyle, errText, colErr)
+		if mh.errRise || mh.status >= healthDegraded {
+			errSeg, errW = fixedCol(errStyle, errText, colErr)
+		}
+		appendSeg(errSeg, errW)
 		out = append(out, row)
 
 		meta := m.modelMeta(name)
@@ -895,6 +922,10 @@ func (m tuiModel) helpView() string {
 		"",
 		"Metrics: EMB.MODELS / EMB.INFO / EMB.STATS polling plus MONITOR",
 		"events for latency percentiles (p50/p95/p99) and the activity heatmap.",
+		"",
+		"The health line synthesizes error ratio, p95 vs this session's baseline,",
+		"CPU, cache hit rate and connection state; the latency panel is a p50–p99",
+		"band with a p95 line.",
 	}
 	return strings.Join(lines, "\n")
 }

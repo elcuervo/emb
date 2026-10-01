@@ -95,9 +95,9 @@ and renders:
   headless `-once` mode for scripts and CI.
 
 <!-- topviz:begin -->
-![The emb-top dashboard under load: four models with their request, token and latency rates, an activity heatmap, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-74d0848f.gif)
+![The emb-top dashboard under load: four models with their request, token and latency rates, an activity heatmap, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-db139f1d.gif)
 
-*Captured 2026-09-15 · emb-top v0.4.0.pre5 · 4 models · 127.0.0.1:16379.*
+*Captured 2026-10-01 · emb-top v0.4.1 · 4 models · 127.0.0.1:16379.*
 <!-- topviz:end -->
 
 ```bash

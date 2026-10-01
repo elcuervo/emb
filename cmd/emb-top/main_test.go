@@ -153,6 +153,31 @@ func TestResetClearsCharts(t *testing.T) {
 	}
 }
 
+func TestModelRowsStayInServerOrder(t *testing.T) {
+	m := newSizedTUI(120, 40)
+	pollAB := func(aReqs, bReqs int64) *embtop.PollResult {
+		res := fakePoll(aReqs+bReqs, aReqs+bReqs, 0, 0)
+		res.Models = []embtop.ModelListEntry{
+			{Name: "alpha", Dim: 1, Status: "ready"},
+			{Name: "beta", Dim: 1, Status: "ready"},
+		}
+		res.PerModel = map[string]*embtop.ModelStats{
+			"alpha": {Requests: aReqs, Tokens: aReqs, Pooling: "mean"},
+			"beta":  {Requests: bReqs, Tokens: bReqs, Pooling: "mean"},
+		}
+		return res
+	}
+	m.applyResult(pollAB(0, 0))
+	time.Sleep(time.Millisecond)
+	m.applyResult(pollAB(1, 100)) // beta busiest: a rate sort would flip the rows
+	m.connected = true
+	view := m.View()
+	ai, bi := strings.Index(view, "alpha"), strings.Index(view, "beta")
+	if ai < 0 || bi < 0 || ai > bi {
+		t.Fatalf("rows not in stable server order (alpha=%d beta=%d):\n%s", ai, bi, view)
+	}
+}
+
 func TestEmitFrameIsOneJSONLine(t *testing.T) {
 	var buf bytes.Buffer
 	frame := "line one\x1b[31m red\x1b[0m\nline two"
