@@ -815,11 +815,14 @@ func (r *Registry) SetModelCount(n int) {
 
 func (r *Registry) List() []*ModelEntry {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	list := make([]*ModelEntry, 0, len(r.models))
 	for _, entry := range r.models {
 		list = append(list, entry)
 	}
+	r.mu.RUnlock()
+	// The registry is a map, so iteration order is randomized; sort by name so
+	// EMB.MODELS (and any other listing) is deterministic across calls.
+	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	return list
 }
 
