@@ -387,7 +387,11 @@ end
 local function decide(specials, game)
   local ms = moves(game)
   local safe, preferred, preferred_advance = {}, nil, -1
+  -- Only the legal directions carry markers, exactly as pacman.lua does: the
+  -- softmax is then over the moves the snake can actually make, not over walls.
+  local marked = {}
   for _, m in ipairs(ms) do
+    if m.legal then marked[#marked + 1] = m end
     if m.safe then
       safe[#safe + 1] = m.direction
       if m.advance > preferred_advance then
@@ -401,10 +405,9 @@ local function decide(specials, game)
     .. ". Food reachable through empty cells: " .. (reachable and "yes" or "no") .. "."
 
   local criteria, order = {}, {}
-  for i, m in ipairs(ms) do
+  for i, m in ipairs(marked) do
     local desc
-    if not m.legal then desc = "Blocked. Collision."
-    elseif not m.safe then desc = "Unsafe. Traps the snake."
+    if not m.safe then desc = "Unsafe. Traps the snake."
     elseif m.eats then desc = "Safe. Eat food now. Best."
     elseif m.direction == preferred then desc = "Safe. Best route to food."
     else desc = "Safe. Slower route." end
@@ -438,7 +441,7 @@ local function decide(specials, game)
     for j = 1, k do scaled[j] = live[j] / scale end
     local probs = emb.math.softmax(scaled)
     if row.q.id == "move" then
-      for j, m in ipairs(ms) do probs_by_dir[m.direction] = probs[j] end
+      for j, m in ipairs(marked) do probs_by_dir[m.direction] = probs[j] end
       frame.probs = probs_by_dir
       frame.confidence = confidence(probs)
     elseif row.q.id == "risk" then
@@ -448,9 +451,9 @@ local function decide(specials, game)
     end
   end
 
-  local proposed = DIRS[1]
-  for _, dir in ipairs(DIRS) do
-    if probs_by_dir[dir] > probs_by_dir[proposed] then proposed = dir end
+  local proposed = marked[1] and marked[1].direction or DIRS[1]
+  for _, m in ipairs(marked) do
+    if probs_by_dir[m.direction] > probs_by_dir[proposed] then proposed = m.direction end
   end
   local executed = proposed
   if #safe > 0 and not (function()

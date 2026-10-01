@@ -210,7 +210,7 @@
       <h2 class="sec__h" id="try-it-h">TRY IT</h2>
       <div class="mech" data-mech></div>
 
-      <div data-live class="rig lab" data-rig="laya" data-emb-preset-laya="529cf880f327f83e52924998d9a465cb59fe0071" data-emb-preset-snake="4061f9e001c04f8067800b8ddabbd17cff92ad6c" data-emb-preset-pacman="9cf527643823ce7b041164a0b798096103310277">
+      <div data-live class="rig lab" data-rig="laya" data-emb-preset-laya="529cf880f327f83e52924998d9a465cb59fe0071" data-emb-preset-snake="2d19be5e2c31d9062a140acbb599b66574fb45c2" data-emb-preset-pacman="9cf527643823ce7b041164a0b798096103310277">
         <div class="lab__switch" data-switch role="group" aria-label="Choose an example"></div>
         <p class="lab__blurb" data-blurb></p>
         <div class="lab__stage" data-stage></div>
@@ -223,7 +223,7 @@
           <summary class="cmds__h">the commands this run sent</summary>
           <div class="cmds__body" data-cmds-body></div>
         </details>
-        <p class="lab__honest" data-honest>All four run the sandbox's <b>32-hidden miniature</b> — random weights, real mechanism; its probabilities are shapes, not judgments. Inbox and Quickstart make one call per round; Snake and Pac-Man make one call per episode and animate locally. Identical requests hit the server's reply cache.</p>
+        <p class="lab__honest" data-honest>All four run the sandbox's <b>32-hidden miniature</b>: real mechanism, random weights — the bars are shapes, not judgments. Inbox and Quickstart make one call per round; Snake and Pac-Man make one call per episode and animate locally. Repeated requests hit the reply cache.</p>
       </div>
     </div></div>
   </section>
@@ -637,10 +637,10 @@ const QUICK_QUESTIONS = {
 /* The switch. Order is the reading order: the loop first, then the sheet,
  * then the smallest round. */
 const EXAMPLES = [
-  { id: 'snake', label: 'Snake', blurb: 'A decision every tick, run where the model runs. One call returns a whole episode: the preset owns the board, the safety planner and the three typed questions, and the plate animates the frames locally — so the run reads as realtime instead of a slideshow. A Hamiltonian shield can veto the model\'s move; Step plays exactly one decision in one call.' },
-  { id: 'pacman', isNew: true, label: 'Pac-Man', blurb: 'A second loop, deliberately not Snake\'s: the preset owns a maze, the pellets and four ghosts, and asks the model only for a direction among the legal ones — a planner vetoes a move that walks into a ghost. One call returns a whole episode, the plate animates it locally, and playback stops after three minutes of active play or the moment the page loses focus.' },
-  { id: 'inbox', label: 'Inbox', blurb: 'An inbound-triage set: which team, is it spam, is it phishing, how urgent, does it need a reply. Fifteen options, one call.' },
-  { id: 'quickstart', label: 'Quickstart', blurb: 'The smallest round: one invoice, three typed questions — the whole API with nothing around it.' },
+  { id: 'snake', label: 'Snake', blurb: 'One call returns a whole episode. The preset owns the board, the safety shield and three typed questions; the plate animates the frames locally, and the shield vetoes a move that traps the snake.' },
+  { id: 'pacman', isNew: true, label: 'Pac-Man', blurb: 'The second loop, not Snake\'s. The preset owns a maze, pellets and four ghosts, and asks the model for a direction among the legal moves; a planner vetoes a move into a ghost. Playback pauses after three minutes or when the page loses focus.' },
+  { id: 'inbox', label: 'Inbox', blurb: 'Five typed questions over one email — which team, spam, phishing, urgency, needs a reply — answered in one pass.' },
+  { id: 'quickstart', label: 'Quickstart', blurb: 'The smallest round: one invoice, three typed questions, one call.' },
 ];
 
 let active = 'snake';
@@ -672,14 +672,14 @@ function hudBuild(refs, bigRows, bars, foot) {
   refs.moves = {};
   const moveBars = el('div', { class: 'hud__moves' });
   DIRS.forEach((dir) => {
+    const mark = el('span', { class: 'hud__mark' });
+    const label = el('span', { class: 'hud__dir', text: dir });
     const fill = el('i', { class: 'hud__fill' });
     const value = el('span', { class: 'hud__v', text: '—' });
     const row = el('div', { class: 'hud__mrow' }, [
-      el('span', { class: 'hud__dir', text: '  ' + dir }),
-      el('span', { class: 'hud__track' }, [fill]),
-      value,
+      mark, label, el('span', { class: 'hud__track' }, [fill]), value,
     ]);
-    refs.moves[dir] = { fill, value, row, label: row.firstChild };
+    refs.moves[dir] = { fill, value, row, mark, label };
     moveBars.appendChild(row);
   });
   const bar = (label, key) => {
@@ -696,6 +696,7 @@ function hudBuild(refs, bigRows, bars, foot) {
   refs.status = el('span', { class: 'hud__status', text: 'IDLE' });
   refs.exec = el('span', { class: 'hud__big', text: '—' });
   refs.shield = el('span', { class: 'hud__shield', text: '' });
+  refs.proposed = el('span', { class: 'hud__proposedv', text: '—' });
   refs.big = {};
   const stats = el('div', { class: 'hud__stats' }, bigRows.map(([label, key]) => {
     const value = el('b', { class: 'hud__statv', text: '—' });
@@ -711,16 +712,24 @@ function hudBuild(refs, bigRows, bars, foot) {
     meter('decisions/s', refs.rate),
     meter('input tokens', refs.tokens),
   ]);
+  const decision = el('div', { class: 'hud__decision' }, [
+    el('span', { class: 'hud__decidedk', text: 'decided' }),
+    refs.exec,
+    refs.shield,
+  ]);
+  const proposedLine = el('div', { class: 'hud__proposed' }, [
+    el('span', { class: 'hud__k', text: 'model proposed ' }),
+    refs.proposed,
+  ]);
 
   return el('div', { class: 'hud' }, [
     el('div', { class: 'hud__head' }, [el('b', { text: 'laya' }), refs.status]),
     el('p', { class: 'hud__sub', text: 'sandbox · 32-hidden miniature · mechanism only' }),
     stats,
-    el('div', { class: 'hud__label', text: 'next move · model probabilities' }),
+    decision,
+    proposedLine,
+    el('div', { class: 'hud__label', text: 'model probabilities · legal moves' }),
     moveBars,
-    el('div', { class: 'hud__exec' }, [
-      el('span', { class: 'hud__k', text: 'executing ' }), refs.exec, refs.shield,
-    ]),
     ...bars.map(([label, key]) => bar(label, key)),
     meters,
     el('p', { class: 'hud__foot', text: foot }),
@@ -767,23 +776,31 @@ function snakeCounters() {
   renderMeters(hudRefs, frame ? Number(frame.inference_ms || 0) : 0, frame ? frame.input_tokens : 0);
 }
 
+// One move-table update for both loops: mark the executed move as the decision,
+// name the model's proposal beside it, and leave a rule-blocked direction with no
+// value. `probs` only ever carries the legal moves.
+function applyMoves(refs, frame) {
+  DIRS.forEach((dir) => {
+    const known = frame.probs && frame.probs[dir] != null;
+    const p = known ? Number(frame.probs[dir]) : 0;
+    const ref = refs.moves[dir];
+    ref.fill.style.width = known ? (p * 100).toFixed(1) + '%' : '0%';
+    ref.value.textContent = known ? p.toFixed(2) : '—';
+    ref.mark.textContent = dir === frame.executed ? '›' : (dir === frame.proposed ? '·' : '');
+    ref.row.classList.toggle('is-decided', dir === frame.executed);
+    ref.row.classList.toggle('is-proposed', dir === frame.proposed && dir !== frame.executed);
+  });
+  refs.exec.textContent = frame.executed;
+  refs.proposed.textContent = frame.proposed;
+}
+
 function snakeApplyFrame(frame) {
   snake.current = frame;
   const b = frame.board;
   boardRef.replaceChildren(snakeSVG(b));
   hudRefs.status.textContent = b.won ? 'BOARD CLEAR' : b.alive ? (snake.playing ? 'LIVE' : 'STEP') : 'GAME OVER';
   hudRefs.status.className = 'hud__status' + (b.alive ? '' : ' is-dead');
-  DIRS.forEach((dir) => {
-    const p = Number(frame.probs[dir] || 0);
-    const ref = hudRefs.moves[dir];
-    ref.fill.style.width = (p * 100).toFixed(1) + '%';
-    ref.value.textContent = p.toFixed(2);
-    // Mark the model's own pick; the executed move is named separately, so a
-    // veto is visible as a difference between the two.
-    ref.row.classList.toggle('is-proposed', dir === frame.proposed);
-    ref.label.textContent = (dir === frame.proposed ? '› ' : '  ') + dir;
-  });
-  hudRefs.exec.textContent = frame.executed;
+  applyMoves(hudRefs, frame);
   hudRefs.shield.textContent = frame.intervened ? 'SHIELD' : '';
   hudBar(hudRefs, 'risk', 1 - Number(frame.risk || 0));
   hudBar(hudRefs, 'food', Number(frame.food || 0));
@@ -892,7 +909,7 @@ function pacHudBuild() {
   pacHudRefs = {};
   return hudBuild(pacHudRefs,
     [['score', 'score'], ['lives', 'lives'], ['pellets', 'pellets']],
-    [['ghost within 1 tile', 'danger'], ['pellets reachable', 'clear']],
+    [['ghost near', 'danger'], ['routes clear', 'clear']],
     'laya + a move planner');
 }
 
@@ -910,17 +927,8 @@ function pacCounters() {
 function pacmanApplyFrame(frame) {
   pacman.current = frame;
   pacBoardRef.replaceChildren(pacmanSVG(frame.board));
-  DIRS.forEach((dir) => {
-    const known = frame.probs && frame.probs[dir] != null;
-    const p = Number((frame.probs && frame.probs[dir]) || 0);
-    const ref = pacHudRefs.moves[dir];
-    ref.fill.style.width = (p * 100).toFixed(1) + '%';
-    ref.value.textContent = known ? p.toFixed(2) : '—';
-    ref.row.classList.toggle('is-proposed', dir === frame.proposed);
-    ref.label.textContent = (dir === frame.proposed ? '› ' : '  ') + dir;
-  });
-  pacHudRefs.exec.textContent = frame.executed;
-  pacHudRefs.shield.textContent = frame.intervened ? 'PLANNER' : '';
+  applyMoves(pacHudRefs, frame);
+  pacHudRefs.shield.textContent = frame.intervened ? 'SHIELD' : '';
   hudBar(pacHudRefs, 'danger', Number(frame.danger || 0));
   hudBar(pacHudRefs, 'clear', Number(frame.clear || 0));
   pacCounters();
@@ -1048,6 +1056,11 @@ function clearStage() {
 
 /* ── Inbox controller ─────────────────────────────────────────────────── */
 function inboxMount() {
+  // A re-selection (a ticket click) calls this directly, so the mount owns its
+  // own reset: without it, every switch appends another list and form.
+  out.hidden = true;
+  treeEl.replaceChildren();
+  stage.replaceChildren();
   const list = el('div', { class: 'tickets', role: 'radiogroup', 'aria-label': 'Choose a support email' });
   INBOX_TICKETS.forEach((ticket, i) => {
     const btn = el('button', {
@@ -1061,8 +1074,6 @@ function inboxMount() {
     btn.addEventListener('click', () => {
       if (i === inboxIndex) { return; }
       inboxIndex = i;
-      out.hidden = true;
-      treeEl.replaceChildren();
       inboxMount();
       setState('ready');
     });

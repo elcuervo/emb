@@ -3599,19 +3599,26 @@ html.js.is-ready .hero__prose{
 .hud__sub{ margin: 4px 0 12px; color: var(--rule); font-size: .92em; }
 .hud__label{ color: var(--rule); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
 .hud__moves{ display: grid; gap: 4px; }
-.hud__mrow{ display: grid; grid-template-columns: 48px minmax(0, 1fr) 40px; gap: 8px; align-items: center; color: var(--rule); }
-.hud__mrow.is-proposed{ color: var(--bg); }
-.hud__mrow.is-proposed .hud__v{ color: var(--accent); }
-.hud__dir{ letter-spacing: .04em; }
+.hud__mrow{ display: grid; grid-template-columns: 12px 44px minmax(0, 1fr) 40px; gap: 8px; align-items: center; color: var(--rule); }
+.hud__mark{ color: var(--accent); text-align: center; }
+.hud__mrow.is-decided{ color: var(--bg); }
+.hud__mrow.is-decided .hud__dir{ font-weight: 700; }
+.hud__mrow.is-decided .hud__v{ color: var(--accent); }
+.hud__dir{ letter-spacing: .04em; white-space: nowrap; }
 .hud__track{ position: relative; height: 8px; background: #23221e; min-width: 24px; }
 .hud__fill{ position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--rule); }
-.hud__mrow.is-proposed .hud__fill{ background: var(--accent); }
+.hud__mrow.is-decided .hud__fill{ background: var(--accent); }
 .hud__v{ text-align: right; color: var(--rule); }
-.hud__row{ display: grid; grid-template-columns: 108px minmax(0, 1fr) 40px; gap: 8px; align-items: center; margin-top: 6px; }
-.hud__k{ color: var(--rule); }
+.hud__row{ display: grid; grid-template-columns: max-content minmax(24px, 1fr) 40px; gap: 8px; align-items: center; margin-top: 6px; }
+.hud__k{ color: var(--rule); white-space: nowrap; }
 .hud__row .hud__fill{ background: var(--accent); }
-.hud__exec{ display: flex; align-items: baseline; gap: 8px; margin: 12px 0 4px; }
-.hud__big{ font-weight: 700; color: var(--bg); }
+/* The decision leads: the executed move in the big voice, the model's proposal
+   beside it, and the table below as the distribution over the legal moves. */
+.hud__decision{ display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }
+.hud__decidedk{ color: var(--rule); text-transform: uppercase; letter-spacing: .1em; font-size: .82em; }
+.hud__big{ font-weight: 700; color: var(--bg); font-size: 1.35em; line-height: 1; }
+.hud__proposed{ margin: 0 0 12px; }
+.hud__proposedv{ color: var(--bg); }
 .hud__shield{ color: var(--fg); background: var(--accent); padding: 0 6px; font-size: .9em; letter-spacing: .06em; }
 /* The readout's order mirrors the reference: status, the big counters, the
    probability table, the executing move, the readout bars, then the meters. */
@@ -3628,6 +3635,5 @@ html.js.is-ready .hero__prose{
 .hud__meter b{ color: var(--bg); font-weight: 500; font-variant-numeric: tabular-nums; }
 .hud__foot{ margin: 12px 0 0; color: var(--rule); }
 @media (max-width: 520px){
-  .hud__row{ grid-template-columns: 90px minmax(0, 1fr) 40px; }
   .hud__statv{ font-size: 1.4em; }
 }
