@@ -163,3 +163,27 @@ func TestRESP3IntrospectionMaps(t *testing.T) {
 		t.Fatalf("expected INFO bulk string under RESP3, got %q", resp)
 	}
 }
+
+// TestCLIENTSubcommandErrors covers the CLIENT paths the SETINFO happy path
+// skips: a missing subcommand, a wrong-arity SETINFO, and an unknown
+// subcommand that names the offending token.
+func TestCLIENTSubcommandErrors(t *testing.T) {
+	addr := serveTest(t)
+	c := dial(t, addr)
+	defer c.Close()
+
+	c.Write(respCommand("CLIENT"))
+	if resp := readRESP(t, c); !strings.HasPrefix(resp, "-ERR wrong number of arguments") {
+		t.Fatalf("expected arity error, got %q", resp)
+	}
+
+	c.Write(respCommand("CLIENT", "SETINFO", "lib-name"))
+	if resp := readRESP(t, c); !strings.HasPrefix(resp, "-ERR wrong number of arguments for 'CLIENT SETINFO'") {
+		t.Fatalf("expected SETINFO arity error, got %q", resp)
+	}
+
+	c.Write(respCommand("CLIENT", "NOPE"))
+	if resp := readRESP(t, c); !strings.HasPrefix(resp, "-ERR unknown subcommand 'NOPE'") {
+		t.Fatalf("expected unknown-subcommand error, got %q", resp)
+	}
+}

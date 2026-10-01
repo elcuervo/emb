@@ -32,10 +32,7 @@ func visionDir(t *testing.T) string {
 
 func requireORT(t *testing.T) {
 	t.Helper()
-	if err := onnx.InitEnvironment(""); err != nil {
-		t.Skipf("onnx runtime unavailable: %v (run inside nix develop)", err)
-	}
-	t.Cleanup(func() { _ = onnx.DestroyEnvironment() })
+	initORT(t)
 }
 
 // newVisionImageResources resolves the plan (exercising the production
