@@ -33,3 +33,35 @@ type OffsetTokenizer interface {
 	// second-part tokens slice `second`).
 	EncodePairOffsets(first, second string, maxLength int) (ids, mask []int64, offsets [][2]int, sep int, err error)
 }
+
+// SpecialTokenIDs is the set of special-token IDs a sequence builder needs to
+// reproduce a model's templates: the [MASK], [CLS], [SEP] and [PAD] tokens.
+// MaskToken is the resolved mask token's text (e.g. "[MASK]" or "<mask>"),
+// which reference sequence construction replaces with a space in the
+// instructions, options and state.
+type SpecialTokenIDs struct {
+	Mask      int64
+	CLS       int64
+	SEP       int64
+	PAD       int64
+	MaskToken string
+}
+
+// PlainTokenizer is the optional no-special-token encoding capability used by
+// sequence-building scripts (e.g. Laya's build_sequence): it encodes text the
+// way `encode(text, add_special_tokens=False)` does, returning only the plain
+// token IDs, without special tokens and without padding.
+type PlainTokenizer interface {
+	// EncodePlain encodes a single text without special tokens. No padding is
+	// applied: the returned slice mirrors the real token count (front-truncated
+	// to maxLength when positive), matching EncodePretokenized's contract.
+	EncodePlain(text string, maxLength int) ([]int64, error)
+}
+
+// SpecialTokenIDsProvider reports a model's special-token IDs so scripts do
+// not have to probe single-token encodes. Discovery follows the reference
+// implementation's semantics: tokenizer-config special-token names first,
+// then the tokenizer.json added-token entries, then a single-token encode.
+type SpecialTokenIDsProvider interface {
+	SpecialTokenIDs() (SpecialTokenIDs, error)
+}

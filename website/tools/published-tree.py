@@ -73,6 +73,7 @@ SERVED = frozenset(
         "demos/image.html",
         "demos/lens.html",
         "demos/function.html",
+        "demos/laya.html",
         "demos/multilingual.html",
         "demos/samples/raven.jpg",
         "demos/samples/storm.jpg",
@@ -151,6 +152,7 @@ PAGES = (
     "demos/image.html",
     "demos/lens.html",
     "demos/function.html",
+    "demos/laya.html",
     "demos/multilingual.html",
 )
 ABSOLUTE_METADATA = (

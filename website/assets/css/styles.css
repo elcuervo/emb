@@ -2611,6 +2611,20 @@ html.js.is-ready .hero__prose{
 .ord__t{ font-family: var(--display), var(--sans), sans-serif; font-size: clamp(17px, 1.35vw, 24px); }
 .ord__t a{ color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--rule); }
 .ord__t a:hover{ color: var(--accent-ink); border-bottom-color: var(--accent-ink); }
+/* The `new` mark, in the gallery and the plate: one chip, a span in the list and
+   generated content on the tab (its aria-label keeps the mark out of the
+   accessible name). */
+.chip-new,
+.lab__tab[data-new]::after{
+  padding: 0 .3em;
+  border: 1px solid currentColor;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  vertical-align: .14em;
+}
+.chip-new{ display: inline-block; margin-left: .5em; color: var(--accent-ink); }
 .ord__w{ font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--muted); }
 .ord__w b{ color: var(--fg); font-weight: 500; letter-spacing: .05em; }
 .ord__start{ color: var(--accent-ink); }
@@ -3070,3 +3084,567 @@ html.js.is-ready .hero__prose{
 }
 .plate-nav__link:hover .plate-nav__t{ color: var(--accent-ink); }
 .plate-nav__link:focus-visible{ outline: 2px solid var(--fg); outline-offset: 3px; }
+
+/* ── the decision plate ────────────────────────────────────────────────
+   The queue is a ruled list on the dark ground; the sheet is a paper bar
+   inside it taking the paper's ink back (the `.examples__group` pattern):
+   black ink, hairline rules, orange for the winning option only, mono
+   throughout. Everything is drawn from the world's own tokens. */
+
+.tickets{
+  display: grid;
+  margin: clamp(14px, 1.6vw, 22px) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule-dark);
+}
+.tickets__i{ border-bottom: 1px solid var(--rule-dark); }
+.tickets__btn{
+  display: grid;
+  grid-template-columns: clamp(26px, 3vw, 44px) minmax(0, 1fr) auto;
+  gap: 6px 16px;
+  align-items: baseline;
+  width: 100%;
+  padding: 10px clamp(10px, 1.4vw, 18px);
+  background: transparent;
+  color: var(--bg);
+  border: 0;
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.05vw, 14px);
+  text-align: left;
+  cursor: pointer;
+}
+.tickets__btn:hover{ color: var(--accent); }
+.tickets__btn:focus-visible{ outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.tickets__n{ color: var(--rule); letter-spacing: .08em; }
+.tickets__btn[aria-checked="true"]{ background: var(--bg); color: var(--fg); }
+.tickets__btn[aria-checked="true"] .tickets__n{ color: var(--accent-ink); }
+.tickets__btn[aria-checked="true"] .tickets__meta{ color: var(--muted); }
+.tickets__q{ font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tickets__meta{ color: var(--rule); letter-spacing: .04em; }
+.block--dark .tickets__btn[aria-checked="true"] .tickets__meta{ color: #6B6963; }
+
+.sheet{
+  margin-top: clamp(14px, 1.6vw, 22px);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1vw, 13px);
+}
+.sheet__head{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px 24px;
+  flex-wrap: wrap;
+  padding: 6px clamp(12px, 1.5vw, 20px);
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+.sheet__row{
+  display: grid;
+  grid-template-columns: clamp(26px, 3vw, 44px) minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding: 12px clamp(12px, 1.5vw, 20px);
+  border-bottom: 1px solid var(--rule);
+}
+.sheet__row:last-child{ border-bottom: 0; }
+.sheet__rowhead{ display: contents; }
+.sheet__n{ color: var(--muted); letter-spacing: .08em; }
+.sheet__name{ font-weight: 700; }
+.sheet__type{ color: var(--muted); letter-spacing: .06em; }
+.sheet__main{ min-width: 0; }
+.sheet__opts{ display: grid; gap: 4px; }
+.sheet__opt{
+  display: grid;
+  grid-template-columns: clamp(120px, 22vw, 240px) minmax(48px, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  font-size: clamp(11px, 0.95vw, 12.5px);
+}
+.sheet__label{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111110;
+}
+.sheet__opt.is-win .sheet__label{ font-weight: 700; }
+.sheet__track{
+  position: relative;
+  height: 10px;
+  background: var(--rule-soft);
+}
+.sheet__track--split::after{
+  content: "";
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+.sheet__fill{
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0;
+  background: #0B0B0B;
+}
+.sheet__opt.is-win .sheet__fill,
+.sheet__row--choice .sheet__fill.is-win{ background: var(--accent); }
+.sheet__row--noul .sheet__fill{ background: var(--accent); }
+.sheet__val{ color: #6B6963; text-align: right; }
+.sheet__split-labels{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  color: #6B6963;
+  font-size: clamp(10.5px, 0.9vw, 12px);
+}
+.sheet__ruler{
+  position: relative;
+  height: 16px;
+  border-bottom: 1px solid #0B0B0B;
+}
+.sheet__tick{
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 5px;
+  background: #0B0B0B;
+}
+.sheet__marker{
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  height: 16px;
+  background: var(--accent);
+}
+.sheet__legend{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 6px;
+  color: #6B6963;
+  font-size: clamp(10.5px, 0.9vw, 12px);
+}
+.sheet__conf{
+  text-align: right;
+  color: #6B6963;
+  white-space: nowrap;
+  font-size: clamp(11px, 0.95vw, 12.5px);
+}
+.block--dark .sheet .t-cmd{ color: inherit; }
+@media (max-width: 640px){
+  .sheet__row{ grid-template-columns: clamp(24px, 7vw, 34px) minmax(0, 1fr); }
+  .sheet__conf{ grid-column: 2; text-align: left; }
+  .tickets__btn{ grid-template-columns: clamp(24px, 7vw, 34px) minmax(0, 1fr); }
+  .tickets__meta{ grid-column: 2; }
+  .sheet__opt{ grid-template-columns: minmax(0, 1fr) auto; }
+  .sheet__track{ grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* The confidence axis: one ruler, the floors named once, the sheet's own
+   confidences plotted as dots that light with the row tween. The axis is an
+   instrument, not prose. */
+.sheet__axis{
+  position: relative;
+  margin: 0 clamp(12px, 1.5vw, 20px) 14px;
+  height: 30px;
+}
+.sheet__axis-rule{
+  position: absolute;
+  left: 0; right: 0; top: 8px;
+  height: 1px;
+  background: var(--rule);
+}
+.sheet__axis-tick{
+  position: absolute;
+  top: 4px;
+  width: 1px;
+  height: 9px;
+  background: var(--rule);
+}
+.sheet__axis-n{
+  position: absolute;
+  top: 15px;
+  transform: translateX(-50%);
+  color: #6B6963;
+  font-family: var(--mono);
+  font-size: clamp(10px, 0.9vw, 11.5px);
+}
+.sheet__axis-n:first-of-type{ transform: none; }
+.sheet__axis-l{
+  position: absolute;
+  top: 26px;
+  transform: translateX(-50%);
+  color: #6B6963;
+  font-family: var(--mono);
+  font-size: clamp(9.5px, 0.85vw, 11px);
+  letter-spacing: .04em;
+}
+.sheet__axis-l:first-of-type{ transform: none; }
+.sheet__axis-dot{
+  position: absolute;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: var(--accent);
+  opacity: 0;
+}
+
+/* ═══ THE DECISION — the question tree's caption and the ticket routes ═══ */
+
+.tree{ margin-top: clamp(18px, 2vw, 30px); }
+.tree__cap{
+  margin-top: clamp(10px, 1vw, 14px);
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: clamp(13px, 0.95vw, 14.5px);
+  line-height: 1.55;
+}
+.tree__cap b{ color: var(--fg); font-weight: 600; }
+
+.tickets__route{
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 7px;
+  border: 1px solid var(--rule-dark);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .07em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.tickets__btn[aria-checked="true"] .tickets__route{
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+
+/* ═══ THE DECISION ENGINE — the three types, the question tree, the examples ═══ */
+
+/* THE THREE TYPES: three ruled cards, one per question type, each carrying the
+   request it takes and the reply shape it returns. */
+.types{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: clamp(16px, 1.8vw, 26px);
+  margin-top: clamp(18px, 2vw, 28px);
+}
+.type{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 2px solid var(--fg);
+  padding-top: 12px;
+  min-width: 0;
+}
+.type__head{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.type__name{
+  font-family: var(--mono);
+  font-size: clamp(14px, 1.2vw, 16.5px);
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--accent-ink);
+}
+.type__job{ color: var(--muted); font-size: clamp(13px, .95vw, 14.5px); }
+.type .code{ margin: 0; }
+.type .code__body{ font-size: clamp(10.5px, .85vw, 12px); }
+.type__ret{
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(12px, .92vw, 13.5px);
+  line-height: 1.5;
+}
+.type__ret b{ color: var(--fg); }
+
+/* THE LAB: the example switch, the shared stage, and the honesty line, all on
+   the dark instrument plate. */
+.lab{ margin-top: clamp(16px, 1.8vw, 26px); }
+.lab__switch{
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--rule-dark);
+}
+.lab__tab{
+  min-height: 44px;
+  padding: 0 clamp(12px, 1.4vw, 20px);
+  background: transparent;
+  color: var(--rule);
+  border: 0;
+  border-left: 1px solid var(--rule-dark);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.lab__tab:first-child{ border-left: 0; }
+.lab__tab:hover{ color: var(--accent); }
+.lab__tab[aria-pressed="true"]{ background: var(--accent); color: var(--fg); }
+.lab__tab[aria-pressed="true"]:hover{ color: var(--fg); }
+.lab__tab:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The `new` mark is generated, not markup: the tab keeps its own text, and its
+   aria-label keeps the mark out of the accessible name. */
+.lab__tab[data-new]::after{ content: "new"; margin-left: .55em; }
+.lab__blurb{
+  margin: 14px 0 0;
+  max-width: 82ch;
+  color: var(--rule);
+  font-size: clamp(13.5px, 1vw, 15.5px);
+  line-height: 1.55;
+}
+.lab__stage{ margin-top: clamp(14px, 1.6vw, 22px); }
+.lab__honest{
+  margin: clamp(16px, 1.8vw, 26px) 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-dark);
+  max-width: 86ch;
+  color: var(--rule);
+  font-size: clamp(12.5px, .95vw, 14px);
+  line-height: 1.55;
+}
+.lab__honest b{ color: var(--bg); }
+
+/* SNAKE: the board and its readings, side by side. */
+.snakegrid, .pacgrid{
+  display: grid;
+  grid-template-columns: minmax(0, 620px) minmax(150px, 1fr);
+  gap: clamp(14px, 1.6vw, 22px);
+  align-items: start;
+}
+.snakeboard{ min-width: 0; }
+.snake{
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule-dark);
+  background: #111110;
+}
+.snake__bg{ fill: #111110; }
+.snake__grid{ stroke: #23221e; stroke-width: 1; }
+.snake__body{ fill: #3f6b58; }
+.snake__head{ fill: var(--accent); }
+.snake__food{ fill: var(--bg); }
+
+/* PAC-MAN: the same dark board, a different vocabulary. Walls reuse the snake's
+   green, dots the paper, the player the accent, and the ghosts the rule grey —
+   no new colour enters the world. Frightened ghosts read as paper. */
+.pac{
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule-dark);
+  background: #111110;
+}
+.pac__bg{ fill: #111110; }
+.pac__wall{ fill: #3f6b58; }
+.pac__dot{ fill: var(--bg); }
+.pac__power{ fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+.pac__player{ fill: var(--accent); }
+.pac__ghost{ fill: var(--rule); }
+.pac__ghost.is-frightened{ fill: var(--bg); }
+.pac__eye{ fill: #111110; }
+.snakestats{ margin: 0; }
+.snakestats__line{
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 13px);
+  color: var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+.snakestats__line b{ color: var(--bg); font-weight: 500; }
+.snakestats__line .k{ color: var(--accent); }
+.snakestats__status{ text-transform: uppercase; letter-spacing: .08em; }
+.shield{ color: var(--accent); }
+
+/* The Auto toggle reads as on, so a running loop is visible. */
+.lab .btn[aria-pressed="true"]{ background: var(--accent); border-color: var(--accent); color: var(--fg); }
+
+/* THE QUESTION TREE: a paper card inside the dark rig. The state is the root,
+   one column per typed question, one ruled track per option leaf. */
+.qtree{ margin-top: clamp(14px, 1.6vw, 22px); }
+.qtree__inner{
+  padding: clamp(12px, 1.5vw, 18px);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 12.5px);
+}
+.qtree__decided{
+  display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: baseline;
+  padding-bottom: 10px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.qtree__decidedk{ color: var(--accent-ink); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+.qtree__chip{ display: inline-flex; gap: 6px; align-items: baseline; }
+.qtree__chip i{ color: var(--muted); font-style: normal; }
+.qtree__chip b{ color: var(--fg); font-weight: 700; }
+.qtree__state{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 14px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.qtree__k{
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.qtree__text{
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.qtree__branches{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: clamp(14px, 1.6vw, 22px);
+  margin-top: 14px;
+}
+.qtree__branch{ min-width: 0; border-top: 2px solid var(--fg); padding-top: 8px; }
+.qtree__branch--choice{ border-top-color: var(--accent); }
+.qtree__branch--noul{ border-top-color: var(--rule); }
+.qtree__node{ display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.qtree__type{
+  padding: 1px 6px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.qtree__branch--choice .qtree__type{ background: var(--accent); color: var(--fg); }
+.qtree__branch--noul .qtree__type{ background: var(--rule-dark); color: var(--bg); }
+.qtree__id{ font-weight: 700; }
+.qtree__ins{ margin: 6px 0 8px; color: var(--muted); line-height: 1.45; }
+.qtree__leaves{ display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.qtree__leaf{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
+.qtree__label{ color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qtree__leaf.is-win .qtree__label{ font-weight: 700; }
+.qtree__track{
+  grid-column: 1 / -1;
+  grid-row: 2;
+  position: relative;
+  height: 8px;
+  background: var(--rule-soft);
+}
+.qtree__fill{ position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--fg); }
+.qtree__leaf.is-win .qtree__fill{ background: var(--accent); }
+.qtree__p{ color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.qtree__meta{
+  margin-top: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--rule-soft);
+  color: var(--muted);
+  font-size: clamp(10.5px, .85vw, 12px);
+  letter-spacing: .04em;
+}
+.block--dark .qtree .t-cmd{ color: inherit; }
+@media (max-width: 720px){
+  .snakegrid, .pacgrid{ grid-template-columns: minmax(0, 1fr); }
+  .qtree__branches{ grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The board reads at its own scale: a capped column, so the readings sit
+   beside it rather than a mile away. */
+.snakeboard{ max-width: 620px; }
+.pacboard{ max-width: 620px; }
+
+/* THE API: the call's arguments, defined once. A mono term column, the prose
+   in the muted voice, one rule per definition. */
+.api{
+  display: grid;
+  grid-template-columns: minmax(130px, auto) minmax(0, 1fr);
+  gap: 8px 22px;
+  margin: clamp(14px, 1.6vw, 22px) 0 0;
+  padding-top: clamp(12px, 1.4vw, 18px);
+  border-top: 1px solid var(--rule);
+}
+.api dt{
+  font-family: var(--mono);
+  font-size: clamp(11.5px, .95vw, 13px);
+  letter-spacing: .02em;
+  color: var(--accent-ink);
+}
+.api dd{
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(13px, .95vw, 14.5px);
+  line-height: 1.5;
+}
+@media (max-width: 640px){
+  .api{ grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .api dd{ margin-bottom: 10px; }
+}
+
+/* THE SNAKE READOUT — the reference implementation's right pane, beside the
+   board: the four move probabilities, the executed move, the cycle-safety
+   shield, dead-end risk and food reachability, advanced frame by frame. */
+.hud{
+  border: 1px solid var(--rule-dark);
+  padding: clamp(12px, 1.4vw, 18px);
+  font-family: var(--mono);
+  font-size: clamp(11px, .9vw, 12.5px);
+  color: var(--bg);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.hud__head{ display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hud__head b{ font-weight: 700; letter-spacing: .06em; color: var(--accent); }
+.hud__status{ letter-spacing: .1em; }
+.hud__status.is-dead{ color: var(--accent); }
+.hud__sub{ margin: 4px 0 12px; color: var(--rule); font-size: .92em; }
+.hud__label{ color: var(--rule); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+.hud__moves{ display: grid; gap: 4px; }
+.hud__mrow{ display: grid; grid-template-columns: 12px 44px minmax(0, 1fr) 40px; gap: 8px; align-items: center; color: var(--rule); }
+.hud__mark{ color: var(--accent); text-align: center; }
+.hud__mrow.is-decided{ color: var(--bg); }
+.hud__mrow.is-decided .hud__dir{ font-weight: 700; }
+.hud__mrow.is-decided .hud__v{ color: var(--accent); }
+.hud__dir{ letter-spacing: .04em; white-space: nowrap; }
+.hud__track{ position: relative; height: 8px; background: #23221e; min-width: 24px; }
+.hud__fill{ position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--rule); }
+.hud__mrow.is-decided .hud__fill{ background: var(--accent); }
+.hud__v{ text-align: right; color: var(--rule); }
+/* One grid for the readout bars, so the label column is shared and the bars
+   start at the same x however long a label is. */
+.hud__bars{ display: grid; grid-template-columns: max-content minmax(24px, 1fr) 40px; gap: 4px 8px; align-items: center; margin-top: 6px; }
+.hud__row{ display: contents; }
+.hud__k{ color: var(--rule); white-space: nowrap; }
+/* The decision leads: the executed move in the big voice, the model's proposal
+   beside it, and the table below as the distribution over the legal moves. */
+.hud__decision{ display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }
+.hud__decidedk{ color: var(--rule); text-transform: uppercase; letter-spacing: .1em; font-size: .82em; }
+.hud__big{ font-weight: 700; color: var(--bg); font-size: 1.35em; line-height: 1; }
+.hud__proposed{ margin: 0 0 12px; }
+.hud__proposedv{ color: var(--bg); }
+.hud__shield{ color: var(--fg); background: var(--accent); padding: 0 6px; font-size: .9em; letter-spacing: .06em; }
+/* The readout's order mirrors the reference: status, the big counters, the
+   probability table, the executing move, the readout bars, then the meters. */
+.hud__stats{
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px; margin: 10px 0 14px; padding: 10px 0;
+  border-top: 1px solid var(--rule-dark); border-bottom: 1px solid var(--rule-dark);
+}
+.hud__stat{ display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hud__statk{ color: var(--rule); font-size: .82em; letter-spacing: .1em; text-transform: uppercase; }
+.hud__statv{ color: var(--bg); font-weight: 700; font-size: 1.7em; line-height: 1; font-variant-numeric: tabular-nums; }
+.hud__meters{ display: grid; gap: 3px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule-dark); }
+.hud__meter{ display: flex; justify-content: space-between; gap: 8px; }
+.hud__meter b{ color: var(--bg); font-weight: 500; font-variant-numeric: tabular-nums; }
+.hud__foot{ margin: 12px 0 0; color: var(--rule); }
+@media (max-width: 520px){
+  .hud__statv{ font-size: 1.4em; }
+}

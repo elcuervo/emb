@@ -22,7 +22,9 @@ import (
 
 // scriptCache stores script source by model and SHA1. Scripts are cached per
 // model (mirroring the registry): the same SHA against two models is two
-// entries, because the graph contract differs.
+// entries, because the graph contract differs. Each entry also carries the
+// script's declared config and its digest, so a request can bind the right
+// emb.script.config and fold the right identity into the reply-cache key.
 //
 // Ownership and bound: the cache owns the source strings and is bounded per
 // model by max (default 1024) via bounded.Map, which evicts the
@@ -30,14 +32,20 @@ import (
 // all of them). The compiled-bytecode cache (script.Compiler) is bounded the
 // same way and flushed alongside it.
 type scriptCache struct {
-	by *bounded.Map[string] // model → sha → source
+	by *bounded.Map[scriptEntry] // model → sha → entry
+}
+
+type scriptEntry struct {
+	src    string
+	config map[string]any
+	digest string
 }
 
 func newScriptCache(max int) *scriptCache {
 	if max <= 0 {
 		max = 1024
 	}
-	return &scriptCache{by: bounded.New[string](max)}
+	return &scriptCache{by: bounded.New[scriptEntry](max)}
 }
 
 func scriptSHA(src string) string {
@@ -46,13 +54,16 @@ func scriptSHA(src string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func (c *scriptCache) Load(model, src string) (sha string, exists bool) {
+func (c *scriptCache) Load(model, src string, config map[string]any) (sha string, exists bool) {
 	sha = scriptSHA(src)
-	_, existed, _ := c.by.GetOrCreate(model, sha, func() (string, error) { return src, nil })
+	digest := script.ConfigDigest(config)
+	_, existed, _ := c.by.GetOrCreate(model, sha, func() (scriptEntry, error) {
+		return scriptEntry{src: src, config: config, digest: digest}, nil
+	})
 	return sha, existed
 }
 
-func (c *scriptCache) Get(model, sha string) (string, bool) { return c.by.Get(model, sha) }
+func (c *scriptCache) Get(model, sha string) (scriptEntry, bool) { return c.by.Get(model, sha) }
 
 func (c *scriptCache) Exists(model, sha string) bool {
 	_, ok := c.by.Get(model, sha)
@@ -144,7 +155,7 @@ func (s *Server) handleEVAL(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
-	s.runScripted(conn, rest.model, rest.script, rest.sha, rest.texts, rest.args)
+	s.runScripted(conn, rest.model, rest.script, rest.sha, nil, "", rest.texts, rest.args)
 }
 
 // handleEVSHA implements EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>.
@@ -155,19 +166,19 @@ func (s *Server) handleEVSHA(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 	model, sha := args[0], args[1]
-	src, ok := s.scripts.Get(model, sha)
+	cached, ok := s.scripts.Get(model, sha)
 	if !ok {
 		conn.WriteError("ERR no such script")
 		return
 	}
-	parseArgs := append([]string{model, src}, args[2:]...)
+	parseArgs := append([]string{model, cached.src}, args[2:]...)
 	rest, err := splitEvalArgs(parseArgs)
 	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 	rest.sha = sha
-	s.runScripted(conn, rest.model, rest.script, rest.sha, rest.texts, rest.args)
+	s.runScripted(conn, rest.model, cached.src, rest.sha, cached.config, cached.digest, rest.texts, rest.args)
 }
 
 func cmdArgs(cmd redcon.Command) []string {
@@ -227,7 +238,7 @@ func splitEvalArgs(args []string) (*evalSplit, error) {
 // without re-running the script; any miss triggers one evaluation over the
 // full KEYS list, and each text's converted element is cached under its
 // content-addressed key.
-func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, args []string) {
+func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config map[string]any, digest string, texts, args []string) {
 	// Record the evaluation for EMB.STATS and MONITOR (bounded ring, no text
 	// payloads). The clock starts before any work so the recorded latency
 	// covers parsing through reply writing, mirroring EMB.
@@ -278,6 +289,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	}
 
 	hosts := script.Hosts{
+		Config: config,
 		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
 			r, err := resolve()
 			if err != nil {
@@ -317,6 +329,28 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 				return nil, nil, nil, 0, errTokenizerUnavailable
 			}
 			return oT.EncodePairOffsets(first, second, maxLen)
+		},
+		EncodePlainIDs: func(text string, maxLen int) ([]int64, error) {
+			r, err := resolve()
+			if err != nil {
+				return nil, err
+			}
+			pT, ok := r.Tokenizer.(tokenizer.PlainTokenizer)
+			if !ok {
+				return nil, errTokenizerUnavailable
+			}
+			return pT.EncodePlain(text, maxLen)
+		},
+		SpecialTokenIDs: func() (tokenizer.SpecialTokenIDs, error) {
+			r, err := resolve()
+			if err != nil {
+				return tokenizer.SpecialTokenIDs{}, err
+			}
+			sT, ok := r.Tokenizer.(tokenizer.SpecialTokenIDsProvider)
+			if !ok {
+				return tokenizer.SpecialTokenIDs{}, errTokenizerUnavailable
+			}
+			return sT.SpecialTokenIDs()
 		},
 	}
 	// emb.embed is bound only for models that can produce embeddings, so a
@@ -391,7 +425,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 	if cacheable {
 		allHit := true
 		for i, text := range texts {
-			if hit, ok := s.cache.Get(script.CacheKey(model, sha, args, len(texts), text)); ok {
+			if hit, ok := s.cache.Get(script.CacheKeyConfig(model, sha, args, len(texts), text, digest)); ok {
 				replies[i] = hit
 			} else {
 				allHit = false
@@ -438,7 +472,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, texts, ar
 		}
 		replies[i] = encoded
 		if cacheable {
-			s.cache.Set(script.CacheKey(model, sha, args, len(texts), texts[i]), encoded)
+			s.cache.Set(script.CacheKeyConfig(model, sha, args, len(texts), texts[i], digest), encoded)
 		}
 	}
 	s.writeScriptReply(conn, replies)

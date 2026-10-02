@@ -48,11 +48,13 @@ func TestExampleScriptsCompile(t *testing.T) {
 // TestReplyCacheKeyUnchanged pins the content-addressed reply-cache key format
 // (with the host API version and the KEYS count folded into the digest) so the
 // cache identity of existing scripts cannot drift silently. The digest changed
-// once when the version was folded in (design decision 8) and again when the
-// KEYS count was folded in (the arity-collision fix); it is pinned again here.
+// once when the version was folded in (design decision 8), again when the KEYS
+// count was folded in (the arity-collision fix), and again when the host API
+// moved to 1.3.0 (bool tensors, encode_plain, special_ids, decode_ordered); it
+// is pinned again here.
 func TestReplyCacheKeyUnchanged(t *testing.T) {
 	got := CacheKey("minilm", "0123456789abcdef0123456789abcdef01234567", []string{"PERSON", "ORG"}, 1, "hello world")
-	const want = "minilm:0123456789abcdef0123456789abcdef01234567:9a105858960d5dc1ea899889a0f303f3d5df59af5c825eefaa3047e8ed96e009:hello world"
+	const want = "minilm:0123456789abcdef0123456789abcdef01234567:c952bf03c1fdbce28b2b2305d09193f101ccc5661a41e643d55718a1cddaa60e:hello world"
 	if got != want {
 		t.Fatalf("reply cache key changed:\n got %q\nwant %q", got, want)
 	}
@@ -75,13 +77,13 @@ func TestHostSurfaceIsComplete(t *testing.T) {
 	want := []string{
 		"emb.run", "emb.run_batch", "emb.embed", "emb.similarity", "emb.distance",
 		"emb.tokenize.pretokenized", "emb.tokenize.words", "emb.tokenize.encode",
-		"emb.tokenize.encode_pair",
+		"emb.tokenize.encode_pair", "emb.tokenize.encode_plain", "emb.tokenize.special_ids",
 		"emb.math.sigmoid", "emb.math.softmax", "emb.math.argmax", "emb.math.float32_bytes",
 		"emb.math.dot", "emb.math.cosine", "emb.math.l2", "emb.math.norm",
 		"emb.math.mean_pool", "emb.math.cls", "emb.math.topk", "emb.math.gather",
 		"emb.math.slice", "emb.math.scale", "emb.math.add",
 		"emb.image.preprocess", "emb.image.info", "emb.image.embed",
-		"json.encode", "json.decode", "json.null", "emb.API_VERSION",
+		"json.encode", "json.decode", "json.decode_ordered", "json.null", "emb.API_VERSION",
 	}
 	for _, path := range want {
 		v, err := EvalWithHosts("return type("+path+")", nil, nil, hosts, EvalOptions{})

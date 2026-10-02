@@ -115,15 +115,15 @@ func run() error {
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
 
 	for name, modelCfg := range fc.Models {
-		for _, scriptPath := range modelCfg.Scripts {
-			src, err := os.ReadFile(scriptPath)
+		for _, entry := range modelCfg.Scripts {
+			src, err := os.ReadFile(entry.Path)
 			if err != nil {
-				return fmt.Errorf("reading script %q for model %q: %w", scriptPath, name, err)
+				return fmt.Errorf("reading script %q for model %q: %w", entry.Path, name, err)
 			}
-			if _, err := srv.PreloadScript(name, string(src)); err != nil {
-				return fmt.Errorf("preloading script %q for model %q: %w", scriptPath, name, err)
+			if _, err := srv.PreloadScriptConfig(name, string(src), entry.Config); err != nil {
+				return fmt.Errorf("preloading script %q for model %q: %w", entry.Path, name, err)
 			}
-			log.Printf("preloaded script %s for model %q", scriptPath, name)
+			log.Printf("preloaded script %s for model %q", entry.Path, name)
 		}
 	}
 

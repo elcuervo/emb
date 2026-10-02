@@ -129,3 +129,54 @@ models:
       std: [0.26862954, 0.26130258, 0.27577711]
     scripts:
       - presets/zeroshot.lua
+
+  # The decision model: a 32-hidden miniature of the Laya architecture shipped
+  # inside the image (testdata/laya) rather than downloaded. Its weights are
+  # random, so the decision plate runs the real mechanism and answers nothing
+  # real -- the prose and the figure say so, and the docs point at the
+  # published checkpoints for production. Three presets: the generic decision
+  # preset (laya.lua, questions as data) and two task presets (snake.lua and
+  # pacman.lua, each owning its own loop and returning a whole episode per call).
+  # The checkpoint envelope lives on the entries' scripts config, so a client
+  # sends only state + questions.
+  laya:
+    onnx: /etc/emb/laya-model/model.onnx
+    tokenizer: /etc/emb/laya-model/tokenizer/tokenizer.json
+    script_preload: true
+    scripts:
+      - path: presets/laya.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98
+      - path: presets/snake.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98
+      - path: presets/pacman.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98

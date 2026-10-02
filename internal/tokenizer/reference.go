@@ -1,7 +1,10 @@
 package tokenizer
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/daulet/tokenizers"
@@ -9,6 +12,7 @@ import (
 
 type RefTokenizer struct {
 	tk        *tokenizers.Tokenizer
+	path      string
 	padOutput bool
 }
 
@@ -17,7 +21,7 @@ func NewTokenizer(path string, padOutput bool) (*RefTokenizer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading tokenizer from %q: %w", path, err)
 	}
-	return &RefTokenizer{tk: tk, padOutput: padOutput}, nil
+	return &RefTokenizer{tk: tk, path: path, padOutput: padOutput}, nil
 }
 
 func (t *RefTokenizer) Encode(text string, maxLength int) ([]int64, []int64, error) {
@@ -68,6 +72,138 @@ func (t *RefTokenizer) Encode(text string, maxLength int) ([]int64, []int64, err
 
 func (t *RefTokenizer) Close() error {
 	return t.tk.Close()
+}
+
+// EncodePlain encodes a single text without special tokens (the tokenizers
+// `encode(text, add_special_tokens=False)` form), returning real-length ids
+// with built-in padding trimmed via the attention mask and front-truncated to
+// maxLength when positive. This is the primitive Laya-style sequence builders
+// compose; it deliberately does not pad.
+func (t *RefTokenizer) EncodePlain(text string, maxLength int) ([]int64, error) {
+	enc := t.tk.EncodeWithOptions(text, false, tokenizers.WithReturnAttentionMask())
+	realLen := 0
+	for _, m := range enc.AttentionMask {
+		if m == 1 {
+			realLen++
+		}
+	}
+	n := realLen
+	if maxLength > 0 && n > maxLength {
+		n = maxLength
+	}
+	ids := make([]int64, n)
+	for i := 0; i < n; i++ {
+		ids[i] = int64(enc.IDs[i])
+	}
+	return ids, nil
+}
+
+// SpecialTokenIDs resolves mask/cls/sep/pad ids by the reference discovery
+// order: the tokenizer's own special-token names (tokenizer_config.json /
+// special_tokens_map.json siblings, falling back to the conventional
+// bracket/angle candidates), then the tokenizer.json added_tokens entries,
+// then a single-token encode probe. This mirrors the Ruby gem's
+// `Tokenizers::Tokenizer#token_to_id` resolution without a token_to_id
+// binding in the CGo API.
+func (t *RefTokenizer) SpecialTokenIDs() (SpecialTokenIDs, error) {
+	var out SpecialTokenIDs
+	dir := filepath.Dir(t.path)
+	byContent := addedTokensByContent(t.path)
+	resolve := func(kind string, candidates []string) (int64, string, error) {
+		names := specialNames(dir, kind)
+		if len(names) > 0 {
+			candidates = append(names, candidates...)
+		}
+		for _, name := range candidates {
+			if id, ok := byContent[name]; ok {
+				return int64(id), name, nil
+			}
+		}
+		for _, name := range candidates {
+			ids, _ := t.tk.Encode(name, false)
+			if len(ids) == 1 {
+				return int64(ids[0]), name, nil
+			}
+		}
+		return 0, "", fmt.Errorf("tokenizer has no %s token (tried %v)", kind, candidates)
+	}
+	var err error
+	if out.Mask, out.MaskToken, err = resolve("mask", []string{"[MASK]", "<mask>"}); err != nil {
+		return out, err
+	}
+	if out.CLS, _, err = resolve("cls", []string{"[CLS]", "<s>", "<cls>", "<bos>"}); err != nil {
+		return out, err
+	}
+	if out.SEP, _, err = resolve("sep", []string{"[SEP]", "</s>", "<sep>", "<eos>"}); err != nil {
+		return out, err
+	}
+	if out.PAD, _, err = resolve("pad", []string{"[PAD]", "<pad>"}); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// addedTokensByContent parses a tokenizer.json file's added_tokens entries
+// into a content → id map. The daulet CGo surface has no token_to_id, and the
+// added_tokens array is the exact source the reference uses for the specials
+// (e.g. `[PAD] 0/[UNK] 1/[CLS] 2/[SEP] 3/[MASK] 4` in the Laya fixture).
+func addedTokensByContent(path string) map[string]int {
+	out := make(map[string]int)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	var doc struct {
+		AddedTokens []struct {
+			Content string `json:"content"`
+			ID      int    `json:"id"`
+		} `json:"added_tokens"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return out
+	}
+	for _, at := range doc.AddedTokens {
+		out[at.Content] = at.ID
+	}
+	return out
+}
+
+// specialNames reads the tokenizer-config sibling files for a kind's declared
+// special-token name (e.g. mask_token; a Hash value's "content" is used). It
+// mirrors the reference's file order — special_tokens_map.json then
+// tokenizer_config.json, the later file winning — and returns at most one
+// name per kind.
+func specialNames(dir, kind string) []string {
+	var found string
+	for _, name := range []string{"special_tokens_map.json", "tokenizer_config.json"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		var cfg map[string]json.RawMessage
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			continue
+		}
+		raw, ok := cfg[kind+"_token"]
+		if !ok {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(raw, &s); err == nil && s != "" {
+			found = s
+			continue
+		}
+		var obj struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &obj); err == nil && obj.Content != "" {
+			found = obj.Content
+		}
+	}
+	if found == "" {
+		return nil
+	}
+	return []string{found}
 }
 
 // EncodePretokenized encodes a sequence of already-split words as a single

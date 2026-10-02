@@ -86,8 +86,8 @@ func loadPresets(configPath string) (presets, error) {
 		return nil, err
 	}
 	for model, m := range cfg.Models {
-		for _, path := range m.Scripts {
-			src, err := os.ReadFile(path)
+		for _, entry := range m.Scripts {
+			src, err := os.ReadFile(entry.Path)
 			if err != nil {
 				return nil, fmt.Errorf("model %q: %w", model, err)
 			}
@@ -96,7 +96,7 @@ func loadPresets(configPath string) (presets, error) {
 			if p[model] == nil {
 				p[model] = map[string]string{}
 			}
-			name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			name := strings.TrimSuffix(filepath.Base(entry.Path), filepath.Ext(entry.Path))
 			p[model][hex.EncodeToString(sum[:])] = name
 		}
 	}

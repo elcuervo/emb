@@ -1,0 +1,52 @@
+# Laya testbed: a Laya decision checkpoint served through the scripted-model
+# path (EMB.EVAL / EMB.EVSHA), using the vendored 32-hidden tiny export from
+# ruby-laya's parity fixtures (see testdata/laya/README.md).
+#
+# Two presets are mounted: the generic decision preset (laya.lua, questions as
+# data) and the Snake task preset (snake.lua, which owns its own loop). Both
+# read the checkpoint envelope — budgets and temperatures — from the model
+# entry's scripts config, exposed to Lua as emb.script.config, so a client
+# sends only state + questions. A production deployment points onnx/tokenizer
+# at a real export from codenamev/laya-onnx and copies the envelope from that
+# checkpoint's rl_agent_config.json / onnx_config.json.
+#
+# Run:  nix develop
+#       ./bin/emb -config test-laya.yaml -listen :16379
+#       redis-cli -p 16379 EMB.EVSHA laya-tiny <laya.lua sha> 1 \
+#         '{"body": "refund me today"}' \
+#         '{"refund": {"type": "noul", "instructions": "does the message ask for money back"}}'
+#       redis-cli -p 16379 EMB.EVSHA laya-tiny <snake.lua sha> 1 \
+#         '{"ticks": 8, "width": 20, "height": 14, "seed": 7}'
+
+listen: :16379
+
+models:
+  laya-tiny:
+    onnx: ./testdata/laya/model.onnx
+    tokenizer: ./testdata/laya/tokenizer/tokenizer.json
+    script_preload: true
+    scripts:
+      - path: ./scripts/laya.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98
+      - path: ./scripts/snake.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98

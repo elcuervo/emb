@@ -99,7 +99,7 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 		return 0
 	}
 
-	outputs, err := h.Run(merged)
+	outputs, runMs, err := timeRun(h.Run, merged)
 	if err != nil {
 		ls.RaiseError("emb.run_batch: %v", err)
 		return 0
@@ -125,7 +125,8 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 		result.RawSetInt(i+1, itemOut)
 	}
 	ls.Push(result)
-	return 1
+	ls.Push(lua.LNumber(runMs))
+	return 2
 }
 
 // namedInputsFromTable parses one emb.run-style input table into ordered
