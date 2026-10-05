@@ -101,3 +101,20 @@ func TestClear(t *testing.T) {
 		t.Fatal("Clear(\"\") should drop every bucket")
 	}
 }
+
+func TestPutCreatesAndOverwrites(t *testing.T) {
+	m := New[string](2)
+	// A Put into an absent bucket creates it, and a second Put overwrites the
+	// value without evicting.
+	m.Put("b", "a", "first")
+	if v, ok := m.Get("b", "a"); !ok || v != "first" {
+		t.Fatalf("Get after Put = %q, %v; want first, true", v, ok)
+	}
+	m.Put("b", "a", "second")
+	if v, _ := m.Get("b", "a"); v != "second" {
+		t.Fatalf("Put did not overwrite: got %q, want second", v)
+	}
+	if n := m.Len("b"); n != 1 {
+		t.Fatalf("Len = %d, want 1", n)
+	}
+}
