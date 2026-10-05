@@ -696,41 +696,31 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
            Do not hand-edit the frame, the caption or the figures. -->
       <figure class="topviz topviz--doc">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-7c507714.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.1 · 127.0.0.1:16379 · uptime 28s · 4 models · poll 1s
-● HEALTHY  connected │ err 0.0% │ p95 27.0ms │ cpu 17% │ cache 50%
-╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  req/s per model · older ████████ newer                                                                      │
-│ bge-small     ██████████████████████████████████████████████████████████████████████████████████    10.9 r/s │
-│ e5-small      ██████████████████████████████████████████████████████████████████████████████████    37.8 r/s │
-│ jina-small    ██████████████████████████████████████████████████████████████████████████████████    11.9 r/s │
-│ minilm        ██████████████████████████████████████████████████████████████████████████████████    35.8 r/s │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-1f8a0bf1.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.1 · 127.0.0.1:16379 · uptime 29s · 4 models · poll 1s
+● HEALTHY  connected │ err 0.0% │ p95 26.7ms │ cpu 18% │ cache 50%
 ╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
-│     │                                 ╭╮ ╭╮╭╮╭╯╰╯╰╮    ││                                                   ░░   │
-│  128│                                 │╰─╯╰╯╰╯    ╰─╮  ││                ░░░░░░░░░██████████████████████████████ │
-│     │                             ╭───╯             ╰─ ││                ░░███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│ 64.0│                             │                    ││      ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│     │                            ╭╯                    ││ █████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  0.0│                          ──╯                     ││ p50–p99 ░  p95 █                                       │
+│     │                                  ╭╮ ╭╮  │╰╯╰──╮  ││                                       ░░            ░░ │
+│  126│                              ╭╮ ╭╯╰─╯╰╮╭╯     │  ││                  ░░░░░░░░░░░░░░░░░░░░░░░██████████████ │
+│     │                              │╰─╯     ││      ╰─ ││                  ███████████████████████░░░░░░░░░░░░░░ │
+│ 62.8│                             ╭╯        ╰╯         ││         ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│     │                             │                    ││ ████████░░░░█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  0.0│                          ───╯                    ││ p50–p99 ░  p95 █                                       │
 ╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
-● bge-small              ▃█▇▆▇▅▆▃▆▃▃▃▄▁▂▁▁     10.9 r/s      374 t/s     p50 2µs p95 28.0ms↑     err 0
-   dim 384 · cls · fp32 · batch 32/16384 workers 1
-● e5-small                       ▂█▅▇▆▅▅▄▃     37.8 r/s     1.0k t/s   p50 17.8ms p95 30.2ms↑     err 0
-   dim 384 · mean · fp32 · batch 32/16384 workers 1
-● jina-small                 ▄▆▆█▅▅▄▄▅▃▃▃▂     11.9 r/s      585 t/s     p50 4µs  p95 21.6ms      err 0
-   dim 512 · mean · fp32 · batch 32/16384 workers 1
-● minilm             ▂█▆▆▆▆▅▅▆▄▅▅▃▃▃▄▃▄▂▂▃     35.8 r/s      616 t/s     p50 3µs p95 11.0ms↑     err 0
-   dim 384 · mean · fp32 · batch 32/16384 workers 1
-cache   49.8%                          cpu     169%                           mem     925MB
+● bge-small     384d·cls·fp32        10.0 r/s      340 t/s     p50 2µs p95 27.0ms↑     err 0   █████████████████████████
+● e5-small      384d·mean·fp32       44.9 r/s     1.2k t/s   p50 18.0ms  p95 28.7ms      err 0   ███████████████████████
+● jina-small    512d·mean·fp32       20.0 r/s      979 t/s    p50 6.5ms p95 22.2ms↑     err 0   ████████████████████████
+● minilm        384d·mean·fp32       31.9 r/s      547 t/s     p50 3µs p95 10.0ms↑     err 0   █████████████████████████
+  rows 1–4 of 4 · req/s per model · older ████████ newer
+cache   49.5%                          cpu     184%                           mem     1.1kMB
 █████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
 █████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
-  conns 4 · active 2 · goroutines 27 · truncated texts/pairs/images 0/0/0
-  event jina-small · 1 texts · 1µs ✓
+  conns 6 · active 4 · goroutines 29 · truncated texts/pairs/images 0/0/0
+  event e5-small · 1 texts · 5.7ms ✓
 q quit · p pause · r reset · j/k scroll · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-01 · emb-top v0.4.1 · 4 models · 127.0.0.1:16379</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 177 requests/s, 5.2k tokens/s, p95 latency 22.0ms, cache hit rate 34%, CPU 302%, 925MB resident. Per model: bge-small 19/s (avg 6.5ms, dim 384, cls, fp32); e5-small 79/s (avg 5.3ms, dim 384, mean, fp32); jina-small 33/s (avg 7.4ms, dim 512, mean, fp32); minilm 46/s (avg 2.2ms, dim 384, mean, fp32).</p>
+        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-05 · emb-top v0.4.1 · 4 models · 127.0.0.1:16379</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 210 requests/s, 6.3k tokens/s, p95 latency 20.0ms, cache hit rate 37%, CPU 396%, 1057MB resident. Per model: bge-small 31/s (avg 6.3ms, dim 384, cls, fp32); e5-small 84/s (avg 5.7ms, dim 384, mean, fp32); jina-small 43/s (avg 7.3ms, dim 512, mean, fp32); minilm 52/s (avg 1.9ms, dim 384, mean, fp32).</p>
       </figure>
 
       <p class="doc-prose">

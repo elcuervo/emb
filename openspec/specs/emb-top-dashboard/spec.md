@@ -42,7 +42,7 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 
 ### Requirement: emb-top renders per-model metrics
 
-`emb-top` SHALL discover models via `EMB.MODELS`, poll `EMB.INFO <model>` for each, and render per-model req/s, tok/s, err/s, avg latency, and identity metadata (dimension, pooling, quantization), updating as models are added or removed. Rows SHALL render in a stable first-seen order — independent of the server's enumeration order — that does not change as traffic rates fluctuate, and changing values SHALL NOT shift a row's columns horizontally.
+`emb-top` SHALL discover models via `EMB.MODELS`, poll `EMB.INFO <model>` for each, and render one per-model list — req/s, tok/s, err/s, latency, activity strip and identity metadata (dimension, pooling, quantization) — updating as models are added or removed. Rows SHALL render in a stable first-seen order with constant height and one position per model, one scroll offset SHALL page the whole list, changing values SHALL NOT shift columns, and a returning model SHALL keep its position.
 
 #### Scenario: Per-model rates
 
@@ -57,7 +57,7 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 #### Scenario: Model list scrolls
 
 - **WHEN** more models are loaded than fit the panel height
-- **THEN** the per-model panel scrolls via keyboard with an indicator of hidden/visible rows
+- **THEN** the per-model list scrolls as one unit via keyboard, reaching every model, with an indicator naming the visible range (for example `rows 12–20 of 24`)
 
 #### Scenario: Rows do not reorder under fluctuating traffic
 
@@ -70,6 +70,18 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 
 - **WHEN** a per-model rate or latency value changes width (for example `9.9` to `10.0`)
 - **THEN** the row's trailing columns keep their horizontal positions
+
+#### Scenario: A missed poll does not move rows
+
+- **GIVEN** a loaded model whose `EMB.INFO` reply is absent for one poll
+- **WHEN** the dashboard repaints
+- **THEN** that model's row keeps its position and height, showing its last-known values, and no row below it shifts
+
+#### Scenario: A returning model keeps its position
+
+- **GIVEN** a model drops out of `EMB.MODELS` for a poll and is announced again
+- **WHEN** the dashboard repaints
+- **THEN** the model returns to the position it held before it dropped, not the end of the list
 
 ### Requirement: emb-top renders resource and cache gauges
 
@@ -116,7 +128,7 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 
 ### Requirement: emb-top has a headless sampling mode
 
-`emb-top -once` SHALL print polled metrics as machine-readable lines (one per poll) to stdout and exit after `-samples` polls, without rendering the TUI, so scripts and tests can consume the same metrics.
+`emb-top -once` SHALL print polled metrics as machine-readable lines (one per poll) to stdout and exit after `-samples` polls, without rendering the TUI, so scripts and tests can consume the same metrics. The per-model sections within a line SHALL appear in a stable first-seen order that does not follow the server's per-call `EMB.MODELS` enumeration order.
 
 #### Scenario: Scripted sampling
 
@@ -127,6 +139,12 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 
 - **WHEN** the node is unreachable during `-once` sampling
 - **THEN** `emb-top` exits non-zero with the connection error on stdout/stderr
+
+#### Scenario: Sampling does not reorder models
+
+- **GIVEN** a node whose `EMB.MODELS` reply enumerates models in a different order on each call
+- **WHEN** `-once` prints successive lines
+- **THEN** the per-model sections keep a stable first-seen order across lines
 
 ### Requirement: emb-top keybindings
 
@@ -162,12 +180,12 @@ Recent per-model and aggregate error rates SHALL be visible in the dashboard, wi
 
 ### Requirement: emb-top renders a model-activity heatmap
 
-`emb-top` SHALL render a heatmap of per-model request activity over a time window (rows = models in the stable first-seen order, columns = recent polls, cell color = req/s), showing each model's current req/s beside its strip and a legend naming the scale and time direction, alongside the existing throughput streams and gauges.
+`emb-top` SHALL render each model's request activity over a time window as a strip inside that model's row in the single per-model list, with the model's current req/s beside it and a legend naming the scale and time direction, alongside the throughput streams and gauges. There SHALL be no separate capped activity panel: scrolling SHALL reach every model's strip at that model's one row position.
 
 #### Scenario: Heatmap reflects traffic
 
 - **WHEN** one model receives traffic and another is idle
-- **THEN** the heatmap SHALL show a colored column band on the busy model's row and blank/near-blank cells on the idle row
+- **THEN** the busy model's row SHALL show a colored strip band and the idle row's strip SHALL be blank or near-blank
 - **AND** each row SHALL show that model's current req/s
 
 #### Scenario: Latency chart renders
@@ -178,7 +196,13 @@ Recent per-model and aggregate error rates SHALL be visible in the dashboard, wi
 #### Scenario: Heatmap rows stay stable
 
 - **WHEN** the busiest model changes between polls
-- **THEN** the heatmap rows keep their stable first-seen order and no row migrates
+- **THEN** each model's strip stays in its row's stable first-seen position and no strip migrates
+
+#### Scenario: Every model's activity is reachable
+
+- **GIVEN** more models are loaded than fit the panel height
+- **WHEN** the user scrolls the list
+- **THEN** every loaded model's activity strip becomes visible, with no model hidden behind a fixed panel cap
 
 ### Requirement: emb-top streams complete dashboard frames headlessly
 

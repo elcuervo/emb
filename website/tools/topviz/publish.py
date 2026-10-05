@@ -259,9 +259,9 @@ def main() -> int:
     # One line for the image: markdown allows a wrapped link text, but a renderer
     # that does not is a broken image in the repository's own documentation.
     body = (
-        f"![The emb-top dashboard under load: four models with their request, token"
-        f" and latency rates, an activity heatmap, request-rate and p95-latency"
-        f" streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
+        f"![The emb-top dashboard under load: one row per model with its request,"
+        f" token and latency rates beside an activity strip, request-rate and p95-"
+        f"latency streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
         f"\n"
         f"*Captured {label}.*"
     )

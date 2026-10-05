@@ -27,7 +27,6 @@ import (
 	"github.com/NimbleMarkets/ntcharts/canvas/runes"
 	"github.com/NimbleMarkets/ntcharts/linechart"
 	"github.com/NimbleMarkets/ntcharts/linechart/streamlinechart"
-	"github.com/NimbleMarkets/ntcharts/sparkline"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -258,12 +257,12 @@ type tuiModel struct {
 	tickScheduled bool
 	pollInFlight  bool
 
-	known      []string // models polled via EMB.INFO
-	modelOrder []string // server EMB.MODELS order
-	lastSeq    uint64   // last MONITOR event seq seen
+	known      []string        // present models polled via EMB.INFO, list order
+	modelOrder []string        // ever-seen models, first-seen order (rows never move)
+	present    map[string]bool // models announced by the latest EMB.MODELS
+	lastSeq    uint64          // last MONITOR event seq seen
 
 	reqChart streamlinechart.Model
-	sparks   map[string]*sparkline.Model
 
 	window  int
 	polls   int
@@ -280,7 +279,6 @@ func newTUI(client dashboardClient, interval time.Duration, window int) tuiModel
 		client:   client,
 		interval: interval,
 		sampler:  embtop.NewSampler(window),
-		sparks:   map[string]*sparkline.Model{},
 		window:   window,
 	}
 	m.initCharts(80, 24)
@@ -297,9 +295,6 @@ func (m *tuiModel) initCharts(w, h int) {
 	m.cacheBar = bar(100)
 	m.cpuBar = bar(100)
 	m.memBar = bar(0) // 0: autoscale
-	for _, sp := range m.sparks {
-		sp.Resize(m.sparkW(), 1)
-	}
 }
 
 // yFmtChart builds a linechart like streamlinechart.New's default but with a
@@ -339,36 +334,22 @@ func streamDims(width, height int) (int, int) {
 	return w, 6
 }
 
-// hotW derives the heatmap grid width from the terminal.
-func hotW(width int) int {
-	if width <= 0 {
-		width = 80
-	}
-	// Reserve the model label (14) and the row's rate column (2+colHeat).
-	if w := width - 38; w > 10 {
-		return w
-	}
-	return 10
-}
+// minStrip is the narrowest an activity strip may render; each row reserves
+// that much before laying out its numeric segments, so the strip always shows.
+const minStrip = 8
 
-// heatContentW is the heatmap panel's inner width: label + strip + rate column.
-func (m tuiModel) heatContentW() int {
-	return 13 + 1 + m.hotW() + 2 + colHeat
-}
+// modelChrome is the number of non-model rows the dashboard always spends:
+// header, banner, the two stream charts, gauges, ticker, footer and the
+// model-list range line.
+const modelChrome = 17
 
-func (m *tuiModel) sparkW() int {
-	w := m.width
-	if w <= 0 {
-		w = 80
+// visibleRows is how many single-line model rows fit below the chrome.
+func (m tuiModel) visibleRows() int {
+	h := m.height - modelChrome
+	if h < 1 {
+		h = 1
 	}
-	sw := w/4 - 4
-	if sw < 6 {
-		sw = 6
-	}
-	if sw > 34 {
-		sw = 34
-	}
-	return sw
+	return h
 }
 
 // ---- bubbletea plumbing ----
@@ -381,6 +362,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.clampScroll()
 		m.layoutCharts()
 		return m, nil
 
@@ -402,11 +384,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "j", "down":
 			m.scroll++
+			m.clampScroll()
 			return m, nil
 		case "k", "up":
-			if m.scroll > 0 {
-				m.scroll--
-			}
+			m.scroll--
+			m.clampScroll()
 			return m, nil
 		}
 		return m, nil
@@ -472,36 +454,27 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 	m.sampler.PushEvents(res.Events)
 	p := m.sampler.Push(res)
 
-	// Reconcile known models with a stable first-seen order. The server's
-	// EMB.MODELS order is not something to render by: keep rows where they are,
-	// append newly discovered models, and drop the ones that vanished, so
-	// traffic can never make a row jump.
+	// Reconcile the model list. modelOrder is append-only and first-seen: a
+	// model keeps its row slot for the life of the process, so a model that
+	// leaves and returns reappears where it was and traffic can never move a
+	// row. The present set drives which rows render and which are polled.
 	announced := make(map[string]bool, len(res.Models))
 	for _, mod := range res.Models {
 		announced[mod.Name] = true
 	}
-	kept := m.modelOrder[:0]
+	for _, mod := range res.Models {
+		if !slices.Contains(m.modelOrder, mod.Name) {
+			m.modelOrder = append(m.modelOrder, mod.Name)
+		}
+	}
+	m.present = announced
+	m.known = m.known[:0]
 	for _, name := range m.modelOrder {
 		if announced[name] {
-			kept = append(kept, name)
+			m.known = append(m.known, name)
 		}
 	}
-	m.modelOrder = kept
-	for _, mod := range res.Models {
-		if slices.Contains(m.modelOrder, mod.Name) {
-			continue
-		}
-		m.modelOrder = append(m.modelOrder, mod.Name)
-		sp := sparkline.New(m.sparkW(), 1,
-			sparkline.WithStyle(modelStyle(len(m.modelOrder)-1)))
-		m.sparks[mod.Name] = &sp
-	}
-	m.known = append(m.known[:0], m.modelOrder...)
-	for name := range m.sparks {
-		if !slices.Contains(m.modelOrder, name) {
-			delete(m.sparks, name)
-		}
-	}
+	m.clampScroll()
 
 	// Stream chart: aggregate req/s.
 	pushStream(&m.reqChart, p.ReqRate)
@@ -515,16 +488,6 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 		m.pushLat(latSample{})
 	}
 	m.polls++
-
-	// Per-model sparklines (req/s).
-	for _, name := range m.modelOrder {
-		if sp, ok := m.sparks[name]; ok {
-			if hist := m.sampler.ModHist[name]; len(hist) > 0 {
-				sp.Push(hist[len(hist)-1].ReqRate)
-				sp.Draw()
-			}
-		}
-	}
 
 	// Gauges (clear-then-push: Push appends to the data set).
 	m.cacheBar.Clear()
@@ -560,10 +523,6 @@ func (m *tuiModel) reset() {
 	m.latHist = nil
 	m.p95Base = 0
 	m.polls = 0
-	for _, sp := range m.sparks {
-		sp.Clear()
-		sp.Draw()
-	}
 	m.cacheBar = bar(100)
 	m.cpuBar = bar(100)
 	m.memBar = bar(0)
@@ -583,17 +542,11 @@ func (m *tuiModel) layoutCharts() {
 	m.cacheBar.Resize(gw, 2)
 	m.cpuBar.Resize(gw, 2)
 	m.memBar.Resize(gw, 2)
-	for _, sp := range m.sparks {
-		sp.Resize(m.sparkW(), 1)
-	}
 	m.reqChart.Draw()
 	m.cacheBar.Draw()
 	m.cpuBar.Draw()
 	m.memBar.Draw()
 }
-
-// m.hotW is a convenience accessor for the heatmap grid width.
-func (m *tuiModel) hotW() int { return hotW(m.width) }
 
 // ---- rendering ----
 
@@ -606,11 +559,6 @@ func (m tuiModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(m.bannerView())
 	b.WriteString("\n")
-
-	if len(m.modelOrder) > 0 {
-		b.WriteString(borderStyle.Render(m.heatmapView()))
-		b.WriteString("\n")
-	}
 
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
 		borderStyle.Render(m.reqChart.View()),
@@ -650,72 +598,6 @@ func (m tuiModel) headerView() string {
 	return lipgloss.NewStyle().Width(m.width).Render(line)
 }
 
-// heatmapView renders a hand-rolled model-activity heatmap: rows = models in
-// stable first-seen order, columns = recent polls, cell = colored block
-// intensity by req/s, with each row's current rate spelled out. Built by hand
-// because lipgloss v1 does not style whitespace-only cells (the ntcharts
-// heatmap widget colors space cells, which render as unstyled), so each cell is
-// a colored non-space rune.
-func (m tuiModel) heatmapView() string {
-	if len(m.modelOrder) == 0 {
-		return dimStyle.Render("no models loaded on node")
-	}
-	_, _, hist := m.sampler.Snapshot()
-	rows := m.hotRows()
-	if len(rows) == 0 {
-		return ""
-	}
-	w := m.hotW()
-	maxV := 0.0
-	for _, name := range rows {
-		for _, mp := range hist[name] {
-			if mp.ReqRate > maxV {
-				maxV = mp.ReqRate
-			}
-		}
-	}
-	lines := make([]string, 0, len(rows))
-	for _, name := range rows {
-		pts := hist[name]
-		cell := heatCellBlock
-		line := lipgloss.NewStyle().Foreground(lipgloss.Color(modelColorIdx(name, m.modelOrder))).
-			Width(13).Render(name) + " "
-		if len(pts) == 0 || maxV <= 0 {
-			line += dimStyle.Render(strings.Repeat(cell, w))
-		} else {
-			for x := 0; x < w; x++ {
-				idx := x * len(pts) / w
-				if idx >= len(pts) {
-					idx = len(pts) - 1
-				}
-				frac := pts[idx].ReqRate / maxV
-				line += heatCellStyle(frac).Render(cell)
-			}
-		}
-		// The current rate is the row's readable value; the cells are the trend.
-		value, _ := fixedCol(labelStyle, fmtRate(latestRate(pts))+" r/s", colHeat)
-		lines = append(lines, line+"  "+value)
-	}
-	ramp := ""
-	for _, c := range heatColors {
-		ramp += lipgloss.NewStyle().Background(c).Foreground(c).Render(heatCellBlock)
-	}
-	legend := " " + labelStyle.Render("req/s per model") + dimStyle.Render(" · older ") + ramp + dimStyle.Render(" newer")
-	if n := len(m.modelOrder) - len(rows); n > 0 {
-		legend += dimStyle.Render(fmt.Sprintf("   (+%d more)", n))
-	}
-	legend = lipgloss.NewStyle().MaxWidth(m.heatContentW()).Render(legend)
-	return legend + "\n" + strings.Join(lines, "\n")
-}
-
-// latestRate returns the last sampled req/s for a model, or 0.
-func latestRate(pts []embtop.ModelPoint) float64 {
-	if len(pts) == 0 {
-		return 0
-	}
-	return pts[len(pts)-1].ReqRate
-}
-
 // heatCellBlock is the rune used per heatmap cell.
 const heatCellBlock = "█"
 
@@ -737,14 +619,40 @@ func heatCellStyle(frac float64) lipgloss.Style {
 	return lipgloss.NewStyle().Background(heatColors[i]).Foreground(heatColors[i])
 }
 
-// hotRows returns the heatmap's model rows in stable server EMB.MODELS order,
-// capped to the visible height. Rows never reorder as traffic fluctuates.
-func (m tuiModel) hotRows() []string {
-	rows := append([]string(nil), m.modelOrder...)
-	if len(rows) > 8 {
-		rows = rows[:8]
+// stripView renders one model's req/s history as colored cells: columns are
+// recent polls, intensity is req/s scaled to the busiest model in view, so
+// strips stay comparable across rows. Built by hand because lipgloss v1 does
+// not style whitespace-only cells, so each cell is a colored non-space rune.
+func stripView(pts []embtop.ModelPoint, w int, maxV float64) string {
+	if w < 1 {
+		w = 1
 	}
-	return rows
+	if len(pts) == 0 || maxV <= 0 {
+		return dimStyle.Render(strings.Repeat(heatCellBlock, w))
+	}
+	var b strings.Builder
+	for x := 0; x < w; x++ {
+		idx := x * len(pts) / w
+		if idx >= len(pts) {
+			idx = len(pts) - 1
+		}
+		b.WriteString(heatCellStyle(pts[idx].ReqRate / maxV).Render(heatCellBlock))
+	}
+	return b.String()
+}
+
+// maxReqRate is the busiest single req/s sample across the given models: the
+// one shared scale for every strip in the list.
+func maxReqRate(rows []string, hist map[string][]embtop.ModelPoint) float64 {
+	maxV := 0.0
+	for _, name := range rows {
+		for _, p := range hist[name] {
+			if p.ReqRate > maxV {
+				maxV = p.ReqRate
+			}
+		}
+	}
+	return maxV
 }
 
 func modelColorIdx(name string, order []string) string {
@@ -762,7 +670,7 @@ const (
 	colRate = 12
 	colLat  = 12
 	colErr  = 10
-	colHeat = 10
+	colMeta = 16
 )
 
 // fixedCol renders plain text right-aligned in a constant-width column and
@@ -776,110 +684,161 @@ func fixedCol(style lipgloss.Style, plain string, width int) (string, int) {
 	return style.Render(plain), width
 }
 
-func (m tuiModel) modelsView() []string {
-	if len(m.modelOrder) == 0 {
-		return []string{dimStyle.Render("  no models loaded on node")}
+// presentNames returns the currently announced models in stable first-seen
+// order. A model that dropped out keeps its slot in modelOrder but
+// contributes no row, so the rows around it never move and it reappears in
+// place when announced again.
+func (m tuiModel) presentNames() []string {
+	rows := make([]string, 0, len(m.modelOrder))
+	for _, name := range m.modelOrder {
+		if m.present[name] {
+			rows = append(rows, name)
+		}
 	}
-	// Reserve vertical space for header + heatmap + charts + gauges + ticker.
-	maxRows := m.height - 22 // header + banner + heatmap + charts + gauges + ticker + footer
-	if maxRows < 1 {
-		maxRows = 1
+	return rows
+}
+
+// clampScroll keeps the single scroll offset within the present rows.
+func (m *tuiModel) clampScroll() {
+	maxScroll := len(m.presentNames()) - m.visibleRows()
+	if maxScroll < 0 {
+		maxScroll = 0
 	}
-	maxRows /= 2 // each model takes two lines (stats + meta)
-	if maxRows > len(m.modelOrder) {
-		maxRows = len(m.modelOrder)
-	}
-	if m.scroll > len(m.modelOrder)-maxRows {
-		m.scroll = len(m.modelOrder) - maxRows
+	if m.scroll > maxScroll {
+		m.scroll = maxScroll
 	}
 	if m.scroll < 0 {
 		m.scroll = 0
 	}
-	// Stable server EMB.MODELS order: rows never reorder as rates fluctuate.
-	rows := m.modelOrder
-	var out []string
-	for i := m.scroll; i < m.scroll+maxRows && i < len(rows); i++ {
-		name := rows[i]
-		mp := m.sampler.LatestModels[name]
-		if mp.At.IsZero() {
-			mp.At = time.Now()
-		}
-		sp := m.sparks[name]
-		mh := modelHealth(m.sampler.ModHist[name])
+}
 
-		row := healthDot(mh) + " " +
-			lipgloss.NewStyle().Foreground(lipgloss.Color(modelColorIdx(name, m.modelOrder))).Bold(true).
-				Width(13).Render(trimModel(name))
-		row += " " + sp.View()
-
-		// Fit the row to the terminal: append fixed-width segments while they
-		// fit so numbers never wrap and columns never shift mid-row.
-		budget := m.width
-		if budget <= 0 {
-			budget = 120
-		}
-		appendSeg := func(seg string, width int) {
-			if lipgloss.Width(row)+1+width > budget {
-				return
-			}
-			row += " " + seg
-		}
-		rateSeg, rateW := fixedCol(labelStyle, fmtRate(mp.ReqRate)+" r/s", colRate)
-		appendSeg(rateSeg, rateW)
-		tokSeg, tokW := fixedCol(labelStyle, fmtRate(mp.TokRate)+" t/s", colRate)
-		appendSeg(tokSeg, tokW)
-
-		latArrow := " "
-		if mh.latRise {
-			latArrow = "↑"
-		}
-		if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
-			p50Seg, p50W := fixedCol(dimStyle, "p50 "+fmtLatency(p50), colLat)
-			appendSeg(p50Seg, p50W)
-			p95Seg, p95W := fixedCol(labelStyle, "p95 "+fmtLatency(p95)+latArrow, colLat)
-			appendSeg(p95Seg, p95W)
-		} else {
-			avgSeg, avgW := fixedCol(dimStyle, "avg "+fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
-			appendSeg(avgSeg, avgW)
-		}
-
-		errArrow := " "
-		if mh.errRise {
-			errArrow = "↑"
-		}
-		errText := fmt.Sprintf("err %d%s", mp.Errors, errArrow)
-		errSeg, errW := fixedCol(dimStyle, errText, colErr)
-		if mh.errRise || mh.status >= healthDegraded {
-			errSeg, errW = fixedCol(errStyle, errText, colErr)
-		}
-		appendSeg(errSeg, errW)
-		out = append(out, row)
-
-		meta := m.modelMeta(name)
-		if meta != "" {
-			out = append(out, "   "+meta)
-		}
+func (m tuiModel) modelsView() []string {
+	rows := m.presentNames()
+	if len(rows) == 0 {
+		return []string{dimStyle.Render("  no models loaded on node")}
 	}
-	if len(rows) > maxRows {
-		out = append(out, dimStyle.Render(fmt.Sprintf("   %d of %d models (j/k to scroll)", maxRows, len(rows))))
+	vis := m.visibleRows()
+	_, _, hist := m.sampler.Snapshot()
+	maxV := maxReqRate(rows, hist)
+
+	out := make([]string, 0, vis+1)
+	for i := m.scroll; i < m.scroll+vis && i < len(rows); i++ {
+		out = append(out, m.modelRow(rows[i], hist[rows[i]], maxV))
 	}
+	out = append(out, m.listLegend(len(rows)))
 	return out
 }
 
-func (m tuiModel) modelMeta(name string) string {
-	ms, ok := m.sampler.RawModels()[name]
-	if !ok {
+// modelRow renders one single-line model row: status dot, name, identity
+// metadata, current metrics and the activity strip. The strip always renders
+// (the numeric segments yield first), and the row's height never varies, so a
+// missing EMB.INFO reply cannot shift the rows below it.
+func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64) string {
+	mp := m.sampler.LatestModels[name]
+	mh := modelHealth(pts)
+
+	dot := healthDot(mh)
+	if mp.Stale {
+		dot = dimStyle.Render("◌")
+	}
+	row := dot + " " +
+		lipgloss.NewStyle().Foreground(lipgloss.Color(modelColorIdx(name, m.modelOrder))).Bold(true).
+			Width(13).Render(trimModel(name))
+
+	meta := compactMeta(m.sampler.RawModels()[name])
+	if len(meta) > colMeta {
+		meta = string([]rune(meta)[:colMeta])
+	}
+	row += " " + metaStyle.Width(colMeta).Render(meta)
+
+	// Fit numeric segments while they fit, reserving room for the strip so it
+	// always renders; columns never shift mid-row as values change width.
+	budget := m.width
+	if budget <= 0 {
+		budget = 120
+	}
+	budget -= minStrip + 2
+	appendSeg := func(seg string, width int) {
+		if lipgloss.Width(row)+1+width > budget {
+			return
+		}
+		row += " " + seg
+	}
+	rateSeg, rateW := fixedCol(labelStyle, fmtRate(mp.ReqRate)+" r/s", colRate)
+	appendSeg(rateSeg, rateW)
+	tokSeg, tokW := fixedCol(labelStyle, fmtRate(mp.TokRate)+" t/s", colRate)
+	appendSeg(tokSeg, tokW)
+
+	latArrow := " "
+	if mh.latRise {
+		latArrow = "↑"
+	}
+	if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
+		p50Seg, p50W := fixedCol(dimStyle, "p50 "+fmtLatency(p50), colLat)
+		appendSeg(p50Seg, p50W)
+		p95Seg, p95W := fixedCol(labelStyle, "p95 "+fmtLatency(p95)+latArrow, colLat)
+		appendSeg(p95Seg, p95W)
+	} else {
+		avgSeg, avgW := fixedCol(dimStyle, "avg "+fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
+		appendSeg(avgSeg, avgW)
+	}
+
+	errArrow := " "
+	if mh.errRise {
+		errArrow = "↑"
+	}
+	errText := fmt.Sprintf("err %d%s", mp.Errors, errArrow)
+	errSeg, errW := fixedCol(dimStyle, errText, colErr)
+	if mh.errRise || mh.status >= healthDegraded {
+		errSeg, errW = fixedCol(errStyle, errText, colErr)
+	}
+	appendSeg(errSeg, errW)
+
+	sw := m.width - lipgloss.Width(row) - 2
+	if sw < minStrip {
+		sw = minStrip
+	}
+	return row + "  " + stripView(pts, sw, maxV)
+}
+
+// listLegend is the list's single trailing line: the visible row range and the
+// strip's scale and time direction.
+func (m tuiModel) listLegend(n int) string {
+	vis := m.visibleRows()
+	first, last := m.scroll+1, m.scroll+vis
+	if last > n {
+		last = n
+	}
+	if last < first {
+		last = first
+	}
+	ramp := ""
+	for _, c := range heatColors {
+		ramp += lipgloss.NewStyle().Background(c).Foreground(c).Render(heatCellBlock)
+	}
+	legend := "  " + dimStyle.Render(fmt.Sprintf("rows %d–%d of %d", first, last, n)) +
+		dimStyle.Render(" · req/s per model · older ") + ramp + dimStyle.Render(" newer")
+	if m.width > 0 {
+		legend = lipgloss.NewStyle().MaxWidth(m.width).Render(legend)
+	}
+	return legend
+}
+
+// compactMeta is a model's identity in as few columns as possible (dimension,
+// pooling, quantization) so it fits the row's fixed metadata column without a
+// second line.
+func compactMeta(ms *embtop.ModelStats) string {
+	if ms == nil {
 		return ""
 	}
-	meta := []string{
-		fmt.Sprintf("dim %d", ms.Dim),
-		ms.Pooling,
-		ms.Quantization,
+	parts := []string{fmt.Sprintf("%dd", ms.Dim)}
+	if ms.Pooling != "" {
+		parts = append(parts, ms.Pooling)
 	}
-	if ms.BatchingMaxBatch > 0 {
-		meta = append(meta, fmt.Sprintf("batch %d/%d workers %d", ms.BatchingMaxBatch, ms.BatchingMaxToks, ms.Workers))
+	if ms.Quantization != "" && ms.Quantization != "none" {
+		parts = append(parts, ms.Quantization)
 	}
-	return metaStyle.Render(strings.Join(meta, " · "))
+	return strings.Join(parts, "·")
 }
 
 func (m tuiModel) gaugesView() []string {
@@ -932,7 +891,7 @@ func (m tuiModel) helpView() string {
 		"  q / ctrl+c   quit",
 		"  p / space    pause / resume polling",
 		"  r            reset visible window",
-		"  j / k        scroll per-model panel",
+		"  j / k        scroll the model list",
 		"  ? / h        toggle this help",
 		"",
 		"Flags:",
@@ -944,8 +903,8 @@ func (m tuiModel) helpView() string {
 		"  -window N         history window in polls (default 120)",
 		"",
 		"Metrics: EMB.MODELS / EMB.INFO / EMB.STATS polling plus MONITOR",
-		"events for latency percentiles (p50/p95/p99) and the activity heatmap.",
-		"",
+		"events for latency percentiles (p50/p95/p99). One model per row, in a",
+		"stable first-seen order, with its activity strip beside its live numbers.",
 		"The health line synthesizes error ratio, p95 vs this session's baseline,",
 		"CPU, cache hit rate and connection state; the latency panel is a p50–p99",
 		"band with a p95 line.",
@@ -1006,8 +965,4 @@ func fmtDuration(secs int64) string {
 	default:
 		return fmt.Sprintf("%ds", s)
 	}
-}
-
-func modelStyle(i int) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(modelColors[i%len(modelColors)]))
 }

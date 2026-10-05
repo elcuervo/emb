@@ -3,6 +3,7 @@ package embtop
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -34,14 +35,27 @@ func RunOnce(c *Client, interval time.Duration, samples int, out io.Writer) erro
 			return fmt.Errorf("poll %d: %w", i+1, err)
 		}
 		lastSeq = res.NextSeq
-		// Reconcile model list; new models are polled from the next round.
-		known = known[:0]
+		// Reconcile the model list with a first-seen order, so the per-model
+		// sections do not follow the server's per-call EMB.MODELS order.
+		announced := make(map[string]bool, len(res.Models))
 		for _, m := range res.Models {
-			known = append(known, m.Name)
+			announced[m.Name] = true
+		}
+		kept := known[:0]
+		for _, name := range known {
+			if announced[name] {
+				kept = append(kept, name)
+			}
+		}
+		known = kept
+		for _, m := range res.Models {
+			if !slices.Contains(known, m.Name) {
+				known = append(known, m.Name)
+			}
 		}
 		sampler.PushEvents(res.Events)
 		p := sampler.Push(res)
-		if err := writeOnceLine(out, p, res, sampler); err != nil {
+		if err := writeOnceLine(out, p, res, known, sampler); err != nil {
 			return fmt.Errorf("poll %d: %w", i+1, err)
 		}
 		i++
@@ -50,8 +64,9 @@ func RunOnce(c *Client, interval time.Duration, samples int, out io.Writer) erro
 }
 
 // writeOnceLine emits one key=value line for the given poll, returning any
-// write error (a closed pipe must not look like a successful run).
-func writeOnceLine(out io.Writer, p Point, res *PollResult, s *Sampler) error {
+// write error (a closed pipe must not look like a successful run). order is
+// the stable first-seen model order the per-model sections follow.
+func writeOnceLine(out io.Writer, p Point, res *PollResult, order []string, s *Sampler) error {
 	var b []byte
 	b = append(b, "t="...)
 	b = strconv.AppendInt(b, p.At.Unix(), 10)
@@ -81,18 +96,18 @@ func writeOnceLine(out io.Writer, p Point, res *PollResult, s *Sampler) error {
 	}
 
 	// One section per model with cumulative + derived rates.
-	for _, m := range res.Models {
-		ms, ok := res.PerModel[m.Name]
+	for _, name := range order {
+		ms, ok := res.PerModel[name]
 		if !ok {
 			continue
 		}
 		b = append(b, " model:"...)
-		b = append(b, m.Name...)
+		b = append(b, name...)
 		b = appendF(b, "dim", int64(ms.Dim))
 		b = appendF(b, "reqs", ms.Requests)
 		b = appendF(b, "toks", ms.Tokens)
 		b = appendF(b, "errs", ms.Errors)
-		mp := s.LatestModels[m.Name]
+		mp := s.LatestModels[name]
 		b = appendRate(b, "req_rate", mp.ReqRate)
 		b = appendRate(b, "tok_rate", mp.TokRate)
 		b = appendRate(b, "err_rate", mp.ErrRate)
