@@ -106,6 +106,7 @@
         <li><a href="#benchmarks"><span class="doc-toc__n">07</span><span>Benchmarks</span></a></li>
         <li><a href="#clients"><span class="doc-toc__n">08</span><span>Clients</span></a></li>
         <li><a href="#status"><span class="doc-toc__n">09</span><span>Status and version</span></a></li>
+        <li><a href="#laya"><span class="doc-toc__n">10</span><span>Laya decision models</span></a></li>
       </ol>
     </nav>
   </div>
@@ -506,9 +507,9 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
 
       <dl class="doc-cmds">
         <dt>emb.run({name = {shape, data|fill, dtype?}, …})</dt>
-        <dd>Named-tensor inference, returning <code>{name = {shape, data}}</code> per output.</dd>
+        <dd>Named-tensor inference, returning <code>{name = {shape, data}}</code> per output and, as a second value, the model call's duration in milliseconds.</dd>
         <dt>emb.run_batch({item, …})</dt>
-        <dd>One model call for N items, padded into a single session run.</dd>
+        <dd>One model call for N items, padded into a single session run; its second return value is that call's duration in milliseconds.</dd>
         <dt>emb.tokenize.encode(text, max_len)</dt>
         <dd>The model tokenizer's own pipeline, returning <code>{ids, mask, offsets}</code>.</dd>
         <dt>emb.tokenize.encode_pair(a, b, max_len)</dt>
@@ -879,6 +880,214 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         <dt>SOURCE</dt>
         <dd><a href="https://github.com/elcuervo/emb" rel="noopener">github.com/elcuervo/emb</a></dd>
       </dl>
+    </div>
+  </div>
+  </div>
+</section>
+
+    <!-- ═════════════════════════════════════════════════════ 10 · LAYA -->
+    <section class="block block--paper" id="laya" aria-labelledby="laya-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="laya-h">10 · Laya decision models</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        <a href="https://github.com/NandhaKishorM/laya" rel="noopener">Laya</a> is a
+        non-autoregressive decision engine, exported to ONNX and served through
+        the scripted-model path: one checkpoint, a round of typed questions
+        (<code>choice</code> / <code>score</code> / <code>noul</code>), and all answers in
+        one forward pass with calibrated confidence. The preset is
+        <code>scripts/laya.lua</code>; it ports the reference's sequence construction,
+        temperature calibration and answer assembly, and is pinned byte-for-byte
+        against the vendored corpus (see <a href="../demos/laya.html">the decision engine</a>
+        plate and the <a href="https://github.com/elcuervo/emb/blob/main/README.md" rel="noopener">README's Laya section</a>). The plate
+        runs four rounds over the same call: a <b>Snake loop</b> that runs a whole
+        bounded episode in one call — the preset owns the board, the planner and the
+        three typed questions, and the plate animates the frames beside the
+        reference's own probability readout (ported from
+        <a href="https://github.com/mizorewww/laya-coreml" rel="noopener">laya-coreml</a>),
+        a <b>Pac-Man loop</b> on the same contract with its own maze, pellets and
+        ghosts, the <b>email-triage</b> set, and the <b>smallest</b> three-question round.
+      </p>
+
+      <h3 class="doc-h3">The three checkpoints</h3>
+      <p class="doc-prose">
+        The reference implementations serve three ONNX exports (from
+        <code>codenamev/laya-onnx</code>, the PyTorch weights published as
+        <code>convaiinnovations/laya*</code>); they mount as three model entries, and
+        the reference <code>Router</code> picks per request. Each export lives under
+        its own folder in the repository, so the entry names it with
+        <code>model_subfolder:</code> and the downloader resolves the ONNX and the
+        supporting files under that folder.
+      </p>
+      <dl class="doc-cmds">
+        <dt><code>english</code> — ModernBERT-large · 421M · context 512</dt>
+        <dd>English, general purpose. The default checkpoint.</dd>
+        <dt><code>multilingual</code> — mmBERT-base · 322M · context 1024</dt>
+        <dd>100+ languages, roughly twice as fast as english. The router sends a ticket whose script or language the English checkpoint cannot read — Devanagari, Han, Spanish, Arabic — here <em>before</em> the forward pass, because a wrong checkpoint collapses while staying confident.</dd>
+        <dt><code>typed-decisions</code> — ModernBERT-large · 421M · context 1024</dt>
+        <dd>Fine-tuned on the typed-decisions workflows: invoice processing, security incidents, customer service, agent-trace observability. Same command surface, its own calibrations.</dd>
+      </dl>
+
+      <h3 class="doc-h3">The decision tree, for anyone</h3>
+      <p class="doc-prose">
+        The model reads a question as one sequence, and the sequence is a little tree:
+        the question is the trunk, every option is a branch marked with the model's
+        mask token, and the state — the email, ticket, prompt or JSON — rides at the
+        tail. The template, exactly:
+      </p>
+      <figure class="code">
+<pre class="code__body"><code>[CLS] choice question: which team should handle the email in `body`? [SEP]
+      [MASK] invoices, payments, refunds
+      [MASK] bugs, outages, integrations
+      [MASK] pricing, demos, new purchases
+      [MASK] phishing, scams, account compromise
+      [MASK] hiring, leave, payroll
+      [MASK] none of the above
+      [SEP] {"from": "hello@world", "body": "we were charged twice…"} [SEP]</code></pre>
+      </figure>
+      <p class="doc-prose">
+        That is <b>one row</b>. A round sends <b>one row per question</b> as a single
+        batch: the email set above is five rows and fifteen markers
+        (6 + 2 + 2 + 3 + 2), and the one forward pass scores every marker at its own
+        position — so the answers all come back together. In a classical decision tree
+        you ask, branch on the answer, and ask again, depth first; Laya's tree is
+        <b>breadth, not depth</b>. No question waits on another's answer, which is why
+        the whole round is one call, one pass, and one reply.
+      </p>
+      <p class="doc-prose">
+        <b>Loops.</b> A decision <em>loop</em> — each step depending on the last — should
+        run where the model runs, not behind a round trip per step. The shipped
+        <code>scripts/snake.lua</code> is the example: it owns the board, a Hamiltonian
+        safety planner and three typed questions, and one
+        <code>EMB.EVSHA ... 1 '{"ticks": 96, "board": null}'</code> returns 96 frames
+        (each with the move probabilities and the shielded result) plus the board to
+        resume from. The page animates the frames locally and prefetches the next
+        episode. The host learns nothing about Snake: it is a task preset, and
+        <code>scripts/pacman.lua</code> is a second one — its own maze, pellets and
+        ghosts, the same one-call contract — so a third task would keep its own rules
+        the same way. Every frame carries the model call's own duration
+        (<code>inference_ms</code>): the host measures <code>emb.run</code> around the
+        session run and returns it as a second value, so the page shows model time,
+        never the request round trip. Pac-Man's planner prefers the shortest path to
+        the nearest pellet and refuses an immediate reversal, so the random-weight
+        checkpoint clears pellets instead of oscillating in place.
+      </p>
+
+      <h3 class="doc-h3">Mount an export bundle</h3>
+      <p class="doc-prose">
+        A Laya export (from <code>codenamev/laya-onnx</code>: <code>english</code>,
+        <code>multilingual</code>, <code>typed-decisions</code>) mounts like any
+        scripted model — <code>onnx:</code> + <code>tokenizer:</code>, the preset
+        preloaded — and answers over <code>EMB.EVSHA</code>. The export publishes each
+        checkpoint under a folder, so the entry names it with
+        <code>model_subfolder:</code>; the downloader fetches
+        <code>&lt;subfolder&gt;/model.onnx</code> and the supporting files into the
+        configured directory.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">models:</span>
+  <span class="t-str">laya-multilingual</span>:
+    <span class="t-cmd">model_repo</span>:      <span class="t-str">codenamev/laya-onnx</span>
+    <span class="t-cmd">model_subfolder</span>: <span class="t-str">multilingual</span>
+    <span class="t-cmd">onnx</span>:            <span class="t-str">./models/laya-multilingual/model.onnx</span>
+    <span class="t-cmd">tokenizer</span>:       <span class="t-str">./models/laya-multilingual/tokenizer.json</span>
+    <span class="t-cmd">script_preload</span>: <span class="t-str">true</span>
+    <span class="t-cmd">scripts</span>:
+      <span class="t-dim">-</span> <span class="t-cmd">path</span>: <span class="t-str">./scripts/laya.lua</span>
+        <span class="t-cmd">config</span>:              <span class="t-dim"># the checkpoint's envelope, read as emb.script.config</span>
+          <span class="t-cmd">max_len</span>: <span class="t-num">512</span>
+          <span class="t-cmd">head_max_len</span>: <span class="t-num">192</span>
+          <span class="t-cmd">temperature</span>: <span class="t-dim">[</span><span class="t-num">1.6</span>, <span class="t-num">1.25</span>, <span class="t-num">1.98</span><span class="t-dim">]</span>
+          <span class="t-cmd">temperature_by_options</span>: <span class="t-dim">{</span> <span class="t-str">"choice:2"</span>: <span class="t-num">1.9</span>, <span class="t-str">"noul:2"</span>: <span class="t-num">1.98</span> <span class="t-dim">}</span></pre>
+      </figure>
+
+      <h3 class="doc-h3">The wire contract</h3>
+      <p class="doc-prose">
+        One <code>EMB.EVSHA &lt;model&gt; &lt;laya.lua sha1&gt; 1 &lt;state&gt; &lt;questions&gt; [&lt;config&gt;]</code>
+        answers every question. The state is <code>KEYS[1]</code>: a plain string passes
+        through, and a structured state must be Python-style JSON — spaces after
+        every comma and colon (<code>{"from": "a@b", "body": "x"}</code>), because the
+        checkpoints were trained on exactly those strings. <code>ARGV[1]</code> is the
+        questions object; criteria label order is significant (marker order maps
+        to label order), so criteria objects arrive as JSON objects in document
+        order. The checkpoint's envelope — <code>max_len</code>, <code>head_max_len</code>,
+        <code>min_seq</code>, <code>min_markers</code>, <code>temperature</code> (choice/score/noul)
+        and <code>temperature_by_options</code> (buckets <code>2</code>, <code>3-5</code>, <code>6-10</code>,
+        <code>11+</code>) — belongs to the checkpoint, not the request: it is declared on
+        the model entry's <code>scripts</code> config and read by the preset as
+        <code>emb.script.config</code>, so a client sends only the state and the
+        questions. <code>ARGV[2]</code> remains an optional per-call override.
+        Calibration clamps follow the reference: temperatures outside [0.5, 5.0]
+        clamp, non-numeric values answer with 1.0.
+      </p>
+
+      <h3 class="doc-h3">The question schema</h3>
+      <dl class="doc-cmds">
+        <dt><code>choice</code></dt>
+        <dd>One winner: criteria as a label → description object (or an array of labels). The reply is the winning label, the full probability distribution, and confidence.</dd>
+        <dt><code>score</code></dt>
+        <dd>A place on an ordered rubric: criteria as an array of level descriptions, index 0 first. The reply is the expectation over levels, the legend, and confidence.</dd>
+        <dt><code>noul</code></dt>
+        <dd>A yes/no statement: optional <code>true</code>/<code>false</code> descriptions. The reply is the probability of <code>true</code> and confidence as the distance from a coin flip.</dd>
+      </dl>
+
+      <p class="doc-prose">
+        The reference implementations ship ready-made question sets as their canonical
+        examples — <code>Laya::Presets.*</code> in the gem and <code>laya.presets.*</code>
+        upstream, byte-identical: <code>triage_questions</code> (intent, urgency,
+        frustration, refund, churn), <code>email_questions</code> (category, spam,
+        phishing, urgency, needs-reply — the set <a href="../demos/laya.html">the decision
+        engine</a> plate runs verbatim), <code>guard_questions</code> (jailbreak, injection,
+        sensitive data, harm, topic), <code>moderation_questions</code>, and
+        <code>router_questions</code>. They are JSON the same way any question set is —
+        copy one, or write your own with the schema above.
+      </p>
+
+      <h3 class="doc-h3">Reading the answers: confidence, the act/escalate head, the gate</h3>
+      <p class="doc-prose">
+        Every answer carries <code>confidence</code> and
+        <code>action.act_probability</code>. Confidence is normalized entropy
+        (<code>1 − H(p) / log k</code>), so it has a true floor: a <code>choice</code> or
+        <code>score</code> sits on the 0–1 scale — <b>0.0000</b> is the undecided floor
+        (a uniform distribution, the genuinely ambiguous input), <b>1.0000</b> is fully
+        decided; a <code>noul</code>'s scale bottoms out at <b>0.5000</b> (a coin flip
+        between yes and no), and a single-option question is always <b>1.0000</b>.
+        <code>act_probability</code> is the act/escalate head's read on the same answer —
+        how strongly the model says “act on this” versus “escalate this” — served as the
+        answer's <code>action</code> field.
+      </p>
+      <p class="doc-prose">
+        The gating pattern the reference implementations themselves demo gates on
+        <b>confidence</b>, not on the act head: pick a threshold from your costs (how bad
+        a wrong action is versus the cost of a review), route at or above it, escalate the
+        rest to a human. Here is the gate on the reply this page produces:
+      </p>
+      <figure class="code">
+<pre class="code__body"><code>redis-cli -p 6379 EMB.EVSHA laya &lt;laya.lua sha1&gt; 1 &lt;state&gt; &lt;questions&gt; &lt;config&gt; \
+  | jq -r '"\(.answers.category.confidence) → \(.answers.category.choice)"'
+# 0.0 → any        (the miniature: a uniform coin flip — escalate)
+# 0.94 → billing   (a trained checkpoint: route automatically)</code></pre>
+      </figure>
+
+      <p class="doc-prose">
+        The same round works in any of the 100+ languages: mount <code>english</code> and
+        <code>multilingual</code>, detect the ticket's script before the call (the gem's
+        <code>Laya::Router</code>, or your own detector), and point each ticket at the
+        checkpoint that can read it — the state, the questions and the config envelope
+        do not change, only the model entry.
+      </p>
+
+      <p class="doc-prose">
+        The website sandbox mounts two Laya entries: a 32-hidden miniature of the
+        architecture — random weights, real mechanism — behind the two game loops
+        (Snake, Pac-Man), and the published <code>typed-decisions</code> checkpoint
+        behind the typed-question examples (Inbox, Quickstart), mounted with
+        <code>model_subfolder: typed-decisions</code> and downloaded once onto the
+        volume. The loops show shapes; the typed answers are judgments.
+      </p>
     </div>
   </div>
   </div>

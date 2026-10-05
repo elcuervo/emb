@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph</title>
+<title>emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph, the decision</title>
 <link rel="canonical" href="https://emb.is/demos/">
-<meta name="description" content="Ten small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, and what a script can compute beside the model.">
+<meta name="description" content="Twelve small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, and what a script can compute — and decide — beside the model.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph">
+<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph, the decision">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="A gallery of ten demos that embed real text and images and search a real index, over one author's public-domain corpus.">
+<meta property="og:description" content="A gallery of twelve demos that embed real text and images and search a real index, over one author's public-domain corpus.">
 <meta property="og:url" content="https://emb.is/demos/">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
@@ -81,19 +81,20 @@
         <div>
           <h1 class="plate__title" id="plate-h">The demos gallery</h1>
           <p class="plate__teaches">
-            Eleven demonstrations of one idea, run against a real server and a
+            Twelve demonstrations of one idea, run against a real server and a
             real index. The first four answer <em>what is a vector</em> and <em>why
             does it help</em>; the next six answer <em>why emb</em> — several
             models, six languages in one space, an image beside them, and a
-            batcher and a cache that make it cheap; and the last is the
-            scripting layer computing structure beside the model. Read them in
-            order, or jump to the one you came for — each stands on its own.
+            batcher and a cache that make it cheap; and the last two are the
+            scripting layer computing structure beside the model, then answering
+            typed questions. Read them in order, or jump to the one you came for —
+            each stands on its own.
           </p>
-        <p class="tldr">Eleven short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
+        <p class="tldr">Twelve short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
         </div>
         <div>
           <p class="fig"><b>THE ATLAS</b>
-            · <b>eleven plates</b>
+            · <b>twelve plates</b>
             · <b data-fig-count>2 782</b> passages
             · <b data-fig-works>86</b> works
             · <b data-fig-model>all-MiniLM-L6-v2</b>
@@ -161,6 +162,11 @@
           <span class="ord__n">11</span>
           <span class="ord__t"><a href="graph.html">The graph</a></span>
           <span class="ord__w"><b>PLATE IV</b> · A Lua script builds the corpus's nearest-neighbour graph beside the model and returns edges, not a matrix.<br>Teaches: the scripting layer computing structure in one round trip.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">12</span>
+          <span class="ord__t"><a href="laya.html">The decision engine</a> <span class="chip-new">new</span></span>
+          <span class="ord__w"><b>PLATE IV</b> · Four rounds over one call: a Snake loop the model plays as a whole episode in one call, and a Pac-Man loop on the same contract with a different board — each animated beside its own live probability readout — a support inbox triaged by five typed questions, and the smallest three-question round. The typed questions answer with a real published checkpoint; the two loops run the shipped miniature.<br>Teaches: the scripting layer answering typed questions, not embedding.</span>
         </li>
           </ol>
         </div></div>

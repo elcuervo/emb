@@ -12,8 +12,13 @@
 # unreachable func: Bridge.Execute
 #   The exported sandbox-bridge command seam the bridge tests drive; the HTTP
 #   handler calls the unexported execute directly.
+# unreachable func: CacheKey
+#   The no-config reply-cache key wrapper. Production always threads the config
+#   digest through CacheKeyConfig (empty for no config), so only the key-shape
+#   tests in internal/script/cache_test.go call CacheKey directly.
 unreachable func: meanPoolAndNormalizeScalar
 unreachable func: extractPrePooledScalar
 unreachable func: Eval
 unreachable func: WithScriptDeadline
 unreachable func: Bridge.Execute
+unreachable func: CacheKey

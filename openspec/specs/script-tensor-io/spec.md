@@ -1,4 +1,9 @@
-## MODIFIED Requirements
+# script-tensor-io Specification
+
+## Purpose
+Defines the Lua host surface for named-tensor inference IO in scripted evaluations (`emb.run` / `emb.run_batch`): tensor shapes and dtypes, packed byte forms, and the host-side vector math and reduction helpers that keep script replies deterministic and cacheable.
+
+## Requirements
 
 ### Requirement: Packed tensor outputs
 
@@ -106,3 +111,51 @@ Operations SHALL validate that `shape` agrees with the operand's element count a
 
 - **WHEN** a script calls `emb.math.topk({}, 3)` or `emb.math.gather({1, 2, 3}, {})`
 - **THEN** the result is an empty array
+
+### Requirement: Boolean tensors in named-tensor IO
+
+`emb.run` input and output tensors SHALL support a `bool` dtype in addition to `i64` and `f32`. A Lua input tensor may declare `dtype = "b1"` (or `"bool"`) with a per-element `data` array of 0/1 integers or a packed `bytes` string of 1-byte elements; a returned tensor SHALL carry `dtype = "b1"` and SHALL round-trip through a subsequent `emb.run` input. ONNX bool graph inputs (e.g. Laya's `marker_mask`) SHALL be feedable and a graph bool output SHALL be readable; mismatched dtypes SHALL produce a run error, never a silent cast.
+
+#### Scenario: Bool input feeds an ONNX bool graph input
+
+- **WHEN** a script passes `{shape = {1, 2}, data = {1, 0}, dtype = "b1"}` for a graph input declared as ONNX bool
+- **THEN** the run succeeds and the model receives the corresponding boolean values
+
+#### Scenario: Bool output round-trips
+
+- **WHEN** a run returns a bool tensor and the script feeds its `{shape, data, dtype}` back as an input
+- **THEN** the second run accepts it and produces the same output
+
+#### Scenario: Wrong dtype for a bool input errors
+
+- **WHEN** a script feeds an `i64` or `f32` tensor where the graph declares a bool input
+- **THEN** the run fails with an error and no inference result is returned
+
+### Requirement: Inference duration returned by emb.run
+
+`emb.run` and `emb.run_batch` SHALL return, in addition to the map of output
+tensors, the model call's own inference duration in milliseconds as a second
+return value. The duration SHALL be measured host-side around the single session
+run that produces the outputs, so it covers the graph call and not the tensor
+marshalling, tokenization, or other script work around it. A script that reads only
+the first return value SHALL behave exactly as before.
+
+#### Scenario: A script captures the inference duration
+
+- **WHEN** a script calls `emb.run` and captures its second return value
+- **THEN** the captured value is a finite number of milliseconds, greater than zero for a successful run
+
+#### Scenario: Ignoring the second value is unchanged
+
+- **WHEN** a script assigns only `emb.run`'s first return value, as scripts written before this change do
+- **THEN** the call produces the same output tensors as it did before, with no error
+
+#### Scenario: A batch reports one duration
+
+- **WHEN** a script calls `emb.run_batch` for several rows
+- **THEN** the second return value is a single duration for the whole batch call, not one per row
+
+#### Scenario: The duration is the model call, not the request
+
+- **WHEN** the same script also reports a request-level elapsed time
+- **THEN** the inference duration it returns is smaller than, and independent of, the request time, because it measures only the session run

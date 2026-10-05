@@ -549,7 +549,7 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 	}
 	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
 	preferQuantized := cfg.Quantize != "off" && cfg.Quantize != ""
-	if err := hfhub.New().DownloadModel(cfg.ModelRepo, dir, preferQuantized); err != nil {
+	if err := hfhub.New().DownloadModel(cfg.ModelRepo, cfg.ModelSubfolder, dir, preferQuantized); err != nil {
 		return fmt.Errorf("downloading %s: %w", cfg.ModelRepo, err)
 	}
 	log.Printf("  downloaded %s to %s", name, dir)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 type FileInfo struct {
@@ -155,23 +156,47 @@ func (c *Client) Download(repo, filePath, destDir string) (string, error) {
 	return destPath, nil
 }
 
-// DownloadModel fetches an embedding model into destDir. When preferQuantized
-// is true it downloads the pre-quantized weights when the repo ships them,
-// falling back to fp32 otherwise.
-func (c *Client) DownloadModel(repo, destDir string, preferQuantized bool) error {
+// DownloadModel fetches an embedding model into destDir. subfolder, when set,
+// names a folder within the repository that holds the checkpoint; the ONNX and
+// supporting files are then resolved under it and written into destDir under
+// their conventional (base) names. When preferQuantized is true it downloads
+// the pre-quantized weights when the repo ships them, falling back to fp32
+// otherwise.
+func (c *Client) DownloadModel(repo, subfolder, destDir string, preferQuantized bool) error {
 	files, err := c.ListFiles(repo)
 	if err != nil {
 		return err
 	}
 
+	prefix := ""
+	if s := strings.Trim(subfolder, "/"); s != "" {
+		prefix = s + "/"
+	}
+	// FindONNX/FindQuantizedONNX and the extra-file loop reason over the
+	// conventional layout (model.onnx at the root, tokenizer.json beside it).
+	// Treating a subfolder's files as if they were the root keeps those pickers
+	// and the destination names unchanged.
+	rel := files
+	if prefix != "" {
+		rel = make([]FileInfo, 0, len(files))
+		for _, f := range files {
+			if rest, ok := strings.CutPrefix(f.Path, prefix); ok {
+				rel = append(rel, FileInfo{Path: rest, Size: f.Size})
+			}
+		}
+	}
+
 	var onnxFile *FileInfo
 	if preferQuantized {
-		onnxFile = c.FindQuantizedONNX(files)
+		onnxFile = c.FindQuantizedONNX(rel)
 	}
 	if onnxFile == nil {
-		onnxFile = c.FindONNX(files)
+		onnxFile = c.FindONNX(rel)
 	}
 	if onnxFile == nil {
+		if prefix != "" {
+			return fmt.Errorf("no ONNX files under %q in repo %q (use optimum-cli to export manually)", strings.TrimSuffix(prefix, "/"), repo)
+		}
 		return fmt.Errorf("no ONNX files in repo %q (use optimum-cli to export manually)", repo)
 	}
 
@@ -179,18 +204,24 @@ func (c *Client) DownloadModel(repo, destDir string, preferQuantized bool) error
 		return fmt.Errorf("creating directory %s: %w", destDir, err)
 	}
 
-	_, err = c.Download(repo, onnxFile.Path, destDir)
-	if err != nil {
+	if _, err := c.Download(repo, prefix+onnxFile.Path, destDir); err != nil {
 		return fmt.Errorf("downloading ONNX model: %w", err)
 	}
 
 	// Download tokenizer, config, and image-preprocessor files (best-effort,
 	// non-fatal if missing). preprocessor_config.json carries the image
-	// rescale/mean/std/crop/resample/size the image autoconfiguration reads.
+	// rescale/mean/std/crop/resample/size the image autoconfiguration reads. A
+	// subfolder export may nest the tokenizer under tokenizer/, so try both
+	// layouts; Download writes to the file's base name either way.
 	for _, f := range ExtraModelFiles {
-		if _, downloadErr := c.Download(repo, f, destDir); downloadErr != nil {
-			// Some models might not have all these files
-			continue
+		candidates := []string{f}
+		if prefix != "" {
+			candidates = []string{prefix + f, prefix + "tokenizer/" + f}
+		}
+		for _, candidate := range candidates {
+			if _, downloadErr := c.Download(repo, candidate, destDir); downloadErr == nil {
+				break
+			}
 		}
 	}
 

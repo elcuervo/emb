@@ -56,6 +56,12 @@ max_image_pixels: 1048576
 models:
   minilm:
     model_repo: Xenova/all-MiniLM-L6-v2
+    # The bridge serializes upstream work over one connection, so extra embedding
+    # workers cannot run concurrently here -- and on Linux the batch-determinism
+    # probe fails for these exports, degrading each pool to `workers` sessions and
+    # multiplying the resident weights. One worker per model keeps the sandbox in
+    # its memory budget.
+    workers: 1
     onnx: /data/models/int8/minilm/model.onnx
     tokenizer: /data/models/int8/minilm/tokenizer.json
     max_length: 512
@@ -73,6 +79,7 @@ models:
 
   sst2:
     model_repo: Xenova/distilbert-base-uncased-finetuned-sst-2-english
+    workers: 1
     onnx: /data/models/int8/sst2/model.onnx
     tokenizer: /data/models/int8/sst2/tokenizer.json
     max_length: 256
@@ -84,6 +91,7 @@ models:
   # gallery's whole argument is that these two are not interchangeable.
   bge-small:
     model_repo: Xenova/bge-small-en-v1.5
+    workers: 1
     onnx: /data/models/int8/bge-small/model.onnx
     tokenizer: /data/models/int8/bge-small/tokenizer.json
     max_length: 512
@@ -96,6 +104,7 @@ models:
   # passage in another.
   multilingual:
     model_repo: Xenova/paraphrase-multilingual-MiniLM-L12-v2
+    workers: 1
     onnx: /data/models/int8/multilingual/model.onnx
     tokenizer: /data/models/int8/multilingual/tokenizer.json
     max_length: 512
@@ -112,6 +121,7 @@ models:
   # `EMB.IMG` stays outside the surface while the preset runs the same sessions.
   clip:
     model_repo: Xenova/clip-vit-base-patch32
+    workers: 1
     onnx: /data/models/int8/clip/model.onnx
     tokenizer: /data/models/int8/clip/tokenizer.json
     max_length: 77
@@ -129,3 +139,102 @@ models:
       std: [0.26862954, 0.26130258, 0.27577711]
     scripts:
       - presets/zeroshot.lua
+
+  # The decision model: a 32-hidden miniature of the Laya architecture shipped
+  # inside the image (testdata/laya) rather than downloaded. Its weights are
+  # random, so the decision plate runs the real mechanism and answers nothing
+  # real -- the prose and the figure say so, and the docs point at the
+  # published checkpoints for production. Three presets: the generic decision
+  # preset (laya.lua, questions as data) and two task presets (snake.lua and
+  # pacman.lua, each owning its own loop and returning a whole episode per call).
+  # The checkpoint envelope lives on the entries' scripts config, so a client
+  # sends only state + questions.
+  laya:
+    onnx: /etc/emb/laya-model/model.onnx
+    tokenizer: /etc/emb/laya-model/tokenizer/tokenizer.json
+    workers: 1
+    script_preload: true
+    scripts:
+      - path: presets/laya.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98
+      - path: presets/snake.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98
+      - path: presets/pacman.lua
+        config:
+          max_len: 64
+          head_max_len: 32
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options:
+            "choice:2": 1.9
+            "choice:3-5": 1.76
+            "choice:11+": 0.1006
+            "noul:2": 1.98
+
+  # The real decision model: the published `typed-decisions` export
+  # (ModernBERT-large, fp16 on the hub), mounted from its subfolder in the
+  # repository and downloaded once onto the volume. The plate's typed-question
+  # examples (Inbox, Quickstart) answer with this checkpoint; the game loops stay
+  # on the miniature, because a ~400M model cannot keep a 96-tick episode
+  # realtime on one shared vCPU. `max_length` and the scripts' envelope come from
+  # the export's own `rl_agent_config.json` / `onnx_config.json`, so the preset's
+  # sequence construction matches the reference. typed-decisions is the
+  # fine-tuned customer-service / security / invoice export: the `multilingual`
+  # router export ships with identity temperatures and no fitted calibration, and
+  # marked legitimate mail as spam/phishing (see design D1). See
+  # openspec/changes/laya-real-checkpoint/design.md (D1, D5).
+  laya-real:
+    model_repo: codenamev/laya-onnx
+    model_subfolder: typed-decisions
+    # `laya-typed/`, not `laya-real/`: `downloadModel` returns early when the
+    # configured `onnx` exists, and the volume already holds the previous
+    # (`multilingual`) checkpoint at `laya-real/`. Naming a fresh path is what
+    # makes the first boot after this change fetch the new export.
+    onnx: /data/models/laya-typed/model.onnx
+    tokenizer: /data/models/laya-typed/tokenizer.json
+    max_length: 1024
+    workers: 1
+    # One thread each: the checkpoint is a single forward pass per request and
+    # the bridge serializes upstream work, so intra-op parallelism buys latency
+    # it cannot use while multiplying ONNX Runtime's per-thread memory during
+    # the (expensive) graph load. Keeps the fp16 export inside the sandbox's
+    # memory budget.
+    intra_op_threads: 1
+    inter_op_threads: 1
+    script_preload: true
+    scripts:
+      - path: presets/laya.lua
+        config:
+          max_len: 1024
+          head_max_len: 256
+          min_seq: 8
+          min_markers: 2
+          temperature: [1.0148024559020996, 1.0374259948730469, 1.0575125217437744]
+          temperature_by_options:
+            "choice:2": 1.9063563346862793
+            "choice:3-5": 1.7601518630981445
+            "choice:6-10": 1.0000158548355103
+            "choice:11+": 0.10058280825614929
+            "score:3-5": 1.2514300346374512
+            "noul:2": 1.983399510383606

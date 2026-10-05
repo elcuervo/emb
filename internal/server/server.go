@@ -578,11 +578,19 @@ func (s *Server) SetTLSConfigPaths(cert, key string) {
 	s.tlsKey = key
 }
 
-// PreloadScript validates, caches, and precompiles a script for a model.
-// It is used at boot time from file paths declared in config. A bad script
-// (unknown model, oversized, invalid Lua) returns an error so the caller can
-// fail fatally. The returned string is the script's SHA1.
+// PreloadScript validates, caches, and precompiles a script for a model with
+// no declared config, as EMB.SCRIPT LOAD does. A bad script (unknown model,
+// oversized, invalid Lua) returns an error so the caller can fail fatally. The
+// returned string is the script's SHA1.
 func (s *Server) PreloadScript(model, src string) (string, error) {
+	return s.PreloadScriptConfig(model, src, nil)
+}
+
+// PreloadScriptConfig is PreloadScript with the script's declared config: the
+// checkpoint constants the script reads as emb.script.config. Boot-time config
+// preloading uses this; a config change is folded into the reply-cache
+// identity so cached replies computed under an older config are not served.
+func (s *Server) PreloadScriptConfig(model, src string, scriptConfig map[string]any) (string, error) {
 	if _, err := s.reg.Resolve(model); err != nil {
 		return "", err
 	}
@@ -592,7 +600,7 @@ func (s *Server) PreloadScript(model, src string) (string, error) {
 	if err := script.Compile(src); err != nil {
 		return "", err
 	}
-	sha, _ := s.scripts.Load(model, src)
+	sha, _ := s.scripts.Load(model, src, scriptConfig)
 	if err := s.compiler.Precompile(model, src); err != nil {
 		return "", err
 	}

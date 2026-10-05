@@ -1,0 +1,1 @@
+../../../scripts/pacman.lua

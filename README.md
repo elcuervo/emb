@@ -138,6 +138,61 @@ redis-cli EMB minilm "hello world"
 Reply formats, `EMB.IMG` semantics, and RESP3 differences are documented in
 [Commands](docs/commands.md).
 
+## Laya decision models
+
+[Laya](https://github.com/NandhaKishorM/laya) is a multilingual, non-autoregressive System 1 decision engine: typed decisions (`choice`/`score`/`noul`) over any state in one forward pass, with calibrated probabilities. The reference implementations serve three ONNX checkpoints (exports of `convaiinnovations/laya*` in [`codenamev/laya-onnx`](https://huggingface.co/codenamev/laya-onnx)): `english` (ModernBERT-large, 421M, context 512), `multilingual` (mmBERT-base, 322M, context 1024 — 100+ languages), and `typed-decisions` (ModernBERT-large, fine-tuned workflows). Mount one the way the gem does, and preload the preset:
+
+```yaml
+# config.yaml
+models:
+  laya:
+    onnx: ./models/laya-english/model.onnx
+    tokenizer: ./models/laya-english/tokenizer/tokenizer.json
+    script_preload: true
+    scripts:
+      - path: ./scripts/laya.lua
+        config:                 # the checkpoint's envelope, read as emb.script.config
+          max_len: 64
+          head_max_len: 32
+          temperature: [1.6, 1.25, 1.98]
+          temperature_by_options: { "choice:2": 1.9 }
+```
+
+```bash
+# In another terminal (the reply below is the vendored tiny export's own bytes):
+EMBSHA=$(redis-cli -p 6379 EMB.SCRIPT LOAD laya "$(cat scripts/laya.lua)")
+redis-cli -p 6379 EMB.EVSHA laya "$EMBSHA" 1 \
+  '"we were charged twice for the invoice please refund"' \
+  '{"department": {"type": "choice", "instructions": "which team", "criteria": {"billing": "invoices, refunds", "technical": "bugs, outages", "other": null}}}'
+# → {"answers":{"department":{"action":{"act_probability":0.3582},"choice":"technical","confidence":0,
+#     "probabilities":{"billing":0.3333,"other":0.33,"technical":0.3367},"type":"choice"}},
+#     "usage":{"input_tokens":32,"output_tokens":0}}
+# (The production checkpoints take max_len 512 / head_max_len 192 — 1024 / 192 for
+# multilingual — and answer meaningfully; the envelope on the model entry carries them.)
+```
+
+Every question in a request is answered in one forward pass. The reply is a JSON bulk with one answer per question id, the gem's payload shapes, and `usage.input_tokens` accounting.
+
+The input is a decision tree drawn as rows — breadth, not depth: each question becomes its own sequence (`[CLS] <question> [SEP]`, every option a `[MASK]` marker, the state at the tail), all rows are batched, and one pass scores every marker at its own position. No question waits on another's answer, so the whole round is one call and one reply (see [the decision](website/demos/laya.html) plate).
+
+Which checkpoint reads a ticket is a routing decision made before the call — the gem's `Laya::Router` detects script and language (Devanagari, Han, Spanish…) and sends non-English tickets to `multilingual`; the same state, questions and config envelope work against any of the three model entries, so a deployment just picks the entry by the ticket's language. In the reference client, that is `Laya.load("convaiinnovations/laya", subfolder: "multilingual")`.
+
+The export publishes each checkpoint under its own folder (`english/`, `multilingual/`, `typed-decisions/`), so a model entry names it with `model_subfolder:`. The downloader resolves the ONNX (`<subfolder>/model.onnx`) and the supporting files (`<subfolder>/tokenizer/tokenizer.json`, …) under that folder and writes them into the configured model directory, so a checkpoint is mounted with one `model_repo` + `model_subfolder` pair. The sandbox behind [the decision](website/demos/laya.html) plate mounts two entries this way: `laya`, the vendored 32-hidden miniature behind the two game loops, and `laya-real`, the published `typed-decisions` export (`codenamev/laya-onnx`, subfolder `typed-decisions`, fine-tuned for invoice/security/customer-service triage) behind the typed-question Inbox and Quickstart examples.
+
+Every answer also carries `action.act_probability`, the act/escalate head's read on the same answer (act on it, or escalate it). The reference gating pattern reads **confidence** against a threshold — `>= 0.85` routes automatically, below goes to a human — because confidence has a true floor (0 for a uniform choice, 0.5 for a yes/no coin flip).
+
+The reference implementations' own question sets are the canonical starting points — `Laya::Presets.triage_questions` / `email_questions` / `guard_questions` / `moderation_questions` / `router_questions` in the gem, byte-identical to upstream `laya.presets.*`; the site demo runs `email_questions` verbatim.
+
+**Wire contract** (parity with [ruby-laya](https://github.com/codenamev/ruby-laya) 0.3.7):
+
+- `KEYS[1]` is the state, serialized Python-style — a plain string passes through; a JSON object/array must use spaces after every comma and colon (`{"from": "a@b", "body": "x"}`, not `{"from":"a@b","body":"x"}`) because the checkpoints were trained on exactly those strings.
+- `ARGV[1]` is the questions JSON; criteria label order is significant (marker order maps to label order), so criteria objects are sent as JSON objects (not pre-sorted).
+- `ARGV[2]` (optional) overrides the checkpoint's config envelope for one call. The envelope itself — `max_len`, `head_max_len`, `min_seq`, `min_markers`, `temperature` (choice/score/noul), `temperature_by_options` (bucket → value, buckets `2`/`3-5`/`6-10`/`11+`) — is declared once on the model entry's `scripts` config and read by the preset as `emb.script.config`, so a client sends only the state and the questions. Calibration clamps follow the gem: temperatures outside [0.5, 5.0] clamp, non-numeric values answer with 1.0.
+
+`scripts/laya.lua` ports the gem's `build_sequence`, marker accounting, temperature calibration, softmax/confidence and answer assembly; the vendored corpus (`testdata/laya/expected.json`) pins it byte-for-byte over the wire (`TestLayaParityCorpus`). The decision graph is a scripted model like GLiNER: there is no new command — `EMB.EVAL`/`EMB.EVSHA` and the script reply cache (keyed on state + questions + config) do the work. `test-laya.yaml` is the running example, with the vendored tiny export in `testdata/laya/`.
+
+A decision *loop* runs where the model runs. `scripts/snake.lua` is the worked example: it owns the board, a Hamiltonian safety planner and three typed questions, and one `EMB.EVSHA laya <snake-sha> 1 '{"ticks": 96, "board": null}'` returns 96 frames — each with the move probabilities and the shielded result — plus the board to resume from. `scripts/pacman.lua` is the second: its own maze, pellets and four ghosts, the same one-call episode contract. The host learns nothing about either game; a task keeps its own rules the same way. Every decision carries the model call's own `inference_ms` — the host measures `emb.run` around the session run and returns it as a second value — and Pac-Man's planner prefers the shortest path to the nearest pellet and refuses an immediate reversal, so the random-weight checkpoint clears pellets instead of oscillating in place.
+
 ## Development
 
 ```bash

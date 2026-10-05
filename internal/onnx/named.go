@@ -17,16 +17,20 @@ const (
 	TensorInt64 TensorType = iota
 	// TensorFloat32 is a single-precision float tensor (ONNX float).
 	TensorFloat32
+	// TensorBool is a boolean tensor (ONNX bool), used by graphs like Laya's
+	// whose marker_mask input is a bool tensor.
+	TensorBool
 )
 
 // NamedTensor is a typed tensor with an explicit shape, addressed by name.
-// Exactly one of Int64 or Float holds the data, matching DType.
+// Exactly one of Int64, Float, or Bool holds the data, matching DType.
 type NamedTensor struct {
 	Name  string
 	Shape []int64
 	DType TensorType
 	Int64 []int64
 	Float []float32
+	Bool  []bool
 }
 
 func (t NamedTensor) elementCount() int {
@@ -274,6 +278,11 @@ func namedTensorValue(t NamedTensor) (ort.Value, error) {
 			return nil, fmt.Errorf("input %q: expected %d float32 elements, got %d", t.Name, t.elementCount(), len(t.Float))
 		}
 		return ort.NewTensor(shape, t.Float)
+	case TensorBool:
+		if len(t.Bool) != t.elementCount() {
+			return nil, fmt.Errorf("input %q: expected %d bool elements, got %d", t.Name, t.elementCount(), len(t.Bool))
+		}
+		return ort.NewTensor(shape, t.Bool)
 	default:
 		return nil, fmt.Errorf("input %q: unsupported dtype %d", t.Name, t.DType)
 	}
@@ -292,6 +301,11 @@ func namedTensorFromValue(name string, v ort.Value) (NamedTensor, error) {
 		out := make([]float32, len(data))
 		copy(out, data)
 		return NamedTensor{Name: name, Shape: shape, DType: TensorFloat32, Float: out}, nil
+	case *ort.Tensor[bool]:
+		data := t.GetData()
+		out := make([]bool, len(data))
+		copy(out, data)
+		return NamedTensor{Name: name, Shape: shape, DType: TensorBool, Bool: out}, nil
 	default:
 		return NamedTensor{}, fmt.Errorf("output %q: unsupported tensor type %T", name, v)
 	}

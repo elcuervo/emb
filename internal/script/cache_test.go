@@ -91,16 +91,16 @@ func TestCacheKeyArgBoundaries(t *testing.T) {
 }
 
 func TestCacheKeyFoldsAPIVersion(t *testing.T) {
-	old := cacheKey("1.1.0", "m", "s", []string{"a"}, 1, "t")
-	newer := cacheKey("1.2.0", "m", "s", []string{"a"}, 1, "t")
+	old := cacheKey("1.1.0", "m", "s", []string{"a"}, 1, "t", "")
+	newer := cacheKey("1.2.0", "m", "s", []string{"a"}, 1, "t", "")
 	if old == newer {
 		t.Fatal("distinct API versions must produce distinct cache keys")
 	}
 	// A fixed version is deterministic, and CacheKey folds the live one.
-	if old != cacheKey("1.1.0", "m", "s", []string{"a"}, 1, "t") {
+	if old != cacheKey("1.1.0", "m", "s", []string{"a"}, 1, "t", "") {
 		t.Fatal("cache key is not deterministic for a fixed version")
 	}
-	if CacheKey("m", "s", []string{"a"}, 1, "t") != cacheKey(APIVersion, "m", "s", []string{"a"}, 1, "t") {
+	if CacheKey("m", "s", []string{"a"}, 1, "t") != cacheKey(APIVersion, "m", "s", []string{"a"}, 1, "t", "") {
 		t.Fatal("CacheKey must fold the current APIVersion")
 	}
 }
@@ -120,6 +120,32 @@ func TestEncodeReplyMatchesConvert(t *testing.T) {
 	}
 	if string(encoded) != buf.b.String() {
 		t.Fatalf("EncodeReply and Convert diverge:\n%q\n%q", encoded, buf.b.String())
+	}
+}
+
+func TestCacheKeyConfigDigestChangesIdentity(t *testing.T) {
+	base := CacheKey("m", "s", []string{"a"}, 1, "hello")
+	if base != CacheKeyConfig("m", "s", []string{"a"}, 1, "hello", "") {
+		t.Fatal("a no-config script's key must be unchanged by the config-aware variant")
+	}
+	withA := CacheKeyConfig("m", "s", []string{"a"}, 1, "hello", "digest-a")
+	withB := CacheKeyConfig("m", "s", []string{"a"}, 1, "hello", "digest-b")
+	if withA == base || withB == base || withA == withB {
+		t.Fatal("a config digest must move the key, and distinct digests must not collide")
+	}
+}
+
+func TestConfigDigestStableAndEmpty(t *testing.T) {
+	if ConfigDigest(nil) != "" || ConfigDigest(map[string]any{}) != "" {
+		t.Fatal("a script with no config must have an empty digest")
+	}
+	a := ConfigDigest(map[string]any{"b": 1, "a": 2})
+	b := ConfigDigest(map[string]any{"a": 2, "b": 1})
+	if a == "" || a != b {
+		t.Fatalf("digest must be stable across map order: %q vs %q", a, b)
+	}
+	if a == ConfigDigest(map[string]any{"a": 2}) {
+		t.Fatal("a changed config must change the digest")
 	}
 }
 

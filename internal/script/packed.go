@@ -89,13 +89,17 @@ func selectOutputNames(outputs map[string]onnx.NamedTensor, opts runOptions) ([]
 }
 
 // dtypeWidth returns the byte width of a tensor dtype: 4 for float32, 8 for
-// int64. It is the single source of the 4/8 constants used by the packed
-// bytes decoder, the renderer, packTensor, and chargeOutputs.
+// int64, 1 for bool. It is the single source of the 4/8/1 constants used by
+// the packed bytes decoder, the renderer, packTensor, and chargeOutputs.
 func dtypeWidth(dt onnx.TensorType) int {
-	if dt == onnx.TensorInt64 {
+	switch dt {
+	case onnx.TensorInt64:
 		return 8
+	case onnx.TensorBool:
+		return 1
+	default:
+		return 4
 	}
-	return 4
 }
 
 // chargeOutputs charges every selected output against the evaluation's tensor
@@ -123,10 +127,14 @@ func chargeOutputs(ls *lua.LState, outputs map[string]onnx.NamedTensor, names []
 
 // dtypeName is the wire name of a tensor dtype in a packed spec.
 func dtypeName(dt onnx.TensorType) string {
-	if dt == onnx.TensorInt64 {
+	switch dt {
+	case onnx.TensorInt64:
 		return "i64"
+	case onnx.TensorBool:
+		return "b1"
+	default:
+		return "f32"
 	}
-	return "f32"
 }
 
 // packTensor serializes a tensor as little-endian raw elements in a single
@@ -134,18 +142,28 @@ func dtypeName(dt onnx.TensorType) string {
 // emb.math.float32_bytes produces. No per-element Lua table is built.
 func packTensor(t onnx.NamedTensor) []byte {
 	width := dtypeWidth(t.DType)
-	if t.DType == onnx.TensorInt64 {
+	switch t.DType {
+	case onnx.TensorInt64:
 		buf := make([]byte, width*len(t.Int64))
 		for i, v := range t.Int64 {
 			binary.LittleEndian.PutUint64(buf[i*8:], uint64(v))
 		}
 		return buf
+	case onnx.TensorBool:
+		buf := make([]byte, len(t.Bool))
+		for i, v := range t.Bool {
+			if v {
+				buf[i] = 1
+			}
+		}
+		return buf
+	default:
+		buf := make([]byte, width*len(t.Float))
+		for i, v := range t.Float {
+			binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
+		}
+		return buf
 	}
-	buf := make([]byte, width*len(t.Float))
-	for i, v := range t.Float {
-		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-	}
-	return buf
 }
 
 // renderTensor is the single output-table builder for every returned tensor:
@@ -166,15 +184,28 @@ func renderTensor(ls *lua.LState, t onnx.NamedTensor, packed bool) *lua.LTable {
 		out.RawSetString("bytes", lua.LString(packTensor(t)))
 		return out
 	}
-	n := len(t.Float)
-	if t.DType == onnx.TensorInt64 {
+	n := 0
+	switch t.DType {
+	case onnx.TensorInt64:
 		n = len(t.Int64)
+	case onnx.TensorBool:
+		n = len(t.Bool)
+	default:
+		n = len(t.Float)
 	}
 	data := ls.CreateTable(0, n)
 	switch t.DType {
 	case onnx.TensorInt64:
 		for i, v := range t.Int64 {
 			data.RawSetInt(i+1, lua.LNumber(v))
+		}
+	case onnx.TensorBool:
+		for i, v := range t.Bool {
+			if v {
+				data.RawSetInt(i+1, lua.LNumber(1))
+			} else {
+				data.RawSetInt(i+1, lua.LNumber(0))
+			}
 		}
 	default:
 		for i, v := range t.Float {

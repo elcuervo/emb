@@ -172,6 +172,38 @@ return #out.words .. "|" .. out.words[2] .. "|" .. out.starts[3]`
 	}
 }
 
+func TestHostScriptConfig(t *testing.T) {
+	src := `
+local cfg = emb.script.config
+return type(cfg) .. "|" .. tostring(cfg.max_len) .. "|" .. tostring(cfg.temperature[2])
+  .. "|" .. tostring(cfg.temperature_by_options["choice:2"]) .. "|" .. tostring(cfg.missing)`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{Config: map[string]any{
+		"max_len":                float64(64),
+		"temperature":            []any{1.6, 1.25, 1.98},
+		"temperature_by_options": map[string]any{"choice:2": 1.9},
+	}}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "table|64|1.25|1.9|nil" {
+		t.Fatalf("unexpected config read %q", v.String())
+	}
+}
+
+func TestHostScriptConfigAbsentIsEmptyTable(t *testing.T) {
+	src := `
+local cfg = emb.script.config
+return type(cfg) .. "|" .. tostring(cfg.max_len or 512)`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An absent config must be a table, so `or` fallbacks read cleanly.
+	if v.String() != "table|512" {
+		t.Fatalf("unexpected absent-config read %q", v.String())
+	}
+}
+
 // offsetTokenizerHosts binds the real minilm tokenizer's plain/pair encode so
 // scripts can slice surface text via byte offsets.
 func offsetTokenizerHosts(t *testing.T) Hosts {
@@ -597,5 +629,128 @@ func TestHostRunFillErrors(t *testing.T) {
 		if _, err := EvalWithHosts(src, nil, nil, hostFixture(), EvalOptions{}); err == nil {
 			t.Fatalf("script %q should fail emb.run validation", src)
 		}
+	}
+}
+
+func TestHostRunBoolTensor(t *testing.T) {
+	var got onnx.NamedTensor
+	src := `
+local out = emb.run({ marker_mask = {shape = {2}, data = {1, 0}, dtype = "b1"} })
+return out.mask.dtype .. "|" .. out.mask.data[1] .. "|" .. out.mask.data[2]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			got = inputs[0]
+			return map[string]onnx.NamedTensor{
+				"mask": {Name: "mask", Shape: []int64{2}, DType: onnx.TensorBool, Bool: []bool{true, false}},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DType != onnx.TensorBool || len(got.Bool) != 2 || !got.Bool[0] || got.Bool[1] {
+		t.Fatalf("input tensor = %+v, want bool [true false]", got)
+	}
+	if v.String() != "b1|1|0" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+func TestHostRunBoolAliasFillAndBytes(t *testing.T) {
+	var got []onnx.NamedTensor
+	src := `
+local a = emb.run({ x = {shape = {2}, data = {0, 1}, dtype = "bool"} })
+local b = emb.run({ y = {shape = {4}, fill = 1, dtype = "b1"} })
+local c = emb.run({ z = {shape = {3}, bytes = "\1\0\1", dtype = "b1"} })
+return a.x.dtype .. "|" .. b.y.data[2] .. "|" .. c.z.data[3]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			got = append(got, inputs[0])
+			return map[string]onnx.NamedTensor{
+				inputs[0].Name: inputs[0],
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d runs", len(got))
+	}
+	if got[0].DType != onnx.TensorBool || !got[0].Bool[1] {
+		t.Fatalf("alias/dtype parse failed: %+v", got[0])
+	}
+	if got[1].DType != onnx.TensorBool || !got[1].Bool[1] {
+		t.Fatalf("fill bool failed: %+v", got[1])
+	}
+	if got[2].DType != onnx.TensorBool || !got[2].Bool[0] || got[2].Bool[1] || !got[2].Bool[2] {
+		t.Fatalf("bytes bool failed: %+v", got[2])
+	}
+	if v.String() != "b1|1|1" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+func TestHostRunBoolDtypeErrors(t *testing.T) {
+	cases := []string{
+		`return emb.run({ x = {shape = {2}, data = {1, 0}, dtype = "f16"} })`, // unknown dtype
+		`return emb.run({ x = {shape = {2}, bytes = "\1", dtype = "b1"} })`,   // wrong bytes length
+	}
+	for _, src := range cases {
+		if _, err := EvalWithHosts(src, nil, nil, hostFixture(), EvalOptions{}); err == nil {
+			t.Fatalf("script %q should fail", src)
+		}
+	}
+}
+
+func TestHostEncodePlainAndSpecialIDs(t *testing.T) {
+	hosts := Hosts{
+		EncodePlainIDs: func(text string, maxLen int) ([]int64, error) {
+			n := len(text)
+			if maxLen > 0 && n > maxLen {
+				n = maxLen
+			}
+			ids := make([]int64, n)
+			for i := range ids {
+				ids[i] = int64(100 + i)
+			}
+			return ids, nil
+		},
+		SpecialTokenIDs: func() (tokenizer.SpecialTokenIDs, error) {
+			return tokenizer.SpecialTokenIDs{Mask: 4, CLS: 2, SEP: 3, PAD: 0, MaskToken: "[MASK]"}, nil
+		},
+	}
+	src := `
+local ids = emb.tokenize.encode_plain("hello", 0).ids
+local s = emb.tokenize.special_ids()
+return ids[1] .. "|" .. s.mask .. "|" .. s.cls .. "|" .. s.sep .. "|" .. s.pad .. "|" .. s.mask_token`
+	v, err := EvalWithHosts(src, nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "100|4|2|3|0|[MASK]" {
+		t.Fatalf("unexpected result %q", v.String())
+	}
+}
+
+func TestHostPlainUnavailable(t *testing.T) {
+	if _, err := EvalWithHosts(`return emb.tokenize.encode_plain("x", 0)`, nil, nil, hostFixture(), EvalOptions{}); err == nil {
+		t.Fatal("encode_plain should be unavailable without EncodePlainIDs")
+	}
+}
+
+func TestJSONDecodeOrderedPreservesKeys(t *testing.T) {
+	src := `
+local o = json.decode_ordered("{\"b\": 1, \"a\": {\"x\": [1, 2]}, \"c\": null}")
+local keys = {}
+for i = 1, o.n do keys[i] = o[i].k end
+local nested = o[2].v
+return table.concat(keys, ",") .. "|" .. nested[1].k .. "|" .. tostring(o[3].v == json.null)`
+	v, err := EvalWithHosts(src, nil, nil, hostFixture(), EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "b,a,c|x|true" {
+		t.Fatalf("unexpected result %q", v.String())
 	}
 }

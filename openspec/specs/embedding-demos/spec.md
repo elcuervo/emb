@@ -412,3 +412,328 @@ to carry one.
 
 - **WHEN** the final plate in the order is read
 - **THEN** it carries no top link to a plate that does not follow it
+
+### Requirement: A demo shows one forward pass answering many typed questions
+
+The gallery SHALL include a plate that demonstrates the decision surface: one scripted call to a decision model that answers several typed questions at once, and whose rendering makes the single-forward-pass fact legible (the answers SHALL appear together, as one reply, rather than one after another). The plate SHALL use the shared demo anatomy — plate, mechanism, rig, commands-that-unfold — and SHALL ship a preselected set of example states, each reusable from one button. The questions it runs SHALL be a reference implementation's own shipped preset (e.g. `Presets.email_questions`), verbatim, so the plate demonstrates the ONNX model's actual features — the typed head, the option markers, the per-bucket calibration, the action head, the single pass — rather than an invented question set.
+
+#### Scenario: One run answers every question
+
+- **WHEN** a visitor selects an example state and runs the plate
+- **THEN** exactly one `EMB.EVSHA <model> <digest> 1 <state> <questions> <config>` evaluation issues, and every question's answer appears at once in the same rendering pass
+
+#### Scenario: The questions are the reference preset, verbatim
+
+- **WHEN** the plate sends its questions
+- **THEN** they match the reference implementation's shipped preset for the example (same ids, instructions, and criteria, in order), and the plate says which preset it runs
+
+#### Scenario: The answers differ in shape by question type
+
+- **WHEN** the plate renders a `choice`, a `score`, and a `noul` answer
+- **THEN** the `choice` shows a distribution with a winner, the `score` shows a position on a legend, and the `noul` shows a probability, and every answer carries its confidence (and the sheet carries the action probability)
+
+### Requirement: A stand-in model demo states that its numbers are not judgments
+
+A demo whose live model is a mechanism substitute — same architecture and export
+pipeline, weights that answer nothing — SHALL say so in the plate's prose and figure,
+SHALL NOT present its numbers as conclusions about the example states, and SHALL
+show what the production-shaped call looks like. A plate that answers some examples
+with a real checkpoint and others with a stand-in SHALL label each example's model,
+so a reader can tell which numbers are judgments and which are only the mechanism.
+The stand-in rule SHALL NOT be applied to an example answered by a real checkpoint.
+
+#### Scenario: The substitute is labeled
+
+- **WHEN** a plate runs an example against a stand-in model
+- **THEN** the plate states that the model demonstrates the mechanism only and that its answers are shapes rather than judgments
+
+#### Scenario: A real example is not labeled a substitute
+
+- **WHEN** an example is answered by a real checkpoint
+- **THEN** the plate does not present it as a mechanism substitute
+
+#### Scenario: The production call is shown
+
+- **WHEN** the plate's exact-commands section presents an example
+- **THEN** it shows the invocation (model entry, state, questions, config envelope) that produced the displayed reply
+
+### Requirement: A decision demo draws each example's typed questions as a tree
+
+A demo plate for a decision model SHALL teach the model's typed-question
+vocabulary before showing a call, and SHALL draw the call as a directed graph: the
+state as the source, one node per question carrying its id and type, and one node
+per answer the reply selected, with an edge from the state to each question and
+from each question to its answer. An answer node SHALL state the option the reply
+chose, by the checkpoint's own answer semantics, and SHALL carry that answer's
+value; a question the reply does not answer SHALL be an empty node, never a
+fabricated value. The figure MUST NOT be a hand-authored illustration of a result,
+and every typed-question example MUST render through the same figure.
+
+#### Scenario: The tree is the payload, filled by the reply
+
+- **WHEN** an example runs
+- **THEN** the drawn nodes and edges are the request's questions and the reply's chosen answers, and a changed reply changes the figure
+
+#### Scenario: The answer node is the decision
+
+- **WHEN** a question is drawn
+- **THEN** its answer node names the option the reply selected and shows that answer's value, rather than a bar to compare across
+
+#### Scenario: The vocabulary is taught before the call
+
+- **WHEN** the plate is read from the top
+- **THEN** `choice`, `score`, and `noul` are each defined with the request they take and the reply shape they return before any example runs
+
+#### Scenario: Multiple examples share one interaction
+
+- **WHEN** a visitor switches between the plate's examples
+- **THEN** each typed-question example runs through the same call, the same graph figure, and the same command disclosure
+
+### Requirement: A dependent decision loop runs as one bounded episode
+
+A demo whose decisions form a loop — each step depending on the previous one —
+SHALL run that loop where the model runs, as a **bounded episode inside a single
+call**, and SHALL animate the returned trace locally. It MUST NOT require a
+network round trip per rendered frame, and it MUST NOT present a precomputed or
+page-authored trace: every frame SHALL be a decision the server computed during
+that call. The episode SHALL be bounded so a single request cannot run unbounded,
+and the demo SHALL keep a single-step path so the per-decision mechanism remains
+inspectable.
+
+#### Scenario: One call returns the episode
+
+- **WHEN** a visitor starts the looped demo
+- **THEN** one command returns the episode's frames, and the commands disclosure shows that single call rather than one call per frame
+
+#### Scenario: The animation survives a slow network
+
+- **WHEN** frames are playing and the buffer runs low
+- **THEN** the demo requests the next episode from the last frame's state before the buffer empties, so the visible animation does not stall on a round trip
+
+#### Scenario: Frames are the server's
+
+- **WHEN** a frame is drawn
+- **THEN** its board and probabilities came from the server's reply for that episode, and a failed fetch shows the sandbox's state instead of any frame
+
+#### Scenario: The single step remains
+
+- **WHEN** a visitor steps once
+- **THEN** exactly one tick is computed in one call and its typed questions and probabilities are shown for that single decision
+
+#### Scenario: The episode is bounded
+
+- **WHEN** a request asks for more ticks than the documented bound
+- **THEN** the request is rejected or clamped rather than running an unbounded loop
+
+### Requirement: A re-selected demo replaces its surface
+
+When a visitor re-selects any control that changes which example or item a demo is
+showing, the demo SHALL replace its surface rather than append to it. A single
+selection MUST NOT leave two copies of a control in the DOM, and the number of
+rendered controls MUST NOT grow with the number of selections.
+
+#### Scenario: Switching an Inbox ticket
+
+- **WHEN** a visitor selects a different Inbox ticket
+- **THEN** the ticket list and its form appear exactly once, not once per selection
+
+#### Scenario: Repeated switches stay single
+
+- **WHEN** a visitor switches between tickets several times
+- **THEN** each switch leaves exactly one list and one form, regardless of how many switches happened
+
+### Requirement: A looped demo's readout shows the executed decision
+
+A looped demo's readout SHALL lead with the move the preset actually executed, and
+SHALL show the model's move probabilities over the **legal** moves only — a
+direction the rules forbid MUST be shown as unavailable, not as a probability. The
+executed move SHALL be marked in the probability table, and the model's own
+proposal SHALL be named beside it whether or not the safety layer overrode it.
+
+#### Scenario: Probabilities cover the legal moves only
+
+- **WHEN** a looped demo displays a decision and some directions are blocked by the rules
+- **THEN** only the legal directions carry a probability, and a blocked direction shows no value
+
+#### Scenario: The executed move is the highlight
+
+- **WHEN** a looped demo displays a decision
+- **THEN** the executed move is named as the decision and marked in the table, and the model's proposal is shown separately
+
+#### Scenario: A veto is visible
+
+- **WHEN** the safety layer overrides the model's proposal
+- **THEN** the readout names the executed move, names the proposal it replaced, and marks the intervention
+
+#### Scenario: Only the decision is highlighted
+
+- **WHEN** the readout draws a bar for a value that is not the decision
+- **THEN** that bar carries the neutral tone, and only the executed move's bar carries the accent
+
+### Requirement: The readout does not reflow as its values change
+
+A demo readout SHALL keep its layout as its values change. A longest permitted
+label or marker MUST NOT wrap to a second line or push a value out of its column,
+and a row's height and alignment MUST NOT change when a different value is
+displayed.
+
+#### Scenario: A long direction is proposed
+
+- **WHEN** the proposed or executed move is the longest direction name
+- **THEN** the move's marker, name, bar and value stay on one aligned row
+
+#### Scenario: The readout-bar labels fit
+
+- **WHEN** the readout's bar labels are drawn
+- **THEN** each label stays on one line and its bar and value remain aligned to it
+
+### Requirement: A typed-question demo states each question's chosen answer
+
+A demo that answers typed questions SHALL state the chosen answer for each
+question alongside that question's distribution, leading with the decision the way
+a looped demo leads with its executed move. The chosen answer SHALL follow the
+checkpoint's own answer semantics — a `choice` is the highest-probability option, a
+`score` is the rubric level nearest its rounded expected value, and a `noul` is
+true only above 0.5 — and the marked leaf MUST be the one that answer selects. The
+stated answer SHALL carry its value (the option's probability, the expected score,
+or the noul probability), so a low-confidence answer reads as one. The example set
+SHALL cover the plate's question vocabulary with distinct inputs rather than one
+repeated shape.
+
+#### Scenario: Each question names its decision
+
+- **WHEN** a typed-question reply is shown
+- **THEN** every question names the option the reply chose, and that option is the marked leaf
+
+#### Scenario: The answer follows the checkpoint's semantics
+
+- **WHEN** a typed-question reply is shown
+- **THEN** the choice is the top option, the score's label is the rubric nearest its rounded expected value, and a noul is true only above 0.5
+
+#### Scenario: A near-coin-flip reads as one
+
+- **WHEN** an answer's probability is close to even
+- **THEN** the stated answer carries that probability, so it is not presented as a confident decision
+
+#### Scenario: The set covers the vocabulary
+
+- **WHEN** the typed-question examples are listed
+- **THEN** they exercise different subjects, so a reader sees the mechanism over varied input rather than one repeated ticket
+
+### Requirement: A decision readout shows per-decision model inference time
+
+A decision demo's readout SHALL show the model's own inference time for the
+decision it is displaying, not the request round trip. The value SHALL come from
+the server's measurement of the model call, and the plate MUST NOT substitute a
+client clock around the request or the bridge's whole-command elapsed time. For a
+looped demo the readout SHALL show the displayed frame's inference time; for a
+single-pass demo it SHALL show the reply's inference time. The plate SHALL label
+the value as model inference and, where the figure reads as a rate, derive that
+rate from the inference time rather than from wall-clock playback.
+
+#### Scenario: The looped readout shows the frame's inference time
+
+- **WHEN** a looped decision demo displays a frame
+- **THEN** the readout's inference figure is that frame's server-measured model time, and it changes as frames advance
+
+#### Scenario: The single-pass readout shows the reply's inference time
+
+- **WHEN** a typed-question demo shows a completed reply
+- **THEN** the readout's inference figure is the reply's server-measured model time
+
+#### Scenario: The figure is not the request time
+
+- **WHEN** a visitor inspects the readout's inference value
+- **THEN** it is the model call's duration, and the plate does not present the client-measured request duration as that figure
+
+### Requirement: The typed-question tree fills as the reply arrives
+
+The decision tree SHALL fill its leaves from the reply's probabilities as an
+ordered reveal rather than a single instantaneous frame, so a visitor sees each
+question's distribution populate in turn. The reveal SHALL be presentational only:
+every leaf's final value MUST equal the reply's probability, the tree MUST be
+complete in one frame under reduced motion, and no value may be shown before the
+reply that carries it exists.
+
+#### Scenario: Leaves populate in question order
+
+- **WHEN** a typed-question reply arrives
+- **THEN** each question's leaves fill in turn, and each leaf ends at the probability the reply carries for it
+
+#### Scenario: Reduced motion keeps the whole tree
+
+- **WHEN** a reader prefers reduced motion
+- **THEN** the tree is drawn complete in one frame and no leaf depends on the reveal having run
+
+#### Scenario: No fabricated value before the reply
+
+- **WHEN** the plate draws the tree before the reply returns
+- **THEN** every leaf is empty and no probability is shown
+
+### Requirement: A looped demo's planner prevents stalls
+
+A looped demo whose decisions move a position SHALL NOT allow the run to oscillate
+without progress. Its planner SHALL veto an immediate reversal of the previous move
+when another legal move exists, and SHALL veto a move that increases the distance
+to the nearest objective when a move that decreases it exists. After a documented
+number of consecutive decisions without collecting an objective, the planner SHALL
+take the objective-seeking move until progress resumes.
+
+#### Scenario: An immediate reversal is vetoed
+
+- **WHEN** the model proposes a reversal of the previous move and another legal move exists
+- **THEN** the executed move is not that reversal
+
+#### Scenario: A regressing move is vetoed
+
+- **WHEN** the model proposes a move that increases the distance to the nearest objective while a move that decreases it is legal
+- **THEN** the executed move does not increase that distance
+
+#### Scenario: A stalled run recovers
+
+- **WHEN** a documented number of decisions pass without an objective being collected
+- **THEN** the next executed move reduces the distance to the nearest objective until one is collected
+
+#### Scenario: A bounded episode makes progress
+
+- **WHEN** a bounded episode runs from a fresh state
+- **THEN** it collects at least one objective, or the objective set was already empty
+
+### Requirement: A looped demo pauses on a bounded play window and on focus loss
+
+A demo that animates a server-computed trace locally SHALL bound its playback to
+a documented active-play window, and SHALL pause — not merely hide — when that
+window is spent. It SHALL also pause when the page loses focus or the document
+becomes hidden. A paused demo MUST NOT advance frames and MUST NOT request the
+next episode, and resuming MUST NOT silently restart or overrun the window.
+
+#### Scenario: The play window is spent
+
+- **WHEN** a looped demo has played for its documented active-play window
+- **THEN** it stops advancing frames and reports the pause rather than continuing to animate
+
+#### Scenario: The page loses focus
+
+- **WHEN** the document becomes hidden or the window loses focus while a looped demo is playing
+- **THEN** the demo pauses immediately, and no further episode is requested while it is paused
+
+#### Scenario: Resuming continues the window
+
+- **WHEN** the visitor resumes a demo paused by the window rather than by focus
+- **THEN** playback continues from where it stopped and the window is not reset
+
+### Requirement: The gallery marks a newly added demo
+
+The gallery SHALL mark a demo that is new in the current release, so a returning
+reader can find what changed. The mark SHALL be visible beside the demo's own
+name and MUST NOT alter the demo's link or its accessible name.
+
+#### Scenario: A new demo is marked
+
+- **WHEN** a demo is added and the gallery lists it
+- **THEN** the demo carries a visible `new` mark, and the marked element still links to and names the demo
+
+#### Scenario: The mark is not permanent
+
+- **WHEN** a later release adds another demo
+- **THEN** the mark is removed from the previously new one, so the mark identifies the current addition

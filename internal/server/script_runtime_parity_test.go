@@ -401,8 +401,8 @@ func cachedOutputSets(t *testing.T, sess onnx.NamedSession) int {
 func TestScriptSourceCacheBounded(t *testing.T) {
 	c := newScriptCache(4)
 	for i := 0; i < 12; i++ {
-		c.Load("test", fmt.Sprintf("return %d", i))
-		c.Load("other", fmt.Sprintf("return %d", i))
+		c.Load("test", fmt.Sprintf("return %d", i), nil)
+		c.Load("other", fmt.Sprintf("return %d", i), nil)
 	}
 	if got := c.by.Len("test"); got != 4 {
 		t.Fatalf("script cache for test = %d entries, want 4", got)

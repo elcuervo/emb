@@ -25,17 +25,31 @@ const CacheKeyInlineLimit = 256
 // request's reply); model/script identity stays Redis EVALSHA's SHA-1. The
 // trailing `text` is inlined when short and digested past CacheKeyInlineLimit.
 func CacheKey(modelName, scriptSHA string, args []string, numTexts int, text string) string {
-	return cacheKey(APIVersion, modelName, scriptSHA, args, numTexts, text)
+	return CacheKeyConfig(modelName, scriptSHA, args, numTexts, text, "")
+}
+
+// CacheKeyConfig is CacheKey with the script's config digest folded in. The
+// digest is empty for a script with no declared config, and is written to the
+// hash only when non-empty so no-config keys stay byte-identical to the
+// pre-config format. When a config changes, its digest changes and the request
+// misses rather than serving a reply computed under the old config.
+func CacheKeyConfig(modelName, scriptSHA string, args []string, numTexts int, text, configDigest string) string {
+	return cacheKey(APIVersion, modelName, scriptSHA, args, numTexts, text, configDigest)
 }
 
 // cacheKey is CacheKey with the host API version supplied explicitly, so the
 // version-folding behavior is directly testable.
-func cacheKey(apiVersion, modelName, scriptSHA string, args []string, numTexts int, text string) string {
+func cacheKey(apiVersion, modelName, scriptSHA string, args []string, numTexts int, text, configDigest string) string {
 	h := sha256.New()
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(apiVersion)))
 	_, _ = h.Write(size[:])
 	_, _ = h.Write([]byte(apiVersion))
+	if configDigest != "" {
+		binary.BigEndian.PutUint64(size[:], uint64(len(configDigest)))
+		_, _ = h.Write(size[:])
+		_, _ = h.Write([]byte(configDigest))
+	}
 	binary.BigEndian.PutUint64(size[:], uint64(numTexts))
 	_, _ = h.Write(size[:])
 	binary.BigEndian.PutUint64(size[:], uint64(len(args)))

@@ -28,6 +28,16 @@ kill_timeout = 40
   BRIDGE_LISTEN = "0.0.0.0:8080"
   UPSTREAM = "127.0.0.1:6379"
   ORIGINS = "https://emb.is,https://www.emb.is"
+  # The real `laya-real` checkpoint is ~617 MiB fp16 and ONNX Runtime's load path
+  # materializes it more than once (the input/output metadata probes each open a
+  # temporary session before the real one). On a multithreaded glibc that can
+  # strand several freed ~1.2 GiB blocks in per-thread arenas and OOM the machine
+  # mid-load. Collapsing the arena count and pinning the native thread pools keeps
+  # the freed blocks reusable; `GOMEMLIMIT` does the same for the Go-side model
+  # buffers. See fly.toml's `[[vm]]` note and design D4.
+  MALLOC_ARENA_MAX = "1"
+  OMP_NUM_THREADS = "1"
+  GOMEMLIMIT = "2GiB"
 
 [http_service]
   internal_port = 8080
@@ -60,17 +70,20 @@ kill_timeout = 40
   path = "/api/health"
 
 [[vm]]
-  # Sized from the measured pair, not a guess: 1 467 040 KB (~1.40 GiB) steady
-  # RSS with both fp32 models loaded (see tasks 1.2). 2 GB leaves ~0.6 GiB of
-  # headroom; if the model set grows, switch to the pre-quantized exports and
-  # re-measure before widening this.
-  # One shared CPU, measured twice: at 2 shared CPUs (gomaxprocs 2, +$0.72/mo at
-  # this memory size) the same five fresh texts took 5.71 ms (minilm) and
-  # 16.35 ms (sst2) against 5.32 ms and 16.39 ms at one — a single request is
-  # one thread and the bridge serializes upstream work, so the second CPU buys
-  # nothing. Revisit only if requests ever run concurrently.
-  size = "shared-cpu-1x"
-  memory = "2gb"
+  # Sized from the measured set, not a guess. The real `typed-decisions` Laya
+  # checkpoint dominates: ONNX Runtime materializes its ~807 MiB fp16 weights as
+  # fp32, so each session holds ~1.6 GiB. The first landing ran 4 GB and
+  # OOM-killed `emb` during the `laya-real` load: on Linux the batch-determinism
+  # probe fails for these exports, so each pool degraded to `workers`
+  # auto-tuned sessions, and the checkpoint was loaded once per worker.
+  # `workers: 1` is now pinned in sandbox.yaml (the bridge serializes upstream
+  # work anyway), which brings the footprint back to one embedding session plus
+  # the scripted session. 8 GB leaves headroom; it requires `shared-cpu-4x`
+  # because shared CPU memory is capped at 2 GB per CPU. The cheaper path is
+  # producing and hosting an int8 export (design D4), which would fit a far
+  # smaller machine. Re-measure if the model set changes.
+  size = "shared-cpu-4x"
+  memory = "8gb"
 
 [mounts]
   # Models download onto the volume on the first boot and load from disk after

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -145,7 +146,7 @@ func TestDownloadModelFetchesWeightsAndExtras(t *testing.T) {
 		},
 	)
 	dest := t.TempDir()
-	if err := c.DownloadModel("test/model", dest, false); err != nil {
+	if err := c.DownloadModel("test/model", "", dest, false); err != nil {
 		t.Fatalf("download model: %v", err)
 	}
 	for _, f := range []string{"model.onnx", "tokenizer.json", "config.json", "preprocessor_config.json"} {
@@ -161,7 +162,7 @@ func TestDownloadModelPrefersQuantized(t *testing.T) {
 		map[string]string{"model_quantized.onnx": "int8", "model.onnx": "fp32"},
 	)
 	dest := t.TempDir()
-	if err := c.DownloadModel("test/model", dest, true); err != nil {
+	if err := c.DownloadModel("test/model", "", dest, true); err != nil {
 		t.Fatalf("download model: %v", err)
 	}
 	// Download writes to filepath.Base, so the quantized artifact lands as
@@ -174,8 +175,68 @@ func TestDownloadModelPrefersQuantized(t *testing.T) {
 
 func TestDownloadModelNoONNX(t *testing.T) {
 	c := newTestClient(t, []string{"README.md", "config.json"}, nil)
-	if err := c.DownloadModel("test/model", t.TempDir(), false); err == nil {
+	if err := c.DownloadModel("test/model", "", t.TempDir(), false); err == nil {
 		t.Fatal("expected an error when the repo has no ONNX files")
+	}
+}
+
+// TestDownloadModelSubfolder resolves the ONNX and the nested tokenizer under a
+// named subfolder and lands both at destDir under their conventional names. The
+// server only serves full paths, so this exercises the nested tokenizer/
+// fallback (multilingual/tokenizer.json is absent).
+func TestDownloadModelSubfolder(t *testing.T) {
+	files := map[string]string{
+		"/test/model/resolve/main/multilingual/model.onnx":                      "multilingual-weights",
+		"/test/model/resolve/main/multilingual/tokenizer/tokenizer.json":        "nested-tokenizer",
+		"/test/model/resolve/main/multilingual/tokenizer/tokenizer_config.json": "{}",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/models/test/model" {
+			_ = json.NewEncoder(w).Encode(modelAPIResponse{Siblings: []FileInfo{
+				{Path: "english/model.onnx"},
+				{Path: "multilingual/model.onnx"},
+				{Path: "multilingual/tokenizer/tokenizer.json"},
+				{Path: "multilingual/tokenizer/tokenizer_config.json"},
+			}})
+			return
+		}
+		if body, ok := files[r.URL.Path]; ok {
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	c := &Client{HTTPClient: srv.Client(), BaseURL: srv.URL}
+
+	dest := t.TempDir()
+	if err := c.DownloadModel("test/model", "multilingual", dest, false); err != nil {
+		t.Fatalf("download model: %v", err)
+	}
+	for name, want := range map[string]string{
+		"model.onnx":            "multilingual-weights",
+		"tokenizer.json":        "nested-tokenizer",
+		"tokenizer_config.json": "{}",
+	} {
+		got, err := os.ReadFile(filepath.Join(dest, name))
+		if err != nil || string(got) != want {
+			t.Fatalf("%s = %q err=%v, want %q", name, got, err, want)
+		}
+	}
+}
+
+// TestDownloadModelSubfolderNoONNX fails with an error that names both the repo
+// and the subfolder when the folder holds no ONNX file.
+func TestDownloadModelSubfolderNoONNX(t *testing.T) {
+	c := newTestClient(t, []string{"english/model.onnx", "multilingual/README.md"}, nil)
+	err := c.DownloadModel("test/model", "multilingual", t.TempDir(), false)
+	if err == nil {
+		t.Fatal("expected an error when the subfolder has no ONNX files")
+	}
+	for _, want := range []string{"test/model", "multilingual"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not name %q", err, want)
+		}
 	}
 }
 

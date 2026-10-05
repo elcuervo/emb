@@ -1,6 +1,9 @@
 package tokenizer
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -136,4 +139,141 @@ func TestEncodePretokenizedNoSpecialTokens(t *testing.T) {
 			t.Fatalf("word %d never appears in wordIDs %v", i, wordIDs)
 		}
 	}
+}
+
+// layaTokenizer loads the vendored tiny Laya tokenizer (committed under
+// testdata, so no model download is required).
+func layaTokenizer(t *testing.T) *RefTokenizer {
+	t.Helper()
+	tok, err := NewTokenizer("../../testdata/laya/tokenizer/tokenizer.json", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tok.Close() })
+	return tok
+}
+
+// TestSpecialTokenIDsResolvedFromAddedTokens verifies the mask/cls/sep/pad ids
+// resolve from the tokenizer's added_tokens (0/2/3/4 for the Laya fixture)
+// and that the mask token's text is reported for sequence construction.
+func TestSpecialTokenIDsResolvedFromAddedTokens(t *testing.T) {
+	tok := layaTokenizer(t)
+	ids, err := tok.SpecialTokenIDs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids.Mask != 4 || ids.CLS != 2 || ids.SEP != 3 || ids.PAD != 0 {
+		t.Fatalf("special ids = %+v, want mask=4 cls=2 sep=3 pad=0", ids)
+	}
+	if ids.MaskToken != "[MASK]" {
+		t.Fatalf("mask token = %q, want [MASK]", ids.MaskToken)
+	}
+}
+
+// TestEncodePlainMatchesReference verifies EncodePlain equals the tokenizers
+// `encode(text, add_special_tokens=False)` output for the tiny WordLevel
+// tokenizer (exact ids from the vendored corpus embed block).
+func TestEncodePlainMatchesReference(t *testing.T) {
+	tok := layaTokenizer(t)
+	texts := []struct {
+		in   string
+		want []int64
+	}{
+		{"hello world refund charged twice please invoice ", []int64{5, 6, 7, 8, 9, 10, 11}},
+		{"refund me", []int64{7, 70}},
+		{"", nil},
+	}
+	for _, tt := range texts {
+		got, err := tok.EncodePlain(tt.in, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slicesEqual(got, tt.want) {
+			t.Fatalf("EncodePlain(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+	// maxLength truncation is front-truncation, like the other plain encoders.
+	got, err := tok.EncodePlain("hello world refund", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != 5 || got[1] != 6 {
+		t.Fatalf("EncodePlain truncated = %v, want [5 6]", got)
+	}
+}
+
+// TestAddedTokensByContentToleratesUnreadableInput pins the helper's two
+// fallthrough paths: a missing file and malformed JSON each yield an empty map,
+// so a tokenizer whose file has no added_tokens still loads.
+func TestAddedTokensByContentToleratesUnreadableInput(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "tokenizer.json")
+	if err := os.WriteFile(good, []byte(`{"added_tokens":[{"content":"[PAD]","id":0},{"content":"[MASK]","id":4}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := addedTokensByContent(good)
+	if len(got) != 2 || got["[PAD]"] != 0 || got["[MASK]"] != 4 {
+		t.Fatalf("addedTokensByContent = %v", got)
+	}
+	if got := addedTokensByContent(filepath.Join(dir, "absent.json")); len(got) != 0 {
+		t.Fatalf("missing file = %v, want empty", got)
+	}
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := addedTokensByContent(bad); len(got) != 0 {
+		t.Fatalf("malformed file = %v, want empty", got)
+	}
+}
+
+// TestSpecialNamesReadsBothConfigForms pins the sibling-file discovery: the
+// string form, the {"content": ...} hash form, the later file winning, missing
+// keys, and malformed files being skipped rather than fatal.
+func TestSpecialNamesReadsBothConfigForms(t *testing.T) {
+	dir := t.TempDir()
+	if names := specialNames(dir, "mask"); names != nil {
+		t.Fatalf("no config files = %v, want nil", names)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("special_tokens_map.json", `{"mask_token":"<mask>","sep_token":"</s>"}`)
+	if names := specialNames(dir, "mask"); !reflect.DeepEqual(names, []string{"<mask>"}) {
+		t.Fatalf("string form = %v", names)
+	}
+	// The later file wins, and the hash form's "content" is what counts.
+	write("tokenizer_config.json", `{"mask_token":{"content":"[MASK]"}}`)
+	if names := specialNames(dir, "mask"); !reflect.DeepEqual(names, []string{"[MASK]"}) {
+		t.Fatalf("hash form = %v", names)
+	}
+	// A key present only in the earlier file still resolves.
+	if names := specialNames(dir, "sep"); !reflect.DeepEqual(names, []string{"</s>"}) {
+		t.Fatalf("earlier-file key = %v", names)
+	}
+	// A key in neither file is nil, not an error.
+	write("special_tokens_map.json", `{"unk_token":"[UNK]"}`)
+	if names := specialNames(dir, "pad"); names != nil {
+		t.Fatalf("absent key = %v, want nil", names)
+	}
+	// A malformed later file is skipped, not fatal.
+	write("tokenizer_config.json", `{bad json`)
+	if names := specialNames(dir, "mask"); names != nil {
+		t.Fatalf("malformed config = %v, want nil", names)
+	}
+}
+
+func slicesEqual(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
