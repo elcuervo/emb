@@ -225,9 +225,18 @@ const layouts = {};
 /* A fragment names the lens, so a link can open the plate on either model. An
  * unknown fragment leaves the default of minilm; only the switch writes it. */
 const initialModel = decodeURIComponent(location.hash.slice(1));
-let shown = initialModel === B ? B : A;
+const initialModelKnown = initialModel === A || initialModel === B;
+let shown = initialModelKnown ? initialModel : A;
 document.querySelectorAll('[data-model]').forEach((o) =>
   o.setAttribute('aria-pressed', String(o.getAttribute('data-model') === shown)));
+// A fragment is a link to the demo, not only to its state: land the reader on
+// the rig. The heading carries the site's scroll-margin, so the sticky masthead
+// cannot cover it. A click does not call this — only a fragment does.
+function revealDemo() {
+  const head = document.getElementById('try-it-h');
+  if (head) { head.scrollIntoView({ block: 'start' }); }
+}
+if (initialModelKnown) { revealDemo(); }
 
 function svg(tag, attrs) {
   const node = document.createElementNS(NS, tag);
@@ -336,6 +345,7 @@ window.addEventListener('hashchange', () => {
   document.querySelectorAll('[data-model]').forEach((o) =>
     o.setAttribute('aria-pressed', String(o.getAttribute('data-model') === id)));
   render(id, true);
+  revealDemo();
 });
 
 g.manifest().then((m) => {

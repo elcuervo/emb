@@ -700,6 +700,13 @@ function exampleFromHash() {
   const id = decodeURIComponent(location.hash.slice(1));
   return EXAMPLES.some((e) => e.id === id) ? id : null;
 }
+// A fragment is a link to the demo, not only to its state: land the reader on
+// the rig. The heading carries the site's scroll-margin, so the sticky masthead
+// cannot cover it. A click does not call this — only a fragment does.
+function revealDemo() {
+  const head = document.getElementById('try-it-h');
+  if (head) { head.scrollIntoView({ block: 'start' }); }
+}
 let active = exampleFromHash() || 'snake';
 let inboxIndex = 0;
 
@@ -1256,9 +1263,11 @@ EXAMPLES.forEach((example) => {
 window.addEventListener('hashchange', () => {
   const id = exampleFromHash();
   if (id && id !== active) { mount(id); }
+  if (id) { revealDemo(); }
 });
 
 mount(active);
+if (exampleFromHash()) { revealDemo(); }
 
 </script>
 <script src="../assets/js/tldr.js" defer></script>

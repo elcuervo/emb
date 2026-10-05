@@ -423,14 +423,21 @@ function orderFromHash() {
   const id = decodeURIComponent(location.hash.slice(1));
   return (id === 'meaning' || id === 'year') ? id : null;
 }
+// A fragment is a link to the demo, not only to its state: land the reader on
+// the rig. The heading carries the site's scroll-margin, so the sticky masthead
+// cannot cover it. A click does not call this — only a fragment does.
+function revealDemo() {
+  const head = document.getElementById('try-it-h');
+  if (head) { head.scrollIntoView({ block: 'start' }); }
+}
 document.querySelectorAll('[data-order]').forEach((btn) => {
   btn.addEventListener('click', () => { setOrder(btn.getAttribute('data-order'), true); });
 });
 const initialOrder = orderFromHash();
-if (initialOrder) { setOrder(initialOrder, false); }
+if (initialOrder) { setOrder(initialOrder, false); revealDemo(); }
 window.addEventListener('hashchange', () => {
   const id = orderFromHash();
-  if (id) { setOrder(id, false); }
+  if (id) { setOrder(id, false); revealDemo(); }
 });
 root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); run(); });
 

@@ -336,16 +336,25 @@ function sampleFromHash() {
   const id = decodeURIComponent(location.hash.slice(1));
   return Array.prototype.find.call(root.querySelectorAll('[data-sample]'), (b) => sampleId(b) === id) || null;
 }
+// A fragment is a link to the demo, not only to its state: land the reader on
+// the rig. The heading carries the site's scroll-margin, so the sticky masthead
+// cannot cover it. A click does not call this — only a fragment does.
+function revealDemo() {
+  const head = document.getElementById('try-it-h');
+  if (head) { head.scrollIntoView({ block: 'start' }); }
+}
 root.querySelectorAll('[data-sample]').forEach((btn) => btn.addEventListener('click', () => {
   history.replaceState(null, '', '#' + sampleId(btn));
   sample(btn);
 }));
 window.addEventListener('hashchange', () => {
   const btn = sampleFromHash();
-  if (btn) { sample(btn); }
+  if (btn) { sample(btn); revealDemo(); }
 });
-const chosen = sampleFromHash() || root.querySelector('[data-sample]');
+const hashChoice = sampleFromHash();
+const chosen = hashChoice || root.querySelector('[data-sample]');
 if (chosen) { sample(chosen); }
+if (hashChoice) { revealDemo(); }
 g.manifest().then(() => {}).catch(() => {});
 draw(null);
 
