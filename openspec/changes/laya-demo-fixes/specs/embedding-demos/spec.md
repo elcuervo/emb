@@ -96,3 +96,37 @@ repeated shape.
 
 - **WHEN** the typed-question examples are listed
 - **THEN** they exercise different subjects, so a reader sees the mechanism over varied input rather than one repeated ticket
+
+## MODIFIED Requirements
+
+### Requirement: A decision demo draws each example's typed questions as a tree
+
+A demo plate for a decision model SHALL teach the model's typed-question
+vocabulary before showing a call, and SHALL draw the call as a directed graph: the
+state as the source, one node per question carrying its id and type, and one node
+per answer the reply selected, with an edge from the state to each question and
+from each question to its answer. An answer node SHALL state the option the reply
+chose, by the checkpoint's own answer semantics, and SHALL carry that answer's
+value; a question the reply does not answer SHALL be an empty node, never a
+fabricated value. The figure MUST NOT be a hand-authored illustration of a result,
+and every typed-question example MUST render through the same figure.
+
+#### Scenario: The tree is the payload, filled by the reply
+
+- **WHEN** an example runs
+- **THEN** the drawn nodes and edges are the request's questions and the reply's chosen answers, and a changed reply changes the figure
+
+#### Scenario: The answer node is the decision
+
+- **WHEN** a question is drawn
+- **THEN** its answer node names the option the reply selected and shows that answer's value, rather than a bar to compare across
+
+#### Scenario: The vocabulary is taught before the call
+
+- **WHEN** the plate is read from the top
+- **THEN** `choice`, `score`, and `noul` are each defined with the request they take and the reply shape they return before any example runs
+
+#### Scenario: Multiple examples share one interaction
+
+- **WHEN** a visitor switches between the plate's examples
+- **THEN** each typed-question example runs through the same call, the same graph figure, and the same command disclosure

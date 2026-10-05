@@ -206,17 +206,21 @@ func (e *ScriptEntry) UnmarshalYAML(node *yaml.Node) error {
 const MaxScriptConfigBytes = 64 << 10
 
 type ModelConfig struct {
-	ONNX         string `yaml:"onnx"`
-	Tokenizer    string `yaml:"tokenizer"`
-	ModelRepo    string `yaml:"model_repo"`
-	Pooling      string `yaml:"pooling"`
-	Normalize    bool   `yaml:"normalize"`
-	MaxLength    int    `yaml:"max_length"`
-	Dim          int    `yaml:"dim"`
-	Preload      bool   `yaml:"preload"`
-	Workers      int    `yaml:"workers"`
-	OutputTensor string `yaml:"output_tensor"`
-	PadOutput    bool   `yaml:"pad_output"`
+	ONNX      string `yaml:"onnx"`
+	Tokenizer string `yaml:"tokenizer"`
+	ModelRepo string `yaml:"model_repo"`
+	// ModelSubfolder names a folder within ModelRepo when the repository
+	// publishes several checkpoints under separate folders. Empty keeps the
+	// repository root.
+	ModelSubfolder string `yaml:"model_subfolder"`
+	Pooling        string `yaml:"pooling"`
+	Normalize      bool   `yaml:"normalize"`
+	MaxLength      int    `yaml:"max_length"`
+	Dim            int    `yaml:"dim"`
+	Preload        bool   `yaml:"preload"`
+	Workers        int    `yaml:"workers"`
+	OutputTensor   string `yaml:"output_tensor"`
+	PadOutput      bool   `yaml:"pad_output"`
 	// Quantize selects weight precision: auto (prefer pre-quantized ONNX when
 	// present), on (require quantized, fail otherwise), off (fp32 always).
 	Quantize        string         `yaml:"quantize"`
@@ -619,6 +623,7 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 	})
 	modelString("model-onnx", func(m *ModelConfig, s string) { m.ONNX = s })
 	modelString("model-repo", func(m *ModelConfig, s string) { m.ModelRepo = s })
+	modelString("model-subfolder", func(m *ModelConfig, s string) { m.ModelSubfolder = s })
 	modelString("model-tokenizer", func(m *ModelConfig, s string) { m.Tokenizer = s })
 	modelString("model-pooling", func(m *ModelConfig, s string) { m.Pooling = s })
 	modelString("model-output-tensor", func(m *ModelConfig, s string) { m.OutputTensor = s })

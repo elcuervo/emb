@@ -217,13 +217,13 @@
         <p class="rig__state" data-state>ready when you are</p>
         <div class="rig__out" data-out hidden>
           <p class="rig__readout" data-readout aria-live="polite"></p>
-          <div class="qtree" data-tree></div>
+          <div class="ddag" data-tree></div>
         </div>
         <details class="cmds" data-cmds hidden>
           <summary class="cmds__h">the commands this run sent</summary>
           <div class="cmds__body" data-cmds-body></div>
         </details>
-        <p class="lab__honest" data-honest>All four run the sandbox's <b>32-hidden miniature</b>: real mechanism, random weights — the bars are shapes, not judgments. Inbox and Quickstart make one call per round; Snake and Pac-Man make one call per episode and animate locally. Repeated requests hit the reply cache.</p>
+        <p class="lab__honest" data-honest>Snake and Pac-Man run the sandbox's <b>32-hidden miniature</b> — real mechanism, random weights, so their bars are shapes, not judgments. Inbox and Quickstart are answered by the real published <b>typed-decisions</b> checkpoint (<span class="t-cmd">codenamev/laya-onnx</span>), so their decisions are judgments. Inbox and Quickstart make one call per round; Snake and Pac-Man make one call per episode and animate locally. Repeated requests hit the reply cache.</p>
       </div>
     </div></div>
   </section>
@@ -238,7 +238,7 @@
     <div class="shell block__inner"><div class="block__body">
       <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
       <p class="block__deck">One command carried the round: the state as <span class="t-cmd">KEYS[1]</span>, the questions as <span class="t-cmd">ARGV[1]</span>. The preset built each question into its own sequence — instructions first, every option a <span class="t-cmd">[MASK]</span> marker, the state at the tail — and sent them as one batch. One pass scored every marker, so the branches came back together.</p>
-      <p class="block__deck">The bars are the model's probabilities, <em>tempered</em>: the checkpoint's fitted temperature is applied per bucket before the softmax, so <span class="t-cmd">confidence</span> — <span class="t-cmd">1 − H(p)/log k</span> — is calibrated, not raw. <b>0</b> (<b>0.5</b> for a yes/no) is a coin flip; <b>1</b> is decided. The untrained miniature sits at the floor, which is why the Snake example needs its shield.</p>
+      <p class="block__deck">The bars are the model's probabilities, <em>tempered</em>: the checkpoint's fitted temperature is applied per bucket before the softmax, so <span class="t-cmd">confidence</span> — <span class="t-cmd">1 − H(p)/log k</span> — is calibrated, not raw. <b>0</b> (<b>0.5</b> for a yes/no) is a coin flip; <b>1</b> is decided. The untrained miniature's bars sit at the floor — which is why Snake's shield exists — while the real checkpoint's bars are judgments.</p>
     </div></div>
   </section>
 
@@ -310,7 +310,7 @@ r.execute_command("EMB.EVSHA", "laya", LAYA_SHA, 1,
         <figcaption class="code__cap">The reply is the answers object in the command above — same state, same questions, same shape, no SDK.</figcaption>
       </figure>
 
-      <p class="block__deck"><b>The checkpoints.</b> The sandbox serves a vendored 32-hidden miniature so this page works offline. Production is the same command against a published export: <span class="t-cmd">english</span> (ModernBERT-large, <span class="t-cmd">max_len 512</span>), <span class="t-cmd">multilingual</span> (mmBERT-base, 100+ languages, <span class="t-cmd">max_len 1024</span>), or <span class="t-cmd">typed-decisions</span> for a fine-tuned workflow. One model entry per checkpoint; the questions and the call do not change.</p>
+      <p class="block__deck"><b>The checkpoints.</b> The sandbox serves a vendored 32-hidden miniature for the two loops (Snake, Pac-Man), so the page works offline, and the real published <span class="t-cmd">typed-decisions</span> export (ModernBERT-large, <span class="t-cmd">max_len 1024</span>, fine-tuned for invoice, security and customer-service workflows) for the typed-question examples (Inbox, Quickstart). Production is the same command against any published export: <span class="t-cmd">english</span> (ModernBERT-large, <span class="t-cmd">max_len 512</span>), <span class="t-cmd">multilingual</span> (mmBERT-base, 100+ languages), or <span class="t-cmd">typed-decisions</span>. One model entry per checkpoint; the questions and the call do not change.</p>
     </div></div>
   </section>
 
@@ -332,10 +332,11 @@ r.execute_command("EMB.EVSHA", "laya", LAYA_SHA, 1,
 
 <script type="module" data-sandbox="https://cli.emb.is">
 
-import { gallery, el, showState, mechanism, playStages, tween, unfold } from '../assets/js/demos.js';
+import { gallery, el, showState, mechanism, playStages, unfold } from '../assets/js/demos.js';
 
 const g = gallery();
 const MODEL = 'laya';
+const REAL_MODEL = 'laya-real';
 const root = document.querySelector('[data-rig="laya"]');
 const digest = root.getAttribute('data-emb-preset-laya');
 const snakeDigest = root.getAttribute('data-emb-preset-snake');
@@ -361,9 +362,13 @@ mech.all();
  * in sandbox.yaml and reaches the preset as emb.script.config, so the calls
  * below carry only the state and the questions. See THE API. */
 
-/* ── one call, the same for every example ─────────────────────────────── */
-async function predict(state, questions) {
-  const replyText = await g.preset(MODEL, digest, [state], [JSON.stringify(questions)]);
+/* ── one call, the same for every example ───────────────────────────────
+ * The game loops run the shipped miniature (`laya`); the typed-question
+ * examples answer with the real `typed-decisions` checkpoint (`laya-real` in
+ * sandbox.yaml). The preset bytes — and so the digest — are identical for both
+ * entries, so only the model name changes. */
+async function predict(state, questions, model = MODEL) {
+  const replyText = await g.preset(model, digest, [state], [JSON.stringify(questions)]);
   return JSON.parse(replyText);
 }
 
@@ -371,17 +376,15 @@ function setState(next, message) {
   showState(stateEl, next, message, () => { g.retry(); remount(); });
 }
 
-/* ── the tree: the questions we are about to send, filled by the reply ──
- * The figure is generated from the payload, never drawn by hand: the state is
- * the root, each question is a branch, each criterion is a leaf. Before a
- * reply the leaves are empty tracks; after it they carry the model's own
- * probabilities. One tween grows every leaf together -- the answers arrived
- * together. */
+/* ── the decisions: the DAG drawn from the reply ───────────────────────
+ * The figure is generated from the payload, never drawn by hand: the state
+ * heads one edge per question, and each question continues to the answer the
+ * model chose. Before a reply the answer nodes are empty; after it they carry
+ * the decision. */
 // The chosen answer, matching ruby-laya's Answer semantics: a choice is the
 // argmax label, a score's label is the rubric nearest its rounded expected score,
-// and a noul is true only above 0.5. `text` carries the value, because the
-// reference prints the probability beside every answer and a near-coin-flip
-// should read as one.
+// and a noul is true only above 0.5. `label` is the decision and `meta` its value,
+// because the reference prints the probability beside every answer.
 function decidedFor(q, ans) {
   if (!ans) { return null; }
   if (q.type === 'choice') {
@@ -391,132 +394,127 @@ function decidedFor(q, ans) {
       if (best === null || Number(probs[label] || 0) > Number(probs[best] || 0)) { best = label; }
     });
     if (best === null) { return null; }
-    return { value: best, text: best + ' · ' + (Number(probs[best]) * 100).toFixed(1) + '%' };
+    return { value: best, label: best, meta: (Number(probs[best]) * 100).toFixed(1) + '%' };
   }
   if (q.type === 'score') {
     const levels = q.criteria || [];
     const score = Number(ans.score) || 0;
     const idx = Math.max(0, Math.min(levels.length - 1, Math.round(score)));
-    return { value: String(idx), text: score.toFixed(2) + ' · ' + (levels[idx] != null ? levels[idx] : '—') };
+    return { value: String(idx), label: levels[idx] != null ? levels[idx] : '—', meta: score.toFixed(2) };
   }
   const p = ans.noul != null ? Number(ans.noul) : null;
   if (p === null) { return null; }
   const value = p > 0.5 ? 'true' : 'false';
-  return { value: value, text: value + ' · ' + (p * 100).toFixed(1) + '%' };
+  return { value: value, label: value, meta: (p * 100).toFixed(1) + '%' };
 }
 
-function leavesFor(q, ans) {
-  const decided = decidedFor(q, ans);
-  if (q.type === 'choice') {
-    const probs = (ans && ans.probabilities) || {};
-    return Object.keys(q.criteria).map((label) => ({
-      label: label,
-      p: probs[label] != null ? Number(probs[label]) : null,
-      win: decided ? decided.value === label : false,
-    }));
-  }
-  if (q.type === 'score') {
-    const probs = (ans && ans.probabilities) || {};
-    return (q.criteria || []).map((level, i) => ({
-      label: i + ' · ' + level,
-      p: probs[String(i)] != null ? Number(probs[String(i)]) : null,
-      win: decided ? decided.value === String(i) : false,
-    }));
-  }
-  const p = ans && ans.noul != null ? Number(ans.noul) : null;
-  return [
-    { label: 'false', p: p == null ? null : 1 - p, win: decided ? decided.value === 'false' : false },
-    { label: 'true', p: p, win: decided ? decided.value === 'true' : false },
-  ];
+const DAG_NS = 'http://www.w3.org/2000/svg';
+function dagEl(tag, attrs) {
+  const node = document.createElementNS(DAG_NS, tag);
+  Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
+  return node;
+}
+function dagText(x, y, text, cls, anchor) {
+  const t = dagEl('text', { x: x, y: y, class: cls });
+  if (anchor) { t.setAttribute('text-anchor', anchor); }
+  t.textContent = text;
+  return t;
+}
+function clip(text, n) {
+  const s = String(text == null ? '' : text);
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-function renderTree(state, questions, answers) {
-  const groups = [];
-  const branches = el('div', { class: 'qtree__branches' });
+// The email's subject when the state is the JSON the plate sends; otherwise the
+// raw state, clipped.
+function stateSubject(state) {
+  try {
+    const o = JSON.parse(state);
+    if (o && o.subject) { return String(o.subject); }
+    if (o && o.from) { return String(o.from); }
+  } catch (err) { /* not JSON: fall through */ }
+  return String(state);
+}
 
-  Object.keys(questions).forEach((id) => {
+// The decisions as a DAG: one state node fanning into a question node per typed
+// question, each edge continuing to the answer the model chose. It is generated
+// from the reply, so a changed reply changes the figure, and the answer node is
+// the decision — there are no probability bars to read across.
+function decisionDag(state, questions, answers) {
+  const ids = Object.keys(questions);
+  const pad = 16, rowH = 58, gap1 = 66, gap2 = 54;
+  const stateW = 224, stateH = 56, qW = 156, qH = 36, aW = 236, aH = 44;
+  const x0 = pad, x1 = x0 + stateW + gap1, x2 = x1 + qW + gap2;
+  const width = x2 + aW + pad;
+  const height = pad * 2 + Math.max(rowH * ids.length, stateH);
+  const rowY = (i) => pad + rowH * i + rowH / 2;
+  const svg = dagEl('svg', {
+    class: 'ddag__svg' + (answers ? ' is-filled' : ''),
+    viewBox: '0 0 ' + width + ' ' + height,
+    role: 'img',
+    'aria-label': 'the decisions, one node per question',
+  });
+
+  const defs = dagEl('defs');
+  const marker = dagEl('marker', {
+    id: 'ddag-arrow', viewBox: '0 0 8 8', refX: '6.5', refY: '4',
+    markerWidth: '7', markerHeight: '7', orient: 'auto',
+  });
+  marker.appendChild(dagEl('path', { d: 'M0,0 L8,4 L0,8 z', class: 'ddag__head' }));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  const stateY = height / 2;
+  const sx = x0 + stateW;
+  const bus = sx + 26;
+  svg.appendChild(dagEl('path', { d: 'M' + sx + ',' + stateY + ' H' + bus, class: 'ddag__edge' }));
+  svg.appendChild(dagEl('path', { d: 'M' + bus + ',' + rowY(0) + ' V' + rowY(ids.length - 1), class: 'ddag__edge' }));
+  ids.forEach((id, i) => {
     const q = questions[id];
-    const ans = answers && answers[id];
-    const branch = el('div', { class: 'qtree__branch qtree__branch--' + q.type });
-    branch.appendChild(el('div', { class: 'qtree__node' }, [
-      el('span', { class: 'qtree__type', text: q.type }),
-      el('span', { class: 'qtree__id', text: id }),
-    ]));
-    branch.appendChild(el('p', { class: 'qtree__ins', text: q.instructions }));
+    const qy = rowY(i);
+    svg.appendChild(dagEl('path', {
+      d: 'M' + bus + ',' + qy + ' H' + x1,
+      class: 'ddag__edge', 'marker-end': 'url(#ddag-arrow)',
+    }));
 
-    const leaves = el('ul', { class: 'qtree__leaves' });
-    const branchFills = [];
-    leavesFor(q, ans).forEach((leaf) => {
-      const fill = el('i', { class: 'qtree__fill' + (leaf.win ? ' is-win' : '') });
-      leaves.appendChild(el('li', { class: 'qtree__leaf' + (leaf.win ? ' is-win' : '') }, [
-        el('span', { class: 'qtree__label', text: leaf.label }),
-        el('span', { class: 'qtree__track' }, [fill]),
-        el('span', { class: 'qtree__p', text: leaf.p == null ? '—' : leaf.p.toFixed(3) }),
-      ]));
-      branchFills.push([fill, leaf.p == null ? 0 : Math.max(2, leaf.p * 100)]);
-    });
-    branch.appendChild(leaves);
-    groups.push(branchFills);
+    const qg = dagEl('g', { class: 'ddag__node ddag__node--q' });
+    qg.appendChild(dagEl('rect', { x: x1, y: qy - qH / 2, width: qW, height: qH, class: 'ddag__q ddag__q--' + q.type }));
+    qg.appendChild(dagText(x1 + 12, qy + 4, clip(id, 17), 'ddag__qid'));
+    qg.appendChild(dagText(x1 + qW - 12, qy + 4, q.type.toUpperCase(), 'ddag__qtype', 'end'));
+    svg.appendChild(qg);
 
-    if (ans) {
-      const bits = [];
-      if (q.type === 'score' && ans.score != null) { bits.push('score ' + Number(ans.score).toFixed(2)); }
-      if (ans.confidence != null) { bits.push('conf ' + Number(ans.confidence).toFixed(3)); }
-      if (ans.action && ans.action.act_probability != null) { bits.push('act ' + Number(ans.action.act_probability).toFixed(3)); }
-      branch.appendChild(el('div', { class: 'qtree__meta', text: bits.join(' · ') }));
-    }
-    branches.appendChild(branch);
+    const ax = x2;
+    svg.appendChild(dagEl('path', {
+      d: 'M' + (x1 + qW) + ',' + qy + ' L' + ax + ',' + qy,
+      class: 'ddag__edge ddag__edge--decision', 'marker-end': 'url(#ddag-arrow)',
+    }));
+
+    const d = decidedFor(q, answers && answers[id]);
+    const ag = dagEl('g', { class: 'ddag__node ddag__node--a' + (d ? ' is-decided' : '') });
+    if (answers) { ag.style.animationDelay = (i * 55) + 'ms'; }
+    ag.appendChild(dagEl('rect', { x: ax, y: qy - aH / 2, width: aW, height: aH, class: 'ddag__a' }));
+    ag.appendChild(dagText(ax + 14, qy + 5, d ? clip(d.label, 26) : '—', 'ddag__decision'));
+    if (d) { ag.appendChild(dagText(ax + aW - 14, qy + 5, d.meta, 'ddag__meta', 'end')); }
+    svg.appendChild(ag);
   });
 
-  const children = [];
-  if (answers) {
-    children.push(el('div', { class: 'qtree__decided' }, [
-      el('span', { class: 'qtree__decidedk', text: 'decided' }),
-      ...Object.keys(questions).map((id) => {
-        const d = decidedFor(questions[id], answers[id]);
-        return el('span', { class: 'qtree__chip' }, [
-          el('i', { text: id }),
-          el('b', { text: d ? d.text : '—' }),
-        ]);
-      }),
-    ]));
-  }
-  children.push(
-    el('div', { class: 'qtree__state' }, [
-      el('span', { class: 'qtree__k', text: 'state' }),
-      el('p', { class: 'qtree__text', text: state }),
-    ]),
-    branches,
-  );
-  const inner = el('div', { class: 'qtree__inner' }, children);
-  return { node: inner, groups };
+  const sg = dagEl('g', { class: 'ddag__node ddag__node--state' });
+  sg.appendChild(dagEl('rect', { x: x0, y: stateY - stateH / 2, width: stateW, height: stateH, class: 'ddag__state' }));
+  sg.appendChild(dagText(x0 + 12, stateY - 6, 'STATE', 'ddag__statek'));
+  sg.appendChild(dagText(x0 + 12, stateY + 15, clip(stateSubject(state), 28), 'ddag__statev'));
+  svg.appendChild(sg);
+  return svg;
 }
 
-// The reply is one forward pass, so "realtime" here is an ordered reveal: the
-// tree is drawn complete, then each question's leaves fill in turn. Every value
-// is the reply's; the reveal only staggers the drawing, and reduced motion draws
-// it in one frame.
-function revealGroups(groups) {
-  const n = Math.max(1, groups.length);
-  groups.forEach((fills, i) => {
-    const from = i / n;
-    const to = (i + 1) / n;
-    tween(520, (t) => {
-      const local = Math.max(0, Math.min(1, (t - from) / (to - from)));
-      fills.forEach(([fill, width]) => { fill.style.width = (width * local).toFixed(1) + '%'; });
-    });
-  });
-}
-
-function showTree(state, questions, reply) {
-  const drawn = renderTree(state, questions, reply && reply.answers);
-  treeEl.replaceChildren(drawn.node);
+// One forward pass answers every question at once, so the DAG is drawn with the
+// question nodes first and the decisions land together; the answers stagger in.
+function showDecisions(state, questions, reply) {
+  const answers = reply && reply.answers;
+  treeEl.replaceChildren(decisionDag(state, questions, answers));
   out.hidden = false;
-  revealGroups(drawn.groups);
   const usage = (reply && reply.usage) || {};
   const figTokens = document.querySelector('[data-fig-tokens]');
   if (figTokens) { figTokens.textContent = usage.input_tokens || 0; }
-  return drawn;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -668,7 +666,7 @@ const INBOX_TICKETS = [
     state: '{"from": "user@gmail.com", "subject": "someone logged into my account", "body": "i got a login alert from a country i have never visited and my account looks compromised, please help"}' },
   { name: 'missing march payslip', meta: 'hr · payroll',
     state: '{"from": "ana@company.com", "subject": "missing march payslip", "body": "my march payslip never arrived and the payroll portal shows nothing, i have a mortgage due friday"}' },
-  { name: 'nos cobraron dos veces', meta: 'español · multilingual route',
+  { name: 'nos cobraron dos veces', meta: 'español · billing',
     state: '{"from": "cliente@ejemplo.com", "subject": "nos cobraron dos veces", "body": "se nos cobraron dos veces la factura de marzo, pedimos el reembolso hoy"}' },
 ];
 
@@ -688,10 +686,10 @@ const QUICK_QUESTIONS = {
 /* The switch. Order is the reading order: the loop first, then the sheet,
  * then the smallest round. */
 const EXAMPLES = [
-  { id: 'snake', label: 'Snake', blurb: 'One call returns a whole episode. The preset owns the board, the safety shield and three typed questions; the plate animates the frames locally, and the shield vetoes a move that traps the snake.' },
-  { id: 'pacman', isNew: true, label: 'Pac-Man', blurb: 'The second loop, not Snake\'s. The preset owns a maze, pellets and four ghosts, and asks the model for a direction among the legal moves; a planner vetoes a move into a ghost. Playback pauses after three minutes or when the page loses focus.' },
-  { id: 'inbox', label: 'Inbox', blurb: 'Five typed questions over one email — which team, spam, phishing, urgency, needs a reply — answered in one pass.' },
-  { id: 'quickstart', label: 'Quickstart', blurb: 'The smallest round: one invoice, three typed questions, one call.' },
+  { id: 'snake', label: 'Snake', blurb: 'One call returns a whole episode. The preset owns the board, the safety shield and three typed questions; the plate animates the frames locally, and the shield vetoes a move that traps the snake. Runs the shipped 32-hidden miniature.' },
+  { id: 'pacman', isNew: true, label: 'Pac-Man', blurb: 'The second loop, not Snake\'s. The preset owns a maze, pellets and four ghosts, and asks the model for a direction among the legal moves; a planner vetoes a move into a ghost. Playback pauses after three minutes or when the page loses focus. Runs the shipped 32-hidden miniature.' },
+  { id: 'inbox', label: 'Inbox', blurb: 'Five typed questions over one email — which team, spam, phishing, urgency, needs a reply — answered in one pass. Answered by the real typed-decisions checkpoint.' },
+  { id: 'quickstart', label: 'Quickstart', blurb: 'The smallest round: one invoice, three typed questions, one call. Answered by the real typed-decisions checkpoint.' },
 ];
 
 let active = 'snake';
@@ -1152,11 +1150,11 @@ async function inboxRun() {
   setState('running');
   mech.reset();
   playStages(mech, 120, 40);
-  showTree(ticket.state, INBOX_QUESTIONS, null);
+  showDecisions(ticket.state, INBOX_QUESTIONS, null);
   readout.replaceChildren(el('span', { text: 'asking five typed questions in one pass…' }));
   try {
-    const reply = await predict(ticket.state, INBOX_QUESTIONS);
-    showTree(ticket.state, INBOX_QUESTIONS, reply);
+    const reply = await predict(ticket.state, INBOX_QUESTIONS, REAL_MODEL);
+    showDecisions(ticket.state, INBOX_QUESTIONS, reply);
     const usage = reply.usage || {};
     readout.replaceChildren(
       el('span', { class: 'k', text: 'email ' }), el('b', { text: ticket.name }),
@@ -1191,11 +1189,11 @@ async function quickRun() {
   setState('running');
   mech.reset();
   playStages(mech, 120, 40);
-  showTree(QUICK_STATE, QUICK_QUESTIONS, null);
+  showDecisions(QUICK_STATE, QUICK_QUESTIONS, null);
   readout.replaceChildren(el('span', { text: 'three typed questions, one pass…' }));
   try {
-    const reply = await predict(QUICK_STATE, QUICK_QUESTIONS);
-    showTree(QUICK_STATE, QUICK_QUESTIONS, reply);
+    const reply = await predict(QUICK_STATE, QUICK_QUESTIONS, REAL_MODEL);
+    showDecisions(QUICK_STATE, QUICK_QUESTIONS, reply);
     const usage = reply.usage || {};
     readout.replaceChildren(
       el('span', { class: 'k', text: 'three-question round · ' }),

@@ -23,12 +23,12 @@ they show and how they name the decision.
   probabilities over the **legal** moves only (Snake joins Pac-Man), the HUD leads
   with the move that was actually executed, and the model's proposal is named
   beside it rather than being the highlight.
-- **The typed-question demos show their decisions.** Inbox and Quickstart lead with
-  each question's chosen answer, derived to the checkpoint's own semantics (choice
-  argmax, score label from the rounded expected value, noul above 0.5) and carrying
-  its value so a low-confidence answer reads as one. The Inbox set covers the
-  question vocabulary with varied tickets instead of one repeated shape, and only
-  the decision is highlighted — readout bars stay neutral.
+- **The typed-question demos show their decisions as a graph.** Inbox and
+  Quickstart draw the call as a decision DAG — the state heads one edge per
+  question, and each question continues to the answer the model chose, stated by
+  the checkpoint's own semantics and carrying its value. No probability bars to
+  read across. The Inbox set covers the question vocabulary with varied tickets,
+  and only the decision is highlighted — readout bars stay neutral.
 - **Consistent readout and copy.** Both loops render the same figure through one
   builder; the blurbs, caption and labels are shortened to decisional copy.
 

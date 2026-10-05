@@ -700,6 +700,94 @@ func TestLoadImageLimitsNegative(t *testing.T) {
 	}
 }
 
+func TestLoadModelSubfolder(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  multilingual:
+    model_repo: codenamev/laya-onnx
+    model_subfolder: multilingual
+  root:
+    model_repo: some/repo
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Models["multilingual"].ModelSubfolder; got != "multilingual" {
+		t.Fatalf("model_subfolder = %q, want multilingual", got)
+	}
+	if got := cfg.Models["root"].ModelSubfolder; got != "" {
+		t.Fatalf("model_subfolder = %q, want empty when unset", got)
+	}
+}
+
+func TestParseFlagsModelSubfolder(t *testing.T) {
+	fc, err := ParseFlags([]string{
+		"-model", "multilingual",
+		"-model-repo", "codenamev/laya-onnx",
+		"-model-subfolder", "multilingual",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fc.Models["multilingual"].ModelSubfolder; got != "multilingual" {
+		t.Fatalf("model_subfolder = %q, want multilingual", got)
+	}
+}
+
+// TestSandboxConfigExampleEntries guards the decision plate's model setup: the
+// sandbox mounts a shipped miniature behind the loops and a real checkpoint
+// behind the typed-question examples, with both entries preloading the same
+// preset (one digest) and the real entry carrying its own complete envelope.
+func TestSandboxConfigExampleEntries(t *testing.T) {
+	cfg, err := Load("../../website/repl/sandbox.yaml")
+	if err != nil {
+		t.Fatalf("sandbox config failed to load: %v", err)
+	}
+	mini, ok := cfg.Models["laya"]
+	if !ok {
+		t.Fatal("sandbox has no `laya` (miniature) entry")
+	}
+	real, ok := cfg.Models["laya-real"]
+	if !ok {
+		t.Fatal("sandbox has no `laya-real` (real checkpoint) entry")
+	}
+	if real.ModelRepo == "" || real.ModelSubfolder == "" {
+		t.Fatalf("laya-real must download from a repository subfolder, got repo=%q subfolder=%q", real.ModelRepo, real.ModelSubfolder)
+	}
+
+	findLaya := func(m ModelConfig) (string, map[string]any) {
+		for _, s := range m.Scripts {
+			if filepath.Base(s.Path) == "laya.lua" {
+				return s.Path, s.Config
+			}
+		}
+		return "", nil
+	}
+	miniPreset, _ := findLaya(mini)
+	realPreset, realConfig := findLaya(real)
+	if miniPreset == "" || realPreset == "" {
+		t.Fatalf("both entries must preload laya.lua, got miniature=%q real=%q", miniPreset, realPreset)
+	}
+	if miniPreset != realPreset {
+		t.Fatalf("laya and laya-real must preload the same preset bytes, got %q vs %q", miniPreset, realPreset)
+	}
+
+	// The real entry's envelope is the checkpoint's own, not the miniature's
+	// rounded values: a caller sends only state + questions.
+	for _, key := range []string{"max_len", "head_max_len", "min_markers", "temperature"} {
+		if _, ok := realConfig[key]; !ok {
+			t.Fatalf("laya-real envelope is missing %q", key)
+		}
+	}
+	if n, _ := realConfig["max_len"].(int); n <= 0 {
+		t.Fatalf("laya-real max_len = %v, want a positive number", realConfig["max_len"])
+	}
+}
+
 func TestRepoExampleConfigLoads(t *testing.T) {
 	// The documented example config must stay parseable (it is shipped and
 	// referenced by the README); registry load-time validation is separate.

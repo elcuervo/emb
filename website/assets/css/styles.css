@@ -3475,15 +3475,35 @@ html.js.is-ready .hero__prose{
   font-family: var(--mono);
   font-size: clamp(11.5px, .95vw, 12.5px);
 }
-.qtree__decided{
-  display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: baseline;
-  padding-bottom: 10px; margin-bottom: 10px;
-  border-bottom: 1px solid var(--rule);
+/* THE DECISION DAG: the state fans into a question node per typed question, and
+   each edge continues to the answer the model chose. Paper card, hairline nodes,
+   the accent reserved for a decision — no probability bars to read across. */
+.ddag{ margin-top: clamp(14px, 1.6vw, 22px); }
+.ddag__svg{
+  display: block; width: 100%; height: auto;
+  background: var(--bg); border: 1px solid var(--rule);
 }
-.qtree__decidedk{ color: var(--accent-ink); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
-.qtree__chip{ display: inline-flex; gap: 6px; align-items: baseline; }
-.qtree__chip i{ color: var(--muted); font-style: normal; }
-.qtree__chip b{ color: var(--fg); font-weight: 700; }
+.ddag__state{ fill: var(--rule-soft); stroke: var(--fg); stroke-width: 2; }
+.ddag__statek{ fill: var(--accent-ink); font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; }
+.ddag__statev{ fill: var(--fg); font-family: var(--mono); font-size: 12px; }
+.ddag__q{ fill: var(--bg); stroke: var(--fg); stroke-width: 1.5; }
+.ddag__q--choice{ stroke: var(--accent); stroke-width: 2; }
+.ddag__qid{ fill: var(--fg); font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.ddag__qtype{ fill: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; }
+.ddag__a{ fill: var(--bg); stroke: var(--rule); stroke-width: 1.5; }
+.ddag__node--a.is-decided .ddag__a{ fill: var(--accent); stroke: var(--fg); stroke-width: 2; }
+.ddag__decision{ fill: var(--muted); font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.ddag__node--a.is-decided .ddag__decision{ fill: var(--fg); }
+.ddag__meta{ fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.ddag__node--a.is-decided .ddag__meta{ fill: var(--fg); }
+.ddag__edge{ fill: none; stroke: var(--rule); stroke-width: 1.25; }
+.ddag__edge--decision{ stroke: var(--fg); stroke-width: 1.5; }
+.ddag__head{ fill: var(--fg); }
+@keyframes ddag-in{ from{ opacity: 0; transform: translateX(-6px); } to{ opacity: 1; transform: none; } }
+.ddag__svg.is-filled .ddag__node--a{ animation: ddag-in 360ms cubic-bezier(.2,.7,.3,1) both; }
+@media (prefers-reduced-motion: reduce){
+  .ddag__svg.is-filled .ddag__node--a{ animation: none; }
+}
 .qtree__state{
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

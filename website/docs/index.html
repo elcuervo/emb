@@ -926,11 +926,14 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         The reference implementations serve three ONNX exports (from
         <code>codenamev/laya-onnx</code>, the PyTorch weights published as
         <code>convaiinnovations/laya*</code>); they mount as three model entries, and
-        the reference <code>Router</code> picks per request.
+        the reference <code>Router</code> picks per request. Each export lives under
+        its own folder in the repository, so the entry names it with
+        <code>model_subfolder:</code> and the downloader resolves the ONNX and the
+        supporting files under that folder.
       </p>
       <dl class="doc-cmds">
         <dt><code>english</code> — ModernBERT-large · 421M · context 512</dt>
-        <dd>English, general purpose. The default checkpoint; the email-triage round on this page runs against it in production.</dd>
+        <dd>English, general purpose. The default checkpoint.</dd>
         <dt><code>multilingual</code> — mmBERT-base · 322M · context 1024</dt>
         <dd>100+ languages, roughly twice as fast as english. The router sends a ticket whose script or language the English checkpoint cannot read — Devanagari, Han, Spanish, Arabic — here <em>before</em> the forward pass, because a wrong checkpoint collapses while staying confident.</dd>
         <dt><code>typed-decisions</code> — ModernBERT-large · 421M · context 1024</dt>
@@ -987,14 +990,20 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         A Laya export (from <code>codenamev/laya-onnx</code>: <code>english</code>,
         <code>multilingual</code>, <code>typed-decisions</code>) mounts like any
         scripted model — <code>onnx:</code> + <code>tokenizer:</code>, the preset
-        preloaded — and answers over <code>EMB.EVSHA</code>.
+        preloaded — and answers over <code>EMB.EVSHA</code>. The export publishes each
+        checkpoint under a folder, so the entry names it with
+        <code>model_subfolder:</code>; the downloader fetches
+        <code>&lt;subfolder&gt;/model.onnx</code> and the supporting files into the
+        configured directory.
       </p>
 
       <figure class="code">
 <pre class="code__body"><span class="t-cmd">models:</span>
-  <span class="t-str">laya</span>:
-    <span class="t-cmd">onnx</span>:      <span class="t-str">./models/laya-english/model.onnx</span>
-    <span class="t-cmd">tokenizer</span>: <span class="t-str">./models/laya-english/tokenizer/tokenizer.json</span>
+  <span class="t-str">laya-multilingual</span>:
+    <span class="t-cmd">model_repo</span>:      <span class="t-str">codenamev/laya-onnx</span>
+    <span class="t-cmd">model_subfolder</span>: <span class="t-str">multilingual</span>
+    <span class="t-cmd">onnx</span>:            <span class="t-str">./models/laya-multilingual/model.onnx</span>
+    <span class="t-cmd">tokenizer</span>:       <span class="t-str">./models/laya-multilingual/tokenizer.json</span>
     <span class="t-cmd">script_preload</span>: <span class="t-str">true</span>
     <span class="t-cmd">scripts</span>:
       <span class="t-dim">-</span> <span class="t-cmd">path</span>: <span class="t-str">./scripts/laya.lua</span>
@@ -1082,10 +1091,12 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
       </p>
 
       <p class="doc-prose">
-        The website sandbox serves a 32-hidden miniature of the
-        architecture — random weights, real mechanism — so its demo shows the
-        shapes, not judgments; point the same config at the published checkpoints
-        for real answers.
+        The website sandbox mounts two Laya entries: a 32-hidden miniature of the
+        architecture — random weights, real mechanism — behind the two game loops
+        (Snake, Pac-Man), and the published <code>typed-decisions</code> checkpoint
+        behind the typed-question examples (Inbox, Quickstart), mounted with
+        <code>model_subfolder: typed-decisions</code> and downloaded once onto the
+        volume. The loops show shapes; the typed answers are judgments.
       </p>
     </div>
   </div>

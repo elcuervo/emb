@@ -38,3 +38,10 @@
 - [x] 7.1 Derive each typed-question answer to match the checkpoint's own semantics — choice argmax, score label from the rounded expected value, noul true only above 0.5 — and mark the leaf that answer selects; verify against `ruby-laya`'s `Answer` semantics and in the browser
 - [x] 7.2 State each answer with its value (probability / expected score / noul probability) so a near-coin-flip reads as one; verify the Inbox strip shows the probability beside every answer
 - [x] 7.3 Stop highlighting readout bars that are not the decision: keep the neutral tone for the readout bars and reserve the accent for the executed move; verify in the browser that only the decided move's bar is accented
+
+## 8. The decision DAG
+
+- [x] 8.1 Replace the bar-tree with a decision DAG: the state fans into one node per question, each edge continuing to the answer the reply selected; verify the figure is generated from the reply and every typed-question example renders it
+- [x] 8.2 State each answer as a node (the option plus its value) instead of a probability bar, and mark the node as the decision; verify the Inbox and Quickstart figures show one decision per question with no bars
+- [x] 8.3 Stylize with the impeccable pass in the site's tokens — paper card, hairline nodes, accent reserved for a decision, one authored reveal — and confirm no new colour/font/token with the detector; verify with desktop screenshots
+- [x] 8.4 Re-verify the Inbox re-selection regression (one list/form), the no-console-error check, and narrow-width legibility after the rework

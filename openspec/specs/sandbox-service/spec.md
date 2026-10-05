@@ -305,14 +305,31 @@ the loaded model set MUST NOT prevent the sandbox from becoming ready.
 
 ### Requirement: The showcase mounts a shipped miniature decision model by digest
 
-The sandbox SHALL serve a decision-model plate from a model and preset shipped inside the image (no network download), alongside its downloaded retrieval models. The model SHALL be the vendored tiny Laya export, mounted read-only, and its preset SHALL be the shipped `laya.lua` preloaded and callable by digest like every other preset; the sandbox's refusal of raw script evaluation SHALL continue to hold for it.
+The sandbox SHALL serve a decision-model plate from a shipped miniature (no network
+download) AND from a real published checkpoint, alongside its downloaded retrieval
+models. The shipped miniature SHALL remain the model behind the plate's game loops,
+mounted read-only, its preset preloaded and callable by digest. The plate's
+typed-question examples SHALL answer with the real checkpoint, mounted from a
+published ONNX export (a one-time download onto the volume), its preset preloaded
+and callable by digest. The sandbox's refusal of raw script evaluation SHALL
+continue to hold for both.
 
 #### Scenario: The decision plate calls by digest
 
 - **WHEN** a visitor runs the decision demo
-- **THEN** the bridge accepts `EMB.EVSHA laya <digest> …` where the digest matches the shipped preset, and refuses sending script source exactly as it does for the other models
+- **THEN** the bridge accepts `EMB.EVSHA <model> <digest> …` for each shipped preset, where the digest matches the shipped bytes, and refuses sending script source exactly as it does for the other models
 
 #### Scenario: First boot needs no download for the miniature
 
-- **WHEN** the sandbox boots with the decision model configured
-- **THEN** the model and preset files are present in the image, so the plate works without a model download or a volume write
+- **WHEN** the sandbox boots with the miniature configured
+- **THEN** the model and preset files are present in the image, so the loops work without a model download or a volume write
+
+#### Scenario: The real checkpoint downloads once
+
+- **WHEN** the sandbox boots with the real checkpoint configured and the volume does not already hold it
+- **THEN** the server downloads it onto the volume, and every later boot loads it from disk without a download
+
+#### Scenario: The typed-question examples answer with the real checkpoint
+
+- **WHEN** a visitor runs the Inbox or Quickstart example
+- **THEN** the call is served by the real checkpoint, not the miniature
