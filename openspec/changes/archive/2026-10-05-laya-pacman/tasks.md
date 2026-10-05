@@ -34,4 +34,4 @@
 
 - [x] 6.1 Run `just website-presets-check`, `just verify-harness`, and `go test ./internal/server/ -count=1` inside `nix develop`; verify all pass
 - [x] 6.2 Drive `just website-dev` end to end: play the Pac-Man tab for a full episode, confirm the commands disclosure shows the episode calls (not one per frame), confirm prefetch keeps the animation from stalling, and confirm a sandbox failure shows the error state instead of frames
-- [ ] 6.3 `just sandbox-deploy` (the sandbox is deployed by hand) and verify the live plate answers `EMB.EVSHA laya <pacman-sha> …` against `cli.emb.is`
+- [x] 6.3 `just sandbox-deploy` (the sandbox is deployed by hand) and verify the live plate answers `EMB.EVSHA laya <pacman-sha> …` against `cli.emb.is`
