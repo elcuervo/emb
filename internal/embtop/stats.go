@@ -44,6 +44,7 @@ type ModelPoint struct {
 	Tokens       int64
 	Errors       int64
 	CacheHitRate float64 // cumulative %, 100 when no cache stats (-1 unknown)
+	Stale        bool    // no EMB.INFO reply this poll; values are last-known
 }
 
 // Sampler diffs cumulative counters between polls into rates and keeps a
@@ -197,7 +198,31 @@ func (s *Sampler) Push(res *PollResult) Point {
 		mp[name] = mpnt
 	}
 
-	// Advance history.
+	// A model with no EMB.INFO reply this poll keeps its last-known sample,
+	// flagged stale, so its row neither blanks nor shrinks. Raw stats carry
+	// forward too, so identity metadata survives and the next poll diffs
+	// against the last known cumulative counters.
+	for name, prev := range s.LatestModels {
+		if _, ok := mp[name]; ok {
+			continue
+		}
+		prev.At = at
+		prev.Stale = true
+		mp[name] = prev
+	}
+	raw := make(map[string]*ModelStats, len(res.PerModel))
+	for name, ms := range res.PerModel {
+		raw[name] = ms
+	}
+	for name, ms := range s.LatestRaw {
+		if _, ok := raw[name]; !ok {
+			raw[name] = ms
+		}
+	}
+
+	// Advance history. A missing model repeats its last point so its strip
+	// stays column-aligned with its neighbours; histories are kept for
+	// models that leave so a returning model keeps its row slot and strip.
 	s.Window = append(s.Window, p)
 	if len(s.Window) > s.window {
 		s.Window = s.Window[len(s.Window)-s.window:]
@@ -208,18 +233,12 @@ func (s *Sampler) Push(res *PollResult) Point {
 			s.ModHist[name] = s.ModHist[name][len(s.ModHist[name])-s.window:]
 		}
 	}
-	// Prune histories for models that vanished.
-	for name := range s.ModHist {
-		if _, ok := mp[name]; !ok {
-			delete(s.ModHist, name)
-		}
-	}
 
 	s.Latest = p
 	s.LatestModels = mp
-	s.LatestRaw = res.PerModel
+	s.LatestRaw = raw
 	s.prev = *res
-	s.prevMod = res.PerModel
+	s.prevMod = raw
 	s.prevAt = at
 	s.havePrev = true
 	return p

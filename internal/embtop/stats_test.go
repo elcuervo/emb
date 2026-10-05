@@ -164,7 +164,9 @@ func TestSamplerResetRebases(t *testing.T) {
 	}
 }
 
-func TestSamplerModelGonePrunesHistory(t *testing.T) {
+// A model absent from a poll keeps its history (and row slot) so a model that
+// leaves and returns renders in place rather than resetting.
+func TestSamplerModelGoneKeepsHistory(t *testing.T) {
 	s := NewSampler(10)
 	s.SetClock(newFakeClock(time.Unix(0, 0), stepDur))
 	pushAt(s, baseRes())
@@ -172,8 +174,11 @@ func TestSamplerModelGonePrunesHistory(t *testing.T) {
 	r2.PerModel = map[string]*ModelStats{}
 	pushAt(s, r2)
 	_, _, hist := s.Snapshot()
-	if _, ok := hist["m"]; ok {
-		t.Error("history for vanished model should be pruned")
+	if _, ok := hist["m"]; !ok {
+		t.Error("history for a missed model should be kept, not pruned")
+	}
+	if got := s.LatestModels["m"]; !got.Stale {
+		t.Errorf("missed model sample = %+v, want Stale=true", got)
 	}
 }
 
@@ -249,5 +254,58 @@ func TestSamplerResetClearsEventWindow(t *testing.T) {
 	}
 	if _, ok := s.LastEvent(); ok {
 		t.Fatal("Reset left a stale last event")
+	}
+}
+
+// TestMissedModelPollKeepsLastKnownSample guards the constant-row-height
+// guarantee: a model absent from res.PerModel for one poll must keep its
+// last-known rates and metadata, flagged stale, and clear on the next poll.
+func TestMissedModelPollKeepsLastKnownSample(t *testing.T) {
+	s := NewSampler(10)
+	s.SetClock(newFakeClock(time.Unix(0, 0), stepDur))
+
+	r1 := baseRes()
+	r1.PerModel["m"].Requests = 10
+	r1.PerModel["m"].Tokens = 100
+	s.Push(r1)
+
+	r2 := baseRes()
+	r2.PerModel["m"].Requests = 20
+	r2.PerModel["m"].Tokens = 200
+	s.Push(r2)
+	if got := s.LatestModels["m"]; got.Stale || got.ReqRate != 10 {
+		t.Fatalf("before miss: %+v, want fresh req_rate=10", got)
+	}
+
+	// A poll with no EMB.INFO reply for m: no entry in PerModel.
+	r3 := baseRes()
+	r3.PerModel = map[string]*ModelStats{}
+	s.Push(r3)
+	got, ok := s.LatestModels["m"]
+	if !ok {
+		t.Fatal("missed poll dropped the model instead of keeping it")
+	}
+	if !got.Stale {
+		t.Error("missed poll did not flag the sample stale")
+	}
+	if got.Requests != 20 || got.ReqRate != 10 {
+		t.Errorf("missed poll changed last-known values: %+v", got)
+	}
+	if ms, ok := s.RawModels()["m"]; !ok || ms.Dim != 384 || ms.Pooling != "mean" {
+		t.Errorf("missed poll dropped raw metadata: %+v (ok=%v)", ms, ok)
+	}
+
+	// m returns: the sample is fresh again and diffs against the carried
+	// cumulative counters (20 -> 30 in one step).
+	r4 := baseRes()
+	r4.PerModel["m"].Requests = 30
+	r4.PerModel["m"].Tokens = 300
+	s.Push(r4)
+	got = s.LatestModels["m"]
+	if got.Stale {
+		t.Error("returning poll still marked stale")
+	}
+	if got.Requests != 30 || got.ReqRate != 10 {
+		t.Errorf("returning poll = %+v, want requests=30 req_rate=10", got)
 	}
 }

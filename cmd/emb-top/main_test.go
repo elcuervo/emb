@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/elcuervo/emb/internal/embtop"
 )
@@ -122,7 +124,7 @@ func TestHelpAndPause(t *testing.T) {
 }
 
 func TestModelAppearingMidRun(t *testing.T) {
-	// New model discovered after start gets a sparkline and appears in order.
+	// New model discovered after start appears in order and is polled next round.
 	m := newSizedTUI(100, 30)
 	m.applyResult(fakePoll(10, 400, 0, 0))
 	if len(m.modelOrder) != 1 || m.modelOrder[0] != "minilm" {
@@ -135,8 +137,8 @@ func TestModelAppearingMidRun(t *testing.T) {
 	if len(m.modelOrder) != 2 {
 		t.Fatalf("expected 2 models, got %v", m.modelOrder)
 	}
-	if _, ok := m.sparks["bge"]; !ok {
-		t.Fatalf("no sparkline created for new model")
+	if !m.present["bge"] || m.known[len(m.known)-1] != "bge" {
+		t.Fatalf("new model not tracked/polled: present=%v known=%v", m.present, m.known)
 	}
 }
 
@@ -340,5 +342,207 @@ func TestRunFramesEmitsColoredFramesAndReconnects(t *testing.T) {
 	}
 	if seqs[2] != 0 {
 		t.Errorf("event cursor was not reset after reconnect: seqs=%v", seqs)
+	}
+}
+
+// ---- stable single model list ----
+
+// multiPoll builds a PollResult for the named models, each with its own
+// cumulative request counter so rates differ across rows.
+func multiPoll(names []string, reqs map[string]int64) *embtop.PollResult {
+	res := fakePoll(0, 0, 0, 0)
+	res.Models = nil
+	res.PerModel = map[string]*embtop.ModelStats{}
+	var total int64
+	for _, n := range names {
+		r := reqs[n]
+		total += r
+		res.Models = append(res.Models, embtop.ModelListEntry{Name: n, Dim: 8, Status: "ready"})
+		res.PerModel[n] = &embtop.ModelStats{
+			Dim: 8, Requests: r, Tokens: r * 4, AvgLatencyUs: 900,
+			Pooling: "mean", Quantization: "int8",
+		}
+	}
+	res.TotalRequests = total
+	res.TotalTokens = total * 4
+	res.ModelsLoaded = len(names)
+	return res
+}
+
+func reqMap(names []string) map[string]int64 {
+	reqs := map[string]int64{}
+	for i, n := range names {
+		reqs[n] = int64(i+1) * 10
+	}
+	return reqs
+}
+
+func testModelNames() []string {
+	return []string{"alpha", "bravo", "charlie", "delta", "echo",
+		"foxtrot", "golf", "hotel", "india", "juliet"}
+}
+
+// rowIndexOf returns the line index of the first line mentioning name.
+func rowIndexOf(lines []string, name string) int {
+	for i, l := range lines {
+		if strings.Contains(l, name) {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestModelRowsAreSingleLine guards constant row height: a model whose
+// metadata is present and one whose EMB.INFO reply is missing must each
+// occupy exactly one line, so no row can shift the ones below it.
+func TestModelRowsAreSingleLine(t *testing.T) {
+	m := newSizedTUI(120, 30)
+	res := multiPoll([]string{"alpha", "bravo"}, map[string]int64{"alpha": 10, "bravo": 5})
+	delete(res.PerModel, "bravo") // no metadata for bravo this poll
+	m.applyResult(res)
+	lines := m.modelsView()
+	if len(lines) != 3 { // two model rows + the range/legend line
+		t.Fatalf("modelsView returned %d lines, want 3 (constant row height):\n%s",
+			len(lines), strings.Join(lines, "\n"))
+	}
+}
+
+// TestActivityStripAlwaysRendersWithinWidth guards that the in-row strip
+// survives narrow terminals by dropping numeric segments, never wrapping.
+func TestActivityStripAlwaysRendersWithinWidth(t *testing.T) {
+	for _, w := range []int{80, 100, 120, 160} {
+		m := newSizedTUI(w, 30)
+		m.applyResult(multiPoll([]string{"alpha", "bravo"}, map[string]int64{"alpha": 100, "bravo": 1}))
+		row := ""
+		for _, l := range m.modelsView() {
+			if strings.Contains(l, "alpha") {
+				row = l
+			}
+		}
+		if !strings.Contains(row, heatCellBlock) {
+			t.Errorf("width %d: activity strip missing from the model row: %q", w, row)
+		}
+		if got := lipgloss.Width(row); got > w {
+			t.Errorf("width %d: model row is %d cols: %q", w, got, row)
+		}
+	}
+}
+
+// TestViewFitsHeight guards the model area against the fixed chrome budget.
+func TestViewFitsHeight(t *testing.T) {
+	for _, h := range []int{24, 30, 40, 50} {
+		m := newSizedTUI(120, h)
+		m.applyResult(multiPoll(testModelNames(), reqMap(testModelNames())))
+		lines := strings.Split(strings.TrimRight(m.View(), "\n"), "\n")
+		if len(lines) > h {
+			t.Errorf("height %d: view is %d lines", h, len(lines))
+		}
+	}
+}
+
+// TestReturningModelKeepsPosition guards that a model dropping out of
+// EMB.MODELS and returning reappears where it was, not at the end.
+func TestReturningModelKeepsPosition(t *testing.T) {
+	m := newSizedTUI(120, 40)
+	reqs := map[string]int64{"alpha": 1, "bravo": 1, "charlie": 1}
+	m.applyResult(multiPoll([]string{"alpha", "bravo", "charlie"}, reqs))
+	m.applyResult(multiPoll([]string{"alpha", "charlie"}, reqs)) // bravo drops out
+	if got := strings.Join(m.presentNames(), ","); got != "alpha,charlie" {
+		t.Fatalf("present after drop = %q, want alpha,charlie", got)
+	}
+	m.applyResult(multiPoll([]string{"alpha", "bravo", "charlie"}, reqs)) // bravo returns
+	if got := strings.Join(m.presentNames(), ","); got != "alpha,bravo,charlie" {
+		t.Fatalf("returning model position = %q, want alpha,bravo,charlie", got)
+	}
+}
+
+// TestMissedPollKeepsRowPositionAndHeight guards that one missing EMB.INFO
+// reply neither moves nor resizes any row.
+func TestMissedPollKeepsRowPositionAndHeight(t *testing.T) {
+	m := newSizedTUI(120, 30)
+	names := []string{"alpha", "bravo", "charlie"}
+	m.applyResult(multiPoll(names, reqMap(names)))
+	before := m.modelsView()
+
+	res := multiPoll(names, map[string]int64{"alpha": 20, "bravo": 20, "charlie": 30})
+	delete(res.PerModel, "bravo") // EMB.INFO reply missed
+	m.applyResult(res)
+	after := m.modelsView()
+
+	if len(before) != len(after) {
+		t.Fatalf("row count changed after a missed poll: %d -> %d", len(before), len(after))
+	}
+	for _, name := range names {
+		if rowIndexOf(before, name) != rowIndexOf(after, name) {
+			t.Errorf("%s moved after a missed poll: %d -> %d", name, rowIndexOf(before, name), rowIndexOf(after, name))
+		}
+	}
+	if !m.sampler.LatestModels["bravo"].Stale {
+		t.Error("missed model not marked stale")
+	}
+}
+
+// TestScrollClampsAndNamesVisibleRange guards the single scroll offset and the
+// range indicator.
+func TestScrollClampsAndNamesVisibleRange(t *testing.T) {
+	m := newSizedTUI(120, 24) // visibleRows = height - modelChrome
+	names := testModelNames()
+	m.applyResult(multiPoll(names, reqMap(names)))
+
+	wantMax := len(names) - m.visibleRows()
+	for i := 0; i < 50; i++ {
+		um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = um.(tuiModel)
+	}
+	if m.scroll != wantMax {
+		t.Fatalf("scroll after j = %d, want %d", m.scroll, wantMax)
+	}
+	lines := m.modelsView()
+	legend := lines[len(lines)-1]
+	if want := fmt.Sprintf("rows %d–%d of %d", wantMax+1, len(names), len(names)); !strings.Contains(legend, want) {
+		t.Errorf("legend %q does not name the visible range %q", legend, want)
+	}
+	for i := 0; i < 50; i++ {
+		um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+		m = um.(tuiModel)
+	}
+	if m.scroll != 0 {
+		t.Fatalf("scroll after k = %d, want 0", m.scroll)
+	}
+}
+
+// TestStableModelListReachesEveryModel guards that scrolling reaches every
+// model, and that a model appears at exactly one position in a frame (visible)
+// or nowhere (off-screen).
+func TestStableModelListReachesEveryModel(t *testing.T) {
+	m := newSizedTUI(120, 24)
+	names := testModelNames()
+	m.applyResult(multiPoll(names, reqMap(names)))
+
+	vis := m.visibleRows()
+	if vis >= len(names) {
+		t.Fatalf("test needs more models than fit: vis=%d n=%d", vis, len(names))
+	}
+	seen := map[string]bool{}
+	for s := 0; s <= len(names)-vis; s++ {
+		m.scroll = s
+		view := m.View()
+		visible := map[string]bool{}
+		for _, n := range m.presentNames()[s : s+vis] {
+			visible[n] = true
+			seen[n] = true
+		}
+		for _, n := range names {
+			c := strings.Count(view, n)
+			if visible[n] && c != 1 {
+				t.Errorf("scroll %d: visible model %q appears %d times, want 1", s, n, c)
+			}
+			if !visible[n] && c != 0 {
+				t.Errorf("scroll %d: off-screen model %q appears %d times, want 0", s, n, c)
+			}
+		}
+	}
+	if len(seen) != len(names) {
+		t.Fatalf("scrolling reached %d of %d models: %v", len(seen), len(names), seen)
 	}
 }

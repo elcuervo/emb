@@ -3,6 +3,7 @@ package embtop
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -97,4 +98,56 @@ func parseKV(line, key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// TestRunOnceKeepsFirstSeenModelOrder guards that the headless lines do not
+// follow the server's per-call EMB.MODELS enumeration order.
+func TestRunOnceKeepsFirstSeenModelOrder(t *testing.T) {
+	orders := [][]string{{"z", "a", "m"}, {"m", "z", "a"}, {"a", "m", "z"}}
+	round := 0
+	respond := func(cmd []string, _ int) []byte {
+		switch strings.ToUpper(cmd[0]) {
+		case "EMB.MODELS":
+			var rows [][]string
+			for _, n := range orders[round%len(orders)] {
+				rows = append(rows, []string{n, "8"})
+			}
+			return modelsReply(rows...)
+		case "EMB.INFO":
+			return infoReply(nil, map[string]int64{"requests": 1, "tokens": 2})
+		case "EMB.STATS":
+			round++
+			return statsReply(map[string]int64{"uptime_secs": int64(round)})
+		case "MONITOR":
+			return encodeArray()
+		default:
+			return encodeError("ERR unknown " + cmd[0])
+		}
+	}
+	_, addr := startScripted(t, respond)
+	c := NewClient(addr, "", false)
+	var out bytes.Buffer
+	if err := RunOnce(c, time.Millisecond, 3, &out); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("want 3 lines, got %d:\n%s", len(lines), out.String())
+	}
+	want := []string{"z", "a", "m"}
+	for i, line := range lines[1:] {
+		if got := modelSectionOrder(line); !slices.Equal(got, want) {
+			t.Errorf("line %d model order = %v, want %v\n%s", i+2, got, want, line)
+		}
+	}
+}
+
+func modelSectionOrder(line string) []string {
+	var out []string
+	for _, f := range strings.Fields(line) {
+		if strings.HasPrefix(f, "model:") {
+			out = append(out, strings.TrimPrefix(f, "model:"))
+		}
+	}
+	return out
 }
