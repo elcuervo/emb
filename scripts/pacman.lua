@@ -166,12 +166,14 @@ local function load_game(spec)
   game.alive = b.alive ~= false
   game.won = b.won or false
   if type(b.pac) == "table" then
-    game.pac = { x = b.pac.x, y = b.pac.y, dir = b.pac.dir or "LEFT" }
+    -- `dir` round-trips through the client, so a resumed game can carry any
+    -- string; VEC[dir] indexes it later, so reject anything but a real direction.
+    game.pac = { x = b.pac.x, y = b.pac.y, dir = VEC[b.pac.dir] and b.pac.dir or "LEFT" }
   end
   if type(b.ghosts) == "table" then
     for i, gh in ipairs(b.ghosts) do
       local home = GHOST_HOMES[i] or GHOST_HOMES[1]
-      game.ghosts[i] = { x = gh.x, y = gh.y, dir = gh.dir or DIRS[1], hx = home[1], hy = home[2] }
+      game.ghosts[i] = { x = gh.x, y = gh.y, dir = VEC[gh.dir] and gh.dir or DIRS[1], hx = home[1], hy = home[2] }
     end
   end
   return game

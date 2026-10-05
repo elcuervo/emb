@@ -253,3 +253,51 @@ return outs[1].labels.shape[2] .. "|" .. outs[2].labels.shape[2]`
 		t.Fatalf("unexpected batch result %q", v.String())
 	}
 }
+
+func TestRunBatchBoolTensors(t *testing.T) {
+	// Bool ("b1") inputs and outputs must merge, scatter, and slice through
+	// their own Bool buffers; routing them through Float left the merged
+	// tensor with zero elements, so the session rejected every bool batch.
+	var merged onnx.NamedTensor
+	src := `
+local outs = emb.run_batch({
+  { mask = {shape = {1, 2}, data = {1, 0}, dtype = "b1"} },
+  { mask = {shape = {1, 3}, data = {0, 1, 1}, dtype = "b1"} }
+})
+return outs[1].mask.dtype .. "|" .. outs[1].mask.shape[2] .. "|" ..
+       outs[1].mask.data[1] .. "|" .. outs[1].mask.data[2] .. "|" .. outs[1].mask.data[3] .. "|" ..
+       outs[2].mask.data[3]`
+	v, err := EvalWithHosts(src, nil, nil, Hosts{
+		Run: func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+			for _, in := range inputs {
+				if in.Name == "mask" {
+					merged = in
+				}
+			}
+			out := make([]bool, len(merged.Bool))
+			copy(out, merged.Bool)
+			return map[string]onnx.NamedTensor{
+				"mask": {Name: "mask", Shape: merged.Shape, DType: onnx.TensorBool, Bool: out},
+			}, nil
+		},
+	}, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged.DType != onnx.TensorBool {
+		t.Fatalf("merged dtype = %v, want bool", merged.DType)
+	}
+	if len(merged.Float) != 0 || len(merged.Int64) != 0 {
+		t.Fatalf("bool merge allocated the wrong buffer: int64=%d float=%d", len(merged.Int64), len(merged.Float))
+	}
+	// Merged shape [2, 3]: item 0 {true,false} plus zero padding; item 1
+	// {false,true,true}.
+	want := []bool{true, false, false, false, true, true}
+	if !reflect.DeepEqual(merged.Bool, want) {
+		t.Fatalf("merged bool data = %v, want %v", merged.Bool, want)
+	}
+	// Per-item slices carry the merged inner shape [1,3] and their own values.
+	if v.String() != "b1|3|1|0|0|1" {
+		t.Fatalf("unexpected batch result %q", v.String())
+	}
+}

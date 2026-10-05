@@ -1,6 +1,7 @@
 package onnx
 
 import (
+	"math"
 	"os"
 	"testing"
 )
@@ -213,9 +214,9 @@ func TestRunNamedBoolGraph(t *testing.T) {
 	if len(act.Shape) != 2 || act.Shape[0] != 2 || act.Shape[1] != 2 {
 		t.Fatalf("act_logits shape = %v, want [2 2]", act.Shape)
 	}
-	for _, v := range logits.Float {
-		if v == 0 || v != v { // finite, nonzero per-row output
-			break
+	for i, v := range logits.Float {
+		if v == 0 || v != v || math.IsInf(float64(v), 0) { // finite, nonzero per-row output
+			t.Fatalf("logits[%d] = %v, want a finite nonzero value", i, v)
 		}
 	}
 }

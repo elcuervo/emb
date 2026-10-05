@@ -339,8 +339,16 @@ func TestLayaParityCorpus(t *testing.T) {
 			}
 			// The empty-questions case runs no forward pass, so it reports a real
 			// zero; every other case must report a positive duration.
-			if ms, ok := gu["inference_ms"].(float64); !ok || ms < 0 {
-				t.Fatalf("reply inference_ms = %v, want a non-negative number", gu["inference_ms"])
+			ms, ok := gu["inference_ms"].(float64)
+			if !ok {
+				t.Fatalf("reply inference_ms = %v, want a number", gu["inference_ms"])
+			}
+			var questions map[string]json.RawMessage
+			if err := json.Unmarshal(q, &questions); err != nil {
+				t.Fatalf("parsing questions: %v", err)
+			}
+			if len(questions) > 0 && ms <= 0 {
+				t.Fatalf("reply inference_ms = %v, want a positive number", ms)
 			}
 		})
 	}
@@ -574,6 +582,24 @@ func TestLayaPacmanEpisode(t *testing.T) {
 	next := episode(1, game)["game"].(map[string]any)
 	if next["ticks"].(float64) != game["ticks"].(float64)+1 {
 		t.Fatalf("chained game ticks = %v, want %v", next["ticks"], game["ticks"].(float64)+1)
+	}
+
+	// A resumed game's direction fields are client-controlled; load_game must
+	// normalize anything that is not a real direction, since step() indexes
+	// VEC[dir] and a nil lookup would raise "index a nil value".
+	corrupt := episode(0, game)["game"].(map[string]any)
+	corrupt["pac"].(map[string]any)["dir"] = "SIDEWAYS"
+	if ghosts, ok := corrupt["ghosts"].([]any); ok && len(ghosts) > 0 {
+		ghosts[0].(map[string]any)["dir"] = "WARP"
+	}
+	resumed := episode(0, corrupt)["game"].(map[string]any)
+	if dir := resumed["pac"].(map[string]any)["dir"]; dir != "LEFT" {
+		t.Fatalf("resumed pac dir = %v, want the LEFT fallback", dir)
+	}
+	if ghosts, ok := resumed["ghosts"].([]any); ok && len(ghosts) > 0 {
+		if dir := ghosts[0].(map[string]any)["dir"]; dir != "UP" {
+			t.Fatalf("resumed ghost dir = %v, want the UP fallback", dir)
+		}
 	}
 
 	// An unbounded request is clamped to the preset's ceiling rather than run.

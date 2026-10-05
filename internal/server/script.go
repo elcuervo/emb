@@ -54,12 +54,21 @@ func scriptSHA(src string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// Load caches src under its SHA1 for a model and returns that SHA. The bool
+// reports whether the exact entry (same config digest) was already cached. A
+// config-carrying load whose digest differs replaces the entry, so a config
+// changed for an already-loaded SHA is honored rather than silently dropped. A
+// config-less load (EMB.SCRIPT LOAD) never clobbers a declared config.
 func (c *scriptCache) Load(model, src string, config map[string]any) (sha string, exists bool) {
 	sha = scriptSHA(src)
 	digest := script.ConfigDigest(config)
-	_, existed, _ := c.by.GetOrCreate(model, sha, func() (scriptEntry, error) {
+	entry, existed, _ := c.by.GetOrCreate(model, sha, func() (scriptEntry, error) {
 		return scriptEntry{src: src, config: config, digest: digest}, nil
 	})
+	if existed && digest != "" && digest != entry.digest {
+		c.by.Put(model, sha, scriptEntry{src: src, config: config, digest: digest})
+		return sha, false
+	}
 	return sha, existed
 }
 

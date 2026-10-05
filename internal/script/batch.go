@@ -217,9 +217,12 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 		out.Name = name
 		out.Shape = maxShape
 		out.DType = base.DType
-		if base.DType == onnx.TensorInt64 {
+		switch base.DType {
+		case onnx.TensorInt64:
 			out.Int64 = make([]int64, int(total))
-		} else {
+		case onnx.TensorBool:
+			out.Bool = make([]bool, int(total))
+		default:
 			out.Float = make([]float32, int(total))
 		}
 		for i, ins := range items {
@@ -235,9 +238,12 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 			row := i * int(inner)
 			if slices.Equal(in.Shape[1:], maxShape[1:]) {
 				// Exact inner layout: a single contiguous copy fills the row.
-				if in.DType == onnx.TensorInt64 {
+				switch in.DType {
+				case onnx.TensorInt64:
 					copy(out.Int64[row:], in.Int64)
-				} else {
+				case onnx.TensorBool:
+					copy(out.Bool[row:], in.Bool)
+				default:
 					copy(out.Float[row:], in.Float)
 				}
 			} else {
@@ -255,9 +261,12 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 func scatterRow(out onnx.NamedTensor, dstStart int, in onnx.NamedTensor, maxInner []int64) {
 	n := len(in.Shape) - 1 // inner dims
 	if n == 0 {
-		if in.DType == onnx.TensorInt64 {
+		switch in.DType {
+		case onnx.TensorInt64:
 			out.Int64[dstStart] = in.Int64[0]
-		} else {
+		case onnx.TensorBool:
+			out.Bool[dstStart] = in.Bool[0]
+		default:
 			out.Float[dstStart] = in.Float[0]
 		}
 		return
@@ -281,9 +290,12 @@ func scatterRow(out onnx.NamedTensor, dstStart int, in onnx.NamedTensor, maxInne
 			src += cur[k] * srcStrides[k]
 			dst += cur[k] * maxStrides[k]
 		}
-		if in.DType == onnx.TensorInt64 {
+		switch in.DType {
+		case onnx.TensorInt64:
 			out.Int64[dstStart+dst] = in.Int64[src]
-		} else {
+		case onnx.TensorBool:
+			out.Bool[dstStart+dst] = in.Bool[src]
+		default:
 			out.Float[dstStart+dst] = in.Float[src]
 		}
 		k := n - 1
@@ -321,16 +333,26 @@ func sliceBatchOutput(ls *lua.LState, t onnx.NamedTensor, i, n int, packed bool)
 		ls.RaiseError("emb.run_batch: %v", err)
 		return out
 	}
-	if (t.DType == onnx.TensorInt64 && int64(len(t.Int64)) < int64(n)*inner) || (t.DType != onnx.TensorInt64 && int64(len(t.Float)) < int64(n)*inner) {
-		ls.RaiseError("emb.run_batch: output %q data has %d elements, want at least %d", t.Name, len(t.Int64)+len(t.Float), int64(n)*inner)
+	avail := int64(len(t.Float))
+	switch t.DType {
+	case onnx.TensorInt64:
+		avail = int64(len(t.Int64))
+	case onnx.TensorBool:
+		avail = int64(len(t.Bool))
+	}
+	if avail < int64(n)*inner {
+		ls.RaiseError("emb.run_batch: output %q data has %d elements, want at least %d", t.Name, avail, int64(n)*inner)
 		return out
 	}
 	batchShape := append([]int64{1}, shape[1:]...)
 	start := int64(i) * inner
 	slice := onnx.NamedTensor{Name: t.Name, Shape: batchShape, DType: t.DType}
-	if t.DType == onnx.TensorInt64 {
+	switch t.DType {
+	case onnx.TensorInt64:
 		slice.Int64 = t.Int64[start : start+inner]
-	} else {
+	case onnx.TensorBool:
+		slice.Bool = t.Bool[start : start+inner]
+	default:
 		slice.Float = t.Float[start : start+inner]
 	}
 	return renderTensor(ls, slice, packed)

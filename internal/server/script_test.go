@@ -508,3 +508,27 @@ func TestEvalMultiTextSingleEval(t *testing.T) {
 	}
 	c.Close()
 }
+
+// A config changed for an already-cached script SHA must replace the entry
+// (the digest keys the reply cache), while a config-less EMB.SCRIPT LOAD must
+// not clobber a declared config. No model or ONNX runtime needed.
+func TestScriptCacheLoadHonorsConfigChange(t *testing.T) {
+	c := newScriptCache(0)
+	const src = "return 1"
+	sha, existed := c.Load("m", src, map[string]any{"max_len": 8})
+	if existed {
+		t.Fatal("first load should be a miss")
+	}
+	if sha2, _ := c.Load("m", src, map[string]any{"max_len": 16}); sha2 != sha {
+		t.Fatalf("sha changed with config: %q vs %q", sha, sha2)
+	}
+	got, _ := c.Get("m", sha)
+	if got.config["max_len"] != 16 {
+		t.Fatalf("changed config dropped: got %#v", got.config)
+	}
+	_, _ = c.Load("m", src, nil)
+	got, _ = c.Get("m", sha)
+	if got.config["max_len"] != 16 {
+		t.Fatalf("config-less load clobbered config: %#v", got.config)
+	}
+}

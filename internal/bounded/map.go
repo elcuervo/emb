@@ -74,6 +74,19 @@ func (m *Map[V]) GetOrCreate(bucket, key string, create func() (V, error)) (V, b
 	return v, false, nil
 }
 
+// Put stores v at bucket/key, overwriting any existing value. It does not
+// evict, since it replaces a key rather than adding one.
+func (m *Map[V]) Put(bucket, key string, v V) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	per := m.by[bucket]
+	if per == nil {
+		per = make(map[string]V)
+		m.by[bucket] = per
+	}
+	per[key] = v
+}
+
 // Clear drops one bucket, or every bucket when bucket is "".
 func (m *Map[V]) Clear(bucket string) {
 	m.mu.Lock()

@@ -68,8 +68,11 @@ steps in `just all` may fail to find the ORT library).
 | `just build` | CGo build with `-ldflags "-X main.version=$(cat VERSION)"` → `bin/emb` |
 | `just all` | `just test` + `just build`, then starts a server on **127.0.0.1:16379** (`test-two-models.yaml`) and runs the Ruby client suite (`cd gems/emb && bundle exec rake`) |
 | `just validate-gems` | build + install + validate both gems locally |
-| `just bench` / `baseline` | Go benchmarks / captured baseline |
+| `just bench` / `baseline` | Go benchmarks over every package / the same, tee'd to `benchmark-baseline.txt` |
+| `just bench-script` | the scripted-inference benchmarks (`BenchmarkScript*`); needs `just download-model` |
+| `just bench-budgets` | enforces the scripted-inference budgets (latency parity, metal parity, memory, throughput scaling) — the benchmark regression gate; needs a model |
 | `just bench-cache-size size="auto"` | server with `-cache <size>` + `redis-benchmark` hit path |
+| `just website-presets` / `website-presets-check` | rewrite / verify the sandbox preset SHA1s stamped into the site (CI runs `--check`) |
 | `just bench-ruby config="bench-cpu-partition.yaml"` | CPU-partitioned client harness (`app_cpus`/`bench_cpus` vars, taskset on Linux) |
 | `just version` / `tag` / `release` | read/bump VERSION, tag, release artifacts |
 | `just clean` | remove `bin/` |
@@ -80,7 +83,16 @@ Equivalent direct commands (inside the dev shell):
 go build ./... && go vet ./...            # compile + vet
 go test ./internal/server/ -count=1       # uncached server tests
 golangci-lint run ./...
+
+# Faster targeted loops for the four core packages (what a small change needs)
+golangci-lint run ./internal/bounded/ ./internal/script/ ./internal/onnx/ ./internal/server/
+go test ./internal/server/ ./internal/script/ ./internal/onnx/ ./internal/bounded/ -count=1
 ```
+
+## Benchmarks and preset edits
+
+- **Benchmark / regression gate.** `just bench-script` prints the `BenchmarkScript*` numbers; `just bench-budgets` enforces the budget tests (`EMB_BENCH_BUDGETS=1`) — the regression gate for scripted-inference latency, metal parity, memory, and throughput scaling. Both need a downloaded model (`just download-model`). On a shared/busy host the recorded baseline ratio is the gate; only set `EMB_BENCH_REFERENCE=1` on a quiet reference machine. To compare against the base, run the same target in a detached worktree at `HEAD` (`git worktree add --detach /tmp/emb-base HEAD`, symlink `models/`) so uncommitted work is never stashed.
+- **Preset Lua edits.** Any byte change to a preset (`scripts/{laya,snake,pacman}.lua`, `website/repl/presets/*.lua`) changes its SHA1, and the site calls presets by that SHA1. Re-stamp with `just website-presets`, verify with `just website-presets-check`; CI runs `--check` and fails on drift. `website/repl/presets/*.lua` are symlinks into `scripts/`.
 
 ## Ruby client checks (`gems/emb`)
 
