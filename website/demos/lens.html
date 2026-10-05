@@ -222,7 +222,12 @@ const mech = mechanism(document.querySelector('[data-mech]'), [
 ]);
 mech.all();
 const layouts = {};
-let shown = A;
+/* A fragment names the lens, so a link can open the plate on either model. An
+ * unknown fragment leaves the default of minilm; only the switch writes it. */
+const initialModel = decodeURIComponent(location.hash.slice(1));
+let shown = initialModel === B ? B : A;
+document.querySelectorAll('[data-model]').forEach((o) =>
+  o.setAttribute('aria-pressed', String(o.getAttribute('data-model') === shown)));
 
 function svg(tag, attrs) {
   const node = document.createElementNS(NS, tag);
@@ -321,8 +326,16 @@ document.querySelectorAll('[data-model]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const model = btn.getAttribute('data-model');
     document.querySelectorAll('[data-model]').forEach((o) => o.setAttribute('aria-pressed', String(o === btn)));
+    history.replaceState(null, '', '#' + model);
     render(model, true);
   });
+});
+window.addEventListener('hashchange', () => {
+  const id = decodeURIComponent(location.hash.slice(1));
+  if (id !== A && id !== B) { return; }
+  document.querySelectorAll('[data-model]').forEach((o) =>
+    o.setAttribute('aria-pressed', String(o.getAttribute('data-model') === id)));
+  render(id, true);
 });
 
 g.manifest().then((m) => {
@@ -339,7 +352,7 @@ g.manifest().then((m) => {
   // x0/x1/y0/y1 undefined and every coordinate NaN.
   layouts[A] = Object.assign({}, la, fit(la.points));
   layouts[B] = Object.assign({}, lb, fit(lb.points));
-  render(A, false);
+  render(shown, false);
   return run();
 }).catch((err) => { setState(err.state || 'error', err.message); });
 

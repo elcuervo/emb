@@ -326,9 +326,26 @@ async function sample(btn) {
     setState(err.state || 'error', err.message);
   }
 }
-root.querySelectorAll('[data-sample]').forEach((btn) => btn.addEventListener('click', () => sample(btn)));
-const first = root.querySelector('[data-sample]');
-if (first) { first.setAttribute('aria-pressed', 'true'); sample(first); }
+/* A fragment names the sample by its basename, so a link can open the plate on
+ * the image it means. An unknown fragment leaves the first sample; only the
+ * switch writes it. */
+function sampleId(btn) {
+  return btn.getAttribute('data-sample').split('/').pop().replace(/\.[^.]+$/, '');
+}
+function sampleFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  return Array.prototype.find.call(root.querySelectorAll('[data-sample]'), (b) => sampleId(b) === id) || null;
+}
+root.querySelectorAll('[data-sample]').forEach((btn) => btn.addEventListener('click', () => {
+  history.replaceState(null, '', '#' + sampleId(btn));
+  sample(btn);
+}));
+window.addEventListener('hashchange', () => {
+  const btn = sampleFromHash();
+  if (btn) { sample(btn); }
+});
+const chosen = sampleFromHash() || root.querySelector('[data-sample]');
+if (chosen) { sample(chosen); }
 g.manifest().then(() => {}).catch(() => {});
 draw(null);
 

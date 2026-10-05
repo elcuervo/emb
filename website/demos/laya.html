@@ -692,7 +692,15 @@ const EXAMPLES = [
   { id: 'quickstart', label: 'Quickstart', blurb: 'The smallest round: one invoice, three typed questions, one call. Answered by the real typed-decisions checkpoint.' },
 ];
 
-let active = 'snake';
+/* A fragment names the example, so a link can open the plate on the loop or
+ * the round it means. An unknown fragment leaves the default; only the switch
+ * writes it, so a seed reset that re-mounts the same example never rewrites
+ * the URL. */
+function exampleFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  return EXAMPLES.some((e) => e.id === id) ? id : null;
+}
+let active = exampleFromHash() || 'snake';
 let inboxIndex = 0;
 
 /* ── the live loop ──────────────────────────────────────────────────────
@@ -1235,8 +1243,19 @@ EXAMPLES.forEach((example) => {
   // The `new` chip is decoration: aria-label keeps the mark out of the
   // button's accessible name, which stays the example's name.
   if (example.isNew) { btn.setAttribute('data-new', ''); btn.setAttribute('aria-label', example.label); }
-  btn.addEventListener('click', () => { if (example.id !== active) { mount(example.id); } });
+  btn.addEventListener('click', () => {
+    if (example.id === active) { return; }
+    history.replaceState(null, '', '#' + example.id);
+    mount(example.id);
+  });
   switchEl.appendChild(btn);
+});
+
+// An arriving fragment — a manually edited URL or a link — re-mounts here
+// rather than reloading the page.
+window.addEventListener('hashchange', () => {
+  const id = exampleFromHash();
+  if (id && id !== active) { mount(id); }
 });
 
 mount(active);

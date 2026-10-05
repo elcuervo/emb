@@ -409,13 +409,28 @@ async function run() {
   }
 }
 
+/* The order is a fragment, so a link can open the plate on either axis. The
+ * switch writes it and an arriving fragment re-places the marks; a fragment
+ * naming neither leaves the default of meaning untouched. */
+function setOrder(next, reflect) {
+  order = next;
+  document.querySelectorAll('[data-order]').forEach((other) =>
+    other.setAttribute('aria-pressed', String(other.getAttribute('data-order') === next)));
+  if (atlas && lastCentroid) { draw(); drawQuery(); showReadout(); }
+  if (reflect) { history.replaceState(null, '', '#' + next); }
+}
+function orderFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  return (id === 'meaning' || id === 'year') ? id : null;
+}
 document.querySelectorAll('[data-order]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    order = btn.getAttribute('data-order');
-    document.querySelectorAll('[data-order]').forEach((other) =>
-      other.setAttribute('aria-pressed', String(other === btn)));
-    if (atlas && lastCentroid) { draw(); drawQuery(); showReadout(); }
-  });
+  btn.addEventListener('click', () => { setOrder(btn.getAttribute('data-order'), true); });
+});
+const initialOrder = orderFromHash();
+if (initialOrder) { setOrder(initialOrder, false); }
+window.addEventListener('hashchange', () => {
+  const id = orderFromHash();
+  if (id) { setOrder(id, false); }
 });
 root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); run(); });
 
