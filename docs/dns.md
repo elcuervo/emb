@@ -140,6 +140,21 @@ annotations, plus the flag entries CLDR keeps with its derived annotations — a
 carries the Unicode licence (`Unicode-3.0`) and every source it was built from,
 with a digest each, beside the asset.
 
+## The upstream connection
+
+The zone holds one RESP connection to the emb server beside it, and it dials
+again whenever that connection is lost — emb closes one that has been idle for
+its `idle_timeout` (15 minutes by default), and a restart takes one away too.
+The redial reloads the composition preset, because the server that answers may be
+a restarted one, and the query that noticed the loss is retried once, so a caller
+never sees it. Only a failure of the connection is retried: a reply the server
+sent is returned as it is. One caller at a time uses the connection, since an
+exchange is a write, a flush, and a read on one socket.
+
+A zone that cannot reach its upstream at all still answers: it fails the query
+loudly (SERVFAIL on DNS, `502` on HTTP) rather than inventing a nearest neighbor,
+and it keeps refusing until the connection is back.
+
 ## Deploying
 
 The zone is a Fly app of its own (`dns/fly.toml`): one machine, one volume for
