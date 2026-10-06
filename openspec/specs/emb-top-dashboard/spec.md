@@ -298,3 +298,73 @@ polling and resume after a connection loss instead of exiting.
 
 - **WHEN** a loaded model has no recent traffic
 - **THEN** its row shows an idle state instead of a healthy or error verdict
+
+### Requirement: emb-top aligns its gauges to the per-model row grid
+
+`emb-top` SHALL lay the cache, CPU and memory gauges on the same column grid as
+the per-model rows: the cache gauge under the identity block, the CPU gauge under
+the metric block, and the memory gauge under the activity strip, each bar
+spanning the columns of the zone above it. The grid SHALL be a function of the
+terminal width alone, so it does not shift between rows or between polls.
+
+#### Scenario: Gauges share the row's columns
+
+- **WHEN** the dashboard renders per-model rows and the gauges below them
+- **THEN** each gauge bar starts at the same column as the row zone it sits under and spans that zone's width
+
+#### Scenario: The grid does not move when latency events lapse
+
+- **GIVEN** a model rendering its p50/p95 columns and a model falling back to its average latency
+- **WHEN** both rows repaint on the same poll
+- **THEN** their activity strips start at the same column and the gauges stay on the same grid
+
+#### Scenario: Narrow terminal drops columns without breaking the grid
+
+- **WHEN** the terminal is too narrow for every metric column
+- **THEN** the grid drops trailing metric columns, and the rows and gauges still share one grid without overflowing the terminal width
+
+### Requirement: emb-top keeps its readouts on fixed columns
+
+`emb-top` SHALL render every dynamic numeric readout — the health banner chips,
+the header's uptime and model count, the gauge captions, the connection line and
+the event ticker — in a fixed-width column, so a value growing under load moves
+no glyph and no text after it. The health status label SHALL occupy a fixed width
+so a verdict change does not shift the chips that follow it.
+
+#### Scenario: Banner chips do not shuffle under load
+
+- **WHEN** the error ratio, p95 latency, CPU and cache values grow between polls
+- **THEN** every banner chip keeps its column and no chip after a growing value moves
+
+#### Scenario: Gauge values keep their column
+
+- **WHEN** a gauge's value grows (for example `0.0%` to `63.9%`)
+- **THEN** the number and its unit stay in the same columns
+
+#### Scenario: A status change does not shift the chips
+
+- **WHEN** the banner's verdict changes between statuses of different text width
+- **THEN** the chips after the verdict keep their columns
+
+#### Scenario: A narrow band shrinks the value column
+
+- **WHEN** a gauge's band is too narrow for the full-width value column
+- **THEN** the value column shrinks with the band and the line does not overflow the terminal
+
+### Requirement: emb-top pins each labelled metric's label column
+
+`emb-top` SHALL render every labelled per-model metric (`p50`, `p95`, the `avg`
+fallback and `err`) as a fixed label followed by its value, so the label keeps
+its column whatever the value's width and whichever metric the row is showing. A
+model with no recent requests SHALL therefore align its `avg` label with a busy
+model's `p50` label.
+
+#### Scenario: An idle row lines up with a busy row
+
+- **WHEN** one model renders `avg` from its lifetime average and another renders `p50` from recent events
+- **THEN** both labels start at the same column, and their `err` labels do too
+
+#### Scenario: A growing value moves no label
+
+- **WHEN** a metric's value grows between polls (for example `3µs` to `16.9ms`)
+- **THEN** its label and the labels after it keep their columns

@@ -697,31 +697,31 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
            Do not hand-edit the frame, the caption or the figures. -->
       <figure class="topviz topviz--doc">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-1f8a0bf1.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.1 · 127.0.0.1:16379 · uptime 29s · 4 models · poll 1s
-● HEALTHY  connected │ err 0.0% │ p95 26.7ms │ cpu 18% │ cache 50%
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-4fdc7a85.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.1 · 127.0.0.1:16379 · uptime 29s    ·  4 models · poll 1s
+● HEALTHY   connected │ err   0.0% │ p95 53.9ms  │ cpu  19% │ cache  48%
 ╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
-│     │                                  ╭╮ ╭╮  │╰╯╰──╮  ││                                       ░░            ░░ │
-│  126│                              ╭╮ ╭╯╰─╯╰╮╭╯     │  ││                  ░░░░░░░░░░░░░░░░░░░░░░░██████████████ │
-│     │                              │╰─╯     ││      ╰─ ││                  ███████████████████████░░░░░░░░░░░░░░ │
-│ 62.8│                             ╭╯        ╰╯         ││         ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│     │                             │                    ││ ████████░░░░█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  0.0│                          ───╯                    ││ p50–p99 ░  p95 █                                       │
+│     │                                ╭──╮╭╯╰──╯╰╯╰╯ ╰╮ ││                                       ░░               │
+│  104│                                │  ╰╯           ╰ ││                                     ░░░░░░░░░░░░░░░░░░ │
+│     │                             ╭──╯                 ││                              ░░░░░░░██████████████████ │
+│ 51.8│                            ╭╯                    ││                ░░███████████████████░░░░░░░░░░░░░░░░░░ │
+│     │                            │                     ││ █████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  0.0│                          ──╯                     ││ p50–p99 ░  p95 █                                       │
 ╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
-● bge-small     384d·cls·fp32        10.0 r/s      340 t/s     p50 2µs p95 27.0ms↑     err 0   █████████████████████████
-● e5-small      384d·mean·fp32       44.9 r/s     1.2k t/s   p50 18.0ms  p95 28.7ms      err 0   ███████████████████████
-● jina-small    512d·mean·fp32       20.0 r/s      979 t/s    p50 6.5ms p95 22.2ms↑     err 0   ████████████████████████
-● minilm        384d·mean·fp32       31.9 r/s      547 t/s     p50 3µs p95 10.0ms↑     err 0   █████████████████████████
+● bge-small     384d·cls·fp32        14.9 r/s      508 t/s p50 3µs      p95 59.0ms   err 0       ███████████████████████
+● e5-small      384d·mean·fp32       44.8 r/s     1.2k t/s p50 18.3ms   p95 88.9ms   err 0       ███████████████████████
+● jina-small    512d·mean·fp32       18.9 r/s      927 t/s p50 12.0ms   p95 55.4ms   err 0       ███████████████████████
+● minilm        384d·mean·fp32       23.9 r/s      411 t/s p50 3µs      p95 17.3ms   err 0       ███████████████████████
   rows 1–4 of 4 · req/s per model · older ████████ newer
-cache   49.5%                          cpu     184%                           mem     1.1kMB
-█████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
-█████████████████████████████████████  █████████████████████████████████████  █████████████████████████████████████
-  conns 6 · active 4 · goroutines 29 · truncated texts/pairs/images 0/0/0
-  event e5-small · 1 texts · 5.7ms ✓
+cache   48.3%                    cpu    191%                                                     mem  1.1kMB
+████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
+████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
+  conns  2 · active  0 · goroutines  25 · truncated texts/pairs/images   0/  0/  0
+  event bge-small ·   1 texts · 15.5ms  ✓
 q quit · p pause · r reset · j/k scroll · ? help</pre>
         </div>
         <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-05 · emb-top v0.4.1 · 4 models · 127.0.0.1:16379</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 210 requests/s, 6.3k tokens/s, p95 latency 20.0ms, cache hit rate 37%, CPU 396%, 1057MB resident. Per model: bge-small 31/s (avg 6.3ms, dim 384, cls, fp32); e5-small 84/s (avg 5.7ms, dim 384, mean, fp32); jina-small 43/s (avg 7.3ms, dim 512, mean, fp32); minilm 52/s (avg 1.9ms, dim 384, mean, fp32).</p>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 160 requests/s, 4.8k tokens/s, p95 latency 35.7ms, cache hit rate 43%, CPU 299%, 1115MB resident. Per model: bge-small 22/s (avg 8.9ms, dim 384, cls, fp32); e5-small 66/s (avg 8.6ms, dim 384, mean, fp32); jina-small 31/s (avg 11.5ms, dim 512, mean, fp32); minilm 41/s (avg 2.7ms, dim 384, mean, fp32).</p>
       </figure>
 
       <p class="doc-prose">
@@ -1001,8 +1001,22 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
           <span class="t-cmd">max_len</span>: <span class="t-num">512</span>
           <span class="t-cmd">head_max_len</span>: <span class="t-num">192</span>
           <span class="t-cmd">temperature</span>: <span class="t-dim">[</span><span class="t-num">1.6</span>, <span class="t-num">1.25</span>, <span class="t-num">1.98</span><span class="t-dim">]</span>
-          <span class="t-cmd">temperature_by_options</span>: <span class="t-dim">{</span> <span class="t-str">"choice:2"</span>: <span class="t-num">1.9</span>, <span class="t-str">"noul:2"</span>: <span class="t-num">1.98</span> <span class="t-dim">}</span></pre>
+          <span class="t-cmd">temperature_by_options</span>: <span class="t-dim">{</span> <span class="t-str">"choice:2"</span>: <span class="t-num">1.9</span>, <span class="t-str">"noul:2"</span>: <span class="t-num">1.98</span> <span class="t-dim">}</span>
+        <span class="t-cmd">warm</span>:                <span class="t-dim"># optional: replies computed once at boot</span>
+          <span class="t-dim">-</span> <span class="t-cmd">args</span>: <span class="t-dim">[</span><span class="t-str">'{"category": …}'</span><span class="t-dim">]</span>
+            <span class="t-cmd">texts</span>: <span class="t-dim">[</span><span class="t-str">'{"from": "a@b", …}'</span><span class="t-dim">]</span></pre>
       </figure>
+
+      <p class="doc-prose">
+        <code>warm</code> is optional and changes no answer. Each text in a group is
+        evaluated once through the same scripted path after the model loads, under
+        that group's <code>args</code>, so its reply is already in the reply cache when
+        a client sends the same state and arguments. It does not gate readiness, and
+        it stops as soon as the model has served a client request since the previous
+        text, so a visitor never queues behind the whole declared set. A payload that
+        fails is logged and skipped; a state that was not declared answers exactly as
+        it did before.
+      </p>
 
       <h3 class="doc-h3">The wire contract</h3>
       <p class="doc-prose">

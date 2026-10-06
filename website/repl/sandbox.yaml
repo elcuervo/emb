@@ -16,9 +16,9 @@ listen: "127.0.0.1:6379"
 # runs one more than once — and every repeat without a cache re-runs inference
 # on one shared vCPU. 64 MB holds ~43k cached vectors, and the bridge's own work
 # ceiling (20,000 texts per window) can produce only ~29 MB of them, so the
-# budget never binds. It is written out rather than `auto` because this machine
-# is 1.92 GiB with ~0.45 GiB free once both models are warm, and `auto` (13% of
-# RAM) would claim 268 MB of that.
+# budget never binds. It is written out rather than `auto` because `auto` (13%
+# of RAM) would claim far more on this machine than the demo can ever use, and
+# the budget that matters here is the volume the snapshot writes, not RAM.
 cache: 64MB
 
 # The warm cache lives on the volume beside the models, so a restart reloads it
@@ -215,12 +215,13 @@ models:
     tokenizer: /data/models/laya-typed/tokenizer.json
     max_length: 1024
     workers: 1
-    # One thread each: the checkpoint is a single forward pass per request and
-    # the bridge serializes upstream work, so intra-op parallelism buys latency
-    # it cannot use while multiplying ONNX Runtime's per-thread memory during
-    # the (expensive) graph load. Keeps the fp16 export inside the sandbox's
-    # memory budget.
-    intra_op_threads: 1
+    # Intra-op threads matter here and inter-op threads do not: the graph is a
+    # chain with two outputs, so the only parallelism is within one request's
+    # matmuls. The bridge serializes upstream work, which means requests do not
+    # overlap — it does not mean a single request cannot use the cores. Four
+    # threads on the four-vCPU machine (~4x the one-thread rate) with the one
+    # worker the serialized bridge can use.
+    intra_op_threads: 4
     inter_op_threads: 1
     script_preload: true
     scripts:
@@ -238,3 +239,24 @@ models:
             "choice:11+": 0.10058280825614929
             "score:3-5": 1.2514300346374512
             "noul:2": 1.983399510383606
+        warm:
+          # The plate's fixed payloads, mirrored from website/demos/laya.html:
+          # the Quickstart round first, then the Inbox tickets in the page's own
+          # order, so the payloads a visitor is likeliest to open are cached before
+          # the warm can yield to traffic. A state or question edited on the page
+          # without editing here is a cache miss, never a wrong answer.
+          - args:
+              - '{"department":{"type":"choice","instructions":"Which department should handle this email?","criteria":{"billing":"invoices, payments, refunds","technical":"bugs, outages, system errors","sales":"pricing, new contracts","other":"everything else"}},"urgency":{"type":"score","instructions":"How urgent is this request?","criteria":["not urgent","soon","critical deadline or blocking issue"]},"refund":{"type":"noul","instructions":"Does the customer ask for money back?"}}'
+            texts:
+              - '{"from": "user@example.com", "subject": "Duplicate charge on invoice #4411", "body": "We were billed twice for March. Please refund the duplicate today or we will cancel our plan."}'
+          - args:
+              - '{"category":{"type":"choice","instructions":"Which team should handle the email in `body`?","criteria":{"billing":"invoices, payments, refunds","technical":"bugs, outages, integrations","sales":"pricing, demos, new purchases","security":"phishing, scams, account compromise","hr":"hiring, leave, payroll","other":"none of the above"}},"is_spam":{"type":"noul","instructions":"Is this email unsolicited spam or bulk marketing?"},"is_phishing":{"type":"noul","instructions":"Is this email a phishing or scam attempt to steal money, credentials, or personal data?","criteria":{"true":"phishing, scam, or fraud","false":"a legitimate email"}},"urgency":{"type":"score","instructions":"How urgent is the request in `body`?","criteria":["no time pressure","needs attention soon","blocking issue or hard deadline"]},"needs_reply":{"type":"noul","instructions":"Does the sender expect a reply?"}}'
+            texts:
+              - '{"from": "hello@world", "subject": "duplicate charge on invoice", "body": "we were charged twice for the invoice please refund the money back today"}'
+              - '{"from": "b.winters@example.com", "subject": "refund my first month", "body": "please refund the first month or i am cancelling today"}'
+              - '{"from": "ops@startup.io", "subject": "prod cluster down after deploy", "body": "after the latest deploy our production cluster returns 502 for every request and customers are leaving"}'
+              - '{"from": "buyer@corp.com", "subject": "pricing for fifty seats", "body": "we are evaluating you against two vendors, can you send enterprise pricing for fifty seats and a demo this week"}'
+              - '{"from": "security@verification.example", "subject": "confirm your password", "body": "your account was locked, send the password to unlock it immediately"}'
+              - '{"from": "user@gmail.com", "subject": "someone logged into my account", "body": "i got a login alert from a country i have never visited and my account looks compromised, please help"}'
+              - '{"from": "ana@company.com", "subject": "missing march payslip", "body": "my march payslip never arrived and the payroll portal shows nothing, i have a mortgage due friday"}'
+              - '{"from": "cliente@ejemplo.com", "subject": "nos cobraron dos veces", "body": "se nos cobraron dos veces la factura de marzo, pedimos el reembolso hoy"}'

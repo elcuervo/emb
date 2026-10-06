@@ -535,13 +535,10 @@ func (m *tuiModel) layoutCharts() {
 	}
 	chartW, chartH := streamDims(m.width, m.height)
 	m.reqChart.Resize(chartW, chartH)
-	gw := (m.width - 8) / 3
-	if gw < 10 {
-		gw = 10
-	}
-	m.cacheBar.Resize(gw, 2)
-	m.cpuBar.Resize(gw, 2)
-	m.memBar.Resize(gw, 2)
+	idW, numW, stripW := newRowLayout(m.width).gaugeBands()
+	m.cacheBar.Resize(idW, 2)
+	m.cpuBar.Resize(numW, 2)
+	m.memBar.Resize(stripW, 2)
 	m.reqChart.Draw()
 	m.cacheBar.Draw()
 	m.cpuBar.Draw()
@@ -583,14 +580,15 @@ func (m tuiModel) headerView() string {
 	p := m.sampler.Latest
 	uptime := ""
 	if p.UptimeSecs > 0 {
-		uptime = fmt.Sprintf("uptime %s", fmtDuration(p.UptimeSecs))
+		uptime = fmt.Sprintf("uptime %-6s", fmtDuration(p.UptimeSecs))
 	}
 	// Health (connection, rates, latency) lives in the banner immediately
-	// below; the header is identity only, so it does not repeat it.
+	// below; the header is identity only, so it does not repeat it. The uptime
+	// and model count are padded so a growing value cannot shift the line.
 	line := headerStyle.Render("emb-top v"+version) +
 		" · " + labelStyle.Render(m.client.Addr()) +
 		" · " + uptime +
-		" · " + fmt.Sprint(p.RegisteredModels) + " models" +
+		" · " + fmt.Sprintf("%2d models", p.RegisteredModels) +
 		" · poll " + m.interval.String()
 	if m.paused {
 		line += " " + warnStyle.Render("(paused)")
@@ -667,19 +665,77 @@ func modelColorIdx(name string, order []string) string {
 // Fixed column widths (plain-text) for per-model metric segments, so a value
 // changing width cannot shift the columns after it.
 const (
+	colName = 13
 	colRate = 12
 	colLat  = 12
 	colErr  = 10
 	colMeta = 16
 )
 
+// rowLayout is the dashboard's single column grid: the identity block, the
+// metric slots that fit, and the activity strip. It is a pure function of the
+// terminal width, so every model row and the gauge row below them share it and
+// a value changing between polls can never move a column.
+type rowLayout struct {
+	idW, numW, stripW         int
+	rate, tok, lat, lat2, err bool
+}
+
+func newRowLayout(width int) rowLayout {
+	if width <= 0 {
+		width = 120
+	}
+	l := rowLayout{idW: 2 + colName + 1 + colMeta}
+	row := l.idW
+	budget := width - minStrip - 2
+	add := func(w int) bool {
+		if row+1+w > budget {
+			return false
+		}
+		row += 1 + w
+		return true
+	}
+	l.rate = add(colRate)
+	l.tok = add(colRate)
+	l.lat = add(colLat)
+	l.lat2 = add(colLat)
+	l.err = add(colErr)
+	l.numW = row - l.idW
+	l.stripW = width - row - 2
+	if l.stripW < minStrip {
+		l.stripW = minStrip
+	}
+	return l
+}
+
+// gaugeBands is the grid the gauges sit on: the identity block, the metric
+// block (without its leading separator) and the strip.
+func (l rowLayout) gaugeBands() (int, int, int) {
+	num := l.numW - 1
+	if num < 1 {
+		num = 1
+	}
+	return l.idW, num, l.stripW
+}
+
 // fixedCol renders plain text right-aligned in a constant-width column and
 // returns the styled segment plus the column width it occupies.
 func fixedCol(style lipgloss.Style, plain string, width int) (string, int) {
-	if n := width - len(plain); n > 0 {
+	if n := width - lipgloss.Width(plain); n > 0 {
 		plain = strings.Repeat(" ", n) + plain
 	} else if n < 0 {
 		plain = string([]rune(plain)[:width])
+	}
+	return style.Render(plain), width
+}
+
+// fixedLabeledCol renders a label and its value in a constant-width column,
+// the label first so it keeps its column whatever the value's width or which
+// metric it is (p50, p95 or the avg fallback).
+func fixedLabeledCol(style lipgloss.Style, label, value string, width int) (string, int) {
+	plain := label + " " + value
+	if n := width - lipgloss.Width(plain); n > 0 {
+		plain += strings.Repeat(" ", n)
 	}
 	return style.Render(plain), width
 }
@@ -720,10 +776,11 @@ func (m tuiModel) modelsView() []string {
 	vis := m.visibleRows()
 	_, _, hist := m.sampler.Snapshot()
 	maxV := maxReqRate(rows, hist)
+	l := newRowLayout(m.width)
 
 	out := make([]string, 0, vis+1)
 	for i := m.scroll; i < m.scroll+vis && i < len(rows); i++ {
-		out = append(out, m.modelRow(rows[i], hist[rows[i]], maxV))
+		out = append(out, m.modelRow(rows[i], hist[rows[i]], maxV, l))
 	}
 	out = append(out, m.listLegend(len(rows)))
 	return out
@@ -733,7 +790,7 @@ func (m tuiModel) modelsView() []string {
 // metadata, current metrics and the activity strip. The strip always renders
 // (the numeric segments yield first), and the row's height never varies, so a
 // missing EMB.INFO reply cannot shift the rows below it.
-func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64) string {
+func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64, l rowLayout) string {
 	mp := m.sampler.LatestModels[name]
 	mh := modelHealth(pts)
 
@@ -743,7 +800,7 @@ func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64) s
 	}
 	row := dot + " " +
 		lipgloss.NewStyle().Foreground(lipgloss.Color(modelColorIdx(name, m.modelOrder))).Bold(true).
-			Width(13).Render(trimModel(name))
+			Width(colName).Render(trimModel(name))
 
 	meta := compactMeta(m.sampler.RawModels()[name])
 	if len(meta) > colMeta {
@@ -751,54 +808,52 @@ func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64) s
 	}
 	row += " " + metaStyle.Width(colMeta).Render(meta)
 
-	// Fit numeric segments while they fit, reserving room for the strip so it
-	// always renders; columns never shift mid-row as values change width.
-	budget := m.width
-	if budget <= 0 {
-		budget = 120
+	// Segments sit on the shared layout, which reserved its slots from the
+	// width alone: a missing latency reply blanks a slot instead of moving the
+	// strip, so no column ever shifts between rows or polls.
+	add := func(seg string) { row += " " + seg }
+	if l.rate {
+		seg, _ := fixedCol(labelStyle, fmtRate(mp.ReqRate)+" r/s", colRate)
+		add(seg)
 	}
-	budget -= minStrip + 2
-	appendSeg := func(seg string, width int) {
-		if lipgloss.Width(row)+1+width > budget {
-			return
+	if l.tok {
+		seg, _ := fixedCol(labelStyle, fmtRate(mp.TokRate)+" t/s", colRate)
+		add(seg)
+	}
+	if l.lat {
+		latArrow := " "
+		if mh.latRise {
+			latArrow = "↑"
 		}
-		row += " " + seg
+		if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
+			seg, _ := fixedLabeledCol(dimStyle, "p50", fmtLatency(p50), colLat)
+			add(seg)
+			if l.lat2 {
+				seg2, _ := fixedLabeledCol(labelStyle, "p95", fmtLatency(p95)+latArrow, colLat)
+				add(seg2)
+			}
+		} else {
+			seg, _ := fixedLabeledCol(dimStyle, "avg", fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
+			add(seg)
+			if l.lat2 {
+				add(strings.Repeat(" ", colLat))
+			}
+		}
 	}
-	rateSeg, rateW := fixedCol(labelStyle, fmtRate(mp.ReqRate)+" r/s", colRate)
-	appendSeg(rateSeg, rateW)
-	tokSeg, tokW := fixedCol(labelStyle, fmtRate(mp.TokRate)+" t/s", colRate)
-	appendSeg(tokSeg, tokW)
+	if l.err {
+		errArrow := " "
+		if mh.errRise {
+			errArrow = "↑"
+		}
+		style := dimStyle
+		if mh.errRise || mh.status >= healthDegraded {
+			style = errStyle
+		}
+		seg, _ := fixedLabeledCol(style, "err", fmt.Sprintf("%d%s", mp.Errors, errArrow), colErr)
+		add(seg)
+	}
 
-	latArrow := " "
-	if mh.latRise {
-		latArrow = "↑"
-	}
-	if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
-		p50Seg, p50W := fixedCol(dimStyle, "p50 "+fmtLatency(p50), colLat)
-		appendSeg(p50Seg, p50W)
-		p95Seg, p95W := fixedCol(labelStyle, "p95 "+fmtLatency(p95)+latArrow, colLat)
-		appendSeg(p95Seg, p95W)
-	} else {
-		avgSeg, avgW := fixedCol(dimStyle, "avg "+fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
-		appendSeg(avgSeg, avgW)
-	}
-
-	errArrow := " "
-	if mh.errRise {
-		errArrow = "↑"
-	}
-	errText := fmt.Sprintf("err %d%s", mp.Errors, errArrow)
-	errSeg, errW := fixedCol(dimStyle, errText, colErr)
-	if mh.errRise || mh.status >= healthDegraded {
-		errSeg, errW = fixedCol(errStyle, errText, colErr)
-	}
-	appendSeg(errSeg, errW)
-
-	sw := m.width - lipgloss.Width(row) - 2
-	if sw < minStrip {
-		sw = minStrip
-	}
-	return row + "  " + stripView(pts, sw, maxV)
+	return row + "  " + stripView(pts, l.stripW, maxV)
 }
 
 // listLegend is the list's single trailing line: the visible row range and the
@@ -843,20 +898,39 @@ func compactMeta(ms *embtop.ModelStats) string {
 
 func (m tuiModel) gaugesView() []string {
 	p := m.sampler.Latest
+	// The bars were sized to the row grid, and the separators below are the
+	// row's own (one column after identity, two before the strip), so each
+	// gauge spans exactly the columns of the zone above it.
+	idW, numW, stripW := newRowLayout(m.width).gaugeBands()
 	barLine := lipgloss.JoinHorizontal(lipgloss.Top,
-		caption("cache", m.cacheBar.View(), p.CacheHitRate, "%"),
-		caption("cpu", m.cpuBar.View(), p.CPUPercent, "%"),
-		caption("mem", m.memBar.View(), float64(p.MemMB), "MB"),
+		caption("cache", m.cacheBar.View(), p.CacheHitRate, "%", idW),
+		" ",
+		caption("cpu", m.cpuBar.View(), p.CPUPercent, "%", numW),
+		"  ",
+		caption("mem", m.memBar.View(), float64(p.MemMB), "MB", stripW),
 	)
-	texts := fmt.Sprintf("conns %d · active %d · goroutines %d · truncated texts/pairs/images %d/%d/%d",
+	texts := fmt.Sprintf("conns %2d · active %2d · goroutines %3d · truncated texts/pairs/images %3d/%3d/%3d",
 		p.Conns, p.Active, p.Goroutines, p.TruncatedTexts, p.TruncatedPairs, p.TruncatedImages)
 	return []string{barLine, dimStyle.Render("  " + texts)}
 }
 
-func caption(title, barView string, val float64, unit string) string {
-	head := labelStyle.Render(fmt.Sprintf("%-7s %s%s", title, fmtRate(val), unit))
-	// Pad on the right so adjacent gauges read as separate bars.
-	return lipgloss.NewStyle().PaddingRight(2).Render(head + "\n" + barView)
+func caption(title, barView string, val float64, unit string, width int) string {
+	// The value sits in a fixed-width column so a growing rate moves no glyph;
+	// the column shrinks with a narrow band instead of overflowing it.
+	valW := width - len(title) - 1
+	if valW > 7 {
+		valW = 7
+	}
+	if valW < 1 {
+		valW = 1
+	}
+	head := title + " " + fmt.Sprintf("%*s", valW, fmtRate(val)+unit)
+	if pad := width - len(head); pad > 0 {
+		head += strings.Repeat(" ", pad)
+	} else if pad < 0 {
+		head = head[:width]
+	}
+	return labelStyle.Render(head) + "\n" + barView
 }
 
 func (m tuiModel) tickerView() string {
@@ -871,8 +945,8 @@ func (m tuiModel) tickerView() string {
 	}
 	line := "  " + dimStyle.Render("event") + " " +
 		labelStyle.Render(trimModelLen(ev.Model, 14)) +
-		" · " + fmt.Sprintf("%d texts", ev.Texts) +
-		" · " + lat + " " + mark
+		" · " + fmt.Sprintf("%3d texts", ev.Texts) +
+		" · " + fmt.Sprintf("%-7s", lat) + " " + mark
 	if !m.connected {
 		line = errStyle.Render("✗ connection lost — retrying") + "  " + line
 	}
@@ -914,7 +988,7 @@ func (m tuiModel) helpView() string {
 
 // ---- formatting helpers ----
 
-func trimModel(s string) string { return trimModelLen(s, 13) }
+func trimModel(s string) string { return trimModelLen(s, colName) }
 
 func trimModelLen(s string, n int) string {
 	if len(s) > n {

@@ -124,6 +124,14 @@ func modelOf(key string) string {
 	return key
 }
 
+// embeddingCacheKey reports whether a cache key addresses a float32 embedding
+// vector, whose value is the model's dimension times four bytes. Script replies
+// (any other key shape) share the same cache map with arbitrary-length JSON
+// values, so they cannot be length-checked against a dimension.
+func embeddingCacheKey(key string) bool {
+	return strings.HasPrefix(key, "txt:") || strings.HasPrefix(key, "img:")
+}
+
 const (
 	sha1HexLen   = 40
 	sha256HexLen = 64

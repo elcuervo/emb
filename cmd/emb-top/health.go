@@ -67,7 +67,7 @@ func health(in healthInput) (healthStatus, []signal) {
 		return healthNoData, sigs
 	}
 
-	errSig := signal{text: fmt.Sprintf("err %.1f%%", in.errRatio*100), level: healthHealthy}
+	errSig := signal{text: fmt.Sprintf("err %5.1f%%", in.errRatio*100), level: healthHealthy}
 	switch {
 	case in.errRatio > errRatioCritical:
 		errSig.level = healthCritical
@@ -77,7 +77,7 @@ func health(in healthInput) (healthStatus, []signal) {
 	sigs = append(sigs, errSig)
 
 	if in.p95Us > 0 {
-		latSig := signal{text: "p95 " + fmtLatency(in.p95Us), level: healthHealthy}
+		latSig := signal{text: fmt.Sprintf("p95 %-7s", fmtLatency(in.p95Us)), level: healthHealthy}
 		if in.baselineUs > 0 {
 			ratio := float64(in.p95Us) / float64(in.baselineUs)
 			switch {
@@ -90,7 +90,7 @@ func health(in healthInput) (healthStatus, []signal) {
 		sigs = append(sigs, latSig)
 	}
 
-	cpuSig := signal{text: fmt.Sprintf("cpu %.0f%%", in.cpuPct), level: healthHealthy}
+	cpuSig := signal{text: fmt.Sprintf("cpu %3.0f%%", in.cpuPct), level: healthHealthy}
 	switch {
 	case in.cpuPct > cpuCriticalPct:
 		cpuSig.level = healthCritical
@@ -100,7 +100,7 @@ func health(in healthInput) (healthStatus, []signal) {
 	sigs = append(sigs, cpuSig)
 
 	if in.hasCache {
-		cacheSig := signal{text: fmt.Sprintf("cache %.0f%%", in.cachePct), level: healthHealthy}
+		cacheSig := signal{text: fmt.Sprintf("cache %3.0f%%", in.cachePct), level: healthHealthy}
 		switch {
 		case in.cachePct < cacheCriticalPct:
 			cacheSig.level = healthCritical
@@ -167,7 +167,7 @@ func (m tuiModel) bannerView() string {
 		}
 		chips = append(chips, styleFor(s.level).Render(text))
 	}
-	line := dot + " " + headerStyle.Render(healthLabel(st)) + "  " +
+	line := dot + " " + headerStyle.Render(fmt.Sprintf("%-8s", healthLabel(st))) + "  " +
 		strings.Join(chips, dimStyle.Render(" │ "))
 
 	max := m.width

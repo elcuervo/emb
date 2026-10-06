@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/elcuervo/emb/internal/embtop"
 )
 
@@ -17,14 +19,14 @@ func TestHealthVerdicts(t *testing.T) {
 		chip string
 	}{
 		{"no data", healthInput{connected: true, polls: 1}, healthNoData, ""},
-		{"healthy", healthInput{connected: true, polls: 5}, healthHealthy, "err 0.0%"},
-		{"errors degrade", healthInput{connected: true, polls: 5, errRatio: 0.02}, healthDegraded, "err 2.0%"},
-		{"errors critical", healthInput{connected: true, polls: 5, errRatio: 0.10}, healthCritical, "err 10.0%"},
-		{"cpu critical", healthInput{connected: true, polls: 5, cpuPct: 97}, healthCritical, "cpu 97%"},
-		{"latency ok", healthInput{connected: true, polls: 5, p95Us: 1500, baselineUs: 1000}, healthHealthy, "p95 1.5ms"},
-		{"latency degrade", healthInput{connected: true, polls: 5, p95Us: 3000, baselineUs: 1000}, healthDegraded, "p95 3.0ms"},
-		{"latency critical", healthInput{connected: true, polls: 5, p95Us: 5000, baselineUs: 1000}, healthCritical, "p95 5.0ms"},
-		{"cache degrade", healthInput{connected: true, polls: 5, hasCache: true, cachePct: 25}, healthDegraded, "cache 25%"},
+		{"healthy", healthInput{connected: true, polls: 5}, healthHealthy, "err   0.0%"},
+		{"errors degrade", healthInput{connected: true, polls: 5, errRatio: 0.02}, healthDegraded, "err   2.0%"},
+		{"errors critical", healthInput{connected: true, polls: 5, errRatio: 0.10}, healthCritical, "err  10.0%"},
+		{"cpu critical", healthInput{connected: true, polls: 5, cpuPct: 97}, healthCritical, "cpu  97%"},
+		{"latency ok", healthInput{connected: true, polls: 5, p95Us: 1500, baselineUs: 1000}, healthHealthy, "p95 1.5ms  "},
+		{"latency degrade", healthInput{connected: true, polls: 5, p95Us: 3000, baselineUs: 1000}, healthDegraded, "p95 3.0ms  "},
+		{"latency critical", healthInput{connected: true, polls: 5, p95Us: 5000, baselineUs: 1000}, healthCritical, "p95 5.0ms  "},
+		{"cache degrade", healthInput{connected: true, polls: 5, hasCache: true, cachePct: 25}, healthDegraded, "cache  25%"},
 		{"disconnected", healthInput{connected: false, polls: 5}, healthCritical, "reconnecting"},
 	}
 	for _, tc := range cases {
@@ -43,6 +45,23 @@ func TestHealthVerdicts(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s: missing chip %q in %+v", tc.name, tc.chip, sigs)
+		}
+	}
+}
+
+// TestHealthChipsKeepFixedWidth guards the banner against text jumps: a chip's
+// width must not change as its value grows, or every chip after it shifts.
+func TestHealthChipsKeepFixedWidth(t *testing.T) {
+	low := healthInput{connected: true, polls: 5, p95Us: 1200, baselineUs: 1200, hasCache: true, cachePct: 1}
+	high := healthInput{connected: true, polls: 5, errRatio: 0.99, p95Us: 120000, baselineUs: 1200, cpuPct: 293, hasCache: true, cachePct: 100}
+	_, a := health(low)
+	_, b := health(high)
+	if len(a) != len(b) {
+		t.Fatalf("chip count changed: %d vs %d", len(a), len(b))
+	}
+	for i := range a {
+		if wa, wb := lipgloss.Width(a[i].text), lipgloss.Width(b[i].text); wa != wb {
+			t.Errorf("chip %d width changed with its value: %q (%d) vs %q (%d)", i, a[i].text, wa, b[i].text, wb)
 		}
 	}
 }

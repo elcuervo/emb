@@ -537,8 +537,9 @@ func (s *Server) admitQuarantine(model string, entry *registry.ModelEntry) {
 	fp, err := entry.Fingerprint()
 	if err != nil || fp != q.fingerprint {
 		// Model files changed since the snapshot was written (or became
-		// unreadable): the restored embeddings no longer match and are unsafe
+		// unreadable): the restored entries no longer match and are unsafe
 		// to serve, so they are discarded.
+		log.Printf("snapshot: discarding %d quarantined entries for %q: fingerprint %q != snapshot %q (err=%v)", len(q.entries), model, fp, q.fingerprint, err)
 		return
 	}
 	for _, e := range q.entries {
