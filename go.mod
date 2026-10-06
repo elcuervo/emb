@@ -9,6 +9,7 @@ require (
 	github.com/daulet/tokenizers v1.27.0
 	github.com/docker/go-units v0.5.0
 	github.com/kelindar/simd v1.2.0
+	github.com/miekg/dns v1.1.73
 	github.com/muesli/termenv v0.16.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/tidwall/redcon v1.6.2
@@ -46,10 +47,11 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260908163034-4bcc4b2ee518 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
 )
 

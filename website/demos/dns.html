@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the zone — a DNS name is a sentence, a TXT record is the answer</title>
+<link rel="canonical" href="https://emb.is/demos/dns.html">
+<meta name="description" content="dns.emb.is, a DNS zone where every name is a sentence: the query, the ranked emoji, and the same answer printed twice — the escaped TXT data a resolver hands back and the glyph it stands for.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the zone — a DNS name is a sentence, a TXT record is the answer">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Semantic retrieval over DNS: every name under dns.emb.is is a query, and the reply is one TXT record per ranked emoji.">
+<meta property="og:url" content="https://emb.is/demos/dns.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the zone — a DNS name is a sentence, a TXT record is the answer">
+<meta name="twitter:description" content="Semantic retrieval over DNS: every name under dns.emb.is is a query, and the reply is one TXT record per ranked emoji.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything that explains it — the grammar, the reply shape, and the exact commands — is static and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">V.</span>The zone</h1>
+          <p class="plate__teaches">
+            Every name under <b>dns.emb.is</b> is a query, and the reply is one
+            <b>TXT record</b> per ranked result. The label is the sentence, the
+            record is the answer, and the working is printed twice: the escaped
+            bytes a resolver hands back beside the glyph they stand for.
+          </p>
+          <p class="tldr">A DNS name is a sentence; the emoji whose description the model ranks nearest is the reply. `dig` escapes it, so the plate shows both forms.</p>
+        </div>
+        <div>
+          <p class="fig"><b>THE ZONE</b>
+            · <b data-fig-zone>dns.emb.is</b>
+            · <b data-fig-model>emojiml</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b data-fig-entries>—</b> emoji
+            · <b data-fig-ttl>—</b> s TTL
+            · <b>one</b> record per result</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ──────────────────────────────────────── WHAT YOU ARE LOOKING AT -->
+  <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+      <p class="block__deck">Every name strictly beneath <span class="t-cmd">dns.emb.is</span> is a query. The name's labels are the words of a sentence — <span class="t-cmd">i.lost.my.job.dns.emb.is</span> — and <span class="t-cmd">+</span> and <span class="t-cmd">-</span> separate the terms a query composes. A glyph is a way of writing its vocabulary entry, so <span class="t-cmd">🦈.dns.emb.is</span> and <span class="t-cmd">shark.dns.emb.is</span> are the same query, and <span class="t-cmd">🦈-🐟+🐦</span> is the algebra the joke started as.</p>
+      <p class="block__deck">The reply is one <span class="t-cmd">TXT</span> record per ranked result, and the record carries the glyph and nothing else: no score, no vocabulary name. A record is a value a resolver caches for its TTL and answers other people's questions from, so it holds the answer rather than the working. That working — the name, the similarity, the escaped bytes — rides the HTTP surface beside the zone, at <span class="t-cmd">https://zone.emb.is/&lt;name&gt;</span>, which exists because every resolver renders non-ASCII <span class="t-cmd">TXT</span> data escaped: <span class="t-cmd">dig</span> prints <span class="t-cmd">\240\159\145\184</span> where the record carries <span class="t-cmd">👍</span>. This plate shows both, because the escaping is the truth about the wire.</p>
+    </div></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── TRY IT -->
+  <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+      <div class="mech" data-mech></div>
+
+      <div data-live class="rig" data-rig="dns" data-zone="https://zone.emb.is">
+        <div class="rig__row">
+          <div class="rig__pick" data-examples role="group" aria-label="Examples">
+            <button type="button" data-example="my mom is in the hospital" aria-pressed="true">a sentence</button>
+            <button type="button" data-example="🦈" aria-pressed="false">a glyph</button>
+            <button type="button" data-example="🦈-🐟+🐦" aria-pressed="false">a composition</button>
+          </div>
+          <p class="rig__state" data-state aria-live="polite">ready when you are</p>
+        </div>
+        <form class="rig__form" data-form>
+          <label class="sr-only" for="dns-q">The name to query</label>
+          <input class="rig__input" id="dns-q" autocomplete="off" spellcheck="false"
+                 value="my mom is in the hospital">
+          <button class="rig__go" type="submit">Query</button>
+        </form>
+        <p class="rec__q" data-queried hidden></p>
+        <div class="rig__out" data-out hidden>
+          <div class="rec__card">
+            <div class="rec__sentence" data-sentence hidden></div>
+            <ol class="rec" data-records></ol>
+          </div>
+        </div>
+        <details class="cmds" data-cmds hidden>
+          <summary class="cmds__h">the commands this run sent</summary>
+          <div class="cmds__body" data-cmds-body></div>
+        </details>
+      </div>
+
+    </div></div>
+  </section>
+
+  <!-- the massif, as a reading break -->
+  <section class="ridge ridge--band" aria-hidden="true">
+    <img class="ridge__art" src="../assets/img/terrain-crag.png" width="1400" height="175" alt="" decoding="async" fetchpriority="low">
+  </section>
+
+  <!-- ──────────────────────────────────────────── WHAT JUST HAPPENED -->
+  <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+      <p class="block__deck">The plate asked the zone's read route for the name. The zone split the labels into terms, spelled each vocabulary word out to its description — the model never sees a raw glyph, because BERT's vocabulary contains almost none — and composed <span class="t-cmd">+</span>/<span class="t-cmd">-</span> inside <span class="t-cmd">scripts/emoji.lua</span>: one <span class="t-cmd">emb.embed</span> for the terms, folded left to right. The composed vector is ranked against the index the zone built at boot by embedding every description once.</p>
+      <p class="block__deck">The shape of the question decides the answer's shape. A name whose one term is more than one word is a sentence, and its first record is the whole ranking read as one pictogram; a glyph or a composition answers with a single emoji. The DNS record and this page's list are the same ranking: one <span class="t-cmd">TXT</span> record per result, each holding one glyph, and the escaped form beside each row is that record's data exactly as a resolver's tooling renders it.</p>
+    </div></div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────── WHY IT MATTERS -->
+  <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+      <p class="block__deck">DNS is the most boring protocol there is, and the model answers on it: no SDK, no client library, no port to open beyond the one a resolver already speaks. The retrieval is real — the answer is the nearest description by meaning, not a lookup table — and it is the same ranking the HTTP routes serve.</p>
+      <p class="block__deck">The zone is also a second deployment. It runs its own <span class="t-cmd">emb</span> on its own machine, which is why the caption above reports <em>this</em> surface's model and vocabulary size and not the sandbox's. It is the gallery's one plate served from another surface of the product, and it says so.</p>
+    </div></div>
+  </section>
+
+  <!-- ────────────────────────────────────────── THE EXACT COMMANDS -->
+  <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
+    <div class="shell block__inner"><div class="block__body">
+      <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+      <p class="block__deck">Three ways to the same answer. The record is what a resolver gets; the HTTP route is the readable form; the preset is the whole composition, byte for byte.</p>
+<figure class="code"><pre class="code__body"><code># the record a resolver caches: one TXT per ranked result, the glyph and nothing else
+dig +short TXT the.server.is.on.fire.dns.emb.is
+# "\240\159\148\165\240\159\154\146\240\159\148\166"   <- the sentence, all three joined
+# "\240\159\148\165"                                    <- fire
+# "\240\159\154\146"                                    <- fire engine
+# "\240\159\148\166"                                    <- flashlight
+
+# the same ranking, readable at the zone's HTTP surface, with the name and
+# score the record omits
+curl 'https://zone.emb.is/?q=the.server.is.on.fire'
+# -> {"name":"the.server.is.on.fire.dns.emb.is.","model":"emojiml","ttl":300,
+#     "records":[{"glyph":"🔥","name":"fire","score":0.771,"escaped":"\"\\240\\159\\148\\165\""},
+#                {"glyph":"🚒","name":"fire engine","score":0.422, ...}, ...],
+#     "sentence":{"glyphs":"🔥🚒🔦","escaped":"\"\\240\\159\\148\\165...\""}}</code></pre>
+        <figcaption class="code__cap">A name is the query, the <span class="t-cmd">TXT</span> record is the answer, and the HTTP route carries the working. The zone refuses a name it cannot read rather than truncating it, and answers every other type with NODATA.</figcaption>
+      </figure>
+<figure class="code"><pre class="code__body"><code>-- scripts/emoji.lua — compose a query's terms into one vector.
+-- The zone spells vocabulary words out, so the terms arrive resolved:
+-- KEYS[1] is the base term, ARGV carries the rest as (operator, text) pairs.
+local terms = { KEYS[1] }
+local operators = { "+" }
+for i = 1, #ARGV, 2 do
+  operators[#operators + 1] = ARGV[i]
+  terms[#terms + 1] = ARGV[i + 1]
+end
+
+local vectors = emb.embed(terms, { bytes = true })
+local composed = vectors[1]
+for i = 2, #terms do
+  local vector = vectors[i]
+  if operators[i] == "-" then
+    vector = emb.math.float32_bytes(emb.math.scale(vector, -1))
+  end
+  composed = emb.math.float32_bytes(emb.math.add(composed, vector))
+end
+
+return composed</code></pre>
+        <figcaption class="code__cap">The whole trick, in one shipped preset: the server embeds the terms through the same path and cache as <span class="t-cmd">EMB</span>, and a <span class="t-cmd">-</span> is an add of the scaled operand.</figcaption>
+      </figure>
+    </div></div>
+  </section>
+  <div class="shell">
+    <nav class="plate-nav" aria-label="The gallery">
+      <a class="plate-nav__link" href="laya.html"><span class="plate-nav__k">Previous</span><span class="plate-nav__t">The decision engine</span></a>
+      <a class="plate-nav__link plate-nav__link--next" href="index.html"><span class="plate-nav__k">Gallery</span><span class="plate-nav__t">The thirteen plates</span></a>
+    </nav>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module">
+import { el } from '../assets/js/demos.js';
+import { mechanism, playStages } from '../assets/js/mechanism.js';
+
+const root = document.querySelector('[data-rig="dns"]');
+const form = root.querySelector('[data-form]');
+const input = root.querySelector('#dns-q');
+const state = root.querySelector('[data-state]');
+const queried = root.querySelector('[data-queried]');
+const out = root.querySelector('[data-out]');
+const sentence = root.querySelector('[data-sentence]');
+const records = root.querySelector('[data-records]');
+const cmds = root.querySelector('[data-cmds]');
+const cmdsBody = root.querySelector('[data-cmds-body]');
+const go = root.querySelector('.rig__go');
+const zoneHost = root.getAttribute('data-zone') || 'https://zone.emb.is';
+// The zone's read route. A `?zone=` override points the plate at another
+// deployment of the same service (self-hosted emb is the product); the caption
+// names whichever surface answered, so an override is never hidden.
+const ZONE = (new URLSearchParams(location.search).get('zone') || zoneHost).replace(/\/+$/, '');
+
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'text', label: 'a name' },
+  { glyph: 'model', label: 'emojiml' },
+  { glyph: 'rank', label: 'nearest emoji' },
+  { glyph: 'reply', label: 'one TXT record' }
+]);
+mech.all();
+
+const label = (next, message) => ({
+  empty: 'ready when you are',
+  running: 'asking ' + ZONE.replace(/^https?:\/\//, '') + '…',
+  answered: '',
+  refused: 'refused — ' + (message || 'the zone declined that name'),
+  unreachable: 'unreachable — ' + (message || 'the zone could not be reached')
+}[next] ?? next);
+
+function setState(next, message) {
+  state.replaceChildren(document.createTextNode(label(next, message)));
+  if (next === 'unreachable') {
+    state.appendChild(el('button', { class: 'btn btn--sm', type: 'button', text: 'retry', onclick: run }));
+  }
+}
+
+// A name is typed with spaces and queried with dots; a glyph or a composition
+// travels as written. This is the whole transformation, shown as it happens.
+const toName = (text) => String(text).trim().replace(/\s+/g, '.').replace(/^\.+|\.+$/g, '');
+
+function zoneError(state, message) { const err = new Error(message); err.state = state; return err; }
+
+async function ask(name) {
+  let response;
+  try {
+    response = await fetch(ZONE + '/?q=' + encodeURIComponent(name), { headers: { Accept: 'application/json' } });
+  } catch (err) {
+    throw zoneError('unreachable', 'the zone could not be reached');
+  }
+  if (!response.ok) {
+    const text = (await response.text()).trim();
+    const detail = text.split('\t').pop();
+    if (response.status === 400) { throw zoneError('refused', detail + ' — a resolver answers NXDOMAIN'); }
+    if (response.status === 429) { throw zoneError('refused', 'the zone is rate-limiting; retry shortly'); }
+    throw zoneError('unreachable', detail || 'the zone answered ' + response.status);
+  }
+  return response.json();
+}
+
+function row(record, top) {
+  return el('li', { class: 'rec__i' + (top ? ' is-top' : '') }, [
+    el('span', { class: 'rec__gw', text: record.glyph }),
+    el('div', { class: 'rec__main' }, [
+      el('span', { class: 'rec__name', text: record.name }),
+      el('span', { class: 'rec__bar' }, [el('i', { style: '--v:' + Number(record.score).toFixed(4) })]),
+      el('b', { class: 'rec__score', text: Number(record.score).toFixed(3) })
+    ]),
+    el('span', { class: 'rec__esc', text: record.escaped })
+  ]);
+}
+
+function draw(document) {
+  queried.textContent = document.name;
+  queried.hidden = false;
+  if (document.sentence) {
+    sentence.hidden = false;
+    sentence.replaceChildren(
+      el('span', { class: 'rec__gw', text: document.sentence.glyphs }),
+      el('span', { class: 'rec__name', text: 'the sentence' }),
+      el('span', { class: 'rec__esc', text: document.sentence.escaped })
+    );
+  } else {
+    sentence.hidden = true;
+    sentence.replaceChildren();
+  }
+  records.replaceChildren(...document.records.map((r, i) => row(r, i === 0)));
+}
+
+function commandLine(text) {
+  return el('div', { class: 'code' }, [el('pre', { class: 'code__body' }, [el('code', { class: 't-cmd', text })])]);
+}
+
+async function run() {
+  const name = toName(input.value);
+  if (!name) {
+    setState('empty');
+    out.hidden = true;
+    queried.hidden = true;
+    cmds.hidden = true;
+    return;
+  }
+  setState('running');
+  go.disabled = true;
+  mech.reset();
+  playStages(mech, 140, 60);
+  try {
+    const document = await ask(name);
+    draw(document);
+    cmdsBody.replaceChildren(
+      commandLine('dig +short TXT ' + document.name),
+      commandLine("curl '" + ZONE + "/?q=" + name + "'")
+    );
+    cmds.hidden = false;
+    out.hidden = false;
+    setState('answered');
+  } catch (err) {
+    out.hidden = true;
+    queried.hidden = true;
+    cmds.hidden = true;
+    setState(err.state || 'unreachable', err.message);
+  } finally {
+    go.disabled = false;
+    mech.all();
+  }
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  // A typed name is not one of the shipped examples, so none of them stays lit.
+  root.querySelectorAll('[data-example]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+  run();
+});
+root.querySelectorAll('[data-example]').forEach((button) => {
+  button.addEventListener('click', () => {
+    root.querySelectorAll('[data-example]').forEach((other) => other.setAttribute('aria-pressed', String(other === button)));
+    input.value = button.getAttribute('data-example');
+    run();
+  });
+});
+
+const put = (selector, text) => { const node = document.querySelector(selector); if (node) { node.textContent = text; } };
+put('[data-fig-zone]', ZONE.replace(/^https?:\/\//, ''));
+fetch(ZONE + '/meta').then((r) => r.json()).then((m) => {
+  put('[data-fig-zone]', (m.zone || '').replace(/\.$/, '') || ZONE.replace(/^https?:\/\//, ''));
+  put('[data-fig-model]', m.model);
+  put('[data-fig-dim]', m.dimensions);
+  put('[data-fig-entries]', Number(m.entries).toLocaleString('en-US').replace(/,/g, ' '));
+  put('[data-fig-ttl]', m.ttl);
+}).catch(() => { /* the static figures stand; nothing is fabricated. */ });
+
+setState('empty');
+run();
+</script>
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>

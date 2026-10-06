@@ -23,18 +23,31 @@ func TestAPIVersionReadable(t *testing.T) {
 	}
 }
 
-// TestExampleScriptsCompile is the compatibility gate: every shipped example
-// must still compile against the current host surface (parse + wrap), so an
-// API change cannot silently break a published script.
-func TestExampleScriptsCompile(t *testing.T) {
-	files, err := filepath.Glob("../../examples/scripts/*/*.lua")
-	if err != nil {
-		t.Fatal(err)
+// TestShippedScriptsCompile is the compatibility gate: every shipped example
+// and every preset a deployment loads at boot must still compile against the
+// current host surface (parse + wrap), so an API change cannot silently break a
+// published or preloaded script. The deliberately broken fixture is the one
+// file this skips.
+func TestShippedScriptsCompile(t *testing.T) {
+	patterns := []string{
+		"../../examples/scripts/*/*.lua",
+		"../../scripts/*.lua", // the presets the sandbox and the DNS zone preload
 	}
-	if len(files) == 0 {
-		t.Fatal("no example scripts found")
+	var files []string
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) == 0 {
+			t.Fatalf("no scripts matched %s", pattern)
+		}
+		files = append(files, matches...)
 	}
 	for _, f := range files {
+		if filepath.Base(f) == "invalid.lua" {
+			continue
+		}
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

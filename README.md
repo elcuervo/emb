@@ -58,6 +58,7 @@ redis-cli -3 EMB minilm VALUES "hello world"
 | [Scripting](docs/scripting.md) | Lua `EMB.EVAL` / `EMB.EVSHA` surface and examples |
 | [Operations](docs/operations.md) | Health checks, limits, observability, `emb-top` |
 | [Clients](docs/clients.md) | Ruby, Python, and Go recipes |
+| [The DNS zone](docs/dns.md) | `dns.emb.is`: the emoji query grammar, the `TXT` replies, the HTTP surface, deployment |
 | [Development](#development) | Build, test, and dev-shell commands |
 
 ## Install

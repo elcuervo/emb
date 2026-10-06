@@ -74,6 +74,7 @@ SERVED = frozenset(
         "demos/lens.html",
         "demos/function.html",
         "demos/laya.html",
+        "demos/dns.html",
         "demos/multilingual.html",
         "demos/samples/raven.jpg",
         "demos/samples/storm.jpg",

@@ -3668,3 +3668,39 @@ html.js.is-ready .hero__prose{
 @media (max-width: 520px){
   .hud__statv{ font-size: 1.4em; }
 }
+
+/* THE ZONE — the record card: a name queried, and the answer printed twice, the
+   escaped TXT data a resolver hands back beside the glyph it stands for. Ruled
+   rows on the dark plate; the one accent lands on the top result's rule. */
+.rec__q{
+  font-family: var(--mono); font-size: 12px; letter-spacing: .05em;
+  color: var(--rule); margin: 12px 0 0; overflow-wrap: anywhere;
+}
+.rec__card{ margin-top: clamp(14px, 1.6vw, 22px); }
+.rec__sentence{
+  display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 2fr);
+  gap: 4px 14px; align-items: center;
+  padding: 12px 0; border-top: 1px solid var(--accent); border-bottom: 1px solid var(--rule-dark);
+}
+.rec{ list-style: none; margin: 0; padding: 0; }
+.rec__i{
+  display: grid; grid-template-columns: minmax(2.4em, auto) minmax(0, 1fr);
+  gap: 2px 14px; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--rule-dark);
+}
+.rec__gw{ grid-row: 1 / span 2; font-size: clamp(22px, 2.6vw, 34px); line-height: 1; }
+.rec__main{ display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rec__name{
+  font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--bg);
+}
+.rec__bar{ flex: 1 1 120px; min-width: 60px; height: 6px; background: var(--rule-dark); position: relative; }
+.rec__bar > i{ position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v, 0) * 100%); background: var(--rule); }
+.rec__score{ font-family: var(--mono); font-size: 12px; color: var(--rule); font-variant-numeric: tabular-nums; }
+.rec__esc{ grid-column: 2; font-family: var(--mono); font-size: 11px; color: var(--rule); overflow-wrap: anywhere; }
+.rec__i.is-top .rec__bar > i{ background: var(--accent); }
+.rec__i.is-top .rec__name{ color: var(--accent); }
+@media (max-width: 520px){
+  .rec__sentence{ grid-template-columns: auto minmax(0, 1fr); }
+  .rec__sentence .rec__esc{ grid-column: 2; }
+}

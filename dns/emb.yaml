@@ -1,0 +1,43 @@
+# The zone's own emb server: the model the DNS zone embeds with, and the preset
+# it composes queries through.
+#
+# `just dns-dev` starts this on loopback and rewrites the model paths for a
+# local checkout; the deployed app ships it as-is beside the model on the
+# volume. The zone never exposes this listener — the DNS and HTTP surfaces in
+# dns/config.yaml are the only public ones.
+
+listen: "127.0.0.1:16389"
+
+# The index build is 1961 short texts and a restart should not pay for them
+# twice, so the cache (and its snapshot) covers the vocabulary's descriptions.
+# `cache_file` puts the snapshot on the volume beside the model, so a restart
+# reads it back instead of rebuilding the index through the model; deleting the
+# file is always safe.
+cache: auto
+cache_file: /data/cache.embcache
+cache_save: 30m
+
+models:
+  emojiml:
+    # The repo lets the first boot fetch the weights onto the volume; a later
+    # boot finds the configured `onnx` file and reads it instead. The weights
+    # are the fp32 export, deliberately: `dns/examples.json` records what this
+    # model answered, and the zone must serve the model those numbers were
+    # measured on. `quantize` defaults to `auto`, so fp32 has to be asked for —
+    # MiniLM is 22M parameters (~90 MB fp32) and fits the zone's small machine,
+    # and an int8 export would drift every pinned score and the plate's copy.
+    # `workers: 1` on Linux avoids the batch-determinism probe degrading the
+    # pool to several sessions and multiplying the resident weights.
+    model_repo: Xenova/all-MiniLM-L6-v2
+    quantize: off
+    workers: 1
+    onnx: /data/models/minilm/model.onnx
+    tokenizer: /data/models/minilm/tokenizer.json
+    # Descriptions and query names are short sentences; 64 tokens is well past
+    # the longest of either and keeps the index build cheap.
+    max_length: 64
+    normalize: true
+    scripts:
+      # The same path the zone's own config names, so the image carries the
+      # preset once; `just dns-dev` rewrites this to a checkout's copy.
+      - path: /scripts/emoji.lua
