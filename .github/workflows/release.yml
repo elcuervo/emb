@@ -53,6 +53,26 @@ jobs:
         env:
           CGO_ENABLED: "0"
 
+      # `go test ./internal/...` loads the minilm fixture: internal/registry's
+      # batch-determinism tests validate against it (metadata-only reads, with
+      # inference faked through the session seam). Same cache key as ci.yml's
+      # test-cgo, so the main-branch cache is reused here.
+      - name: Cache the minilm fixture
+        uses: actions/cache@v4
+        with:
+          path: models/minilm
+          key: minilm-v1
+
+      - name: Download the minilm fixture
+        run: |
+          # Mirrors `just download-model` (Xenova/all-MiniLM-L6-v2); the cache
+          # above makes this a no-op on a hit.
+          mkdir -p models/minilm
+          base=https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main
+          [ -s models/minilm/model.onnx ] || curl -fsSL "$base/onnx/model.onnx" -o models/minilm/model.onnx
+          [ -s models/minilm/tokenizer.json ] || curl -fsSL "$base/tokenizer.json" -o models/minilm/tokenizer.json
+          [ -s models/minilm/config.json ] || curl -fsSL "$base/config.json" -o models/minilm/config.json
+
       - name: Test (CGo)
         run: go test -short ./internal/... ./website/repl/
         env:
