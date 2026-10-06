@@ -4,7 +4,8 @@
 // emoji, carrying its glyph, a slug, its CLDR name, and the description the
 // model embeds. A query name is a small expression over those words — its
 // labels read as a sentence, and `+` and `-` compose terms — and the answer is
-// the vocabulary ranked by cosine similarity to the query's vector.
+// the vocabulary ranked by cosine similarity to the query's vector, or, for a
+// conjunction, by the product of its similarity to each of the query's terms.
 //
 // Nothing here touches a model. The package owns the vocabulary, the grammar,
 // and the ranking, so it is testable with CGO_ENABLED=0, no ONNX Runtime, and
@@ -143,6 +144,10 @@ func (ix *Index) Dim() int { return ix.dim }
 type Result struct {
 	Entry Entry
 	Score float64
+	// Legs is the entry's similarity to each term of a conjunction, in the
+	// query's term order. It is nil for a query ranked against a single vector:
+	// a composition has no per-term working to report.
+	Legs []float64
 }
 
 // Rank returns the k entries closest to the query vector, ordered by cosine
@@ -174,6 +179,82 @@ func (ix *Index) Rank(query []float32, k int) ([]Result, error) {
 		k = len(results)
 	}
 	return results[:k], nil
+}
+
+// RankJoint ranks the vocabulary against a conjunction: every entry is scored
+// by the product of its similarity to each of the terms, so an entry close to
+// all of them outranks an entry that matches only the nearest. The entries the
+// query named are excluded, because a conjunction answers what its terms have
+// in common rather than one of the terms itself. Equally scoring entries keep
+// vocabulary order, as Rank does, and each result carries its similarity to
+// every term in the order the terms were given.
+func (ix *Index) RankJoint(terms [][]float32, exclude map[int]struct{}, k int) ([]Result, error) {
+	if ix == nil || len(ix.matrix) == 0 || k <= 0 {
+		return nil, nil
+	}
+	if len(terms) == 0 {
+		return nil, ErrNoTerms
+	}
+	unit := make([][]float32, len(terms))
+	for i, term := range terms {
+		if len(term) != ix.dim {
+			return nil, fmt.Errorf("emoji: term %d has %d dimensions, index has %d", i, len(term), ix.dim)
+		}
+		unit[i] = make([]float32, len(term))
+		copy(unit[i], term)
+		normalize(unit[i])
+	}
+
+	results := make([]Result, 0, ix.vocab.Len())
+	for i := range ix.vocab.Entries {
+		if _, skip := exclude[i]; skip {
+			continue
+		}
+		row := ix.matrix[i*ix.dim : (i+1)*ix.dim]
+		legs := make([]float64, len(unit))
+		score := 1.0
+		for t, term := range unit {
+			var dot float64
+			for d, value := range row {
+				dot += float64(value) * float64(term[d])
+			}
+			legs[t] = dot
+			score *= dot
+		}
+		results = append(results, Result{Entry: ix.vocab.Entries[i], Score: score, Legs: legs})
+	}
+	sort.SliceStable(results, func(a, b int) bool { return results[a].Score > results[b].Score })
+	if k > len(results) {
+		k = len(results)
+	}
+	return results[:k], nil
+}
+
+// Indices is the set of entries a query's terms name by slug or glyph, which is
+// what a conjunction excludes from its answer. A term that names nothing is not
+// an entry and excludes nothing.
+func (v Vocab) Indices(q Query) map[int]struct{} {
+	var named map[int]struct{}
+	for _, term := range q.Terms {
+		for _, word := range strings.Fields(term.Text) {
+			if i, ok := v.bySlug[word]; ok {
+				named = add(named, i)
+				continue
+			}
+			if i, ok := v.byGlyph[word]; ok {
+				named = add(named, i)
+			}
+		}
+	}
+	return named
+}
+
+func add(set map[int]struct{}, i int) map[int]struct{} {
+	if set == nil {
+		set = make(map[int]struct{}, 1)
+	}
+	set[i] = struct{}{}
+	return set
 }
 
 // normalize scales v to unit length in place; a zero vector is left alone,

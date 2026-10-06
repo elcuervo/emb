@@ -80,7 +80,8 @@
             Every name under <b>dns.emb.is</b> is a query, and the reply is one
             <b>TXT record</b> per ranked result. The label is the sentence, the
             record is the answer, and the working is printed twice: the escaped
-            bytes a resolver hands back beside the glyph they stand for.
+            bytes a resolver hands back beside the glyph they stand for. The
+            algebra is playable — tap an emoji in the ranking to compose with it.
           </p>
           <p class="tldr">A DNS name is a sentence; the emoji whose description the model ranks nearest is the reply. `dig` escapes it, so the plate shows both forms.</p>
         </div>
@@ -102,7 +103,8 @@
     <div class="shell block__inner"><div class="block__body">
       <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-      <p class="block__deck">Every name strictly beneath <span class="t-cmd">dns.emb.is</span> is a query. The name's labels are the words of a sentence — <span class="t-cmd">i.lost.my.job.dns.emb.is</span> — and <span class="t-cmd">+</span> and <span class="t-cmd">-</span> separate the terms a query composes. A glyph is a way of writing its vocabulary entry, so <span class="t-cmd">🦈.dns.emb.is</span> and <span class="t-cmd">shark.dns.emb.is</span> are the same query, and <span class="t-cmd">🦈-🐟+🐦</span> is the algebra the joke started as.</p>
+      <p class="block__deck">Every name strictly beneath <span class="t-cmd">dns.emb.is</span> is a query. The name's labels are the words of a sentence — <span class="t-cmd">i.lost.my.job.dns.emb.is</span> — and <span class="t-cmd">+</span>, <span class="t-cmd">-</span>, and <span class="t-cmd">*</span> separate the terms a query composes. A glyph is a way of writing its vocabulary entry, so <span class="t-cmd">🦈.dns.emb.is</span> and <span class="t-cmd">shark.dns.emb.is</span> are the same query, and <span class="t-cmd">🦈-🐟+🐦</span> is the algebra the joke started as.</p>
+      <p class="block__deck">A composition adds and subtracts vectors, which is a real question with a dull answer: an average of two emoji is closest to one of them. A conjunction asks a better one — <span class="t-cmd">🐉*🥟</span> wants the entry closest to <em>all</em> of its terms at once, so it can answer with a third thing entirely, and the terms themselves are never the answer. The reply carries the working: each result's similarity to every term, beside the joint score they multiply to, so a joke can be told from a stretch.</p>
       <p class="block__deck">The reply is one <span class="t-cmd">TXT</span> record per ranked result, and the record carries the glyph and nothing else: no score, no vocabulary name. A record is a value a resolver caches for its TTL and answers other people's questions from, so it holds the answer rather than the working. That working — the name, the similarity, the escaped bytes — rides the HTTP surface beside the zone, at <span class="t-cmd">https://zone.emb.is/&lt;name&gt;</span>, which exists because every resolver renders non-ASCII <span class="t-cmd">TXT</span> data escaped: <span class="t-cmd">dig</span> prints <span class="t-cmd">\240\159\145\184</span> where the record carries <span class="t-cmd">👍</span>. This plate shows both, because the escaping is the truth about the wire.</p>
     </div></div>
   </section>
@@ -116,18 +118,59 @@
       <div data-live class="rig" data-rig="dns" data-zone="https://zone.emb.is">
         <div class="rig__row">
           <div class="rig__pick" data-examples role="group" aria-label="Examples">
-            <button type="button" data-example="my mom is in the hospital" aria-pressed="true">a sentence</button>
-            <button type="button" data-example="🦈" aria-pressed="false">a glyph</button>
-            <button type="button" data-example="🦈-🐟+🐦" aria-pressed="false">a composition</button>
+            <!-- examples:start -->
+            <span class="rig__pick__fam">ops</span>
+            <button type="button" data-example="the.server.is.on.fire" data-mode="sentence" data-family="ops" aria-pressed="true">the server is on fire</button>
+            <button type="button" data-example="the.pager.went.off" data-mode="sentence" data-family="ops" aria-pressed="false">the pager went off</button>
+            <button type="button" data-example="i.forgot.to.back.up" data-mode="sentence" data-family="ops" aria-pressed="false">i forgot to back up</button>
+            <button type="button" data-example="it.works.on.my.machine" data-mode="sentence" data-family="ops" aria-pressed="false">it works on my machine</button>
+            <button type="button" data-example="i.deleted.production" data-mode="sentence" data-family="ops" aria-pressed="false">i deleted production</button>
+            <button type="button" data-example="its.always.dns" data-mode="sentence" data-family="ops" aria-pressed="false">its always dns</button>
+            <span class="rig__pick__fam">human</span>
+            <button type="button" data-example="my.mom.is.in.the.hospital" data-mode="sentence" data-family="human" aria-pressed="false">my mom is in the hospital</button>
+            <button type="button" data-example="the.baby.is.crying" data-mode="sentence" data-family="human" aria-pressed="false">the baby is crying</button>
+            <button type="button" data-example="i.just.ate.a.whole.pizza" data-mode="sentence" data-family="human" aria-pressed="false">i just ate a whole pizza</button>
+            <button type="button" data-example="my.dog.died" data-mode="sentence" data-family="human" aria-pressed="false">my dog died</button>
+            <button type="button" data-example="i.cant.sleep" data-mode="sentence" data-family="human" aria-pressed="false">i cant sleep</button>
+            <button type="button" data-example="i.need.coffee" data-mode="sentence" data-family="human" aria-pressed="false">i need coffee</button>
+            <span class="rig__pick__fam">pun</span>
+            <button type="button" data-example="i.won.the.lottery" data-mode="sentence" data-family="pun" aria-pressed="false">i won the lottery</button>
+            <button type="button" data-example="i.quit.smoking" data-mode="sentence" data-family="pun" aria-pressed="false">i quit smoking</button>
+            <button type="button" data-example="the.wifi.is.dead" data-mode="sentence" data-family="pun" aria-pressed="false">the wifi is dead</button>
+            <span class="rig__pick__fam">glyph</span>
+            <button type="button" data-example="🦈" data-mode="emoji" data-family="glyph" aria-pressed="false">🦈</button>
+            <button type="button" data-example="👑" data-mode="emoji" data-family="glyph" aria-pressed="false">👑</button>
+            <span class="rig__pick__fam">algebra</span>
+            <button type="button" data-example="🦈-🐟+🐦" data-mode="composition" data-family="algebra" aria-pressed="false">🦈-🐟+🐦</button>
+            <span class="rig__pick__fam">country</span>
+            <button type="button" data-example="🐉*🥟" data-mode="conjunction" data-family="country" aria-pressed="false">🐉*🥟</button>
+            <button type="button" data-example="🍣*🌸" data-mode="conjunction" data-family="country" aria-pressed="false">🍣*🌸</button>
+            <button type="button" data-example="🗽*🏈" data-mode="conjunction" data-family="country" aria-pressed="false">🗽*🏈</button>
+            <button type="button" data-example="🐘*🛕" data-mode="conjunction" data-family="country" aria-pressed="false">🐘*🛕</button>
+            <span class="rig__pick__fam">everyday</span>
+            <button type="button" data-example="🥛*🍓" data-mode="conjunction" data-family="everyday" aria-pressed="false">🥛*🍓</button>
+            <button type="button" data-example="🚒*🛥" data-mode="conjunction" data-family="everyday" aria-pressed="false">🚒*🛥</button>
+            <span class="rig__pick__fam">ceiling</span>
+            <button type="button" data-example="🍕*🦅" data-mode="conjunction" data-family="ceiling" aria-pressed="false" data-note="Pizza and eagle answer with a penguin — a third entry both terms point at, and not the American flag the joke wants. The flag scores 0.113 to pizza and 0.161 to eagle against the winner&#x27;s 0.202 and 0.654, so no ranking reaches it: a flag&#x27;s description is its country&#x27;s name and says nothing a pizza or an eagle is about.">🍕*🦅</button>
+            <!-- examples:end -->
           </div>
           <p class="rig__state" data-state aria-live="polite">ready when you are</p>
+        </div>
+        <p class="rig__ask">Compose with <b>*</b> for <i>closest to all of these</i>, or <b>+</b>/<b>-</b> to add and subtract a term — a name composes or conjoins, never both. Tap any emoji in the ranking to add it to the query.</p>
+        <div class="rig__row">
+          <div class="rig__pick" data-ops role="group" aria-label="The operator for the next term">
+            <button type="button" data-op="*" aria-pressed="true">* both</button>
+            <button type="button" data-op="+" aria-pressed="false">+ add</button>
+            <button type="button" data-op="-" aria-pressed="false">- subtract</button>
+          </div>
         </div>
         <form class="rig__form" data-form>
           <label class="sr-only" for="dns-q">The name to query</label>
           <input class="rig__input" id="dns-q" autocomplete="off" spellcheck="false"
-                 value="my mom is in the hospital">
+                 value="the.server.is.on.fire">
           <button class="rig__go" type="submit">Query</button>
         </form>
+        <p class="rig__note" data-note-out hidden></p>
         <p class="rec__q" data-queried hidden></p>
         <div class="rig__out" data-out hidden>
           <div class="rec__card">
@@ -155,7 +198,8 @@
       <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
       <p class="block__deck">The plate asked the zone's read route for the name. The zone split the labels into terms, spelled each vocabulary word out to its description — the model never sees a raw glyph, because BERT's vocabulary contains almost none — and composed <span class="t-cmd">+</span>/<span class="t-cmd">-</span> inside <span class="t-cmd">scripts/emoji.lua</span>: one <span class="t-cmd">emb.embed</span> for the terms, folded left to right. The composed vector is ranked against the index the zone built at boot by embedding every description once.</p>
-      <p class="block__deck">The shape of the question decides the answer's shape. A name whose one term is more than one word is a sentence, and its first record is the whole ranking read as one pictogram; a glyph or a composition answers with a single emoji. The DNS record and this page's list are the same ranking: one <span class="t-cmd">TXT</span> record per result, each holding one glyph, and the escaped form beside each row is that record's data exactly as a resolver's tooling renders it.</p>
+      <p class="block__deck">A conjunction takes the other path. It needs each term's own vector, so the zone embeds them one by one and ranks every entry by the <em>product</em> of its similarity to each term, skipping the entries the query named. That is what lets an answer be something neither term wrote — and why the ranking shows the legs: the product is only as good as its weakest factor.</p>
+      <p class="block__deck">The shape of the question decides the answer's shape. A name whose one term is more than one word is a sentence, and its first record is the whole ranking read as one pictogram; a glyph, a composition, or a conjunction answers with a single emoji. The DNS record and this page's list are the same ranking: one <span class="t-cmd">TXT</span> record per result, each holding one glyph, and the escaped form beside each row is that record's data exactly as a resolver's tooling renders it.</p>
     </div></div>
   </section>
 
@@ -188,8 +232,15 @@ curl 'https://zone.emb.is/?q=the.server.is.on.fire'
 # -> {"name":"the.server.is.on.fire.dns.emb.is.","model":"emojiml","ttl":300,
 #     "records":[{"glyph":"🔥","name":"fire","score":0.771,"escaped":"\"\\240\\159\\148\\165\""},
 #                {"glyph":"🚒","name":"fire engine","score":0.422, ...}, ...],
-#     "sentence":{"glyphs":"🔥🚒🔦","escaped":"\"\\240\\159\\148\\165...\""}}</code></pre>
-        <figcaption class="code__cap">A name is the query, the <span class="t-cmd">TXT</span> record is the answer, and the HTTP route carries the working. The zone refuses a name it cannot read rather than truncating it, and answers every other type with NODATA.</figcaption>
+#     "sentence":{"glyphs":"🔥🚒🔦","escaped":"\"\\240\\159\\148\\165...\""}}
+
+# a conjunction asks what its terms have in common, and the reply carries the
+# working: each result's similarity to every term, beside the joint score
+curl 'https://zone.emb.is/?q=🐉*🥟'
+# -> {"name":"🐉*🥟.dns.emb.is.","model":"emojiml","ttl":300,
+#     "records":[{"glyph":"🐼","name":"panda","score":0.1,"legs":[0.297,0.336],
+#                  "escaped":"\"\\240\\159\\144\\188\""}, ...]}</code></pre>
+        <figcaption class="code__cap">A name is the query, the <span class="t-cmd">TXT</span> record is the answer, and the HTTP route carries the working — a conjunction's legs as well as its score. The zone refuses a name it cannot read rather than truncating it, and answers every other type with NODATA.</figcaption>
       </figure>
 <figure class="code"><pre class="code__body"><code>-- scripts/emoji.lua — compose a query's terms into one vector.
 -- The zone spells vocabulary words out, so the terms arrive resolved:
@@ -246,12 +297,19 @@ const sentence = root.querySelector('[data-sentence]');
 const records = root.querySelector('[data-records]');
 const cmds = root.querySelector('[data-cmds]');
 const cmdsBody = root.querySelector('[data-cmds-body]');
+const noteOut = root.querySelector('[data-note-out]');
+const ops = root.querySelector('[data-ops]');
 const go = root.querySelector('.rig__go');
 const zoneHost = root.getAttribute('data-zone') || 'https://zone.emb.is';
 // The zone's read route. A `?zone=` override points the plate at another
 // deployment of the same service (self-hosted emb is the product); the caption
 // names whichever surface answered, so an override is never hidden.
 const ZONE = (new URLSearchParams(location.search).get('zone') || zoneHost).replace(/\/+$/, '');
+
+// The operator the next tapped term joins with, and the note the selected
+// example carries: the ceiling example says its intended answer is unreachable.
+let operator = '*';
+let exampleNote = '';
 
 const mech = mechanism(document.querySelector('[data-mech]'), [
   { glyph: 'text', label: 'a name' },
@@ -276,8 +334,9 @@ function setState(next, message) {
   }
 }
 
-// A name is typed with spaces and queried with dots; a glyph or a composition
-// travels as written. This is the whole transformation, shown as it happens.
+// A name is typed with spaces and queried with dots; a glyph, a composition, or
+// a conjunction travels as written. This is the whole transformation, shown as
+// it happens.
 const toName = (text) => String(text).trim().replace(/\s+/g, '.').replace(/^\.+|\.+$/g, '');
 
 function zoneError(state, message) { const err = new Error(message); err.state = state; return err; }
@@ -299,19 +358,39 @@ async function ask(name) {
   return response.json();
 }
 
-function row(record, top) {
-  return el('li', { class: 'rec__i' + (top ? ' is-top' : '') }, [
-    el('span', { class: 'rec__gw', text: record.glyph }),
+function row(record, top, terms) {
+  const children = [
+    el('button', {
+      class: 'rec__gw',
+      type: 'button',
+      text: record.glyph,
+      title: 'compose with ' + record.glyph,
+      'aria-label': 'add ' + record.glyph + ' to the query',
+      onclick: () => appendTerm(record.glyph)
+    }),
     el('div', { class: 'rec__main' }, [
       el('span', { class: 'rec__name', text: record.name }),
       el('span', { class: 'rec__bar' }, [el('i', { style: '--v:' + Number(record.score).toFixed(4) })]),
       el('b', { class: 'rec__score', text: Number(record.score).toFixed(3) })
     ]),
     el('span', { class: 'rec__esc', text: record.escaped })
-  ]);
+  ];
+  // A conjunction's working: this result's similarity to each of the query's
+  // terms, in the order the query wrote them. The joint score is their product,
+  // so a leg that is small is why the answer is a stretch.
+  if (record.legs) {
+    children.push(el('span', { class: 'rec__legs', text: legsText(record.legs, terms) }));
+  }
+  return el('li', { class: 'rec__i' + (top ? ' is-top' : '') }, children);
 }
 
-function draw(document) {
+function legsText(legs, terms) {
+  return legs
+    .map((leg, i) => Number(leg).toFixed(3) + ' to ' + (terms[i] || 'term ' + (i + 1)))
+    .join('  ·  ');
+}
+
+function draw(document, terms) {
   queried.textContent = document.name;
   queried.hidden = false;
   if (document.sentence) {
@@ -325,7 +404,7 @@ function draw(document) {
     sentence.hidden = true;
     sentence.replaceChildren();
   }
-  records.replaceChildren(...document.records.map((r, i) => row(r, i === 0)));
+  records.replaceChildren(...document.records.map((r, i) => row(r, i === 0, terms)));
 }
 
 function commandLine(text) {
@@ -339,6 +418,8 @@ async function run() {
     out.hidden = true;
     queried.hidden = true;
     cmds.hidden = true;
+    noteOut.hidden = true;
+    syncOps();
     return;
   }
   setState('running');
@@ -347,7 +428,7 @@ async function run() {
   playStages(mech, 140, 60);
   try {
     const document = await ask(name);
-    draw(document);
+    draw(document, termsOf(name));
     cmdsBody.replaceChildren(
       commandLine('dig +short TXT ' + document.name),
       commandLine("curl '" + ZONE + "/?q=" + name + "'")
@@ -355,30 +436,97 @@ async function run() {
     cmds.hidden = false;
     out.hidden = false;
     setState('answered');
+    showNote(document);
   } catch (err) {
     out.hidden = true;
     queried.hidden = true;
     cmds.hidden = true;
+    noteOut.hidden = true;
     setState(err.state || 'unreachable', err.message);
   } finally {
     go.disabled = false;
     mech.all();
+    syncOps();
   }
+}
+
+// The terms of the query as the reader wrote them, in order: what a conjunction's
+// legs are reported against.
+function termsOf(name) {
+  return name.split(/[+*-]/).map((term) => term.trim()).filter(Boolean);
+}
+
+// The operator family a query already uses. A name composes or conjoins, never
+// both, so the plate never offers an operator the zone would refuse.
+function familyOf(name) {
+  if (name.includes('*')) { return 'conjunction'; }
+  if (name.includes('+') || name.includes('-')) { return 'arithmetic'; }
+  return null;
+}
+
+function syncOps() {
+  if (!ops) { return; }
+  const family = familyOf(toName(input.value));
+  ops.querySelectorAll('[data-op]').forEach((button) => {
+    const op = button.getAttribute('data-op');
+    const isConjunction = op === '*';
+    button.disabled = family !== null && (family === 'conjunction') !== isConjunction;
+    button.setAttribute('aria-pressed', String(op === operator));
+  });
+}
+
+// What the answer is worth saying about: an example that ships as a measured
+// ceiling says so, and a conjunction whose terms barely agree is the honest
+// reading of a weak product rather than a fault.
+function showNote(document) {
+  const top = document.records && document.records[0];
+  if (exampleNote) {
+    noteOut.textContent = exampleNote;
+    noteOut.hidden = false;
+    return;
+  }
+  if (top && top.legs && Number(top.score) < 0.2) {
+    noteOut.textContent =
+      'A low joint score is the honest reading: nothing in the vocabulary is close to all of these terms.';
+    noteOut.hidden = false;
+    return;
+  }
+  noteOut.hidden = true;
+}
+
+// Tapping a ranked emoji composes with it: the query the reader is building is
+// the one they just got an answer from.
+function appendTerm(glyph) {
+  const current = toName(input.value);
+  input.value = current ? current + operator + glyph : glyph;
+  root.querySelectorAll('[data-example]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+  exampleNote = '';
+  run();
 }
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   // A typed name is not one of the shipped examples, so none of them stays lit.
   root.querySelectorAll('[data-example]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+  exampleNote = '';
   run();
 });
 root.querySelectorAll('[data-example]').forEach((button) => {
   button.addEventListener('click', () => {
     root.querySelectorAll('[data-example]').forEach((other) => other.setAttribute('aria-pressed', String(other === button)));
     input.value = button.getAttribute('data-example');
+    exampleNote = button.getAttribute('data-note') || '';
     run();
   });
 });
+if (ops) {
+  ops.querySelectorAll('[data-op]').forEach((button) => {
+    button.addEventListener('click', () => {
+      operator = button.getAttribute('data-op');
+      syncOps();
+    });
+  });
+}
 
 const put = (selector, text) => { const node = document.querySelector(selector); if (node) { node.textContent = text; } };
 put('[data-fig-zone]', ZONE.replace(/^https?:\/\//, ''));
@@ -391,6 +539,7 @@ fetch(ZONE + '/meta').then((r) => r.json()).then((m) => {
 }).catch(() => { /* the static figures stand; nothing is fabricated. */ });
 
 setState('empty');
+syncOps();
 run();
 </script>
 <script src="../assets/js/tldr.js" defer></script>

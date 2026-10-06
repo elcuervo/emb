@@ -140,7 +140,7 @@ func (h *HTTPHandler) read(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPHandler) document(outcome Outcome) map[string]any {
 	records := make([]map[string]any, 0, len(outcome.Results))
 	for _, result := range outcome.Results {
-		records = append(records, map[string]any{
+		record := map[string]any{
 			// escaped is the record data as any resolver's tooling renders it.
 			"escaped": escapeTXT(result.Entry.Glyph),
 			// glyph is the same bytes, as a reader sees them.
@@ -148,7 +148,14 @@ func (h *HTTPHandler) document(outcome Outcome) map[string]any {
 			"name":  result.Entry.Name,
 			"slug":  result.Entry.Slug,
 			"score": result.Score,
-		})
+		}
+		if result.Legs != nil {
+			// A conjunction's working: this result's similarity to each of the
+			// query's terms, in the order the query wrote them, so a surface can
+			// show what the joint score is made of.
+			record["legs"] = result.Legs
+		}
+		records = append(records, record)
 	}
 	document := map[string]any{
 		"name":    outcome.Name,
@@ -172,7 +179,7 @@ func (h *HTTPHandler) document(outcome Outcome) map[string]any {
 func (h *HTTPHandler) refuse(w http.ResponseWriter, name string, err error) {
 	status := http.StatusBadGateway
 	switch {
-	case errors.Is(err, emoji.ErrEmpty), errors.Is(err, emoji.ErrNoTerms), errors.Is(err, emoji.ErrTooLong):
+	case errors.Is(err, emoji.ErrEmpty), errors.Is(err, emoji.ErrNoTerms), errors.Is(err, emoji.ErrTooLong), errors.Is(err, emoji.ErrMixedOperators):
 		status = http.StatusBadRequest
 	case errors.Is(err, ErrNotReady):
 		status = http.StatusServiceUnavailable

@@ -686,6 +686,15 @@ website-presets:
 website-presets-check:
     python3 website/tools/stamp-presets.py --check
 
+# The plate's example controls are derived from `dns/examples.json`, so a
+# re-pinned example or a newly discovered joke becomes a control without an edit
+# to the page. `--check` is the drift guard CI runs.
+website-examples:
+    python3 website/tools/stamp-examples.py
+
+website-examples-check:
+    python3 website/tools/stamp-examples.py --check
+
 # ── the demos gallery's corpus and index ─────────────────────────────────
 #
 # `poe.jsonl` and the `.db` are committed, so the site builds with no tooling;
@@ -785,7 +794,7 @@ emoji-vocab-check:
 # The ports and the rate limit are rewritten into a copy of dns/config.yaml,
 # which is the only configuration mechanism the zone has: the deployed file is
 # the one that runs, and the dev loop is the one caller that varies it. The dev
-# rate limit is high because `just verify-emoji` asks eighteen questions in a
+# rate limit is high because `just verify-emoji` asks every shipped example in a
 # row from one address.
 #
 # Then, in another terminal (inside `nix develop`):
@@ -831,6 +840,18 @@ dns-dev port="5354" http="8099" upstream="16389" rate="1000": build
 #   just verify-emoji https://zone.emb.is    # a deployment
 verify-emoji base="http://127.0.0.1:8099":
     python3 dns/tools/verify-emoji.py --base {{base}}
+
+# Find the composition jokes the vocabulary can tell, by embedding every
+# description through the zone's own upstream and searching for pairs whose best
+# third entry is close to both terms. Needs that upstream running (`just dns-dev`
+# starts it) because the vectors must be the ones the zone ranks with. Reports
+# the floors it searched under, and the legs the intended country answers would
+# need beside the legs the winners have.
+#
+#   just emoji-jokes
+#   just emoji-jokes 127.0.0.1:16389 emojiml 40   # upstream, model, how many to print
+emoji-jokes upstream="127.0.0.1:16389" model="emojiml" top="20":
+    python3 dns/tools/emoji-jokes.py --upstream {{upstream}} --model {{model}} --top {{top}}
 
 # ── the zone's image and deployment (dns/) ──────────────────────────────
 #

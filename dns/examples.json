@@ -1,14 +1,15 @@
 {
-  "note": "The zone's examples, with the result each one measured. This file is the single source: the gallery plate renders these queries and the copy that explains them, and `just verify-emoji` fails when the zone stops returning what is recorded here. A change of model or vocabulary is expected to move these numbers, and the check exists so that it is a decision rather than a surprise.",
+  "note": "The zone's examples, with the result each one measured. This file is the single source: the gallery plate renders these queries and the copy that explains them, and `just verify-emoji` fails when the zone stops returning what is recorded here. A change of model or vocabulary is expected to move these numbers, and the check exists so that it is a decision rather than a surprise. An example whose intended answer is unreachable is recorded with the answer the zone does return and the legs that show why.",
   "verified_against": {
     "model": "emojiml (Xenova/all-MiniLM-L6-v2, 384 dimensions, mean pooling, normalized)",
-    "vocabulary": "dns/emoji-vocab.json",
-    "entries": 1961
+    "vocabulary": "dns/emoji-vocab.json (annotations + annotationsDerived flags)",
+    "entries": 2223
   },
   "modes": {
     "sentence": "A name's labels are the words of a sentence.",
     "emoji": "A glyph is a way of writing its vocabulary entry, so it answers with itself.",
-    "composition": "`-` subtracts a term's vector and `+` adds one, left to right."
+    "composition": "`-` subtracts a term's vector and `+` adds one, left to right.",
+    "conjunction": "`*` asks for the entry closest to all of its terms at once, with the terms excluded, so the answer can be a third entry rather than an average. Each result carries its similarity to every term (its legs) beside the joint score."
   },
   "examples": [
     {
@@ -491,6 +492,223 @@
           "glyph": "🐔",
           "slug": "chicken",
           "score": 0.654
+        }
+      ]
+    },
+    {
+      "name": "🐉*🥟",
+      "mode": "conjunction",
+      "family": "country",
+      "expect_slug": "panda",
+      "expect_glyph": "🐼",
+      "measured_score": 0.1,
+      "expect_legs": [
+        0.297,
+        0.336
+      ],
+      "claim": "Dragon and dumpling are not a panda by arithmetic — an average of two vectors has no reason to be a bear. They are a panda because it is the entry both terms point at, which is the question `*` asks.",
+      "measured_top3": [
+        {
+          "glyph": "🐼",
+          "slug": "panda",
+          "score": 0.1
+        },
+        {
+          "glyph": "🐲",
+          "slug": "dragon_face",
+          "score": 0.079
+        },
+        {
+          "glyph": "🔮",
+          "slug": "crystal_ball",
+          "score": 0.07
+        }
+      ]
+    },
+    {
+      "name": "🍣*🌸",
+      "mode": "conjunction",
+      "family": "country",
+      "expect_slug": "dango",
+      "expect_glyph": "🍡",
+      "measured_score": 0.147,
+      "expect_legs": [
+        0.439,
+        0.336
+      ],
+      "claim": "Sushi and blossom answer with dango, the sweet both words sit next to. The joint score is low and the legs say why.",
+      "measured_top3": [
+        {
+          "glyph": "🍡",
+          "slug": "dango",
+          "score": 0.147
+        },
+        {
+          "glyph": "🍙",
+          "slug": "rice_ball",
+          "score": 0.126
+        },
+        {
+          "glyph": "🍒",
+          "slug": "cherries",
+          "score": 0.12
+        }
+      ]
+    },
+    {
+      "name": "🗽*🏈",
+      "mode": "conjunction",
+      "family": "country",
+      "expect_slug": "stadium",
+      "expect_glyph": "🏟",
+      "measured_score": 0.138,
+      "expect_legs": [
+        0.34,
+        0.407
+      ],
+      "claim": "Liberty and football answer with the stadium: the place both of them are about.",
+      "measured_top3": [
+        {
+          "glyph": "🏟",
+          "slug": "stadium",
+          "score": 0.138
+        },
+        {
+          "glyph": "🏀",
+          "slug": "basketball",
+          "score": 0.084
+        },
+        {
+          "glyph": "🇺🇸",
+          "slug": "flag_united_states",
+          "score": 0.081
+        }
+      ]
+    },
+    {
+      "name": "🐘*🛕",
+      "mode": "conjunction",
+      "family": "country",
+      "expect_slug": "om",
+      "expect_glyph": "🕉",
+      "measured_score": 0.165,
+      "expect_legs": [
+        0.261,
+        0.634
+      ],
+      "claim": "Elephant and temple answer with om, the syllable at the middle of the two.",
+      "measured_top3": [
+        {
+          "glyph": "🕉",
+          "slug": "om",
+          "score": 0.165
+        },
+        {
+          "glyph": "🐏",
+          "slug": "ram",
+          "score": 0.149
+        },
+        {
+          "glyph": "🐃",
+          "slug": "water_buffalo",
+          "score": 0.112
+        }
+      ]
+    },
+    {
+      "name": "🥛*🍓",
+      "mode": "conjunction",
+      "family": "everyday",
+      "expect_slug": "beverage_box",
+      "expect_glyph": "🧃",
+      "measured_score": 0.281,
+      "expect_legs": [
+        0.544,
+        0.518
+      ],
+      "claim": "Milk and strawberry answer with a beverage box: the kitchen's reading of the pair, and the strongest joint score in the set.",
+      "measured_top3": [
+        {
+          "glyph": "🧃",
+          "slug": "beverage_box",
+          "score": 0.281
+        },
+        {
+          "glyph": "🧋",
+          "slug": "bubble_tea",
+          "score": 0.255
+        },
+        {
+          "glyph": "🥤",
+          "slug": "cup_with_straw",
+          "score": 0.253
+        }
+      ]
+    },
+    {
+      "name": "🚒*🛥",
+      "mode": "conjunction",
+      "family": "everyday",
+      "expect_slug": "tractor",
+      "expect_glyph": "🚜",
+      "measured_score": 0.32,
+      "expect_legs": [
+        0.581,
+        0.55
+      ],
+      "claim": "A fire engine and a motor boat answer with a tractor. Three vehicles, and the model agrees they are one kind of thing.",
+      "measured_top3": [
+        {
+          "glyph": "🚜",
+          "slug": "tractor",
+          "score": 0.32
+        },
+        {
+          "glyph": "🛵",
+          "slug": "motor_scooter",
+          "score": 0.239
+        },
+        {
+          "glyph": "🛶",
+          "slug": "canoe",
+          "score": 0.234
+        }
+      ]
+    },
+    {
+      "name": "🍕*🦅",
+      "mode": "conjunction",
+      "family": "ceiling",
+      "expect_slug": "penguin",
+      "expect_glyph": "🐧",
+      "measured_score": 0.132,
+      "expect_legs": [
+        0.202,
+        0.654
+      ],
+      "claim": "Pizza and eagle answer with a penguin — a third entry both terms point at, and not the American flag the joke wants. The flag scores 0.113 to pizza and 0.161 to eagle against the winner's 0.202 and 0.654, so no ranking reaches it: a flag's description is its country's name and says nothing a pizza or an eagle is about.",
+      "intended_slug": "flag_united_states",
+      "intended_glyph": "🇺🇸",
+      "intended_legs": [
+        0.113,
+        0.161
+      ],
+      "unreachable": true,
+      "measured_top3": [
+        {
+          "glyph": "🐧",
+          "slug": "penguin",
+          "score": 0.132
+        },
+        {
+          "glyph": "🦞",
+          "slug": "lobster",
+          "score": 0.096
+        },
+        {
+          "glyph": "🐿",
+          "slug": "chipmunk",
+          "score": 0.093
         }
       ]
     }

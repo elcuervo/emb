@@ -7,6 +7,11 @@ and its search keywords live:
     <annotation cp="😭">bawling | cry | crying | face | loudly | sad | sob | tear | tears | unhappy</annotation>
     <annotation cp="😭" type="tts">loudly crying face</annotation>
 
+Flags are not in that file: CLDR keeps them with the derived annotations, whose
+other entries are the skin-tone and gender variants the vocabulary deliberately
+folds. So the derived file is read for its flag entries alone, which is what
+lets a country joke have a country to answer with.
+
 Each entry carries the glyph, a slug, and a description. The description is what
 the model embeds — the name plus the keywords the name does not already say — so
 a query is matched against the words people actually search emoji by rather than
@@ -33,6 +38,7 @@ import tempfile
 import unicodedata
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
 
 CLDR_REPO = "https://raw.githubusercontent.com/unicode-org/cldr"
@@ -40,6 +46,12 @@ CLDR_REPO = "https://raw.githubusercontent.com/unicode-org/cldr"
 CLDR_REF = "release-48"
 CLDR_PATH = "common/annotations/en.xml"
 CLDR_URL = f"{CLDR_REPO}/{CLDR_REF}/{CLDR_PATH}"
+# The flags live here, not in the annotations file above: CLDR keeps derived
+# annotations (flags, and the skin-tone and gender variants of other entries)
+# apart. Only the flags are taken, because the variants are exactly what the
+# vocabulary folds to one canonical glyph.
+CLDR_DERIVED_PATH = "common/annotationsDerived/en.xml"
+CLDR_DERIVED_URL = f"{CLDR_REPO}/{CLDR_REF}/{CLDR_DERIVED_PATH}"
 CLDR_LICENSE = "Unicode-3.0"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,7 +90,7 @@ def description(name: str, keywords: list[str]) -> str:
     return " ".join([name, *kept])
 
 
-def parse(source: bytes) -> list[dict[str, str]]:
+def parse(source: bytes, keep: Callable[[str], bool] | None = None) -> list[dict[str, str]]:
     try:
         tree = ET.fromstring(source)
     except ET.ParseError as exc:  # pragma: no cover - the pinned source parses
@@ -102,6 +114,8 @@ def parse(source: bytes) -> list[dict[str, str]]:
         # is no query that should answer with a tone swatch.
         if glyph in SKIN_TONE:
             continue
+        if keep is not None and not keep(name):
+            continue
         slug = slugify(name)
         if not slug:
             continue
@@ -122,11 +136,25 @@ def parse(source: bytes) -> list[dict[str, str]]:
     return sorted(entries.values(), key=lambda e: e["slug"])
 
 
-def render(entries: list[dict[str, str]], source: bytes) -> bytes:
+def is_flag(name: str) -> bool:
+    """CLDR names every flag `flag: <place>`, and nothing else starts that way."""
+    return name.lower().startswith("flag")
+
+
+def render(entries: list[dict[str, str]], sources: list[tuple[str, bytes]]) -> bytes:
     document = {
         "source": f"{CLDR_REPO}/{CLDR_REF}/{CLDR_PATH}",
         "license": CLDR_LICENSE,
-        "source_sha256": hashlib.sha256(source).hexdigest(),
+        "source_sha256": hashlib.sha256(sources[0][1]).hexdigest(),
+        # Every source the asset was built from, so a rebuild is reproducible
+        # from the recorded digests rather than from whatever the ref serves.
+        "sources": [
+            {
+                "url": f"{CLDR_REPO}/{CLDR_REF}/{path}",
+                "sha256": hashlib.sha256(source).hexdigest(),
+            }
+            for path, source in sources
+        ],
         "generated_by": "dns/tools/build-emoji-vocab.py",
         "entries": entries,
     }
@@ -134,16 +162,26 @@ def render(entries: list[dict[str, str]], source: bytes) -> bytes:
     return (body + "\n").encode("utf-8")
 
 
-def build() -> tuple[bytes, list[dict[str, str]]]:
+def fetch(url: str) -> bytes:
     try:
-        with urllib.request.urlopen(CLDR_URL, timeout=60) as response:
-            source = response.read()
+        with urllib.request.urlopen(url, timeout=60) as response:
+            return response.read()
     except OSError as exc:
-        raise SystemExit(f"emoji-vocab: could not fetch {CLDR_URL}: {exc}")
-    entries = parse(source)
+        raise SystemExit(f"emoji-vocab: could not fetch {url}: {exc}")
+
+
+def build() -> tuple[bytes, list[dict[str, str]]]:
+    annotations = fetch(CLDR_URL)
+    derived = fetch(CLDR_DERIVED_URL)
+    # The annotations file comes first, so an entry it already carries wins the
+    # slug it shares with a derived one.
+    merged: dict[str, dict[str, str]] = {entry["slug"]: entry for entry in parse(annotations)}
+    for entry in parse(derived, keep=is_flag):
+        merged.setdefault(entry["slug"], entry)
+    entries = sorted(merged.values(), key=lambda e: e["slug"])
     if not entries:
         raise SystemExit("emoji-vocab: the source produced no entries")
-    return render(entries, source), entries
+    return render(entries, [(CLDR_PATH, annotations), (CLDR_DERIVED_PATH, derived)]), entries
 
 
 def main() -> int:

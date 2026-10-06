@@ -347,3 +347,42 @@ func unescapeBytes(t *testing.T, field string) string {
 	}
 	return out.String()
 }
+
+func TestAConjunctionAnswersOneGlyphPerRecord(t *testing.T) {
+	service, _ := newTestService(t, nil)
+	msg := ask(t, service, "🐟*🐟.dns.emb.is", dns.TypeTXT)
+	if msg.Rcode != dns.RcodeSuccess {
+		t.Fatalf("rcode is %s, want NOERROR", dns.RcodeToString[msg.Rcode])
+	}
+	got := txtStrings(t, msg)
+	// The fixture has four entries and the query names one of them, so three
+	// candidates remain and the named entry is not among them.
+	if len(got) != 3 {
+		t.Fatalf("answered with %d records, want the 3 candidates: %v", len(got), got)
+	}
+	if got[0] != "🦈" {
+		t.Fatalf("the first record is %q, want the best joint glyph (not the term)", got[0])
+	}
+	for _, rr := range msg.Answer {
+		if record := rr.(*dns.TXT); len(record.Txt) != 1 {
+			t.Fatalf("a conjunction's record carries %d strings (%v), want only its glyph", len(record.Txt), record.Txt)
+		}
+	}
+	// A conjunction is not a sentence, so no record carries a joined phrase.
+	for _, text := range got {
+		if len([]rune(text)) > 1 {
+			t.Fatalf("a record carries the joined phrase %q", text)
+		}
+	}
+}
+
+func TestAMixedNameDoesNotExist(t *testing.T) {
+	service, _ := newTestService(t, nil)
+	msg := ask(t, service, "🦈*🐟+🎉.dns.emb.is", dns.TypeTXT)
+	if msg.Rcode != dns.RcodeNameError {
+		t.Fatalf("rcode is %s, want NXDOMAIN", dns.RcodeToString[msg.Rcode])
+	}
+	if len(msg.Answer) != 0 {
+		t.Fatalf("a mixed name was answered with %v", txtStrings(t, msg))
+	}
+}

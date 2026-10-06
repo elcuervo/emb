@@ -9,8 +9,8 @@ related_targets: ["website/demos/index.html"]
 
 ## Scope and visitor mode
 
-**Read.** One plate at `website/demos/dns.html` for `emb`, the thirteenth and the
-gallery's first served by a second deployment. The visitor arrives from the
+**Read and play.** One plate at `website/demos/dns.html` for `emb`, the thirteenth
+and the gallery's first served by a second deployment. The visitor arrives from the
 gallery or a search; the plate answers *what the model does when the client is
 `dig`* — a DNS query is a sentence, the reply is one `TXT` record, and the whole
 ranking is readable if you know where to look. The plate is an extension of the
@@ -20,11 +20,14 @@ unchanged.
 
 ## The visitor's job
 
-Type a sentence, a glyph, or a composition and watch it become a DNS name and
-come back as an emoji sentence and a ranked list — the same answer a `TXT` record
-carries, and the same answer `dig` escapes into `\240\159\...`. Leave knowing
-that the record holds one glyph and the working rides the HTTP surface, and that
-the zone is a separate machine holding its own model.
+Type a sentence, a glyph, a composition, or a conjunction — or tap an emoji in
+the ranking to compose with it — and watch it become a DNS name and come back as
+an emoji sentence and a ranked list, the same answer a `TXT` record carries and
+the same answer `dig` escapes into `\240\159\...`. Leave knowing that the record
+holds one glyph and the working rides the HTTP surface (a conjunction's legs with
+its joint score), that a sum of two emoji answers with one of them while a
+conjunction can answer with a third, and that the zone is a separate machine
+holding its own model.
 
 ## Constraints (inherited, non-negotiable)
 
@@ -96,8 +99,9 @@ marks with the top rule the one accent, and the same answer printed twice, the
 escaped `TXT` data a resolver hands back beside the glyph it stands for. The
 first viewport carries the number and title, the `WHAT YOU ARE LOOKING AT`
 claim, and the caption read from the service's `/meta` (`emojiml · 384
-dimensions · 1 961 emoji · 300 s TTL`), so the plate reports the surface that
-answered it and no figure is typed.
+dimensions · 2 223 emoji · 300 s TTL`), so the plate reports the surface that
+answered it and no figure is typed. Its example controls are the zone's shipped
+set, stamped from `dns/examples.json` by `website/tools/stamp-examples.py`.
 
 Three material defects were found in the live render and fixed in one batch: the
 `answered` state showed the literal word because the empty label fell through

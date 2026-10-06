@@ -156,8 +156,10 @@ func (s *Service) BuildIndex(ctx context.Context) error {
 // Ready reports whether the vocabulary has been indexed.
 func (s *Service) Ready() bool { return s.index.Load() != nil }
 
-// Answer ranks a query's labels. The name is a sentence and a sum of terms;
-// the answer is the vocabulary ordered by similarity to the composed vector.
+// Answer ranks a query's labels. The name is a sentence, a composition of
+// terms, or a conjunction of them; the answer is the vocabulary ordered by
+// similarity to the composed vector, or by joint similarity to every term of a
+// conjunction.
 func (s *Service) Answer(labels []string, source string) (Outcome, error) {
 	name := s.Name(labels)
 	if s.cfg.LogQueries {
@@ -168,7 +170,7 @@ func (s *Service) Answer(labels []string, source string) (Outcome, error) {
 	if index == nil {
 		return Outcome{Name: name}, ErrNotReady
 	}
-	query, err := s.vocab.Query(labels)
+	parsed, err := emoji.Parse(labels)
 	if err != nil {
 		// A name the grammar cannot read is refused, and nothing is ranked.
 		// This runs before the limiter: reading a name costs nothing, and a
@@ -177,6 +179,7 @@ func (s *Service) Answer(labels []string, source string) (Outcome, error) {
 		s.stats.Unparseable.Add(1)
 		return Outcome{Name: name}, err
 	}
+	query := s.vocab.Spell(parsed)
 	if s.limiter != nil && !s.limiter.allow(source, time.Now()) {
 		// Past its allowance, the caller gets nothing: the vector is the work
 		// being protected, and it is the only thing the limit guards.
@@ -184,8 +187,23 @@ func (s *Service) Answer(labels []string, source string) (Outcome, error) {
 		return Outcome{Name: name}, ErrRateLimited
 	}
 
+	// A conjunction asks what its terms have in common and needs every term's
+	// own vector, so it embeds each of them; a composition is one vector and
+	// stays on the preset that folds the terms.
 	started := time.Now()
-	vector, err := s.upstream.Compose(query)
+	var (
+		vector []float32
+		terms  [][]float32
+	)
+	if query.Conjunction {
+		texts := make([]string, len(query.Terms))
+		for i, term := range query.Terms {
+			texts[i] = term.Text
+		}
+		terms, err = s.upstream.Embed(texts)
+	} else {
+		vector, err = s.upstream.Compose(query)
+	}
 	s.stats.UpstreamCalls.Add(1)
 	s.stats.UpstreamNanos.Add(int64(time.Since(started)))
 	if err != nil {
@@ -193,7 +211,12 @@ func (s *Service) Answer(labels []string, source string) (Outcome, error) {
 		return Outcome{Name: name}, err
 	}
 
-	results, err := index.Rank(vector, s.cfg.TopK)
+	var results []emoji.Result
+	if query.Conjunction {
+		results, err = index.RankJoint(terms, s.vocab.Indices(parsed), s.cfg.TopK)
+	} else {
+		results, err = index.Rank(vector, s.cfg.TopK)
+	}
 	if err != nil {
 		s.stats.UpstreamErrors.Add(1)
 		return Outcome{Name: name}, err

@@ -322,6 +322,9 @@ jobs:
       - name: Preset digests match the preloaded bytes
         run: python3 website/tools/stamp-presets.py --check
 
+      - name: Example controls match the zone's shipped examples
+        run: python3 website/tools/stamp-examples.py --check
+
       - name: Served tree, canonical origin, and cache rules
         run: python3 website/tools/published-tree.py
 

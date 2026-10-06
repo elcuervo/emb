@@ -18,7 +18,11 @@ and over HTTP for the view `dig` cannot print.
 ## The grammar
 
 A name's labels are the words of a sentence. A `.` is a word break; `+` and `-`
-separate the terms a query composes, evaluated left to right with no precedence.
+separate the terms a query composes, evaluated left to right with no precedence,
+and `*` joins terms into a conjunction — the entries closest to *all* of them at
+once. A name composes or conjoins, never both: mixing `*` with `+` or `-` is
+refused, because each operator means one thing and no precedence decides between
+them.
 
 | Name | Treated as |
 |---|---|
@@ -26,6 +30,15 @@ separate the terms a query composes, evaluated left to right with no precedence.
 | `🦈.dns.emb.is` | the glyph's vocabulary entry, `shark` |
 | `shark.dns.emb.is` | the same query — a glyph is a way of writing its entry |
 | `🦈-🐟+🐦.dns.emb.is` | `shark − fish + bird`, composed as vectors |
+| `🐉*🥟.dns.emb.is` | the entry closest to both a dragon and a dumpling |
+
+A composition of unit vectors is an average, so it scores its own terms equally
+and answers with one of them (`pizza + eagle` returns pizza or eagle). A
+conjunction is a different question: it ranks every entry by the product of its
+similarity to each term and answers with the best entry the query did not name,
+so it can answer with a third thing entirely — `🐉*🥟` → 🐼, `🍣*🌸` → 🍡,
+`🗽*🏈` → 🏟. The HTTP reply carries each result's similarity to every term
+beside its joint score, so a joke can be told from a stretch.
 
 A glyph expands to its vocabulary entry's **description** before embedding, which
 is why `🦈` and `shark` are the same query by construction: the model never sees
@@ -38,8 +51,9 @@ came from. Ask in a glyph or compose terms and the answer is a single emoji,
 because the shape of the question, not a flag, decides.
 
 A name the grammar cannot read is refused rather than truncated: an empty name,
-one that is only operators or opens with `-`, a label over 63 bytes, or a name
-over 253 bytes. DNS answers `NXDOMAIN`; HTTP answers `400`.
+one that is only operators or opens with `-`, one that mixes `*` with `+`/`-`, a
+label over 63 bytes, or a name over 253 bytes. DNS answers `NXDOMAIN`; HTTP
+answers `400`.
 
 ## The reply
 
@@ -119,10 +133,12 @@ just emoji-vocab               # rebuild from CLDR
 just emoji-vocab-check         # fail on any drift
 ```
 
-The vocabulary is one entry per fully-qualified emoji (1961 of them), each with a
-glyph, a kebab-case slug, and a description; skin-tone and gender variants are
-folded onto one canonical glyph. It is derived from Unicode CLDR and carries the
-Unicode licence (`Unicode-3.0`) and its source beside the asset.
+The vocabulary is one entry per fully-qualified emoji (2223 of them), each with
+a glyph, a kebab-case slug, and a description; skin-tone and gender variants are
+folded onto one canonical glyph. It is derived from Unicode CLDR — the emoji
+annotations, plus the flag entries CLDR keeps with its derived annotations — and
+carries the Unicode licence (`Unicode-3.0`) and every source it was built from,
+with a digest each, beside the asset.
 
 ## Deploying
 

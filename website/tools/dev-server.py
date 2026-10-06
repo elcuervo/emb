@@ -11,6 +11,11 @@ published file, so the page under test differs from production in exactly one
 respect, and the published page keeps a single source rather than growing a
 dev-only branch.
 
+It also proxies `/zone/` to a local DNS zone, so the zone plate can be played
+against a local `just dns-dev` without the zone's production origins growing a
+localhost entry: the plate's own `?zone=` override points at `/zone`, and the
+browser sees one origin.
+
     python3 website/tools/dev-server.py 8080 --sandbox-port 8081
 
 Run it together with the bridge and a local `emb` via `just website-dev`,
@@ -24,6 +29,8 @@ from __future__ import annotations
 import argparse
 import functools
 import http.server
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +44,11 @@ PRODUCTION_SANDBOX = "https://cli.emb.is"
 # them from their own mtimes: `demos.js` gains an export, the page names it, and
 # the template hands the page the current bytes instead of yesterday's.
 LIVE_MODULES = ("demos.js", "tldr.js")
+
+
+# The zone the plate may be pointed at through this server, so a local zone can
+# be played without adding a localhost origin to the zone's own configuration.
+ZONE_PREFIX = "/zone"
 
 
 def module_token() -> str:
@@ -54,6 +66,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # the loop works from `localhost`, from `127.0.0.1`, and from a LAN address
     # without knowing any of them up front.
     sandbox_port = 8081
+    # The local zone's HTTP port, proxied at /zone.
+    zone_port = 8099
 
     def send_response(self, code: int, message: str | None = None) -> None:
         # Nothing in the working loop is cached. The published tree pins its own
@@ -64,7 +78,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().send_response(code, message)
         self.send_header("Cache-Control", "no-store")
 
+    def zone_target(self) -> str:
+        """The zone's own path for a /zone request: the prefix is the only
+        difference, so `?q=` and the read routes travel unchanged."""
+        rest = self.path[len(ZONE_PREFIX) :]
+        return rest if rest.startswith(("/", "?")) else "/" + rest
+
+    def proxy_zone(self) -> None:
+        url = f"http://127.0.0.1:{self.zone_port}{self.zone_target()}"
+        try:
+            with urllib.request.urlopen(url, timeout=30) as upstream:
+                body = upstream.read()
+                status = upstream.status
+                content_type = upstream.headers.get("Content-Type", "application/json")
+        except urllib.error.HTTPError as exc:
+            # A refusal is an answer: the zone's 400 carries the reason, and the
+            # plate states it rather than calling the zone unreachable.
+            body = exc.read()
+            status = exc.code
+            content_type = exc.headers.get("Content-Type", "text/plain; charset=utf-8")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            # The plate states an unreachable zone rather than inventing an
+            # answer, so the failure is reported as one.
+            body = f"dev-server: the local zone at {url} could not be reached: {exc}\n".encode()
+            status, content_type = 502, "text/plain; charset=utf-8"
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib name
+        if self.path == ZONE_PREFIX or self.path.startswith((ZONE_PREFIX + "/", ZONE_PREFIX + "?")):
+            self.proxy_zone()
+            return
         path = Path(self.translate_path(self.path))
         if path.is_dir():
             path = path / "index.html"
@@ -105,18 +152,27 @@ def main() -> int:
         help="port of the local bridge (default: %(default)s)",
     )
     parser.add_argument("--bind", default="127.0.0.1")
+    parser.add_argument(
+        "--zone-port",
+        type=int,
+        default=8099,
+        help="port of the local DNS zone, served at /zone (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     if not SITE_DIR.is_dir():
         raise SystemExit(f"dev-server: no site directory at {SITE_DIR}")
 
     Handler.sandbox_port = args.sandbox_port
+    Handler.zone_port = args.zone_port
     handler = functools.partial(Handler, directory=str(SITE_DIR))
     with http.server.ThreadingHTTPServer((args.bind, args.port), handler) as httpd:
         print(
             f"dev-server: http://{args.bind}:{args.port}/ → {SITE_DIR}\n"
             f"dev-server: console client module loaded from "
-            f"http://<this host>:{args.sandbox_port}",
+            f"http://<this host>:{args.sandbox_port}\n"
+            f"dev-server: the zone plate may be pointed at /zone → "
+            f"http://127.0.0.1:{args.zone_port}",
             flush=True,
         )
         try:

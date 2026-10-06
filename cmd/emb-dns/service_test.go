@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -278,5 +279,105 @@ func TestMetaReportsTheServedFacts(t *testing.T) {
 		if got := meta[key]; got != want {
 			t.Errorf("meta[%q] is %v, want %v", key, got, want)
 		}
+	}
+}
+
+func cosine(a, b []float32) float64 {
+	var dot, na, nb float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+}
+
+func TestAnswerConjoinsInsteadOfComposing(t *testing.T) {
+	service, fake := newTestService(t, nil)
+	outcome, err := service.Answer([]string{"🦈*🐟"}, "192.0.2.1")
+	if err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	// A conjunction needs each term's own vector, so it embeds them; the
+	// composition preset is the arithmetic path and must not be used.
+	if len(fake.queries) != 0 {
+		t.Fatalf("a conjunction ran the composition preset: %+v", fake.queries)
+	}
+	if fake.embedCalls != 2 {
+		t.Fatalf("the index build and the conjunction made %d embed calls, want 2", fake.embedCalls)
+	}
+	// Two of the four fixture entries are the terms themselves, so only two
+	// candidates remain: an excluded term is not an answer and no placeholder
+	// stands in for it.
+	if len(outcome.Results) != 2 {
+		t.Fatalf("got %d results, want the 2 entries the query did not name", len(outcome.Results))
+	}
+	top := outcome.Results[0]
+	if top.Entry.Slug == "shark" || top.Entry.Slug == "fish" {
+		t.Fatalf("a conjunction answered with one of its own terms: %q", top.Entry.Slug)
+	}
+	// The working: the legs are this entry's similarity to each term, and the
+	// score is what they multiply to.
+	if len(top.Legs) != 2 {
+		t.Fatalf("the answer carries %d legs, want one per term: %v", len(top.Legs), top.Legs)
+	}
+	for i, term := range []string{"shark", "fish"} {
+		want := cosine(fixtureVectors[top.Entry.Description], fixtureVectors[term])
+		if math.Abs(top.Legs[i]-want) > 1e-6 {
+			t.Fatalf("leg %d is %v, want cos(%q, %q) = %v", i, top.Legs[i], top.Entry.Description, term, want)
+		}
+	}
+	if math.Abs(top.Score-top.Legs[0]*top.Legs[1]) > 1e-6 {
+		t.Fatalf("the joint score %v is not the product of its legs %v", top.Score, top.Legs)
+	}
+	if outcome.Phrase != "" {
+		t.Fatalf("a conjunction carried an emoji sentence: %q", outcome.Phrase)
+	}
+}
+
+func TestAConjunctionExcludesTheTermsItNames(t *testing.T) {
+	service, _ := newTestService(t, nil)
+	// `🐟*🐟` names one entry twice. Fish would answer itself at 1.0, so the
+	// answer proves the exclusion rather than the ranking.
+	outcome, err := service.Answer([]string{"🐟*🐟"}, "192.0.2.1")
+	if err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	top := outcome.Results[0]
+	if top.Entry.Slug != "shark" {
+		t.Fatalf("the best entry is %q, want shark (scores %+v)", top.Entry.Slug, outcome.Results)
+	}
+	want := cosine(fixtureVectors["shark"], fixtureVectors["fish"])
+	if math.Abs(top.Score-want*want) > 1e-6 {
+		t.Fatalf("the joint score is %v, want %v", top.Score, want*want)
+	}
+}
+
+func TestArithmeticCarriesNoLegs(t *testing.T) {
+	service, fake := newTestService(t, nil)
+	outcome, err := service.Answer([]string{"🦈-🐟+🎉"}, "192.0.2.1")
+	if err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	if len(fake.queries) != 1 {
+		t.Fatalf("the composition preset ran %d times, want once: %+v", len(fake.queries), fake.queries)
+	}
+	for _, result := range outcome.Results {
+		if result.Legs != nil {
+			t.Fatalf("a composed query reported legs for %q: %v", result.Entry.Slug, result.Legs)
+		}
+	}
+}
+
+func TestAnswerRefusesAMixedName(t *testing.T) {
+	service, fake := newTestService(t, nil)
+	if _, err := service.Answer([]string{"🦈*🐟+🎉"}, "192.0.2.1"); !errors.Is(err, emoji.ErrMixedOperators) {
+		t.Fatalf("Answer gave %v, want %v", err, emoji.ErrMixedOperators)
+	}
+	if len(fake.queries) != 0 || fake.embedCalls != 1 {
+		t.Fatal("a mixed name reached the model")
+	}
+	if service.stats.Served.Load() != 0 {
+		t.Fatal("a mixed name counted as served")
 	}
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -312,5 +314,61 @@ func TestTheRootExplainsTheZone(t *testing.T) {
 	w := get(t, handler, "/", nil)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "every name under this zone is a query") {
 		t.Fatalf("the root answered %d with %q", w.Code, w.Body.String())
+	}
+}
+
+func TestJSONRouteCarriesAConjunctionsWorking(t *testing.T) {
+	_, handler := newTestHandler(t, nil)
+	type document struct {
+		Records []struct {
+			Slug  string    `json:"slug"`
+			Score float64   `json:"score"`
+			Legs  []float64 `json:"legs"`
+		} `json:"records"`
+	}
+	conjunct := get(t, handler, "/?q="+url.QueryEscape("🐟*🐟"), nil)
+	if conjunct.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", conjunct.Code, conjunct.Body.String())
+	}
+	var joined document
+	if err := json.Unmarshal(conjunct.Body.Bytes(), &joined); err != nil {
+		t.Fatalf("decode %q: %v", conjunct.Body.String(), err)
+	}
+	// Four fixture entries, one named by the query and excluded: three remain.
+	if len(joined.Records) != 3 {
+		t.Fatalf("got %d records, want the 3 candidates", len(joined.Records))
+	}
+	for _, record := range joined.Records {
+		if len(record.Legs) != 2 {
+			t.Fatalf("%q carries %d legs, want one per term: %v", record.Slug, len(record.Legs), record.Legs)
+		}
+		if want := record.Legs[0] * record.Legs[1]; math.Abs(record.Score-want) > 1e-6 {
+			t.Fatalf("%q: the joint score %v is not the product of %v", record.Slug, record.Score, record.Legs)
+		}
+	}
+
+	composed := get(t, handler, "/?q="+url.QueryEscape("🦈-🐟+🎉"), nil)
+	var arithmetic document
+	if err := json.Unmarshal(composed.Body.Bytes(), &arithmetic); err != nil {
+		t.Fatalf("decode %q: %v", composed.Body.String(), err)
+	}
+	if len(arithmetic.Records) == 0 {
+		t.Fatalf("the composed query answered nothing: %s", composed.Body.String())
+	}
+	for _, record := range arithmetic.Records {
+		if record.Legs != nil {
+			t.Fatalf("a composed query reported legs for %q: %v", record.Slug, record.Legs)
+		}
+	}
+}
+
+func TestAMixedNameIsRefusedAsABadRequest(t *testing.T) {
+	_, handler := newTestHandler(t, nil)
+	w := get(t, handler, "/?q="+url.QueryEscape("🦈*🐟+🎉"), nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "mixed") {
+		t.Fatalf("the refusal does not name the reason: %q", body)
 	}
 }

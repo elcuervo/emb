@@ -24,17 +24,25 @@ var (
 	ErrNoTerms = errors.New("emoji: query has no terms")
 	// ErrTooLong is a name or label the transport cannot carry.
 	ErrTooLong = errors.New("emoji: query too long")
+	// ErrMixedOperators is a name that both composes arithmetic terms and asks
+	// a conjunction: each operator means one thing, and there is no precedence
+	// to decide between them.
+	ErrMixedOperators = errors.New("emoji: mixed composition operators")
 )
 
 // operators separate the terms of a query. Every other character belongs to the
-// term being read, which is why a vocabulary slug never contains either: see
-// dns/tools/build-emoji-vocab.py.
-const operators = "+-"
+// term being read, which is why a vocabulary slug never contains one: see
+// dns/tools/build-emoji-vocab.py. `+` and `-` compose a term arithmetically and
+// `*` conjoins one: an operator belongs to the term that follows it.
+const operators = "+-*"
 
 // Term is one operand of a query. Text is what the model embeds for it, and
-// Subtract marks a `-`, which the evaluator applies to the running result.
+// Subtract and Conjoin are the operator that introduced it: `-` subtracts a
+// term and `*` conjoins it. At most one of the two is set, and neither is set
+// for the first term, which no operator introduced.
 type Term struct {
 	Subtract bool
+	Conjoin  bool
 	Text     string
 }
 
@@ -47,11 +55,18 @@ type Query struct {
 	// the term as the query wrote it, before any vocabulary word is spelled out,
 	// so naming an entry is one word however long its description runs.
 	Sentence bool
+	// Conjunction marks a query whose terms are joined by `*`, which asks for
+	// the entries closest to all of them at once rather than for a composition
+	// of their vectors. A single term is not a conjunction: there is nothing to
+	// conjoin it with.
+	Conjunction bool
 }
 
 // Parse reads a query name, given as the labels the transport carried. Labels
-// are the words of one sentence (a `.` between them is a word break), and `+`
-// or `-` inside a label ends the term being read and starts the next one.
+// are the words of one sentence (a `.` between them is a word break), and `+`,
+// `-`, or `*` inside a label ends the term being read and starts the next one.
+// A name may compose arithmetically or conjoin, never both: an operator means
+// one thing and no precedence decides between them.
 //
 // Parse is pure: it knows nothing about the vocabulary, so a glyph or a slug
 // travels as written. Vocab.Spell is what turns those into their descriptions.
@@ -81,10 +96,11 @@ func Parse(labels []string) (Query, error) {
 		terms    []Term
 		current  strings.Builder
 		subtract bool
+		conjoin  bool
 	)
 	flush := func() {
 		if word := strings.Join(strings.Fields(current.String()), " "); word != "" {
-			terms = append(terms, Term{Subtract: subtract, Text: word})
+			terms = append(terms, Term{Subtract: subtract, Conjoin: conjoin, Text: word})
 		}
 		current.Reset()
 	}
@@ -92,6 +108,7 @@ func Parse(labels []string) (Query, error) {
 		if strings.ContainsRune(operators, r) {
 			flush()
 			subtract = r == '-'
+			conjoin = r == '*'
 			continue
 		}
 		current.WriteRune(r)
@@ -104,9 +121,25 @@ func Parse(labels []string) (Query, error) {
 	if terms[0].Subtract {
 		return Query{}, fmt.Errorf("%w: the query opens with a subtraction", ErrNoTerms)
 	}
+
+	// A name composes or conjoins, never both: only one of the two readings can
+	// answer, and a precedence rule would make it a third thing nobody wrote.
+	var conjoined, arithmetic bool
+	for i, term := range terms {
+		switch {
+		case term.Conjoin:
+			conjoined = true
+		case i > 0:
+			arithmetic = true
+		}
+	}
+	if conjoined && arithmetic {
+		return Query{}, fmt.Errorf("%w: `*` cannot be mixed with `+` or `-`", ErrMixedOperators)
+	}
 	return Query{
-		Terms:    terms,
-		Sentence: len(terms) == 1 && len(strings.Fields(terms[0].Text)) > 1,
+		Terms:       terms,
+		Sentence:    len(terms) == 1 && len(strings.Fields(terms[0].Text)) > 1,
+		Conjunction: conjoined && len(terms) > 1,
 	}, nil
 }
 
@@ -123,9 +156,9 @@ func (v Vocab) Spell(q Query) Query {
 				words[j] = entry.Description
 			}
 		}
-		spelled[i] = Term{Subtract: term.Subtract, Text: strings.Join(words, " ")}
+		spelled[i] = Term{Subtract: term.Subtract, Conjoin: term.Conjoin, Text: strings.Join(words, " ")}
 	}
-	return Query{Terms: spelled, Sentence: q.Sentence}
+	return Query{Terms: spelled, Sentence: q.Sentence, Conjunction: q.Conjunction}
 }
 
 // Query parses labels and spells them against the vocabulary, which is what a

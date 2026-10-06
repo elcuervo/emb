@@ -2,6 +2,16 @@
   "source": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotations/en.xml",
   "license": "Unicode-3.0",
   "source_sha256": "8511aadd046fdba2f0ffe590266ced8bbf48175ad139b2675d85d7141057b235",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotations/en.xml",
+      "sha256": "8511aadd046fdba2f0ffe590266ced8bbf48175ad139b2675d85d7141057b235"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotationsDerived/en.xml",
+      "sha256": "d76bd041c8c9e7b00b716aff8b7d9dbf509877010e191d5efd068be2553e066e"
+    }
+  ],
   "generated_by": "dns/tools/build-emoji-vocab.py",
   "entries": [
     {
@@ -3437,10 +3447,1582 @@
       "description": "five-thirty 30 5 5:30 clock thirty time"
     },
     {
+      "glyph": "🇦🇽",
+      "slug": "flag_a_land_islands",
+      "name": "flag: Åland Islands",
+      "description": "flag: Åland Islands"
+    },
+    {
+      "glyph": "🇦🇫",
+      "slug": "flag_afghanistan",
+      "name": "flag: Afghanistan",
+      "description": "flag: Afghanistan"
+    },
+    {
+      "glyph": "🇦🇱",
+      "slug": "flag_albania",
+      "name": "flag: Albania",
+      "description": "flag: Albania"
+    },
+    {
+      "glyph": "🇩🇿",
+      "slug": "flag_algeria",
+      "name": "flag: Algeria",
+      "description": "flag: Algeria"
+    },
+    {
+      "glyph": "🇦🇸",
+      "slug": "flag_american_samoa",
+      "name": "flag: American Samoa",
+      "description": "flag: American Samoa"
+    },
+    {
+      "glyph": "🇦🇩",
+      "slug": "flag_andorra",
+      "name": "flag: Andorra",
+      "description": "flag: Andorra"
+    },
+    {
+      "glyph": "🇦🇴",
+      "slug": "flag_angola",
+      "name": "flag: Angola",
+      "description": "flag: Angola"
+    },
+    {
+      "glyph": "🇦🇮",
+      "slug": "flag_anguilla",
+      "name": "flag: Anguilla",
+      "description": "flag: Anguilla"
+    },
+    {
+      "glyph": "🇦🇶",
+      "slug": "flag_antarctica",
+      "name": "flag: Antarctica",
+      "description": "flag: Antarctica"
+    },
+    {
+      "glyph": "🇦🇬",
+      "slug": "flag_antigua_barbuda",
+      "name": "flag: Antigua & Barbuda",
+      "description": "flag: Antigua & Barbuda"
+    },
+    {
+      "glyph": "🇦🇷",
+      "slug": "flag_argentina",
+      "name": "flag: Argentina",
+      "description": "flag: Argentina"
+    },
+    {
+      "glyph": "🇦🇲",
+      "slug": "flag_armenia",
+      "name": "flag: Armenia",
+      "description": "flag: Armenia"
+    },
+    {
+      "glyph": "🇦🇼",
+      "slug": "flag_aruba",
+      "name": "flag: Aruba",
+      "description": "flag: Aruba"
+    },
+    {
+      "glyph": "🇦🇨",
+      "slug": "flag_ascension_island",
+      "name": "flag: Ascension Island",
+      "description": "flag: Ascension Island"
+    },
+    {
+      "glyph": "🇦🇺",
+      "slug": "flag_australia",
+      "name": "flag: Australia",
+      "description": "flag: Australia"
+    },
+    {
+      "glyph": "🇦🇹",
+      "slug": "flag_austria",
+      "name": "flag: Austria",
+      "description": "flag: Austria"
+    },
+    {
+      "glyph": "🇦🇿",
+      "slug": "flag_azerbaijan",
+      "name": "flag: Azerbaijan",
+      "description": "flag: Azerbaijan"
+    },
+    {
+      "glyph": "🇧🇸",
+      "slug": "flag_bahamas",
+      "name": "flag: Bahamas",
+      "description": "flag: Bahamas"
+    },
+    {
+      "glyph": "🇧🇭",
+      "slug": "flag_bahrain",
+      "name": "flag: Bahrain",
+      "description": "flag: Bahrain"
+    },
+    {
+      "glyph": "🇧🇩",
+      "slug": "flag_bangladesh",
+      "name": "flag: Bangladesh",
+      "description": "flag: Bangladesh"
+    },
+    {
+      "glyph": "🇧🇧",
+      "slug": "flag_barbados",
+      "name": "flag: Barbados",
+      "description": "flag: Barbados"
+    },
+    {
+      "glyph": "🇧🇾",
+      "slug": "flag_belarus",
+      "name": "flag: Belarus",
+      "description": "flag: Belarus"
+    },
+    {
+      "glyph": "🇧🇪",
+      "slug": "flag_belgium",
+      "name": "flag: Belgium",
+      "description": "flag: Belgium"
+    },
+    {
+      "glyph": "🇧🇿",
+      "slug": "flag_belize",
+      "name": "flag: Belize",
+      "description": "flag: Belize"
+    },
+    {
+      "glyph": "🇧🇯",
+      "slug": "flag_benin",
+      "name": "flag: Benin",
+      "description": "flag: Benin"
+    },
+    {
+      "glyph": "🇧🇲",
+      "slug": "flag_bermuda",
+      "name": "flag: Bermuda",
+      "description": "flag: Bermuda"
+    },
+    {
+      "glyph": "🇧🇹",
+      "slug": "flag_bhutan",
+      "name": "flag: Bhutan",
+      "description": "flag: Bhutan"
+    },
+    {
+      "glyph": "🇧🇴",
+      "slug": "flag_bolivia",
+      "name": "flag: Bolivia",
+      "description": "flag: Bolivia"
+    },
+    {
+      "glyph": "🇧🇦",
+      "slug": "flag_bosnia_herzegovina",
+      "name": "flag: Bosnia & Herzegovina",
+      "description": "flag: Bosnia & Herzegovina"
+    },
+    {
+      "glyph": "🇧🇼",
+      "slug": "flag_botswana",
+      "name": "flag: Botswana",
+      "description": "flag: Botswana"
+    },
+    {
+      "glyph": "🇧🇻",
+      "slug": "flag_bouvet_island",
+      "name": "flag: Bouvet Island",
+      "description": "flag: Bouvet Island"
+    },
+    {
+      "glyph": "🇧🇷",
+      "slug": "flag_brazil",
+      "name": "flag: Brazil",
+      "description": "flag: Brazil"
+    },
+    {
+      "glyph": "🇮🇴",
+      "slug": "flag_british_indian_ocean_territory",
+      "name": "flag: British Indian Ocean Territory",
+      "description": "flag: British Indian Ocean Territory"
+    },
+    {
+      "glyph": "🇻🇬",
+      "slug": "flag_british_virgin_islands",
+      "name": "flag: British Virgin Islands",
+      "description": "flag: British Virgin Islands"
+    },
+    {
+      "glyph": "🇧🇳",
+      "slug": "flag_brunei",
+      "name": "flag: Brunei",
+      "description": "flag: Brunei"
+    },
+    {
+      "glyph": "🇧🇬",
+      "slug": "flag_bulgaria",
+      "name": "flag: Bulgaria",
+      "description": "flag: Bulgaria"
+    },
+    {
+      "glyph": "🇧🇫",
+      "slug": "flag_burkina_faso",
+      "name": "flag: Burkina Faso",
+      "description": "flag: Burkina Faso"
+    },
+    {
+      "glyph": "🇧🇮",
+      "slug": "flag_burundi",
+      "name": "flag: Burundi",
+      "description": "flag: Burundi"
+    },
+    {
+      "glyph": "🇰🇭",
+      "slug": "flag_cambodia",
+      "name": "flag: Cambodia",
+      "description": "flag: Cambodia"
+    },
+    {
+      "glyph": "🇨🇲",
+      "slug": "flag_cameroon",
+      "name": "flag: Cameroon",
+      "description": "flag: Cameroon"
+    },
+    {
+      "glyph": "🇨🇦",
+      "slug": "flag_canada",
+      "name": "flag: Canada",
+      "description": "flag: Canada"
+    },
+    {
+      "glyph": "🇮🇨",
+      "slug": "flag_canary_islands",
+      "name": "flag: Canary Islands",
+      "description": "flag: Canary Islands"
+    },
+    {
+      "glyph": "🇨🇻",
+      "slug": "flag_cape_verde",
+      "name": "flag: Cape Verde",
+      "description": "flag: Cape Verde"
+    },
+    {
+      "glyph": "🇧🇶",
+      "slug": "flag_caribbean_netherlands",
+      "name": "flag: Caribbean Netherlands",
+      "description": "flag: Caribbean Netherlands"
+    },
+    {
+      "glyph": "🇰🇾",
+      "slug": "flag_cayman_islands",
+      "name": "flag: Cayman Islands",
+      "description": "flag: Cayman Islands"
+    },
+    {
+      "glyph": "🇨🇫",
+      "slug": "flag_central_african_republic",
+      "name": "flag: Central African Republic",
+      "description": "flag: Central African Republic"
+    },
+    {
+      "glyph": "🇪🇦",
+      "slug": "flag_ceuta_melilla",
+      "name": "flag: Ceuta & Melilla",
+      "description": "flag: Ceuta & Melilla"
+    },
+    {
+      "glyph": "🇹🇩",
+      "slug": "flag_chad",
+      "name": "flag: Chad",
+      "description": "flag: Chad"
+    },
+    {
+      "glyph": "🇨🇱",
+      "slug": "flag_chile",
+      "name": "flag: Chile",
+      "description": "flag: Chile"
+    },
+    {
+      "glyph": "🇨🇳",
+      "slug": "flag_china",
+      "name": "flag: China",
+      "description": "flag: China"
+    },
+    {
+      "glyph": "🇨🇽",
+      "slug": "flag_christmas_island",
+      "name": "flag: Christmas Island",
+      "description": "flag: Christmas Island"
+    },
+    {
+      "glyph": "🇨🇵",
+      "slug": "flag_clipperton_island",
+      "name": "flag: Clipperton Island",
+      "description": "flag: Clipperton Island"
+    },
+    {
+      "glyph": "🇨🇮",
+      "slug": "flag_co_te_d_ivoire",
+      "name": "flag: Côte d’Ivoire",
+      "description": "flag: Côte d’Ivoire"
+    },
+    {
+      "glyph": "🇨🇨",
+      "slug": "flag_cocos_keeling_islands",
+      "name": "flag: Cocos (Keeling) Islands",
+      "description": "flag: Cocos (Keeling) Islands"
+    },
+    {
+      "glyph": "🇨🇴",
+      "slug": "flag_colombia",
+      "name": "flag: Colombia",
+      "description": "flag: Colombia"
+    },
+    {
+      "glyph": "🇰🇲",
+      "slug": "flag_comoros",
+      "name": "flag: Comoros",
+      "description": "flag: Comoros"
+    },
+    {
+      "glyph": "🇨🇬",
+      "slug": "flag_congo_brazzaville",
+      "name": "flag: Congo - Brazzaville",
+      "description": "flag: Congo - Brazzaville"
+    },
+    {
+      "glyph": "🇨🇩",
+      "slug": "flag_congo_kinshasa",
+      "name": "flag: Congo - Kinshasa",
+      "description": "flag: Congo - Kinshasa"
+    },
+    {
+      "glyph": "🇨🇰",
+      "slug": "flag_cook_islands",
+      "name": "flag: Cook Islands",
+      "description": "flag: Cook Islands"
+    },
+    {
+      "glyph": "🇨🇷",
+      "slug": "flag_costa_rica",
+      "name": "flag: Costa Rica",
+      "description": "flag: Costa Rica"
+    },
+    {
+      "glyph": "🇭🇷",
+      "slug": "flag_croatia",
+      "name": "flag: Croatia",
+      "description": "flag: Croatia"
+    },
+    {
+      "glyph": "🇨🇺",
+      "slug": "flag_cuba",
+      "name": "flag: Cuba",
+      "description": "flag: Cuba"
+    },
+    {
+      "glyph": "🇨🇼",
+      "slug": "flag_curac_ao",
+      "name": "flag: Curaçao",
+      "description": "flag: Curaçao"
+    },
+    {
+      "glyph": "🇨🇾",
+      "slug": "flag_cyprus",
+      "name": "flag: Cyprus",
+      "description": "flag: Cyprus"
+    },
+    {
+      "glyph": "🇨🇿",
+      "slug": "flag_czechia",
+      "name": "flag: Czechia",
+      "description": "flag: Czechia"
+    },
+    {
+      "glyph": "🇩🇰",
+      "slug": "flag_denmark",
+      "name": "flag: Denmark",
+      "description": "flag: Denmark"
+    },
+    {
+      "glyph": "🇩🇬",
+      "slug": "flag_diego_garcia",
+      "name": "flag: Diego Garcia",
+      "description": "flag: Diego Garcia"
+    },
+    {
+      "glyph": "🇩🇯",
+      "slug": "flag_djibouti",
+      "name": "flag: Djibouti",
+      "description": "flag: Djibouti"
+    },
+    {
+      "glyph": "🇩🇲",
+      "slug": "flag_dominica",
+      "name": "flag: Dominica",
+      "description": "flag: Dominica"
+    },
+    {
+      "glyph": "🇩🇴",
+      "slug": "flag_dominican_republic",
+      "name": "flag: Dominican Republic",
+      "description": "flag: Dominican Republic"
+    },
+    {
+      "glyph": "🇪🇨",
+      "slug": "flag_ecuador",
+      "name": "flag: Ecuador",
+      "description": "flag: Ecuador"
+    },
+    {
+      "glyph": "🇪🇬",
+      "slug": "flag_egypt",
+      "name": "flag: Egypt",
+      "description": "flag: Egypt"
+    },
+    {
+      "glyph": "🇸🇻",
+      "slug": "flag_el_salvador",
+      "name": "flag: El Salvador",
+      "description": "flag: El Salvador"
+    },
+    {
+      "glyph": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+      "slug": "flag_england",
+      "name": "flag: England",
+      "description": "flag: England"
+    },
+    {
+      "glyph": "🇬🇶",
+      "slug": "flag_equatorial_guinea",
+      "name": "flag: Equatorial Guinea",
+      "description": "flag: Equatorial Guinea"
+    },
+    {
+      "glyph": "🇪🇷",
+      "slug": "flag_eritrea",
+      "name": "flag: Eritrea",
+      "description": "flag: Eritrea"
+    },
+    {
+      "glyph": "🇪🇪",
+      "slug": "flag_estonia",
+      "name": "flag: Estonia",
+      "description": "flag: Estonia"
+    },
+    {
+      "glyph": "🇸🇿",
+      "slug": "flag_eswatini",
+      "name": "flag: Eswatini",
+      "description": "flag: Eswatini"
+    },
+    {
+      "glyph": "🇪🇹",
+      "slug": "flag_ethiopia",
+      "name": "flag: Ethiopia",
+      "description": "flag: Ethiopia"
+    },
+    {
+      "glyph": "🇪🇺",
+      "slug": "flag_european_union",
+      "name": "flag: European Union",
+      "description": "flag: European Union"
+    },
+    {
+      "glyph": "🇫🇰",
+      "slug": "flag_falkland_islands",
+      "name": "flag: Falkland Islands",
+      "description": "flag: Falkland Islands"
+    },
+    {
+      "glyph": "🇫🇴",
+      "slug": "flag_faroe_islands",
+      "name": "flag: Faroe Islands",
+      "description": "flag: Faroe Islands"
+    },
+    {
+      "glyph": "🇫🇯",
+      "slug": "flag_fiji",
+      "name": "flag: Fiji",
+      "description": "flag: Fiji"
+    },
+    {
+      "glyph": "🇫🇮",
+      "slug": "flag_finland",
+      "name": "flag: Finland",
+      "description": "flag: Finland"
+    },
+    {
+      "glyph": "🇫🇷",
+      "slug": "flag_france",
+      "name": "flag: France",
+      "description": "flag: France"
+    },
+    {
+      "glyph": "🇬🇫",
+      "slug": "flag_french_guiana",
+      "name": "flag: French Guiana",
+      "description": "flag: French Guiana"
+    },
+    {
+      "glyph": "🇵🇫",
+      "slug": "flag_french_polynesia",
+      "name": "flag: French Polynesia",
+      "description": "flag: French Polynesia"
+    },
+    {
+      "glyph": "🇹🇫",
+      "slug": "flag_french_southern_territories",
+      "name": "flag: French Southern Territories",
+      "description": "flag: French Southern Territories"
+    },
+    {
+      "glyph": "🇬🇦",
+      "slug": "flag_gabon",
+      "name": "flag: Gabon",
+      "description": "flag: Gabon"
+    },
+    {
+      "glyph": "🇬🇲",
+      "slug": "flag_gambia",
+      "name": "flag: Gambia",
+      "description": "flag: Gambia"
+    },
+    {
+      "glyph": "🇬🇪",
+      "slug": "flag_georgia",
+      "name": "flag: Georgia",
+      "description": "flag: Georgia"
+    },
+    {
+      "glyph": "🇩🇪",
+      "slug": "flag_germany",
+      "name": "flag: Germany",
+      "description": "flag: Germany"
+    },
+    {
+      "glyph": "🇬🇭",
+      "slug": "flag_ghana",
+      "name": "flag: Ghana",
+      "description": "flag: Ghana"
+    },
+    {
+      "glyph": "🇬🇮",
+      "slug": "flag_gibraltar",
+      "name": "flag: Gibraltar",
+      "description": "flag: Gibraltar"
+    },
+    {
+      "glyph": "🇬🇷",
+      "slug": "flag_greece",
+      "name": "flag: Greece",
+      "description": "flag: Greece"
+    },
+    {
+      "glyph": "🇬🇱",
+      "slug": "flag_greenland",
+      "name": "flag: Greenland",
+      "description": "flag: Greenland"
+    },
+    {
+      "glyph": "🇬🇩",
+      "slug": "flag_grenada",
+      "name": "flag: Grenada",
+      "description": "flag: Grenada"
+    },
+    {
+      "glyph": "🇬🇵",
+      "slug": "flag_guadeloupe",
+      "name": "flag: Guadeloupe",
+      "description": "flag: Guadeloupe"
+    },
+    {
+      "glyph": "🇬🇺",
+      "slug": "flag_guam",
+      "name": "flag: Guam",
+      "description": "flag: Guam"
+    },
+    {
+      "glyph": "🇬🇹",
+      "slug": "flag_guatemala",
+      "name": "flag: Guatemala",
+      "description": "flag: Guatemala"
+    },
+    {
+      "glyph": "🇬🇬",
+      "slug": "flag_guernsey",
+      "name": "flag: Guernsey",
+      "description": "flag: Guernsey"
+    },
+    {
+      "glyph": "🇬🇳",
+      "slug": "flag_guinea",
+      "name": "flag: Guinea",
+      "description": "flag: Guinea"
+    },
+    {
+      "glyph": "🇬🇼",
+      "slug": "flag_guinea_bissau",
+      "name": "flag: Guinea-Bissau",
+      "description": "flag: Guinea-Bissau"
+    },
+    {
+      "glyph": "🇬🇾",
+      "slug": "flag_guyana",
+      "name": "flag: Guyana",
+      "description": "flag: Guyana"
+    },
+    {
+      "glyph": "🇭🇹",
+      "slug": "flag_haiti",
+      "name": "flag: Haiti",
+      "description": "flag: Haiti"
+    },
+    {
+      "glyph": "🇭🇲",
+      "slug": "flag_heard_mcdonald_islands",
+      "name": "flag: Heard & McDonald Islands",
+      "description": "flag: Heard & McDonald Islands"
+    },
+    {
+      "glyph": "🇭🇳",
+      "slug": "flag_honduras",
+      "name": "flag: Honduras",
+      "description": "flag: Honduras"
+    },
+    {
+      "glyph": "🇭🇰",
+      "slug": "flag_hong_kong_sar_china",
+      "name": "flag: Hong Kong SAR China",
+      "description": "flag: Hong Kong SAR China"
+    },
+    {
+      "glyph": "🇭🇺",
+      "slug": "flag_hungary",
+      "name": "flag: Hungary",
+      "description": "flag: Hungary"
+    },
+    {
+      "glyph": "🇮🇸",
+      "slug": "flag_iceland",
+      "name": "flag: Iceland",
+      "description": "flag: Iceland"
+    },
+    {
       "glyph": "⛳",
       "slug": "flag_in_hole",
       "name": "flag in hole",
       "description": "flag in hole golf sport"
+    },
+    {
+      "glyph": "🇮🇳",
+      "slug": "flag_india",
+      "name": "flag: India",
+      "description": "flag: India"
+    },
+    {
+      "glyph": "🇮🇩",
+      "slug": "flag_indonesia",
+      "name": "flag: Indonesia",
+      "description": "flag: Indonesia"
+    },
+    {
+      "glyph": "🇮🇷",
+      "slug": "flag_iran",
+      "name": "flag: Iran",
+      "description": "flag: Iran"
+    },
+    {
+      "glyph": "🇮🇶",
+      "slug": "flag_iraq",
+      "name": "flag: Iraq",
+      "description": "flag: Iraq"
+    },
+    {
+      "glyph": "🇮🇪",
+      "slug": "flag_ireland",
+      "name": "flag: Ireland",
+      "description": "flag: Ireland"
+    },
+    {
+      "glyph": "🇮🇲",
+      "slug": "flag_isle_of_man",
+      "name": "flag: Isle of Man",
+      "description": "flag: Isle of Man"
+    },
+    {
+      "glyph": "🇮🇱",
+      "slug": "flag_israel",
+      "name": "flag: Israel",
+      "description": "flag: Israel"
+    },
+    {
+      "glyph": "🇮🇹",
+      "slug": "flag_italy",
+      "name": "flag: Italy",
+      "description": "flag: Italy"
+    },
+    {
+      "glyph": "🇯🇲",
+      "slug": "flag_jamaica",
+      "name": "flag: Jamaica",
+      "description": "flag: Jamaica"
+    },
+    {
+      "glyph": "🇯🇵",
+      "slug": "flag_japan",
+      "name": "flag: Japan",
+      "description": "flag: Japan"
+    },
+    {
+      "glyph": "🇯🇪",
+      "slug": "flag_jersey",
+      "name": "flag: Jersey",
+      "description": "flag: Jersey"
+    },
+    {
+      "glyph": "🇯🇴",
+      "slug": "flag_jordan",
+      "name": "flag: Jordan",
+      "description": "flag: Jordan"
+    },
+    {
+      "glyph": "🇰🇿",
+      "slug": "flag_kazakhstan",
+      "name": "flag: Kazakhstan",
+      "description": "flag: Kazakhstan"
+    },
+    {
+      "glyph": "🇰🇪",
+      "slug": "flag_kenya",
+      "name": "flag: Kenya",
+      "description": "flag: Kenya"
+    },
+    {
+      "glyph": "🇰🇮",
+      "slug": "flag_kiribati",
+      "name": "flag: Kiribati",
+      "description": "flag: Kiribati"
+    },
+    {
+      "glyph": "🇽🇰",
+      "slug": "flag_kosovo",
+      "name": "flag: Kosovo",
+      "description": "flag: Kosovo"
+    },
+    {
+      "glyph": "🇰🇼",
+      "slug": "flag_kuwait",
+      "name": "flag: Kuwait",
+      "description": "flag: Kuwait"
+    },
+    {
+      "glyph": "🇰🇬",
+      "slug": "flag_kyrgyzstan",
+      "name": "flag: Kyrgyzstan",
+      "description": "flag: Kyrgyzstan"
+    },
+    {
+      "glyph": "🇱🇦",
+      "slug": "flag_laos",
+      "name": "flag: Laos",
+      "description": "flag: Laos"
+    },
+    {
+      "glyph": "🇱🇻",
+      "slug": "flag_latvia",
+      "name": "flag: Latvia",
+      "description": "flag: Latvia"
+    },
+    {
+      "glyph": "🇱🇧",
+      "slug": "flag_lebanon",
+      "name": "flag: Lebanon",
+      "description": "flag: Lebanon"
+    },
+    {
+      "glyph": "🇱🇸",
+      "slug": "flag_lesotho",
+      "name": "flag: Lesotho",
+      "description": "flag: Lesotho"
+    },
+    {
+      "glyph": "🇱🇷",
+      "slug": "flag_liberia",
+      "name": "flag: Liberia",
+      "description": "flag: Liberia"
+    },
+    {
+      "glyph": "🇱🇾",
+      "slug": "flag_libya",
+      "name": "flag: Libya",
+      "description": "flag: Libya"
+    },
+    {
+      "glyph": "🇱🇮",
+      "slug": "flag_liechtenstein",
+      "name": "flag: Liechtenstein",
+      "description": "flag: Liechtenstein"
+    },
+    {
+      "glyph": "🇱🇹",
+      "slug": "flag_lithuania",
+      "name": "flag: Lithuania",
+      "description": "flag: Lithuania"
+    },
+    {
+      "glyph": "🇱🇺",
+      "slug": "flag_luxembourg",
+      "name": "flag: Luxembourg",
+      "description": "flag: Luxembourg"
+    },
+    {
+      "glyph": "🇲🇴",
+      "slug": "flag_macao_sar_china",
+      "name": "flag: Macao SAR China",
+      "description": "flag: Macao SAR China"
+    },
+    {
+      "glyph": "🇲🇬",
+      "slug": "flag_madagascar",
+      "name": "flag: Madagascar",
+      "description": "flag: Madagascar"
+    },
+    {
+      "glyph": "🇲🇼",
+      "slug": "flag_malawi",
+      "name": "flag: Malawi",
+      "description": "flag: Malawi"
+    },
+    {
+      "glyph": "🇲🇾",
+      "slug": "flag_malaysia",
+      "name": "flag: Malaysia",
+      "description": "flag: Malaysia"
+    },
+    {
+      "glyph": "🇲🇻",
+      "slug": "flag_maldives",
+      "name": "flag: Maldives",
+      "description": "flag: Maldives"
+    },
+    {
+      "glyph": "🇲🇱",
+      "slug": "flag_mali",
+      "name": "flag: Mali",
+      "description": "flag: Mali"
+    },
+    {
+      "glyph": "🇲🇹",
+      "slug": "flag_malta",
+      "name": "flag: Malta",
+      "description": "flag: Malta"
+    },
+    {
+      "glyph": "🇲🇭",
+      "slug": "flag_marshall_islands",
+      "name": "flag: Marshall Islands",
+      "description": "flag: Marshall Islands"
+    },
+    {
+      "glyph": "🇲🇶",
+      "slug": "flag_martinique",
+      "name": "flag: Martinique",
+      "description": "flag: Martinique"
+    },
+    {
+      "glyph": "🇲🇷",
+      "slug": "flag_mauritania",
+      "name": "flag: Mauritania",
+      "description": "flag: Mauritania"
+    },
+    {
+      "glyph": "🇲🇺",
+      "slug": "flag_mauritius",
+      "name": "flag: Mauritius",
+      "description": "flag: Mauritius"
+    },
+    {
+      "glyph": "🇾🇹",
+      "slug": "flag_mayotte",
+      "name": "flag: Mayotte",
+      "description": "flag: Mayotte"
+    },
+    {
+      "glyph": "🇲🇽",
+      "slug": "flag_mexico",
+      "name": "flag: Mexico",
+      "description": "flag: Mexico"
+    },
+    {
+      "glyph": "🇫🇲",
+      "slug": "flag_micronesia",
+      "name": "flag: Micronesia",
+      "description": "flag: Micronesia"
+    },
+    {
+      "glyph": "🇲🇩",
+      "slug": "flag_moldova",
+      "name": "flag: Moldova",
+      "description": "flag: Moldova"
+    },
+    {
+      "glyph": "🇲🇨",
+      "slug": "flag_monaco",
+      "name": "flag: Monaco",
+      "description": "flag: Monaco"
+    },
+    {
+      "glyph": "🇲🇳",
+      "slug": "flag_mongolia",
+      "name": "flag: Mongolia",
+      "description": "flag: Mongolia"
+    },
+    {
+      "glyph": "🇲🇪",
+      "slug": "flag_montenegro",
+      "name": "flag: Montenegro",
+      "description": "flag: Montenegro"
+    },
+    {
+      "glyph": "🇲🇸",
+      "slug": "flag_montserrat",
+      "name": "flag: Montserrat",
+      "description": "flag: Montserrat"
+    },
+    {
+      "glyph": "🇲🇦",
+      "slug": "flag_morocco",
+      "name": "flag: Morocco",
+      "description": "flag: Morocco"
+    },
+    {
+      "glyph": "🇲🇿",
+      "slug": "flag_mozambique",
+      "name": "flag: Mozambique",
+      "description": "flag: Mozambique"
+    },
+    {
+      "glyph": "🇲🇲",
+      "slug": "flag_myanmar_burma",
+      "name": "flag: Myanmar (Burma)",
+      "description": "flag: Myanmar (Burma)"
+    },
+    {
+      "glyph": "🇳🇦",
+      "slug": "flag_namibia",
+      "name": "flag: Namibia",
+      "description": "flag: Namibia"
+    },
+    {
+      "glyph": "🇳🇷",
+      "slug": "flag_nauru",
+      "name": "flag: Nauru",
+      "description": "flag: Nauru"
+    },
+    {
+      "glyph": "🇳🇵",
+      "slug": "flag_nepal",
+      "name": "flag: Nepal",
+      "description": "flag: Nepal"
+    },
+    {
+      "glyph": "🇳🇱",
+      "slug": "flag_netherlands",
+      "name": "flag: Netherlands",
+      "description": "flag: Netherlands"
+    },
+    {
+      "glyph": "🇳🇨",
+      "slug": "flag_new_caledonia",
+      "name": "flag: New Caledonia",
+      "description": "flag: New Caledonia"
+    },
+    {
+      "glyph": "🇳🇿",
+      "slug": "flag_new_zealand",
+      "name": "flag: New Zealand",
+      "description": "flag: New Zealand"
+    },
+    {
+      "glyph": "🇳🇮",
+      "slug": "flag_nicaragua",
+      "name": "flag: Nicaragua",
+      "description": "flag: Nicaragua"
+    },
+    {
+      "glyph": "🇳🇪",
+      "slug": "flag_niger",
+      "name": "flag: Niger",
+      "description": "flag: Niger"
+    },
+    {
+      "glyph": "🇳🇬",
+      "slug": "flag_nigeria",
+      "name": "flag: Nigeria",
+      "description": "flag: Nigeria"
+    },
+    {
+      "glyph": "🇳🇺",
+      "slug": "flag_niue",
+      "name": "flag: Niue",
+      "description": "flag: Niue"
+    },
+    {
+      "glyph": "🇳🇫",
+      "slug": "flag_norfolk_island",
+      "name": "flag: Norfolk Island",
+      "description": "flag: Norfolk Island"
+    },
+    {
+      "glyph": "🇰🇵",
+      "slug": "flag_north_korea",
+      "name": "flag: North Korea",
+      "description": "flag: North Korea"
+    },
+    {
+      "glyph": "🇲🇰",
+      "slug": "flag_north_macedonia",
+      "name": "flag: North Macedonia",
+      "description": "flag: North Macedonia"
+    },
+    {
+      "glyph": "🇲🇵",
+      "slug": "flag_northern_mariana_islands",
+      "name": "flag: Northern Mariana Islands",
+      "description": "flag: Northern Mariana Islands"
+    },
+    {
+      "glyph": "🇳🇴",
+      "slug": "flag_norway",
+      "name": "flag: Norway",
+      "description": "flag: Norway"
+    },
+    {
+      "glyph": "🇴🇲",
+      "slug": "flag_oman",
+      "name": "flag: Oman",
+      "description": "flag: Oman"
+    },
+    {
+      "glyph": "🇵🇰",
+      "slug": "flag_pakistan",
+      "name": "flag: Pakistan",
+      "description": "flag: Pakistan"
+    },
+    {
+      "glyph": "🇵🇼",
+      "slug": "flag_palau",
+      "name": "flag: Palau",
+      "description": "flag: Palau"
+    },
+    {
+      "glyph": "🇵🇸",
+      "slug": "flag_palestinian_territories",
+      "name": "flag: Palestinian Territories",
+      "description": "flag: Palestinian Territories"
+    },
+    {
+      "glyph": "🇵🇦",
+      "slug": "flag_panama",
+      "name": "flag: Panama",
+      "description": "flag: Panama"
+    },
+    {
+      "glyph": "🇵🇬",
+      "slug": "flag_papua_new_guinea",
+      "name": "flag: Papua New Guinea",
+      "description": "flag: Papua New Guinea"
+    },
+    {
+      "glyph": "🇵🇾",
+      "slug": "flag_paraguay",
+      "name": "flag: Paraguay",
+      "description": "flag: Paraguay"
+    },
+    {
+      "glyph": "🇵🇪",
+      "slug": "flag_peru",
+      "name": "flag: Peru",
+      "description": "flag: Peru"
+    },
+    {
+      "glyph": "🇵🇭",
+      "slug": "flag_philippines",
+      "name": "flag: Philippines",
+      "description": "flag: Philippines"
+    },
+    {
+      "glyph": "🇵🇳",
+      "slug": "flag_pitcairn_islands",
+      "name": "flag: Pitcairn Islands",
+      "description": "flag: Pitcairn Islands"
+    },
+    {
+      "glyph": "🇵🇱",
+      "slug": "flag_poland",
+      "name": "flag: Poland",
+      "description": "flag: Poland"
+    },
+    {
+      "glyph": "🇵🇹",
+      "slug": "flag_portugal",
+      "name": "flag: Portugal",
+      "description": "flag: Portugal"
+    },
+    {
+      "glyph": "🇵🇷",
+      "slug": "flag_puerto_rico",
+      "name": "flag: Puerto Rico",
+      "description": "flag: Puerto Rico"
+    },
+    {
+      "glyph": "🇶🇦",
+      "slug": "flag_qatar",
+      "name": "flag: Qatar",
+      "description": "flag: Qatar"
+    },
+    {
+      "glyph": "🇷🇪",
+      "slug": "flag_re_union",
+      "name": "flag: Réunion",
+      "description": "flag: Réunion"
+    },
+    {
+      "glyph": "🇷🇴",
+      "slug": "flag_romania",
+      "name": "flag: Romania",
+      "description": "flag: Romania"
+    },
+    {
+      "glyph": "🇷🇺",
+      "slug": "flag_russia",
+      "name": "flag: Russia",
+      "description": "flag: Russia"
+    },
+    {
+      "glyph": "🇷🇼",
+      "slug": "flag_rwanda",
+      "name": "flag: Rwanda",
+      "description": "flag: Rwanda"
+    },
+    {
+      "glyph": "🇸🇹",
+      "slug": "flag_sa_o_tome_pri_ncipe",
+      "name": "flag: São Tomé & Príncipe",
+      "description": "flag: São Tomé & Príncipe"
+    },
+    {
+      "glyph": "🇼🇸",
+      "slug": "flag_samoa",
+      "name": "flag: Samoa",
+      "description": "flag: Samoa"
+    },
+    {
+      "glyph": "🇸🇲",
+      "slug": "flag_san_marino",
+      "name": "flag: San Marino",
+      "description": "flag: San Marino"
+    },
+    {
+      "glyph": "🇨🇶",
+      "slug": "flag_sark",
+      "name": "flag: Sark",
+      "description": "flag: Sark"
+    },
+    {
+      "glyph": "🇸🇦",
+      "slug": "flag_saudi_arabia",
+      "name": "flag: Saudi Arabia",
+      "description": "flag: Saudi Arabia"
+    },
+    {
+      "glyph": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+      "slug": "flag_scotland",
+      "name": "flag: Scotland",
+      "description": "flag: Scotland"
+    },
+    {
+      "glyph": "🇸🇳",
+      "slug": "flag_senegal",
+      "name": "flag: Senegal",
+      "description": "flag: Senegal"
+    },
+    {
+      "glyph": "🇷🇸",
+      "slug": "flag_serbia",
+      "name": "flag: Serbia",
+      "description": "flag: Serbia"
+    },
+    {
+      "glyph": "🇸🇨",
+      "slug": "flag_seychelles",
+      "name": "flag: Seychelles",
+      "description": "flag: Seychelles"
+    },
+    {
+      "glyph": "🇸🇱",
+      "slug": "flag_sierra_leone",
+      "name": "flag: Sierra Leone",
+      "description": "flag: Sierra Leone"
+    },
+    {
+      "glyph": "🇸🇬",
+      "slug": "flag_singapore",
+      "name": "flag: Singapore",
+      "description": "flag: Singapore"
+    },
+    {
+      "glyph": "🇸🇽",
+      "slug": "flag_sint_maarten",
+      "name": "flag: Sint Maarten",
+      "description": "flag: Sint Maarten"
+    },
+    {
+      "glyph": "🇸🇰",
+      "slug": "flag_slovakia",
+      "name": "flag: Slovakia",
+      "description": "flag: Slovakia"
+    },
+    {
+      "glyph": "🇸🇮",
+      "slug": "flag_slovenia",
+      "name": "flag: Slovenia",
+      "description": "flag: Slovenia"
+    },
+    {
+      "glyph": "🇸🇧",
+      "slug": "flag_solomon_islands",
+      "name": "flag: Solomon Islands",
+      "description": "flag: Solomon Islands"
+    },
+    {
+      "glyph": "🇸🇴",
+      "slug": "flag_somalia",
+      "name": "flag: Somalia",
+      "description": "flag: Somalia"
+    },
+    {
+      "glyph": "🇿🇦",
+      "slug": "flag_south_africa",
+      "name": "flag: South Africa",
+      "description": "flag: South Africa"
+    },
+    {
+      "glyph": "🇬🇸",
+      "slug": "flag_south_georgia_south_sandwich_islands",
+      "name": "flag: South Georgia & South Sandwich Islands",
+      "description": "flag: South Georgia & South Sandwich Islands"
+    },
+    {
+      "glyph": "🇰🇷",
+      "slug": "flag_south_korea",
+      "name": "flag: South Korea",
+      "description": "flag: South Korea"
+    },
+    {
+      "glyph": "🇸🇸",
+      "slug": "flag_south_sudan",
+      "name": "flag: South Sudan",
+      "description": "flag: South Sudan"
+    },
+    {
+      "glyph": "🇪🇸",
+      "slug": "flag_spain",
+      "name": "flag: Spain",
+      "description": "flag: Spain"
+    },
+    {
+      "glyph": "🇱🇰",
+      "slug": "flag_sri_lanka",
+      "name": "flag: Sri Lanka",
+      "description": "flag: Sri Lanka"
+    },
+    {
+      "glyph": "🇧🇱",
+      "slug": "flag_st_barthe_lemy",
+      "name": "flag: St. Barthélemy",
+      "description": "flag: St. Barthélemy"
+    },
+    {
+      "glyph": "🇸🇭",
+      "slug": "flag_st_helena",
+      "name": "flag: St. Helena",
+      "description": "flag: St. Helena"
+    },
+    {
+      "glyph": "🇰🇳",
+      "slug": "flag_st_kitts_nevis",
+      "name": "flag: St. Kitts & Nevis",
+      "description": "flag: St. Kitts & Nevis"
+    },
+    {
+      "glyph": "🇱🇨",
+      "slug": "flag_st_lucia",
+      "name": "flag: St. Lucia",
+      "description": "flag: St. Lucia"
+    },
+    {
+      "glyph": "🇲🇫",
+      "slug": "flag_st_martin",
+      "name": "flag: St. Martin",
+      "description": "flag: St. Martin"
+    },
+    {
+      "glyph": "🇵🇲",
+      "slug": "flag_st_pierre_miquelon",
+      "name": "flag: St. Pierre & Miquelon",
+      "description": "flag: St. Pierre & Miquelon"
+    },
+    {
+      "glyph": "🇻🇨",
+      "slug": "flag_st_vincent_grenadines",
+      "name": "flag: St. Vincent & Grenadines",
+      "description": "flag: St. Vincent & Grenadines"
+    },
+    {
+      "glyph": "🇸🇩",
+      "slug": "flag_sudan",
+      "name": "flag: Sudan",
+      "description": "flag: Sudan"
+    },
+    {
+      "glyph": "🇸🇷",
+      "slug": "flag_suriname",
+      "name": "flag: Suriname",
+      "description": "flag: Suriname"
+    },
+    {
+      "glyph": "🇸🇯",
+      "slug": "flag_svalbard_jan_mayen",
+      "name": "flag: Svalbard & Jan Mayen",
+      "description": "flag: Svalbard & Jan Mayen"
+    },
+    {
+      "glyph": "🇸🇪",
+      "slug": "flag_sweden",
+      "name": "flag: Sweden",
+      "description": "flag: Sweden"
+    },
+    {
+      "glyph": "🇨🇭",
+      "slug": "flag_switzerland",
+      "name": "flag: Switzerland",
+      "description": "flag: Switzerland"
+    },
+    {
+      "glyph": "🇸🇾",
+      "slug": "flag_syria",
+      "name": "flag: Syria",
+      "description": "flag: Syria"
+    },
+    {
+      "glyph": "🇹🇼",
+      "slug": "flag_taiwan",
+      "name": "flag: Taiwan",
+      "description": "flag: Taiwan"
+    },
+    {
+      "glyph": "🇹🇯",
+      "slug": "flag_tajikistan",
+      "name": "flag: Tajikistan",
+      "description": "flag: Tajikistan"
+    },
+    {
+      "glyph": "🇹🇿",
+      "slug": "flag_tanzania",
+      "name": "flag: Tanzania",
+      "description": "flag: Tanzania"
+    },
+    {
+      "glyph": "🇹🇭",
+      "slug": "flag_thailand",
+      "name": "flag: Thailand",
+      "description": "flag: Thailand"
+    },
+    {
+      "glyph": "🇹🇱",
+      "slug": "flag_timor_leste",
+      "name": "flag: Timor-Leste",
+      "description": "flag: Timor-Leste"
+    },
+    {
+      "glyph": "🇹🇬",
+      "slug": "flag_togo",
+      "name": "flag: Togo",
+      "description": "flag: Togo"
+    },
+    {
+      "glyph": "🇹🇰",
+      "slug": "flag_tokelau",
+      "name": "flag: Tokelau",
+      "description": "flag: Tokelau"
+    },
+    {
+      "glyph": "🇹🇴",
+      "slug": "flag_tonga",
+      "name": "flag: Tonga",
+      "description": "flag: Tonga"
+    },
+    {
+      "glyph": "🇹🇹",
+      "slug": "flag_trinidad_tobago",
+      "name": "flag: Trinidad & Tobago",
+      "description": "flag: Trinidad & Tobago"
+    },
+    {
+      "glyph": "🇹🇦",
+      "slug": "flag_tristan_da_cunha",
+      "name": "flag: Tristan da Cunha",
+      "description": "flag: Tristan da Cunha"
+    },
+    {
+      "glyph": "🇹🇷",
+      "slug": "flag_tu_rkiye",
+      "name": "flag: Türkiye",
+      "description": "flag: Türkiye"
+    },
+    {
+      "glyph": "🇹🇳",
+      "slug": "flag_tunisia",
+      "name": "flag: Tunisia",
+      "description": "flag: Tunisia"
+    },
+    {
+      "glyph": "🇹🇲",
+      "slug": "flag_turkmenistan",
+      "name": "flag: Turkmenistan",
+      "description": "flag: Turkmenistan"
+    },
+    {
+      "glyph": "🇹🇨",
+      "slug": "flag_turks_caicos_islands",
+      "name": "flag: Turks & Caicos Islands",
+      "description": "flag: Turks & Caicos Islands"
+    },
+    {
+      "glyph": "🇹🇻",
+      "slug": "flag_tuvalu",
+      "name": "flag: Tuvalu",
+      "description": "flag: Tuvalu"
+    },
+    {
+      "glyph": "🇺🇲",
+      "slug": "flag_u_s_outlying_islands",
+      "name": "flag: U.S. Outlying Islands",
+      "description": "flag: U.S. Outlying Islands"
+    },
+    {
+      "glyph": "🇻🇮",
+      "slug": "flag_u_s_virgin_islands",
+      "name": "flag: U.S. Virgin Islands",
+      "description": "flag: U.S. Virgin Islands"
+    },
+    {
+      "glyph": "🇺🇬",
+      "slug": "flag_uganda",
+      "name": "flag: Uganda",
+      "description": "flag: Uganda"
+    },
+    {
+      "glyph": "🇺🇦",
+      "slug": "flag_ukraine",
+      "name": "flag: Ukraine",
+      "description": "flag: Ukraine"
+    },
+    {
+      "glyph": "🇦🇪",
+      "slug": "flag_united_arab_emirates",
+      "name": "flag: United Arab Emirates",
+      "description": "flag: United Arab Emirates"
+    },
+    {
+      "glyph": "🇬🇧",
+      "slug": "flag_united_kingdom",
+      "name": "flag: United Kingdom",
+      "description": "flag: United Kingdom"
+    },
+    {
+      "glyph": "🇺🇳",
+      "slug": "flag_united_nations",
+      "name": "flag: United Nations",
+      "description": "flag: United Nations"
+    },
+    {
+      "glyph": "🇺🇸",
+      "slug": "flag_united_states",
+      "name": "flag: United States",
+      "description": "flag: United States"
+    },
+    {
+      "glyph": "🇺🇾",
+      "slug": "flag_uruguay",
+      "name": "flag: Uruguay",
+      "description": "flag: Uruguay"
+    },
+    {
+      "glyph": "🇺🇿",
+      "slug": "flag_uzbekistan",
+      "name": "flag: Uzbekistan",
+      "description": "flag: Uzbekistan"
+    },
+    {
+      "glyph": "🇻🇺",
+      "slug": "flag_vanuatu",
+      "name": "flag: Vanuatu",
+      "description": "flag: Vanuatu"
+    },
+    {
+      "glyph": "🇻🇦",
+      "slug": "flag_vatican_city",
+      "name": "flag: Vatican City",
+      "description": "flag: Vatican City"
+    },
+    {
+      "glyph": "🇻🇪",
+      "slug": "flag_venezuela",
+      "name": "flag: Venezuela",
+      "description": "flag: Venezuela"
+    },
+    {
+      "glyph": "🇻🇳",
+      "slug": "flag_vietnam",
+      "name": "flag: Vietnam",
+      "description": "flag: Vietnam"
+    },
+    {
+      "glyph": "🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+      "slug": "flag_wales",
+      "name": "flag: Wales",
+      "description": "flag: Wales"
+    },
+    {
+      "glyph": "🇼🇫",
+      "slug": "flag_wallis_futuna",
+      "name": "flag: Wallis & Futuna",
+      "description": "flag: Wallis & Futuna"
+    },
+    {
+      "glyph": "🇪🇭",
+      "slug": "flag_western_sahara",
+      "name": "flag: Western Sahara",
+      "description": "flag: Western Sahara"
+    },
+    {
+      "glyph": "🇾🇪",
+      "slug": "flag_yemen",
+      "name": "flag: Yemen",
+      "description": "flag: Yemen"
+    },
+    {
+      "glyph": "🇿🇲",
+      "slug": "flag_zambia",
+      "name": "flag: Zambia",
+      "description": "flag: Zambia"
+    },
+    {
+      "glyph": "🇿🇼",
+      "slug": "flag_zimbabwe",
+      "name": "flag: Zimbabwe",
+      "description": "flag: Zimbabwe"
     },
     {
       "glyph": "🦩",

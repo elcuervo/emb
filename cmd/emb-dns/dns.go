@@ -195,7 +195,7 @@ func (h *DNSHandler) query(msg *dns.Msg, question dns.Question, labels []string,
 	case errors.Is(err, ErrRateLimited):
 		msg.Rcode = dns.RcodeRefused
 		return
-	case errors.Is(err, emoji.ErrEmpty), errors.Is(err, emoji.ErrNoTerms), errors.Is(err, emoji.ErrTooLong):
+	case errors.Is(err, emoji.ErrEmpty), errors.Is(err, emoji.ErrNoTerms), errors.Is(err, emoji.ErrTooLong), errors.Is(err, emoji.ErrMixedOperators):
 		// A name the grammar cannot read does not exist, and the short SOA
 		// minimum is what keeps a typo from being cached as permanent.
 		msg.Rcode = dns.RcodeNameError

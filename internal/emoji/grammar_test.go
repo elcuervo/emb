@@ -184,3 +184,141 @@ func TestGlyphAndSlugProduceOneQuery(t *testing.T) {
 		t.Fatalf("🦈 spelled %q and shark spelled %q", glyph.Terms[0].Text, slug.Terms[0].Text)
 	}
 }
+
+func TestParseReadsAConjunction(t *testing.T) {
+	got, err := Parse([]string{"🍕*🦅"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := []Term{{Text: "🍕"}, {Conjoin: true, Text: "🦅"}}
+	if len(got.Terms) != len(want) {
+		t.Fatalf("Parse gave %d terms, want %d: %+v", len(got.Terms), len(want), got.Terms)
+	}
+	for i, term := range got.Terms {
+		if term != want[i] {
+			t.Errorf("term %d is %+v, want %+v", i, term, want[i])
+		}
+	}
+	if !got.Conjunction {
+		t.Fatal("a name joined by `*` is not marked a conjunction")
+	}
+	if got.Sentence {
+		t.Fatal("a conjunction is not a sentence")
+	}
+}
+
+func TestParseReadsAConjunctionOfMoreThanTwoTerms(t *testing.T) {
+	got, err := Parse([]string{"🍕*🦅*🍔"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(got.Terms) != 3 {
+		t.Fatalf("Parse gave %d terms, want 3: %+v", len(got.Terms), got.Terms)
+	}
+	for i, term := range got.Terms[1:] {
+		if !term.Conjoin {
+			t.Errorf("term %d is not conjoined: %+v", i+1, term)
+		}
+	}
+	if !got.Conjunction {
+		t.Fatal("a three-term conjunction is not marked a conjunction")
+	}
+}
+
+func TestParseRefusesMixedOperators(t *testing.T) {
+	for _, name := range []string{"🍕*🦅+🍔", "🍕-🦅*🍔", "🍕+🦅*🍔", "🍕*🦅-🍔"} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse([]string{name}); !errors.Is(err, ErrMixedOperators) {
+				t.Fatalf("Parse(%q) gave %v, want %v", name, err, ErrMixedOperators)
+			}
+		})
+	}
+}
+
+func TestParseRefusesANameWithNoTerm(t *testing.T) {
+	for _, name := range []string{"*", "***", "*-*"} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse([]string{name}); !errors.Is(err, ErrNoTerms) {
+				t.Fatalf("Parse(%q) gave %v, want %v", name, err, ErrNoTerms)
+			}
+		})
+	}
+}
+
+func TestOneTermIsNotAConjunction(t *testing.T) {
+	for _, name := range []string{"🍕", "*🍕", "🦈-🐟+🐦"} {
+		got, err := Parse([]string{name})
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", name, err)
+		}
+		if got.Conjunction {
+			t.Fatalf("Parse(%q) is a conjunction of %d terms", name, len(got.Terms))
+		}
+	}
+}
+
+func TestConjunctionSpellingMatchesTheGlyphForm(t *testing.T) {
+	v := loadAsset(t)
+	glyph, err := v.Query([]string{"pizza*eagle"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	words, err := v.Query([]string{"🍕*🦅"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if !glyph.Conjunction || !words.Conjunction {
+		t.Fatalf("a conjunction was spelled into %+v and %+v", glyph, words)
+	}
+	if len(glyph.Terms) != len(words.Terms) {
+		t.Fatalf("the two spellings have %d and %d terms", len(glyph.Terms), len(words.Terms))
+	}
+	for i := range glyph.Terms {
+		if glyph.Terms[i].Text != words.Terms[i].Text {
+			t.Fatalf("term %d spelled %q and %q", i, glyph.Terms[i].Text, words.Terms[i].Text)
+		}
+	}
+}
+
+func TestIndicesAreTheEntriesAQueryNames(t *testing.T) {
+	v := loadAsset(t)
+	query, err := v.Query([]string{"pizza*🦅"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	parsed, err := Parse([]string{"pizza*🦅"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(query.Terms) != 2 {
+		t.Fatalf("expected two terms, got %+v", query.Terms)
+	}
+	named := v.Indices(parsed)
+	if len(named) != 2 {
+		t.Fatalf("Indices returned %d entries, want 2: %v", len(named), named)
+	}
+	for _, term := range parsed.Terms {
+		entry, ok := v.Lookup(term.Text)
+		if !ok {
+			t.Fatalf("%q names no entry, so this test proves nothing", term.Text)
+		}
+		i, ok := v.bySlug[entry.Slug]
+		if !ok {
+			t.Fatalf("%q is not indexed by slug", entry.Slug)
+		}
+		if _, ok := named[i]; !ok {
+			t.Fatalf("Indices did not include %q", entry.Slug)
+		}
+	}
+}
+
+func TestIndicesOfFreeTextAreEmpty(t *testing.T) {
+	v := loadAsset(t)
+	parsed, err := Parse([]string{"zzzqqq*xxyy"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if named := v.Indices(parsed); len(named) != 0 {
+		t.Fatalf("free text named %d entries: %v", len(named), named)
+	}
+}
