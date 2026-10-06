@@ -35,6 +35,57 @@ func TestModelColumnsDoNotShift(t *testing.T) {
 	}
 }
 
+// TestGaugesAlignToModelRowGrid guards the shared column grid: each gauge bar
+// starts at the same column as the model-row zone it sits under.
+func TestGaugesAlignToModelRowGrid(t *testing.T) {
+	col := func(line, tok string) int {
+		i := strings.Index(line, tok)
+		if i < 0 {
+			return -1
+		}
+		return lipgloss.Width(line[:i])
+	}
+	for _, w := range []int{100, 120, 160} {
+		m := newSizedTUI(w, 40)
+		m.applyResult(multiPoll([]string{"alpha", "bravo"}, reqMap([]string{"alpha", "bravo"})))
+		idW, numW, _ := newRowLayout(w).gaugeBands()
+		captionLine := strings.Split(m.gaugesView()[0], "\n")[0]
+		for tok, want := range map[string]int{
+			"cache": 0,
+			"cpu":   idW + 1,
+			"mem":   idW + numW + 3,
+		} {
+			if got := col(captionLine, tok); got != want {
+				t.Errorf("width %d: gauge %q starts at column %d, want %d:\n%s", w, tok, got, want, captionLine)
+			}
+		}
+	}
+}
+
+// TestStripStartsOnTheGridWithoutEvents guards that a row falling back to its
+// average latency keeps its strip on the grid's strip column instead of
+// reclaiming the reserved latency slot.
+func TestStripStartsOnTheGridWithoutEvents(t *testing.T) {
+	for _, w := range []int{100, 120, 160} {
+		m := newSizedTUI(w, 40)
+		m.applyResult(multiPoll([]string{"alpha"}, reqMap([]string{"alpha"})))
+		l := newRowLayout(w)
+		row := ""
+		for _, line := range m.modelsView() {
+			if strings.Contains(line, "alpha") {
+				row = line
+			}
+		}
+		i := strings.Index(row, heatCellBlock)
+		if i < 0 {
+			t.Fatalf("width %d: no strip in row %q", w, row)
+		}
+		if got, want := lipgloss.Width(row[:i]), l.idW+l.numW+2; got != want {
+			t.Errorf("width %d: strip starts at column %d, want %d:\n%s", w, got, want, row)
+		}
+	}
+}
+
 // TestViewFitsWidth guards against rows/panels overflowing the terminal width
 // (which wraps mid-row and corrupts the layout).
 func TestViewFitsWidth(t *testing.T) {
