@@ -14,6 +14,7 @@ github.com/elcuervo/emb/internal/bounded	96
 github.com/elcuervo/emb/internal/config	91
 github.com/elcuervo/emb/internal/embtop	91
 github.com/elcuervo/emb/internal/embverify	92
+github.com/elcuervo/emb/internal/emoji	97
 github.com/elcuervo/emb/internal/hfhub	90
 github.com/elcuervo/emb/internal/imageproc	81
 github.com/elcuervo/emb/internal/onnx	78
