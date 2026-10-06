@@ -697,31 +697,31 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
            Do not hand-edit the frame, the caption or the figures. -->
       <figure class="topviz topviz--doc">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-c85b1d4e.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.1 · 127.0.0.1:16379 · uptime 28s · 4 models · poll 1s
-● HEALTHY  connected │ err 0.0% │ p95 37.0ms │ cpu 18% │ cache 49%
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-e4ff2884.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.1 · 127.0.0.1:16379 · uptime 29s    ·  4 models · poll 1s
+● HEALTHY   connected │ err   0.0% │ p95 43.1ms  │ cpu  19% │ cache  49%
 ╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
-│     │                                     ╭╮  │  ╰─╮   ││                                     ░░                 │
-│  124│                                 ╭──╮│╰──╯    ╰╮  ││                           ░░░░░░░███░░░░░░░░░░░░░░░░░░ │
-│     │                              ╭──╯  ╰╯         ╰─ ││                  ░░░░░░░░░███████░░░██████████████████ │
-│ 62.0│                             ╭╯                   ││         ██████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│     │                             │                    ││ ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  0.0│                          ───╯                    ││ p50–p99 ░  p95 █                                       │
+│     │                                 ╭╮ ╭──╮╭─╯│      ││                                                ░░░░░░░ │
+│  122│                             ╭╮  │╰─╯  ╰╯  ╰──╮╭╮ ││                                     ░░░░░░░░░░░███████ │
+│     │                             │╰──╯            ╰╯╰ ││                ░░░░░░░░░░░░░░░░░░██████████████░░░░░░░ │
+│ 61.1│                            ╭╯                    ││           ░░░░░██████████████████░░░░░░░░░░░░░░░░░░░░░ │
+│     │                            │                     ││ ███████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  0.0│                          ──╯                     ││ p50–p99 ░  p95 █                                       │
 ╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
-● bge-small     384d·cls·fp32         9.0 r/s      305 t/s      p50 2µs  p95 38.3ms↑     err 0   ███████████████████████
-● e5-small      384d·mean·fp32       33.9 r/s      917 t/s   p50 18.1ms  p95 41.7ms↑     err 0   ███████████████████████
-● jina-small    512d·mean·fp32       10.0 r/s      489 t/s   p50 10.7ms  p95 30.1ms↑     err 0   ███████████████████████
-● minilm        384d·mean·fp32       24.9 r/s      427 t/s      p50 3µs  p95 11.7ms↑     err 0   ███████████████████████
+● bge-small     384d·cls·fp32        10.0 r/s      340 t/s      p50 3µs  p95 40.0ms↑     err 0   ███████████████████████
+● e5-small      384d·mean·fp32       40.9 r/s     1.1k t/s   p50 19.1ms  p95 61.1ms      err 0   ███████████████████████
+● jina-small    512d·mean·fp32       21.9 r/s     1.1k t/s    p50 6.5ms  p95 32.4ms      err 0   ███████████████████████
+● minilm        384d·mean·fp32       28.9 r/s      495 t/s      p50 3µs  p95 12.3ms      err 0   ███████████████████████
   rows 1–4 of 4 · req/s per model · older ████████ newer
-cache   48.5%                    cpu     183%                                                    mem     1.1kMB
+cache   49.2%                    cpu    191%                                                     mem  1.1kMB
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
-  conns 4 · active 2 · goroutines 27 · truncated texts/pairs/images 0/0/0
-  event jina-small · 1 texts · 3µs ✓
+  conns  2 · active  0 · goroutines  25 · truncated texts/pairs/images   0/  0/  0
+  event bge-small ·   1 texts · 17.9ms  ✓
 q quit · p pause · r reset · j/k scroll · ? help</pre>
         </div>
         <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-05 · emb-top v0.4.1 · 4 models · 127.0.0.1:16379</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 186 requests/s, 5.5k tokens/s, p95 latency 27.0ms, cache hit rate 35%, CPU 330%, 1071MB resident. Per model: bge-small 29/s (avg 8.0ms, dim 384, cls, fp32); e5-small 72/s (avg 5.7ms, dim 384, mean, fp32); jina-small 34/s (avg 10.1ms, dim 512, mean, fp32); minilm 51/s (avg 2.5ms, dim 384, mean, fp32).</p>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 183 requests/s, 5.2k tokens/s, p95 latency 25.3ms, cache hit rate 36%, CPU 340%, 1066MB resident. Per model: bge-small 31/s (avg 7.2ms, dim 384, cls, fp32); e5-small 77/s (avg 7.5ms, dim 384, mean, fp32); jina-small 25/s (avg 8.1ms, dim 512, mean, fp32); minilm 50/s (avg 2.2ms, dim 384, mean, fp32).</p>
       </figure>
 
       <p class="doc-prose">

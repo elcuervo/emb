@@ -86,6 +86,23 @@ func TestStripStartsOnTheGridWithoutEvents(t *testing.T) {
 	}
 }
 
+// TestGaugeValueColumnStaysPut guards the gauge caption: the number and its
+// unit keep their column as the rate grows.
+func TestGaugeValueColumnStaysPut(t *testing.T) {
+	col := func(s string) int {
+		i := strings.Index(s, "%")
+		if i < 0 {
+			return -1
+		}
+		return lipgloss.Width(s[:i])
+	}
+	a := caption("cache", "bar", 0.0, "%", 32)
+	b := caption("cache", "bar", 63.9, "%", 32)
+	if col(a) < 0 || col(a) != col(b) {
+		t.Errorf("gauge value column moved: %d -> %d\n%q\n%q", col(a), col(b), a, b)
+	}
+}
+
 // TestViewFitsWidth guards against rows/panels overflowing the terminal width
 // (which wraps mid-row and corrupts the layout).
 func TestViewFitsWidth(t *testing.T) {

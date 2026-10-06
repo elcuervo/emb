@@ -580,14 +580,15 @@ func (m tuiModel) headerView() string {
 	p := m.sampler.Latest
 	uptime := ""
 	if p.UptimeSecs > 0 {
-		uptime = fmt.Sprintf("uptime %s", fmtDuration(p.UptimeSecs))
+		uptime = fmt.Sprintf("uptime %-6s", fmtDuration(p.UptimeSecs))
 	}
 	// Health (connection, rates, latency) lives in the banner immediately
-	// below; the header is identity only, so it does not repeat it.
+	// below; the header is identity only, so it does not repeat it. The uptime
+	// and model count are padded so a growing value cannot shift the line.
 	line := headerStyle.Render("emb-top v"+version) +
 		" · " + labelStyle.Render(m.client.Addr()) +
 		" · " + uptime +
-		" · " + fmt.Sprint(p.RegisteredModels) + " models" +
+		" · " + fmt.Sprintf("%2d models", p.RegisteredModels) +
 		" · poll " + m.interval.String()
 	if m.paused {
 		line += " " + warnStyle.Render("(paused)")
@@ -898,15 +899,26 @@ func (m tuiModel) gaugesView() []string {
 		"  ",
 		caption("mem", m.memBar.View(), float64(p.MemMB), "MB", stripW),
 	)
-	texts := fmt.Sprintf("conns %d · active %d · goroutines %d · truncated texts/pairs/images %d/%d/%d",
+	texts := fmt.Sprintf("conns %2d · active %2d · goroutines %3d · truncated texts/pairs/images %3d/%3d/%3d",
 		p.Conns, p.Active, p.Goroutines, p.TruncatedTexts, p.TruncatedPairs, p.TruncatedImages)
 	return []string{barLine, dimStyle.Render("  " + texts)}
 }
 
 func caption(title, barView string, val float64, unit string, width int) string {
-	head := fmt.Sprintf("%-7s %s%s", title, fmtRate(val), unit)
+	// The value sits in a fixed-width column so a growing rate moves no glyph;
+	// the column shrinks with a narrow band instead of overflowing it.
+	valW := width - len(title) - 1
+	if valW > 7 {
+		valW = 7
+	}
+	if valW < 1 {
+		valW = 1
+	}
+	head := title + " " + fmt.Sprintf("%*s", valW, fmtRate(val)+unit)
 	if pad := width - len(head); pad > 0 {
 		head += strings.Repeat(" ", pad)
+	} else if pad < 0 {
+		head = head[:width]
 	}
 	return labelStyle.Render(head) + "\n" + barView
 }
@@ -923,8 +935,8 @@ func (m tuiModel) tickerView() string {
 	}
 	line := "  " + dimStyle.Render("event") + " " +
 		labelStyle.Render(trimModelLen(ev.Model, 14)) +
-		" · " + fmt.Sprintf("%d texts", ev.Texts) +
-		" · " + lat + " " + mark
+		" · " + fmt.Sprintf("%3d texts", ev.Texts) +
+		" · " + fmt.Sprintf("%-7s", lat) + " " + mark
 	if !m.connected {
 		line = errStyle.Render("✗ connection lost — retrying") + "  " + line
 	}
