@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -272,17 +273,27 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 		})
 	}()
 
-	if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
-		failed = true
-		conn.WriteError(fmt.Sprintf("ERR too many texts: %d (max %d)", len(texts), limit))
-		return
-	}
-
-	entry, err := s.reg.Resolve(model)
+	replies, err := s.evalScripted(model, src, sha, config, digest, texts, args)
 	if err != nil {
 		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
+	}
+	s.writeScriptReply(conn, replies)
+}
+
+// evalScripted computes one reply per text — from cache when every text hits,
+// otherwise by evaluating the script once and storing each reply — without
+// writing to a connection, so boot-time warm payloads fill exactly the entries
+// a client call reads. Errors are returned for the caller to render.
+func (s *Server) evalScripted(model, src, sha string, config map[string]any, digest string, texts, args []string) ([][]byte, error) {
+	if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
+		return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
+	}
+
+	entry, err := s.reg.Resolve(model)
+	if err != nil {
+		return nil, err
 	}
 
 	// Script resources (named-tensor sessions + the model tokenizer) are loaded
@@ -441,8 +452,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 			}
 		}
 		if allHit {
-			s.writeScriptReply(conn, replies)
-			return
+			return replies, nil
 		}
 	}
 
@@ -451,9 +461,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 	// text returns the value itself.
 	v, err := s.compiler.Eval(model, src, texts, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
 	if err != nil {
-		failed = true
-		conn.WriteError(fmt.Sprintf("ERR %v", err))
-		return
+		return nil, err
 	}
 
 	var values []lua.LValue
@@ -462,9 +470,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 	} else {
 		tbl, ok := v.(*lua.LTable)
 		if !ok || tbl.Len() != len(texts) {
-			failed = true
-			conn.WriteError(fmt.Sprintf("ERR script must return one value per text (%d texts)", len(texts)))
-			return
+			return nil, fmt.Errorf("script must return one value per text (%d texts)", len(texts))
 		}
 		values = make([]lua.LValue, len(texts))
 		for j := 0; j < len(texts); j++ {
@@ -475,16 +481,79 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 	for i := range values {
 		encoded, err := script.EncodeReply(values[i])
 		if err != nil {
-			failed = true
-			conn.WriteError(fmt.Sprintf("ERR %v", err))
-			return
+			return nil, err
 		}
 		replies[i] = encoded
 		if cacheable {
 			s.cache.Set(script.CacheKeyConfig(model, sha, args, len(texts), texts[i], digest), encoded)
 		}
 	}
-	s.writeScriptReply(conn, replies)
+	return replies, nil
+}
+
+// WarmPayload is one text to evaluate once at boot under an argument set.
+type WarmPayload struct {
+	Text string
+	Args []string
+}
+
+// ScriptWarmup names a preloaded script and the payloads to warm under it.
+type ScriptWarmup struct {
+	Model    string
+	SHA      string
+	Payloads []WarmPayload
+}
+
+// WarmScripts evaluates the declared payloads once, in order, so their replies
+// are already in the cache when the first visitor asks for them. It schedules
+// the work in the background and returns a channel closed when it finishes, so
+// the boot path starts it without gating readiness. It stops as soon as the
+// model has served a scripted request since the previous payload, because a
+// warm payload occupies the same single session a visitor's call needs and a
+// visitor should not queue behind the whole declared set.
+func (s *Server) WarmScripts(warmups []ScriptWarmup) <-chan struct{} {
+	return s.warmScriptsAsync(warmups, func(model string) int64 {
+		entry, err := s.reg.Resolve(model)
+		if err != nil {
+			return 0
+		}
+		requests, _ := entry.ScriptStats()
+		return requests
+	})
+}
+
+// warmScriptsAsync is WarmScripts with the client-traffic signal injected, so
+// both the schedule (it returns before the warm completes) and the yield rule
+// are testable without racing a real client.
+func (s *Server) warmScriptsAsync(warmups []ScriptWarmup, served func(model string) int64) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.warmScripts(warmups, served)
+	}()
+	return done
+}
+
+// warmScripts is the warm loop: payloads in declared order, stopping when the
+// client-traffic signal moves.
+func (s *Server) warmScripts(warmups []ScriptWarmup, served func(model string) int64) {
+	for _, w := range warmups {
+		entry, ok := s.scripts.Get(w.Model, w.SHA)
+		if !ok {
+			log.Printf("warm: model %q has no script %s", w.Model, w.SHA)
+			continue
+		}
+		baseline := served(w.Model)
+		for i, p := range w.Payloads {
+			if served(w.Model) != baseline {
+				log.Printf("warm: %q stopped after %d payload(s): a client request was served", w.Model, i)
+				break
+			}
+			if _, err := s.evalScripted(w.Model, entry.src, w.SHA, entry.config, entry.digest, []string{p.Text}, p.Args); err != nil {
+				log.Printf("warm: %q payload %d failed: %v", w.Model, i, err)
+			}
+		}
+	}
 }
 
 // hasDuplicateTexts reports whether a multi-text evaluation repeats a text,
