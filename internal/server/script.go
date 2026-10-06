@@ -296,6 +296,12 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 		return nil, err
 	}
 
+	// Publish any restored snapshot entries now that the model is resolved and
+	// its fingerprint can be verified, before the cache lookup below, so a
+	// restored reply is served instead of recomputed. This is also the only
+	// admission point for a script-only model, whose embedding pool never loads.
+	s.admitQuarantine(model, entry)
+
 	// Script resources (named-tensor sessions + the model tokenizer) are loaded
 	// lazily: only the host functions that actually need them trigger the load.
 	// A script that uses emb.embed alone, or that returns a constant, therefore
