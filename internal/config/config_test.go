@@ -543,6 +543,55 @@ models:
 	}
 }
 
+// TestLoadScriptWarmDeclarations covers the warm payload form: a script entry
+// declares the texts to cache at boot under one argument set, and an entry
+// without warm declares none.
+func TestLoadScriptWarmDeclarations(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  test:
+    onnx: ./model.onnx
+    scripts:
+      - path: ./scripts/laya.lua
+        warm:
+          - args: ["{\"q\":1}"]
+            texts: ["state one", "state two"]
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warm := cfg.Models["test"].Scripts[0].Warm
+	if len(warm) != 1 || len(warm[0].Texts) != 2 || len(warm[0].Args) != 1 {
+		t.Fatalf("warm = %#v, want one group with two texts and one arg", warm)
+	}
+	if warm[0].Texts[0] != "state one" || warm[0].Args[0] != `{"q":1}` {
+		t.Fatalf("warm payload lost its values: %#v", warm[0])
+	}
+}
+
+func TestLoadScriptWarmRejectsMalformed(t *testing.T) {
+	cases := map[string]string{
+		"no texts":    "warm:\n          - args: [\"a\"]\n",
+		"empty text":  "warm:\n          - texts: [\"\"]\n",
+		"empty texts": "warm:\n          - texts: []\n",
+		"non-mapping": "warm:\n          - [\"text\"]\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			os.WriteFile(cfgPath, []byte("\nmodels:\n  test:\n    onnx: ./model.onnx\n    scripts:\n      - path: ./scripts/laya.lua\n        "+body), 0644)
+			if _, err := Load(cfgPath); err == nil {
+				t.Fatalf("expected %s to be rejected", name)
+			}
+		})
+	}
+}
+
 func TestLoadScriptConfigRejectsNonFiniteNumber(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -759,32 +808,56 @@ func TestSandboxConfigExampleEntries(t *testing.T) {
 		t.Fatalf("laya-real must download from a repository subfolder, got repo=%q subfolder=%q", real.ModelRepo, real.ModelSubfolder)
 	}
 
-	findLaya := func(m ModelConfig) (string, map[string]any) {
+	findLaya := func(m ModelConfig) (ScriptEntry, bool) {
 		for _, s := range m.Scripts {
 			if filepath.Base(s.Path) == "laya.lua" {
-				return s.Path, s.Config
+				return s, true
 			}
 		}
-		return "", nil
+		return ScriptEntry{}, false
 	}
-	miniPreset, _ := findLaya(mini)
-	realPreset, realConfig := findLaya(real)
-	if miniPreset == "" || realPreset == "" {
-		t.Fatalf("both entries must preload laya.lua, got miniature=%q real=%q", miniPreset, realPreset)
+	miniEntry, miniOK := findLaya(mini)
+	realEntry, realOK := findLaya(real)
+	if !miniOK || !realOK {
+		t.Fatalf("both entries must preload laya.lua, got miniature=%v real=%v", miniOK, realOK)
 	}
-	if miniPreset != realPreset {
-		t.Fatalf("laya and laya-real must preload the same preset bytes, got %q vs %q", miniPreset, realPreset)
+	if miniEntry.Path != realEntry.Path {
+		t.Fatalf("laya and laya-real must preload the same preset bytes, got %q vs %q", miniEntry.Path, realEntry.Path)
 	}
 
 	// The real entry's envelope is the checkpoint's own, not the miniature's
 	// rounded values: a caller sends only state + questions.
 	for _, key := range []string{"max_len", "head_max_len", "min_markers", "temperature"} {
-		if _, ok := realConfig[key]; !ok {
+		if _, ok := realEntry.Config[key]; !ok {
 			t.Fatalf("laya-real envelope is missing %q", key)
 		}
 	}
-	if n, _ := realConfig["max_len"].(int); n <= 0 {
-		t.Fatalf("laya-real max_len = %v, want a positive number", realConfig["max_len"])
+	if n, _ := realEntry.Config["max_len"].(int); n <= 0 {
+		t.Fatalf("laya-real max_len = %v, want a positive number", realEntry.Config["max_len"])
+	}
+
+	// The checkpoint is CPU-bound and the machine has cores: one intra-op thread
+	// is the single-thread pin the latency change removed. Inter-op stays one
+	// because the graph is a chain.
+	if real.IntraOpThreads <= 1 {
+		t.Fatalf("laya-real intra_op_threads = %d, want > 1", real.IntraOpThreads)
+	}
+	if real.InterOpThreads != 1 {
+		t.Fatalf("laya-real inter_op_threads = %d, want 1 (the graph is a chain)", real.InterOpThreads)
+	}
+
+	// The plate's fixed payloads are declared so the warm can fill the reply
+	// cache: at least the Quickstart round and an Inbox ticket, each as its own
+	// single-text call under the questions a visitor sends.
+	var warmTexts int
+	for _, group := range realEntry.Warm {
+		if len(group.Args) == 0 {
+			t.Fatal("laya-real warm group has no args; the cache key includes them")
+		}
+		warmTexts += len(group.Texts)
+	}
+	if warmTexts < 2 {
+		t.Fatalf("laya-real declares %d warm texts, want at least the Quickstart round and one Inbox ticket", warmTexts)
 	}
 }
 

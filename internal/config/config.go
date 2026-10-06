@@ -184,12 +184,25 @@ type BatchingConfig struct {
 
 // ScriptEntry declares one preloaded Lua preset: the source file and, when the
 // preset needs them, the checkpoint constants it reads as `emb.script.config`.
-// The YAML form is either a bare path string or a mapping with `path` and
-// `config`. The config is opaque to the server — a contract between the
-// operator and the script — and is exposed to that script alone.
+// The YAML form is either a bare path string or a mapping with `path`,
+// `config`, and `warm`. The config is opaque to the server — a contract between
+// the operator and the script — and is exposed to that script alone.
 type ScriptEntry struct {
-	Path   string         `yaml:"path"`
+	Path string `yaml:"path"`
+	// Config is the checkpoint constants the script reads as emb.script.config.
 	Config map[string]any `yaml:"config"`
+	// Warm declares texts to evaluate once at boot so their replies are already
+	// in the reply cache, each as its own single-text call under the group's
+	// arguments. It is an optimization only: a payload that fails to warm still
+	// answers on demand.
+	Warm []WarmGroup `yaml:"warm"`
+}
+
+// WarmGroup declares texts warmed under one argument set. Each text is
+// evaluated as its own single-text call, the shape the reply cache keys on.
+type WarmGroup struct {
+	Args  []string `yaml:"args"`
+	Texts []string `yaml:"texts"`
 }
 
 // UnmarshalYAML accepts the shorthand: a bare scalar is `{path: <value>}`.
@@ -309,6 +322,16 @@ func Load(path string) (*Config, error) {
 // finite numbers, bounded in size. Keys are never interpreted here — that is
 // what keeps the mechanism general across models.
 func validateScriptConfig(model string, entry ScriptEntry) error {
+	for i, group := range entry.Warm {
+		if len(group.Texts) == 0 {
+			return fmt.Errorf("model %q script %q: warm[%d] has no texts", model, entry.Path, i)
+		}
+		for j, text := range group.Texts {
+			if text == "" {
+				return fmt.Errorf("model %q script %q: warm[%d].texts[%d] is empty", model, entry.Path, i, j)
+			}
+		}
+	}
 	if entry.Config == nil {
 		return nil
 	}

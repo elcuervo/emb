@@ -28,15 +28,16 @@ kill_timeout = 40
   BRIDGE_LISTEN = "0.0.0.0:8080"
   UPSTREAM = "127.0.0.1:6379"
   ORIGINS = "https://emb.is,https://www.emb.is"
-  # The real `laya-real` checkpoint is ~617 MiB fp16 and ONNX Runtime's load path
-  # materializes it more than once (the input/output metadata probes each open a
-  # temporary session before the real one). On a multithreaded glibc that can
-  # strand several freed ~1.2 GiB blocks in per-thread arenas and OOM the machine
-  # mid-load. Collapsing the arena count and pinning the native thread pools keeps
-  # the freed blocks reusable; `GOMEMLIMIT` does the same for the Go-side model
-  # buffers. See fly.toml's `[[vm]]` note and design D4.
+  # The real `laya-real` checkpoint is a large fp16 export and ONNX Runtime's
+  # load path materializes it more than once (the input/output metadata probes
+  # each open a temporary session before the real one). On a multithreaded glibc
+  # that can strand several freed ~1.2 GiB blocks in per-thread arenas and OOM
+  # the machine mid-load. Collapsing the arena count keeps the freed blocks
+  # reusable; `GOMEMLIMIT` does the same for the Go-side model buffers. The
+  # model's own intra-op thread count is set per entry in sandbox.yaml; no
+  # process-wide thread cap is set here, so the checkpoint can use the machine's
+  # cores. See fly.toml's `[[vm]]` note and design D4.
   MALLOC_ARENA_MAX = "1"
-  OMP_NUM_THREADS = "1"
   GOMEMLIMIT = "2GiB"
 
 [http_service]

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
@@ -114,21 +115,46 @@ func run() error {
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
 
+	var warmups []server.ScriptWarmup
 	for name, modelCfg := range fc.Models {
 		for _, entry := range modelCfg.Scripts {
 			src, err := os.ReadFile(entry.Path)
 			if err != nil {
 				return fmt.Errorf("reading script %q for model %q: %w", entry.Path, name, err)
 			}
-			if _, err := srv.PreloadScriptConfig(name, string(src), entry.Config); err != nil {
+			sha, err := srv.PreloadScriptConfig(name, string(src), entry.Config)
+			if err != nil {
 				return fmt.Errorf("preloading script %q for model %q: %w", entry.Path, name, err)
 			}
 			log.Printf("preloaded script %s for model %q", entry.Path, name)
+			if len(entry.Warm) > 0 {
+				var payloads []server.WarmPayload
+				for _, group := range entry.Warm {
+					for _, text := range group.Texts {
+						payloads = append(payloads, server.WarmPayload{Text: text, Args: group.Args})
+					}
+				}
+				warmups = append(warmups, server.ScriptWarmup{Model: name, SHA: sha, Payloads: payloads})
+			}
 		}
 	}
+	// Model iteration is a map; fix the warm order so the declared payload order
+	// is what runs, not Go's iteration order.
+	sort.Slice(warmups, func(i, j int) bool {
+		if warmups[i].Model != warmups[j].Model {
+			return warmups[i].Model < warmups[j].Model
+		}
+		return warmups[i].SHA < warmups[j].SHA
+	})
 
 	if modelCount > 0 {
 		srv.SetReady()
+	}
+	// The warm runs after readiness, in the background: a declared payload is an
+	// optimization, and the platform's health check must not wait on it. It
+	// yields to a client request between payloads (see Server.WarmScripts).
+	if len(warmups) > 0 {
+		srv.WarmScripts(warmups)
 	}
 
 	sig := make(chan os.Signal, 1)

@@ -9,6 +9,6 @@
 
 ## 2. Verification
 
-- [ ] 2.1 Confirm a click does not scroll: on a loaded plate, note the scroll position, click a different control, and confirm the page keeps its position (only `hashchange` reveals, and `replaceState` fires none).
-- [ ] 2.2 Confirm the default load does not jump: open each plate with no fragment and with an unknown fragment, and confirm the page opens at the top and the default choice renders.
-- [ ] 2.3 Confirm the sticky masthead does not cover the revealed heading: after a naming fragment lands, `#try-it-h` is visible below the masthead, not behind it.
+- [x] 2.1 Confirm a click does not scroll: on a loaded plate, note the scroll position, click a different control, and confirm the page keeps its position (only `hashchange` reveals, and `replaceState` fires none).
+- [x] 2.2 Confirm the default load does not jump: open each plate with no fragment and with an unknown fragment, and confirm the page opens at the top and the default choice renders.
+- [x] 2.3 Confirm the sticky masthead does not cover the revealed heading: after a naming fragment lands, `#try-it-h` is visible below the masthead, not behind it.

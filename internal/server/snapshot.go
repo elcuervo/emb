@@ -384,10 +384,15 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		if err != nil {
 			return result, err
 		}
-		stored := registry.ModelFingerprint{Fingerprint: string(fingerprint), Dim: int(dim)}
+		// The dimension is a signed int written as its two's-complement bits: a
+		// model with no pooled output reports -1, and reading it unsigned would
+		// fail every fingerprint comparison for it. Non-negative dimensions are
+		// byte-identical either way, so old snapshots still restore.
+		signedDim := int(int32(dim))
+		stored := registry.ModelFingerprint{Fingerprint: string(fingerprint), Dim: signedDim}
 		headerFP[string(name)] = stored
 		cur, ok := current[string(name)]
-		if ok && cur.Loaded && cur.Fingerprint == stored.Fingerprint && cur.Dim == int(dim) {
+		if ok && cur.Loaded && cur.Fingerprint == stored.Fingerprint && cur.Dim == signedDim {
 			compatible[string(name)] = cur
 		}
 	}
@@ -416,16 +421,18 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 			continue
 		}
 		// A configured lazy model is quarantined; a loaded model must match the
-		// snapshot's stored fingerprint exactly. Both still require the value
-		// to fit the model dimension.
+		// snapshot's stored fingerprint exactly. Embedding values are additionally
+		// checked against the model's dimension; an opaque script reply has no
+		// dimension to check and is gated by the fingerprint alone.
+		embedding := embeddingCacheKey(key)
 		if cur.Loaded {
-			if _, ok := compatible[model]; !ok || len(value) != cur.Dim*4 {
+			if _, ok := compatible[model]; !ok || (embedding && len(value) != cur.Dim*4) {
 				result.SkippedFingerprint++
 				continue
 			}
 		} else {
 			hfp, ok := headerFP[model]
-			if !ok || hfp.Dim != cur.Dim || len(value) != cur.Dim*4 {
+			if !ok || hfp.Dim != cur.Dim || (embedding && len(value) != cur.Dim*4) {
 				result.SkippedFingerprint++
 				continue
 			}
