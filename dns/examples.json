@@ -1,0 +1,498 @@
+{
+  "note": "The zone's examples, with the result each one measured. This file is the single source: the gallery plate renders these queries and the copy that explains them, and `just verify-emoji` fails when the zone stops returning what is recorded here. A change of model or vocabulary is expected to move these numbers, and the check exists so that it is a decision rather than a surprise.",
+  "verified_against": {
+    "model": "emojiml (Xenova/all-MiniLM-L6-v2, 384 dimensions, mean pooling, normalized)",
+    "vocabulary": "dns/emoji-vocab.json",
+    "entries": 1961
+  },
+  "modes": {
+    "sentence": "A name's labels are the words of a sentence.",
+    "emoji": "A glyph is a way of writing its vocabulary entry, so it answers with itself.",
+    "composition": "`-` subtracts a term's vector and `+` adds one, left to right."
+  },
+  "examples": [
+    {
+      "name": "the.server.is.on.fire",
+      "mode": "sentence",
+      "family": "ops",
+      "expect_slug": "fire",
+      "expect_glyph": "🔥",
+      "measured_score": 0.771,
+      "claim": "The literal reading wins, which is the joke: ask the zone about a burning server and it agrees.",
+      "measured_top3": [
+        {
+          "glyph": "🔥",
+          "slug": "fire",
+          "score": 0.771
+        },
+        {
+          "glyph": "🚒",
+          "slug": "fire_engine",
+          "score": 0.422
+        },
+        {
+          "glyph": "🔦",
+          "slug": "flashlight",
+          "score": 0.398
+        }
+      ],
+      "expect_sentence": "🔥🚒🔦"
+    },
+    {
+      "name": "the.pager.went.off",
+      "mode": "sentence",
+      "family": "ops",
+      "expect_slug": "pager",
+      "expect_glyph": "📟",
+      "measured_score": 0.815,
+      "claim": "The one word a pager is for, and the highest score in the ops set.",
+      "measured_top3": [
+        {
+          "glyph": "📟",
+          "slug": "pager",
+          "score": 0.815
+        },
+        {
+          "glyph": "📄",
+          "slug": "page_facing_up",
+          "score": 0.382
+        },
+        {
+          "glyph": "📰",
+          "slug": "newspaper",
+          "score": 0.365
+        }
+      ],
+      "expect_sentence": "📟📄📰"
+    },
+    {
+      "name": "i.forgot.to.back.up",
+      "mode": "sentence",
+      "family": "ops",
+      "expect_slug": "back_arrow",
+      "expect_glyph": "🔙",
+      "measured_score": 0.512,
+      "claim": "A back arrow for a backup, because the model reads words and not intentions.",
+      "measured_top3": [
+        {
+          "glyph": "🔙",
+          "slug": "back_arrow",
+          "score": 0.512
+        },
+        {
+          "glyph": "🆙",
+          "slug": "up_button",
+          "score": 0.329
+        },
+        {
+          "glyph": "↕",
+          "slug": "up_down_arrow",
+          "score": 0.313
+        }
+      ],
+      "expect_sentence": "🔙🆙↕"
+    },
+    {
+      "name": "it.works.on.my.machine",
+      "mode": "sentence",
+      "family": "ops",
+      "expect_slug": "printer",
+      "expect_glyph": "🖨",
+      "measured_score": 0.353,
+      "claim": "The desk the phrase comes from: a printer, a floppy disk, a keyboard.",
+      "measured_top3": [
+        {
+          "glyph": "🖨",
+          "slug": "printer",
+          "score": 0.353
+        },
+        {
+          "glyph": "💾",
+          "slug": "floppy_disk",
+          "score": 0.309
+        },
+        {
+          "glyph": "⌨",
+          "slug": "keyboard",
+          "score": 0.294
+        }
+      ],
+      "expect_sentence": "🖨💾⌨"
+    },
+    {
+      "name": "i.deleted.production",
+      "mode": "sentence",
+      "family": "ops",
+      "expect_slug": "factory",
+      "expect_glyph": "🏭",
+      "measured_score": 0.27,
+      "claim": "Production is a place, so the answer is the place it happens.",
+      "measured_top3": [
+        {
+          "glyph": "🏭",
+          "slug": "factory",
+          "score": 0.27
+        },
+        {
+          "glyph": "🧑‍🏭",
+          "slug": "factory_worker",
+          "score": 0.262
+        },
+        {
+          "glyph": "📻",
+          "slug": "radio",
+          "score": 0.253
+        }
+      ],
+      "expect_sentence": "🏭🧑‍🏭📻"
+    },
+    {
+      "name": "its.always.dns",
+      "mode": "sentence",
+      "family": "ops",
+      "expect_slug": "globe_with_meridians",
+      "expect_glyph": "🌐",
+      "measured_score": 0.305,
+      "claim": "The zone answering a question about itself with the nearest thing to a network it knows.",
+      "measured_top3": [
+        {
+          "glyph": "🌐",
+          "slug": "globe_with_meridians",
+          "score": 0.305
+        },
+        {
+          "glyph": "🕸",
+          "slug": "spider_web",
+          "score": 0.258
+        },
+        {
+          "glyph": "📛",
+          "slug": "name_badge",
+          "score": 0.232
+        }
+      ],
+      "expect_sentence": "🌐🕸📛"
+    },
+    {
+      "name": "my.mom.is.in.the.hospital",
+      "mode": "sentence",
+      "family": "human",
+      "expect_slug": "hospital",
+      "expect_glyph": "🏥",
+      "measured_score": 0.709,
+      "claim": "A sentence, not a keyword, and the neighbourhood behind it is the honest one: hospital, health worker, woman health worker.",
+      "measured_top3": [
+        {
+          "glyph": "🏥",
+          "slug": "hospital",
+          "score": 0.709
+        },
+        {
+          "glyph": "🧑‍⚕",
+          "slug": "health_worker",
+          "score": 0.488
+        },
+        {
+          "glyph": "👩‍⚕",
+          "slug": "woman_health_worker",
+          "score": 0.475
+        }
+      ],
+      "expect_sentence": "🏥🧑‍⚕👩‍⚕"
+    },
+    {
+      "name": "the.baby.is.crying",
+      "mode": "sentence",
+      "family": "human",
+      "expect_slug": "baby",
+      "expect_glyph": "👶",
+      "measured_score": 0.846,
+      "claim": "The strongest score of the set, from the shortest sentence in it.",
+      "measured_top3": [
+        {
+          "glyph": "👶",
+          "slug": "baby",
+          "score": 0.846
+        },
+        {
+          "glyph": "🍼",
+          "slug": "baby_bottle",
+          "score": 0.47
+        },
+        {
+          "glyph": "🧑‍🍼",
+          "slug": "person_feeding_baby",
+          "score": 0.46
+        }
+      ],
+      "expect_sentence": "👶🍼🧑‍🍼"
+    },
+    {
+      "name": "i.just.ate.a.whole.pizza",
+      "mode": "sentence",
+      "family": "human",
+      "expect_slug": "pizza",
+      "expect_glyph": "🍕",
+      "measured_score": 0.82,
+      "claim": "Nothing clever here: the model knows what a whole pizza is.",
+      "measured_top3": [
+        {
+          "glyph": "🍕",
+          "slug": "pizza",
+          "score": 0.82
+        },
+        {
+          "glyph": "🍽",
+          "slug": "fork_and_knife_with_plate",
+          "score": 0.468
+        },
+        {
+          "glyph": "🍴",
+          "slug": "fork_and_knife",
+          "score": 0.436
+        }
+      ],
+      "expect_sentence": "🍕🍽🍴"
+    },
+    {
+      "name": "my.dog.died",
+      "mode": "sentence",
+      "family": "human",
+      "expect_slug": "dog",
+      "expect_glyph": "🐕",
+      "measured_score": 0.679,
+      "claim": "It answers with the subject, not the grief — the one place the ranked list is better than the top result.",
+      "measured_top3": [
+        {
+          "glyph": "🐕",
+          "slug": "dog",
+          "score": 0.679
+        },
+        {
+          "glyph": "🐈",
+          "slug": "cat",
+          "score": 0.568
+        },
+        {
+          "glyph": "😿",
+          "slug": "crying_cat",
+          "score": 0.563
+        }
+      ],
+      "expect_sentence": "🐕🐈😿"
+    },
+    {
+      "name": "i.cant.sleep",
+      "mode": "sentence",
+      "family": "human",
+      "expect_slug": "sleepy_face",
+      "expect_glyph": "😪",
+      "measured_score": 0.547,
+      "claim": "Sleepy face, then a person in bed, then a yawning face: the whole answer is the first three.",
+      "measured_top3": [
+        {
+          "glyph": "😪",
+          "slug": "sleepy_face",
+          "score": 0.547
+        },
+        {
+          "glyph": "🛌",
+          "slug": "person_in_bed",
+          "score": 0.503
+        },
+        {
+          "glyph": "🥱",
+          "slug": "yawning_face",
+          "score": 0.492
+        }
+      ],
+      "expect_sentence": "😪🛌🥱"
+    },
+    {
+      "name": "i.need.coffee",
+      "mode": "sentence",
+      "family": "human",
+      "expect_slug": "hot_beverage",
+      "expect_glyph": "☕",
+      "measured_score": 0.469,
+      "claim": "The cup, with mate and tea behind it — which is what a ranked list is for.",
+      "measured_top3": [
+        {
+          "glyph": "☕",
+          "slug": "hot_beverage",
+          "score": 0.469
+        },
+        {
+          "glyph": "🧉",
+          "slug": "mate",
+          "score": 0.444
+        },
+        {
+          "glyph": "🍵",
+          "slug": "teacup_without_handle",
+          "score": 0.426
+        }
+      ],
+      "expect_sentence": "☕🧉🍵"
+    },
+    {
+      "name": "i.won.the.lottery",
+      "mode": "sentence",
+      "family": "pun",
+      "expect_slug": "won",
+      "expect_glyph": "₩",
+      "measured_score": 0.819,
+      "claim": "The model reads 'won' as the currency. A wrong answer at the highest confidence in the set, and the best argument for showing the score beside the glyph.",
+      "measured_top3": [
+        {
+          "glyph": "₩",
+          "slug": "won",
+          "score": 0.819
+        },
+        {
+          "glyph": "🏆",
+          "slug": "trophy",
+          "score": 0.381
+        },
+        {
+          "glyph": "💰",
+          "slug": "money_bag",
+          "score": 0.35
+        }
+      ],
+      "expect_sentence": "₩🏆💰"
+    },
+    {
+      "name": "i.quit.smoking",
+      "mode": "sentence",
+      "family": "pun",
+      "expect_slug": "cigarette",
+      "expect_glyph": "🚬",
+      "measured_score": 0.664,
+      "claim": "The opposite of the sentence, with a no-smoking sign in second place.",
+      "measured_top3": [
+        {
+          "glyph": "🚬",
+          "slug": "cigarette",
+          "score": 0.664
+        },
+        {
+          "glyph": "🚭",
+          "slug": "no_smoking",
+          "score": 0.405
+        },
+        {
+          "glyph": "😮‍💨",
+          "slug": "face_exhaling",
+          "score": 0.352
+        }
+      ],
+      "expect_sentence": "🚬🚭😮‍💨"
+    },
+    {
+      "name": "the.wifi.is.dead",
+      "mode": "sentence",
+      "family": "pun",
+      "expect_slug": "funeral_urn",
+      "expect_glyph": "⚱",
+      "measured_score": 0.349,
+      "claim": "Dead is dead. The router is nowhere in the top three.",
+      "measured_top3": [
+        {
+          "glyph": "⚱",
+          "slug": "funeral_urn",
+          "score": 0.349
+        },
+        {
+          "glyph": "🥀",
+          "slug": "wilted_flower",
+          "score": 0.278
+        },
+        {
+          "glyph": "🪦",
+          "slug": "headstone",
+          "score": 0.276
+        }
+      ],
+      "expect_sentence": "⚱🥀🪦"
+    },
+    {
+      "name": "🦈",
+      "mode": "emoji",
+      "family": "glyph",
+      "expect_slug": "shark",
+      "expect_glyph": "🦈",
+      "measured_score": 1.0,
+      "claim": "A glyph answers with itself, because the glyph and the entry share one vector.",
+      "measured_top3": [
+        {
+          "glyph": "🦈",
+          "slug": "shark",
+          "score": 1.0
+        },
+        {
+          "glyph": "🐡",
+          "slug": "blowfish",
+          "score": 0.741
+        },
+        {
+          "glyph": "🐠",
+          "slug": "tropical_fish",
+          "score": 0.693
+        }
+      ]
+    },
+    {
+      "name": "👑",
+      "mode": "emoji",
+      "family": "glyph",
+      "expect_slug": "crown",
+      "expect_glyph": "👑",
+      "measured_score": 1.0,
+      "claim": "And so does this one, with a person with a crown behind it.",
+      "measured_top3": [
+        {
+          "glyph": "👑",
+          "slug": "crown",
+          "score": 1.0
+        },
+        {
+          "glyph": "🫅",
+          "slug": "person_with_crown",
+          "score": 0.632
+        },
+        {
+          "glyph": "🤴",
+          "slug": "prince",
+          "score": 0.588
+        }
+      ]
+    },
+    {
+      "name": "🦈-🐟+🐦",
+      "mode": "composition",
+      "family": "algebra",
+      "expect_slug": "bird",
+      "expect_glyph": "🐦",
+      "measured_score": 0.731,
+      "claim": "Shark minus fish plus bird is bird, and the same query written as `shark-fish+bird` returns the same three glyphs with the same scores — which is what makes the glyph a spelling rather than a special case.",
+      "measured_top3": [
+        {
+          "glyph": "🐦",
+          "slug": "bird",
+          "score": 0.731
+        },
+        {
+          "glyph": "🦆",
+          "slug": "duck",
+          "score": 0.689
+        },
+        {
+          "glyph": "🐔",
+          "slug": "chicken",
+          "score": 0.654
+        }
+      ]
+    }
+  ]
+}

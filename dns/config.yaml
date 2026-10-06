@@ -1,0 +1,53 @@
+# The zone's configuration.
+#
+# Local development runs this against a loopback emb and non-privileged ports
+# (`just dns-dev`); the deployed app overrides the two listen addresses for Fly,
+# where a UDP socket must bind the platform's own address and TCP must not.
+#
+# Paths are relative to the repository root, which is the working directory for
+# both `just dns-dev` and the container.
+
+zone: dns.emb.is
+
+# Where the zone is reachable. On Fly:
+#   listen_udp: fly-global-services:53   # a reply from any other address leaves with the wrong source
+#   listen_tcp: 0.0.0.0:53               # TCP cannot bind fly-global-services
+listen_udp: "127.0.0.1:5354"
+listen_tcp: "127.0.0.1:5354"
+listen_http: "127.0.0.1:8099"
+
+# The zone's own address, so its name resolves to the HTTP surface beside the
+# DNS one. The deployed app overrides this with the Fly app's dedicated IPv4.
+apex_address: "127.0.0.1"
+
+# The apex's IPv6, answered as AAAA beside the A. It serves the HTTP surface
+# over IPv6 and lets the platform verify domain ownership; it is never the UDP
+# endpoint, because Fly answers UDP only on the dedicated IPv4.
+apex_address_v6: ""
+
+# Out of bailiwick on purpose: a name inside the zone is a query, so the zone's
+# own authority records cannot live under it.
+nameserver: ns1.emb.is
+mailbox: hostmaster.emb.is
+
+# The emb server that does the embedding, on loopback in the same machine.
+upstream: "127.0.0.1:16389"
+model: emojiml
+script: scripts/emoji.lua
+vocabulary: dns/emoji-vocab.json
+
+top_k: 3
+ttl: 300
+negative_ttl: 60
+
+# Per source address. A resolver that retries is fine; a flood is not.
+rate_limit: 20
+
+# The pages allowed to read the zone from a browser. The gallery plate is the
+# only client that needs it.
+origins:
+  - https://emb.is
+  - https://www.emb.is
+
+# A query name is a sentence about someone's day, and the zone does not need it.
+log_queries: false

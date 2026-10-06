@@ -1,0 +1,91 @@
+# Fly configuration for the zone: one machine, one volume, two processes (emb
+# on loopback, emb-dns public) behind one entrypoint.
+#
+# Deploy from the repository root, because the image build needs the Go module.
+# The positional `.` is the build context (the repository root); `dockerfile`
+# below is resolved against *this file's* directory, not against that context:
+#
+#     fly deploy . -c dns/fly.toml
+#
+# or via `just dns-deploy`. The app, region, and volume are the deployment's
+# own; the zone's NS delegation and the apex address are added afterwards — see
+# docs/dns.md.
+app = "emb-dns"
+primary_region = "iad"
+
+# A stop must outlast the server's own shutdown, which flushes the cache to the
+# volume. The default is 5s, which would SIGKILL a machine mid-flush;
+# run.sh traps the signal and waits, so only the ceiling changes here.
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  EMB_CONFIG = "/etc/emb/emb.yaml"
+  ZONE_CONFIG = "/etc/emb/dns.yaml"
+  UPSTREAM = "127.0.0.1:16389"
+  # The zone's apex (dns.emb.is) answers with these. The readable HTTP surface
+  # is a separate name, zone.emb.is, that the parent zone serves directly so the
+  # platform can validate its certificate; set both secrets to the dedicated
+  # addresses. Empty leaves the apex as NODATA.
+  APEX_ADDRESS = ""
+  # The zone apex's IPv6: TCP only, never the UDP endpoint.
+  APEX_ADDRESS_V6 = ""
+
+# The readable routes, health, metadata, and statistics. The zone's own name
+# resolves to this surface.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # The machine stays running: the first boot downloads the model, and the
+  # index build after it is paid for by the cache snapshot on every later
+  # start. Autostop would trade a cold-start cliff for the few cents a month
+  # the machine costs idle.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "3s"
+  # The first boot downloads the quantized weights before the index is built
+  # and /healthz turns true. If that ever exceeds a minute, raise the volume
+  # rather than this number.
+  grace_period = "60s"
+  method = "GET"
+  path = "/healthz"
+
+# UDP must bind the platform's own address (`fly-global-services`, set as the
+# default in run.sh), not the wildcard: a reply sent from any other local
+# address leaves the machine with the wrong source. Fly answers UDP only on the
+# dedicated IPv4, which is allocated after the first deploy.
+[[services]]
+  internal_port = 53
+  protocol = "udp"
+  processes = ["app"]
+  [[services.ports]]
+    port = 53
+
+# DNS over TCP cannot bind `fly-global-services`; it belongs on the wildcard
+# address, and the reply is what a truncated UDP answer falls back to.
+[[services]]
+  internal_port = 53
+  protocol = "tcp"
+  processes = ["app"]
+  [[services.ports]]
+    port = 53
+
+# One small always-on machine for the zone. The quantized MiniLM plus the
+# 1961-entry index fits with room to spare; the whole point of the separate app
+# is that the site's machine is not spent on this.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+[mounts]
+  # Models download onto the volume on the first boot and load from disk after
+  # that; the cache snapshot lives beside them.
+  source = "emb_dns_data"
+  destination = "/data"

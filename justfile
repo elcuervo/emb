@@ -405,7 +405,7 @@ verify-emb-multi: build
 
 # Unit-test the shared verification harness with no server, model, or ONNX.
 verify-harness:
-    CGO_ENABLED=0 go test -count=1 ./internal/resp/... ./internal/embverify/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/
+    CGO_ENABLED=0 go test -count=1 ./internal/resp/... ./internal/embverify/... ./internal/emoji/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/
 
 # Build Docker image (native platform)
 docker:
@@ -758,6 +758,95 @@ website-demos-vendor-check:
     cmp "$tmp/package/sqlite-wasm/jswasm/sqlite3-bundler-friendly.mjs" "website/assets/vendor/sqlite-wasm-vec-$ver/sqlite3-bundler-friendly.mjs"; \
     cmp "$tmp/package/sqlite-wasm/jswasm/sqlite3.wasm" "website/assets/vendor/sqlite-wasm-vec-$ver/sqlite3.wasm"; \
     echo "website-demos-vendor-check: the vendored sqlite-vec is sqlite-wasm-vec $ver, byte for byte"
+
+# ── the DNS zone (dns/) ──────────────────────────────────────────────────
+#
+# `dns/emoji-vocab.json` is committed, so the zone builds with no tooling and no
+# network; `emoji-vocab` is how it is rebuilt and `emoji-vocab-check` is how a
+# drift is caught before it ships. The source is the pinned CLDR annotation set,
+# and the check is byte-for-byte, so a changed source, a changed rule, or an
+# edited asset all fail the same way.
+emoji-vocab:
+    python3 dns/tools/build-emoji-vocab.py
+
+emoji-vocab-check:
+    python3 dns/tools/build-emoji-vocab.py --check
+
+# ── running the zone (dns/) ──────────────────────────────────────────────
+#
+# The zone is two processes: an `emb` that holds the model, and `emb-dns`,
+# which speaks DNS and HTTP in front of it and holds no model at all. This
+# starts both on loopback with non-privileged ports, rewriting the emb config's
+# container paths for a local checkout, and stays in the foreground.
+#
+#   just dns-dev                      # emb :16389, zone :5354, HTTP :8099
+#   just dns-dev port=5300 http=8100 upstream=16399
+#
+# The ports and the rate limit are rewritten into a copy of dns/config.yaml,
+# which is the only configuration mechanism the zone has: the deployed file is
+# the one that runs, and the dev loop is the one caller that varies it. The dev
+# rate limit is high because `just verify-emoji` asks eighteen questions in a
+# row from one address.
+#
+# Then, in another terminal (inside `nix develop`):
+#
+#   dig @127.0.0.1 -p 5354 +short TXT the.server.is.on.fire.dns.emb.is
+#   curl http://127.0.0.1:8099/the.server.is.on.fire
+#   just verify-emoji
+dns-dev port="5354" http="8099" upstream="16389" rate="1000": build
+    @set -eu; \
+    CGO_ENABLED=0 go build -o ./bin/emb-dns ./cmd/emb-dns; \
+    emb_cfg=/tmp/emb-dns-dev-emb.yaml; zone_cfg=/tmp/emb-dns-dev-zone.yaml; \
+    sed -e 's|^listen: .*|listen: "127.0.0.1:{{upstream}}"|' \
+        -e "s|/data|$PWD|" \
+        -e 's|^cache_file: .*|cache_file: /tmp/emb-dns-cache.embcache|' \
+        -e "s|/scripts/emoji.lua|$PWD/scripts/emoji.lua|" \
+        dns/emb.yaml > "$emb_cfg"; \
+    sed -e 's|^listen_udp: .*|listen_udp: "127.0.0.1:{{port}}"|' \
+        -e 's|^listen_tcp: .*|listen_tcp: "127.0.0.1:{{port}}"|' \
+        -e 's|^listen_http: .*|listen_http: "127.0.0.1:{{http}}"|' \
+        -e 's|^rate_limit: .*|rate_limit: {{rate}}|' \
+        dns/config.yaml > "$zone_cfg"; \
+    echo "dns-dev: emb 127.0.0.1:{{upstream}} · DNS 127.0.0.1:{{port}} · HTTP http://127.0.0.1:{{http}}"; \
+    emb=; zone=; \
+    cleanup() { \
+        if [ -n "$emb" ]; then kill "$emb" 2>/dev/null || true; fi; \
+        if [ -n "$zone" ]; then kill "$zone" 2>/dev/null || true; fi; \
+        rm -f "$emb_cfg" "$zone_cfg"; \
+    }; \
+    trap cleanup EXIT INT TERM; \
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$emb_cfg" & emb=$!; \
+    for i in $(seq 1 300); do redis-cli -p {{upstream}} EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
+    redis-cli -p {{upstream}} EMB.READY 2>/dev/null | grep -q OK || { echo "dns-dev: emb did not become ready"; exit 1; }; \
+    ./bin/emb-dns -config "$zone_cfg" & zone=$!; \
+    wait
+
+# Check the zone against the examples it ships: every recorded glyph, slug, and
+# score, measured again. Needs a running zone (`just dns-dev`, or a deployment)
+# and reports the score distribution beside the pass/fail, because a hit rate
+# says nothing about how confident the answers were.
+#
+#   just verify-emoji
+#   just verify-emoji                       # the local zone
+#   just verify-emoji https://zone.emb.is    # a deployment
+verify-emoji base="http://127.0.0.1:8099":
+    python3 dns/tools/verify-emoji.py --base {{base}}
+
+# ── the zone's image and deployment (dns/) ──────────────────────────────
+#
+# Build the zone image (context is the repository root: the image needs the Go
+# module and the server's build inputs).
+dns-image:
+    docker buildx build --load -f dns/Dockerfile -t {{docker_user}}/emb-dns:{{image_tag}} .
+
+# Deploy the zone to Fly (requires flyctl and an authenticated account). The
+# app, region, volume, and UDP service are declared in dns/fly.toml. Run from
+# the repository root: `.` is the build context, and fly.toml's `dockerfile` is
+# resolved against *its own* directory. A first deploy needs the app created,
+# the dedicated IPv4 allocated (UDP requires it), and the zone's NS delegation
+# added — see docs/dns.md.
+dns-deploy:
+    fly deploy . -c dns/fly.toml
 
 # ── the sandbox (website/repl) ───────────────────────────────────────────
 #
