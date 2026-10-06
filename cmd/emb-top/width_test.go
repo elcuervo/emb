@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/elcuervo/emb/internal/embtop"
 )
 
 // TestModelColumnsDoNotShift guards the fixed-width per-model columns: a
@@ -100,6 +102,41 @@ func TestGaugeValueColumnStaysPut(t *testing.T) {
 	b := caption("cache", "bar", 63.9, "%", 32)
 	if col(a) < 0 || col(a) != col(b) {
 		t.Errorf("gauge value column moved: %d -> %d\n%q\n%q", col(a), col(b), a, b)
+	}
+}
+
+// TestMetricLabelsShareTheColumn guards the row's labelled metrics: the p50,
+// p95, avg and err labels sit at fixed columns whatever the value's width, so
+// an idle model's `avg` lines up with a busy model's `p50`.
+func TestMetricLabelsShareTheColumn(t *testing.T) {
+	m := newSizedTUI(120, 32)
+	names := []string{"idle", "busy"}
+	res := multiPoll(names, reqMap(names))
+	res.PerModel["idle"].AvgLatencyUs = 0 // "avg 0µs" is narrow
+	res.Events = []embtop.Event{{Seq: 1, Model: "busy", Texts: 1, LatencyUs: 16900}}
+	m.applyResult(res)
+
+	col := func(line, tok string) int {
+		i := strings.Index(line, tok)
+		if i < 0 {
+			return -1
+		}
+		return lipgloss.Width(line[:i])
+	}
+	idleAvg, busyP50, idleErr, busyErr := -2, -1, -2, -1
+	for _, line := range m.modelsView() {
+		switch {
+		case strings.Contains(line, "idle"):
+			idleAvg, idleErr = col(line, "avg"), col(line, "err")
+		case strings.Contains(line, "busy"):
+			busyP50, busyErr = col(line, "p50"), col(line, "err")
+		}
+	}
+	if idleAvg != busyP50 {
+		t.Errorf("latency label column differs: avg at %d, p50 at %d", idleAvg, busyP50)
+	}
+	if idleErr != busyErr {
+		t.Errorf("err label column differs: idle %d, busy %d", idleErr, busyErr)
 	}
 }
 

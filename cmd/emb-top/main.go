@@ -729,6 +729,17 @@ func fixedCol(style lipgloss.Style, plain string, width int) (string, int) {
 	return style.Render(plain), width
 }
 
+// fixedLabeledCol renders a label and its value in a constant-width column,
+// the label first so it keeps its column whatever the value's width or which
+// metric it is (p50, p95 or the avg fallback).
+func fixedLabeledCol(style lipgloss.Style, label, value string, width int) (string, int) {
+	plain := label + " " + value
+	if n := width - lipgloss.Width(plain); n > 0 {
+		plain += strings.Repeat(" ", n)
+	}
+	return style.Render(plain), width
+}
+
 // presentNames returns the currently announced models in stable first-seen
 // order. A model that dropped out keeps its slot in modelOrder but
 // contributes no row, so the rows around it never move and it reappears in
@@ -815,14 +826,14 @@ func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64, l
 			latArrow = "↑"
 		}
 		if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
-			seg, _ := fixedCol(dimStyle, "p50 "+fmtLatency(p50), colLat)
+			seg, _ := fixedLabeledCol(dimStyle, "p50", fmtLatency(p50), colLat)
 			add(seg)
 			if l.lat2 {
-				seg2, _ := fixedCol(labelStyle, "p95 "+fmtLatency(p95)+latArrow, colLat)
+				seg2, _ := fixedLabeledCol(labelStyle, "p95", fmtLatency(p95)+latArrow, colLat)
 				add(seg2)
 			}
 		} else {
-			seg, _ := fixedCol(dimStyle, "avg "+fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
+			seg, _ := fixedLabeledCol(dimStyle, "avg", fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
 			add(seg)
 			if l.lat2 {
 				add(strings.Repeat(" ", colLat))
@@ -834,12 +845,11 @@ func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64, l
 		if mh.errRise {
 			errArrow = "↑"
 		}
-		errText := fmt.Sprintf("err %d%s", mp.Errors, errArrow)
 		style := dimStyle
 		if mh.errRise || mh.status >= healthDegraded {
 			style = errStyle
 		}
-		seg, _ := fixedCol(style, errText, colErr)
+		seg, _ := fixedLabeledCol(style, "err", fmt.Sprintf("%d%s", mp.Errors, errArrow), colErr)
 		add(seg)
 	}
 
