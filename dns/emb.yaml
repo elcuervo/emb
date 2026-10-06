@@ -8,7 +8,7 @@
 
 listen: "127.0.0.1:16389"
 
-# The index build is 1961 short texts and a restart should not pay for them
+# The index build is 2223 short texts and a restart should not pay for them
 # twice, so the cache (and its snapshot) covers the vocabulary's descriptions.
 # `cache_file` puts the snapshot on the volume beside the model, so a restart
 # reads it back instead of rebuilding the index through the model; deleting the

@@ -78,7 +78,7 @@ kill_timeout = 30
     port = 53
 
 # One small always-on machine for the zone. The quantized MiniLM plus the
-# 1961-entry index fits with room to spare; the whole point of the separate app
+# 2223-entry index fits with room to spare; the whole point of the separate app
 # is that the site's machine is not spent on this.
 [[vm]]
   size = "shared-cpu-1x"
