@@ -285,6 +285,29 @@ RSpec.describe Emb::RoundRobinPool do
     end
   end
 
+  describe 'asynchronous interruption' do
+    # The window between taking an index and arming the release ensure: an async
+    # Thread#kill/#raise here must not leak the index (regression: pool shrank
+    # permanently, the next command blocked forever).
+    it 'returns a taken index when interrupted before the block runs' do
+      pool = described_class.new(1) { RecordingRedisClient.new }
+      source = File.expand_path('../../lib/emb/round_robin_pool.rb', __dir__)
+      target = File.readlines(source).index { |line| line.include?('held[self] = idx') } + 1
+
+      tracer = TracePoint.new(:line) do |tp|
+        next unless tp.path == source && tp.lineno == target
+
+        tracer.disable
+        Thread.current.raise('simulated async interrupt')
+      end
+      tracer.enable
+      expect { pool.with { |_c| } }.to raise_error(RuntimeError, /simulated/)
+      tracer.disable
+
+      expect(Timeout.timeout(1) { pool.with { |_c| :ok } }).to eq(:ok)
+    end
+  end
+
   describe 'fork safety' do
     it 'keeps working in the child after fork without sharing connections' do
       skip 'Process.fork unavailable' unless Process.respond_to?(:fork)
@@ -300,6 +323,22 @@ RSpec.describe Emb::RoundRobinPool do
       end
       _, status = Process.wait2(pid)
       expect(status.exitstatus).to eq(0)
+    end
+
+    it 'keeps the forking thread\'s held connection out of the child free queue' do
+      skip 'Process.fork unavailable' unless Process.respond_to?(:fork)
+
+      pool = described_class.new(2) { RecordingRedisClient.new }
+      double_acquired = nil
+      pool.with do |held|
+        child = Process.fork do
+          other = Thread.new { pool.with { |c| c } }.value
+          exit!(held.equal?(other) ? 1 : 0)
+        end
+        _, status = Process.wait2(child)
+        double_acquired = status.exitstatus == 1
+      end
+      expect(double_acquired).to be(false)
     end
   end
 

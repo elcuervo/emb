@@ -59,7 +59,7 @@ module Emb
     # Child side of after_fork(): drop inherited sockets and sync state.
     def reload_after_fork!
       @connections.each { |conn| conn.close if conn.respond_to?(:close) }
-      @free = free_indices
+      @free = free_indices(exclude: Thread.current[THREAD_KEY]&.[](self))
     end
 
     if Process.respond_to?(:fork)
@@ -76,25 +76,30 @@ module Emb
 
     private
 
-    def free_indices
+    def free_indices(exclude: nil)
       free = Queue.new
-      @size.times { |idx| free << idx }
+      @size.times { |idx| free << idx unless idx == exclude }
       free
     end
 
     # Takes the next free connection, records it as held by this thread/pool,
     # and returns it to the queue on exit — even when the block raises.
     def acquire(held)
-      idx = @free.pop
-      held ||= {}
-      Thread.current[THREAD_KEY] = held
-      held[self] = idx
+      idx = nil
       begin
+        idx = @free.pop
+        held ||= {}
+        Thread.current[THREAD_KEY] = held
+        held[self] = idx
         yield @connections[idx]
       ensure
-        held.delete(self)
-        Thread.current[THREAD_KEY] = nil if held.empty?
-        @free << idx
+        # idx is nil only when the wait was interrupted before a connection was
+        # taken; otherwise the taken index is returned even on async interrupt.
+        if idx
+          held&.delete(self)
+          Thread.current[THREAD_KEY] = nil if held&.empty?
+          @free << idx
+        end
       end
     end
   end
