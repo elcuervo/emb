@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Minimal RESP2 mock of the emb server for the client-timeout leak repro.
+# Minimal RESP2 mock of the emb server for the client-timeout leak repro and
+# the pool head-of-line-blocking gate (MOCK_SLOW / MOCK_SLOW_P).
 #
 # Behavior (all tuned via env):
 #   MOCK_BASE    seconds a normal EMB/EMB.MULTI "inference" takes

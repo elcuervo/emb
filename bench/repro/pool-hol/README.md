@@ -31,7 +31,7 @@ downloaded model is required.
 take `MOCK_SLOW` seconds (default 5% @ 150 ms); the rest take `MOCK_BASE`
 (5 ms). It reports p50/p90/p99 and fails when p90 exceeds `MAX_P90_MS`.
 
-Reference measurements (Apple M4, 5 connections, 10 threads, 3000 calls):
+Reference measurements (5 connections, 10 threads, 3000 calls):
 
 | selection | p50 | p90 | p99 | gate |
 |---|---|---|---|---|
@@ -40,6 +40,6 @@ Reference measurements (Apple M4, 5 connections, 10 threads, 3000 calls):
 
 The slow reply is 150 ms, so the fixed-index p90 lands on the slow path while the
 work-conserving p90 stays on the fast path — the threshold (50 ms) separates them
-with headroom. The legacy row is the pre-fix pool, measured once with a
-temporary fixed-index selection. Override with `MAX_P90_MS`, `MOCK_BASE`,
+with headroom. The legacy row is the pre-fix pool
+(`git show 32ddcba:gems/emb/lib/emb/round_robin_pool.rb`). Override with `MAX_P90_MS`, `MOCK_BASE`,
 `MOCK_SLOW`, `MOCK_SLOW_P`, `POOL`, `THREADS`, `ITERS`.

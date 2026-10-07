@@ -436,8 +436,8 @@ just bench-pool-gate
 `bench/repro/pool-hol/` runs the real client through the shared repro mock
 (`bench/repro/client-timeout/mock_server.rb`, slow-reply fraction) with 10
 threads over a `pool: 5` client (3000 calls). Threshold: **p90 ≤ 50 ms** (the
-slow reply is 150 ms, so the two regimes are far apart). Reference run (Apple
-M4, mock server, no emb model):
+slow reply is 150 ms, so the two regimes are far apart). Reference run (mock
+server, no emb model):
 
 | selection | p50 | p90 | p99 | gate |
 |---|---|---|---|---|

@@ -131,7 +131,7 @@ and queue it there even while other instances sit idle. Round-robin spreading ac
 **at least your expected emb instance count** (e.g. `pool: 10` for 10 instances).
 
 Commands beyond the pool's parallelism do **not** time out: when `pool` commands are
-already in flight, later commands wait on the shared connections until one frees
+already in flight, later commands wait for the first connection to free
 (there is no checkout timeout — unlike the previous pool's 5s
 `ConnectionPool::TimeoutError`). Only the wait for a free pool connection is
 unbounded — once a command runs, `RedisClient`'s `connect_timeout`,

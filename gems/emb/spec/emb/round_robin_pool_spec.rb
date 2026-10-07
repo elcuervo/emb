@@ -226,7 +226,8 @@ RSpec.describe Emb::RoundRobinPool do
       expect(c_result).to be_empty
 
       # Freeing one connection must serve C immediately, without waiting for
-      # the still-held connection (the pre-fix fixed-index wait deadlocks here).
+      # the still-held connection (the pre-fix fixed-index wait blocks here
+      # until A is released, so the bounded pop below times out and fails).
       b_conn.release
       expect(Timeout.timeout(1) { c_result.pop }).to eq(b_conn.id)
 
@@ -292,7 +293,8 @@ RSpec.describe Emb::RoundRobinPool do
     it 'returns a taken index when interrupted before the block runs' do
       pool = described_class.new(1) { RecordingRedisClient.new }
       source = File.expand_path('../../lib/emb/round_robin_pool.rb', __dir__)
-      target = File.readlines(source).index { |line| line.include?('held[self] = idx') } + 1
+      target = File.readlines(source, encoding: Encoding::UTF_8)
+                   .index { |line| line.strip == 'held[self] = idx' } + 1
 
       tracer = TracePoint.new(:line) do |tp|
         next unless tp.path == source && tp.lineno == target
@@ -325,7 +327,7 @@ RSpec.describe Emb::RoundRobinPool do
       expect(status.exitstatus).to eq(0)
     end
 
-    it 'keeps the forking thread\'s held connection out of the child free queue' do
+    it "keeps the forking thread's held connection out of the child free queue" do
       skip 'Process.fork unavailable' unless Process.respond_to?(:fork)
 
       pool = described_class.new(2) { RecordingRedisClient.new }

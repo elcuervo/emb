@@ -38,7 +38,7 @@ module Emb
 
       @size = size
       @connections = Array.new(size, &)
-      @free = free_indices
+      @free = free_queue
       INSTANCES&.[]=(self, self)
     end
 
@@ -56,10 +56,12 @@ module Emb
       end
     end
 
-    # Child side of after_fork(): drop inherited sockets and sync state.
+    # Child side of after_fork(): drop inherited sockets and rebuild the free
+    # queue, keeping the connection this thread still holds out of it (its
+    # holder re-adds it on release).
     def reload_after_fork!
       @connections.each { |conn| conn.close if conn.respond_to?(:close) }
-      @free = free_indices(exclude: Thread.current[THREAD_KEY]&.[](self))
+      @free = free_queue(exclude: Thread.current[THREAD_KEY]&.[](self))
     end
 
     if Process.respond_to?(:fork)
@@ -76,7 +78,7 @@ module Emb
 
     private
 
-    def free_indices(exclude: nil)
+    def free_queue(exclude: nil)
       free = Queue.new
       @size.times { |idx| free << idx unless idx == exclude }
       free
@@ -93,8 +95,8 @@ module Emb
         held[self] = idx
         yield @connections[idx]
       ensure
-        # idx is nil only when the wait was interrupted before a connection was
-        # taken; otherwise the taken index is returned even on async interrupt.
+        # idx stays nil when no connection was taken; otherwise the taken index
+        # is returned even on async interrupt.
         if idx
           held&.delete(self)
           Thread.current[THREAD_KEY] = nil if held&.empty?
