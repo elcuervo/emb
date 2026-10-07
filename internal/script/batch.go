@@ -92,6 +92,14 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 			}
 		}
 	}
+	for i, ins := range items {
+		for _, in := range ins {
+			if in.Shape[0] != 1 {
+				ls.RaiseError("emb.run_batch: input %q item %d: batch dimension must be 1, got %d", in.Name, i+1, in.Shape[0])
+				return 0
+			}
+		}
+	}
 
 	if h.SplitBatch != nil && h.SplitBatch() {
 		return runSplitBatch(ls, h, items, opts)
@@ -268,9 +276,6 @@ func mergeBatch(items [][]onnx.NamedTensor, names []string, budget *tensorBudget
 				if cand.Name == name {
 					in = cand
 				}
-			}
-			if in.Shape[0] != 1 {
-				return nil, fmt.Errorf("input %q item %d: batch dimension must be 1, got %d", name, i+1, in.Shape[0])
 			}
 			row := i * int(inner)
 			if slices.Equal(in.Shape[1:], maxShape[1:]) {
