@@ -1,10 +1,15 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Minimal RESP2 mock of the emb server for the client-timeout leak repro.
+# Minimal RESP2 mock of the emb server for the client-timeout leak repro and
+# the pool head-of-line-blocking gate (MOCK_SLOW / MOCK_SLOW_P).
 #
 # Behavior (all tuned via env):
-#   MOCK_DELAY   seconds each EMB/EMB.MULTI "inference" takes (default 1.5)
+#   MOCK_BASE    seconds a normal EMB/EMB.MULTI "inference" takes
+#                (default MOCK_DELAY, else 1.5)
+#   MOCK_DELAY   fallback for MOCK_BASE (kept for the client-timeout repro)
+#   MOCK_SLOW    seconds a slow inference takes (default 0.15)
+#   MOCK_SLOW_P  fraction of inferences that are slow (default 0 = never)
 #   MOCK_CPU=1   busy-loop instead of sleep — burns a real core so `top`
 #                shows the server doing CPU work the client has abandoned
 #   MOCK_LOG     path to append one JSON line per command (the repro reads
@@ -16,12 +21,15 @@
 # The emb gem unpacks them with `unpack("e*")`.
 
 require 'socket'
-require 'json'
 
-DELAY  = Float(ENV.fetch('MOCK_DELAY', '1.5'))
+BASE   = Float(ENV.fetch('MOCK_BASE', ENV.fetch('MOCK_DELAY', '1.5')))
+SLOW   = Float(ENV.fetch('MOCK_SLOW', '0.15'))
+SLOW_P = Float(ENV.fetch('MOCK_SLOW_P', '0'))
+RNG    = Random.new(42)
 BUSY   = ENV['MOCK_CPU'] == '1'
 LOG    = ENV['MOCK_LOG']
 CLOSE  = ENV['MOCK_CLOSE'] == '1'
+require 'json' if LOG
 
 server = TCPServer.new('127.0.0.1', 0)
 puts "MOCK_PORT=#{server.addr[1]}"
@@ -88,8 +96,8 @@ loop do
       when 'EMB', 'EMB.MULTI'
         n = cmd == 'EMB.MULTI' ? (args.length - 1) / 2 : args.length - 2
         n = 0 if n < 0
-        log.call(cmd: cmd, items: n)
-        inference_wait(DELAY)
+        log&.call(cmd: cmd, items: n)
+        inference_wait(RNG.rand < SLOW_P ? SLOW : BASE)
         c.write("*#{n}\r\n")
         n.times { c.write("$16\r\n#{BLOB}\r\n") }
       else
