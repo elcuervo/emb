@@ -102,6 +102,11 @@ Emb.setup(url: "redis://localhost:6379", pool: 10)
 The default pool size is **5**. The client keeps `pool` persistent connections per
 emb **instance** and routes commands through them **in round-robin order** —
 consecutive commands use different connections instead of reusing one hot connection.
+Selection is **work-conserving**: a command takes the next *available* connection and
+never waits behind a busy one while another connection is free, so an occasional slow
+inference cannot stall commands that another connection could serve. A released
+connection returns to the tail of the free queue, so sequential commands still rotate
+in order.
 
 `url` also accepts an **array of instances** (interchangeable replicas serving the same
 model set); commands then round-robin across instances first, then across connections
@@ -138,9 +143,10 @@ pool size — every command reaches the same server. The pool size still control
 how many persistent connections the client holds and how many commands run in
 parallel. The pool is usually not the bottleneck for
 inference-bound workloads (small pools are fine); it becomes a knob at high
-concurrency on a multi-model box — see [Performance](#performance). With
-round-robin selection up to `pool` commands run in parallel; beyond that, commands
-share connections and serialize on them.
+concurrency on a multi-model box — see [Performance](#performance). Up to `pool`
+commands run in parallel; beyond that, commands wait for the first connection to
+free rather than blocking on a specific busy one, so size `pool` to your expected
+concurrency.
 
 ### Authentication
 

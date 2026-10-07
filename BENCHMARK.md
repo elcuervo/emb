@@ -417,6 +417,36 @@ README). The results below are the rationale.
   `pool.with { conn.pipelined { ... } }` expresses eager-burst pipelining
   (p50 ~7.4–7.9 vs ~8.3–8.6 ms) with no convenience method.
 
+### Connection-pool tail latency (work-conserving selection)
+
+The 0.4.0 `RoundRobinPool` assigned each command a fixed connection index and then
+blocked on that connection's mutex, so with more commands in flight than pool
+connections a command could wait behind a slow inference while another connection
+was free — a p90-only regression versus 0.3.0's `connection_pool`, which woke a
+waiter when *any* connection was returned. Selection is now work-conserving: a
+command takes the next available connection, and a released connection returns to
+the tail of the free queue (sequential rotation unchanged).
+
+Model-free gate (no server or downloaded model needed):
+
+```bash
+just bench-pool-gate
+```
+
+`bench/repro/pool-hol/` runs the real client through the shared repro mock
+(`bench/repro/client-timeout/mock_server.rb`, slow-reply fraction) with 10
+threads over a `pool: 5` client (3000 calls). Threshold: **p90 ≤ 50 ms** (the
+slow reply is 150 ms, so the two regimes are far apart). Reference run (Apple
+M4, mock server, no emb model):
+
+| selection | p50 | p90 | p99 | gate |
+|---|---|---|---|---|
+| work-conserving | 7.6 ms | **7.8 ms** | 160 ms | PASS |
+| legacy fixed-index (0.4.x) | 7.8 ms | **160.3 ms** | 334 ms | FAIL |
+
+The p90 now matches the 0.3.0 work-conserving baseline while keeping the
+connection-level load-balancer fan-out that motivated round-robin.
+
 ## Fargate (linux/arm64, Graviton)
 
 The sections above are measured on Apple M1 Pro (macOS). The deployment target is

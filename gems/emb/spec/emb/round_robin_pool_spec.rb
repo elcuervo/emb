@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'timeout'
+
+# Polls until the block is true or a bounded timeout elapses. Sequences gated
+# threads; the bounded waits only establish the setup, not the pass/fail timing.
+def wait_until(timeout: 2)
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+  sleep(0.001) until yield || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+end
 
 class RecordingRedisClient
   attr_reader :calls
@@ -60,6 +68,36 @@ class ConcurrentRedisClient
     ensure
       @guard.synchronize { @active -= 1 }
       @tracker.leave
+    end
+  end
+end
+
+class GatedRedisClient
+  attr_reader :id
+
+  def initialize(id)
+    @id = id
+    @mutex = Mutex.new
+    @cond = ConditionVariable.new
+    @entered = false
+    @open = false
+  end
+
+  def call
+    @mutex.synchronize do
+      @entered = true
+      @cond.broadcast
+      @cond.wait(@mutex) until @open
+    end
+    @id
+  end
+
+  def entered? = @mutex.synchronize { @entered }
+
+  def release
+    @mutex.synchronize do
+      @open = true
+      @cond.broadcast
     end
   end
 end
@@ -165,6 +203,35 @@ RSpec.describe Emb::RoundRobinPool do
       end
       replies = threads.map(&:value)
       expect(replies.sort).to eq((0...12).map { |i| "reply text#{i}" }.sort)
+    end
+  end
+
+  describe 'work-conserving selection' do
+    it 'serves a waiting command from the first freed connection' do
+      conns = [GatedRedisClient.new('a'), GatedRedisClient.new('b')]
+      pool = described_class.new(2) { conns.shift }
+
+      a = Thread.new { pool.with { |c| c.call } }
+      wait_until { pool.connections.count(&:entered?) == 1 }
+      a_conn = pool.connections.find(&:entered?)
+      b_conn = (pool.connections - [a_conn]).first
+
+      b = Thread.new { pool.with { |c| c.call } }
+      wait_until { pool.connections.count(&:entered?) == 2 }
+
+      # Third command must wait: both connections are held.
+      c_result = Queue.new
+      c = Thread.new { c_result << pool.with { |conn| conn.call } }
+      sleep 0.05
+      expect(c_result).to be_empty
+
+      # Freeing one connection must serve C immediately, without waiting for
+      # the still-held connection (the pre-fix fixed-index wait deadlocks here).
+      b_conn.release
+      expect(Timeout.timeout(1) { c_result.pop }).to eq(b_conn.id)
+
+      a_conn.release
+      [a, b, c].each { |t| t.join(2) }
     end
   end
 

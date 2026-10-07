@@ -343,6 +343,12 @@ bench-ruby-multi config="bench-cpu-partition.yaml":
     status=$?; \
     exit $status
 
+# Pool head-of-line-blocking gate (model-free): drives the real emb client
+# through the shared repro mock with occasional slow replies, from more threads
+# than the pool has connections, and fails when p90 reaches the slow path.
+bench-pool-gate:
+    @cd gems/emb && bundle exec ruby ../../bench/repro/pool-hol/gate.rb
+
 # Run all benchmarks
 bench-all: bench-redis bench-cache
 

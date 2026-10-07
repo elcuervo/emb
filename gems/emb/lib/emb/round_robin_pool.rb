@@ -1,17 +1,22 @@
 # frozen_string_literal: true
 
 module Emb
-  # A thread-safe pool of N RedisClient connections with round-robin selection.
-  # Behind connection-level load balancers (AWS Service Connect, an NLB, or an
-  # Envoy TCP proxy) each keep-alive connection is pinned to one upstream
-  # instance, so rotating commands across the pool spreads traffic across every
-  # instance — even single-threaded at zero concurrency. Connections are created
-  # up front but connect lazily on first use.
+  # A thread-safe pool of N RedisClient connections with work-conserving
+  # round-robin selection. Behind connection-level load balancers (AWS Service
+  # Connect, an NLB, or an Envoy TCP proxy) each keep-alive connection is pinned
+  # to one upstream instance, so rotating commands across the pool spreads
+  # traffic across every instance — even single-threaded at zero concurrency.
+  # Connections are created up front but connect lazily on first use.
+  #
+  # Selection is work-conserving: a command takes the next *available*
+  # connection, never waiting behind a busy connection while another is free.
+  # A released connection returns to the tail of the free queue, so sequential
+  # commands still rotate in order.
   #
   # Two behaviors deliberately match the connection_pool gem it replaces: a
   # nested `with` from the same thread re-enters the held connection, and after
   # `fork` (Puma preload_app, unicorn, resque) the pool closes inherited sockets
-  # and rebuilds its mutexes in the child so parent and child never share a
+  # and rebuilds its free queue in the child so parent and child never share a
   # connection.
   class RoundRobinPool
     # Pools are tracked only to reset them in forked children. WeakMap so a
@@ -33,31 +38,28 @@ module Emb
 
       @size = size
       @connections = Array.new(size, &)
-      @locks = Array.new(size) { Mutex.new }
-      @next = 0
-      @index_mutex = Mutex.new
+      @free = free_indices
       INSTANCES&.[]=(self, self)
     end
 
-    # Yields the next connection in rotation order. Safe from multiple threads:
-    # up to `size` commands run in parallel, each on its own connection. A
-    # nested `with` from the same thread re-enters the connection this pool
-    # already holds without re-locking; other pools are unaffected.
+    # Yields an available connection. Safe from multiple threads: up to `size`
+    # commands run in parallel, each on its own connection; a command beyond that
+    # waits for the first connection to free. A nested `with` from the same
+    # thread re-enters the connection this pool already holds; other pools are
+    # unaffected.
     def with(&)
       held = Thread.current[THREAD_KEY]
       if held&.key?(self)
         yield @connections[held[self]]
       else
-        take(held, &)
+        acquire(held, &)
       end
     end
 
     # Child side of after_fork(): drop inherited sockets and sync state.
     def reload_after_fork!
       @connections.each { |conn| conn.close if conn.respond_to?(:close) }
-      @locks = Array.new(@size) { Mutex.new }
-      @next = 0
-      @index_mutex = Mutex.new
+      @free = free_indices
     end
 
     if Process.respond_to?(:fork)
@@ -74,26 +76,25 @@ module Emb
 
     private
 
-    # Acquires the next connection, records it as held by this thread/pool, and
-    # releases both on exit — even when the block raises.
-    def take(held)
-      idx, connection = pick
+    def free_indices
+      free = Queue.new
+      @size.times { |idx| free << idx }
+      free
+    end
+
+    # Takes the next free connection, records it as held by this thread/pool,
+    # and returns it to the queue on exit — even when the block raises.
+    def acquire(held)
+      idx = @free.pop
       held ||= {}
       Thread.current[THREAD_KEY] = held
       held[self] = idx
       begin
-        @locks[idx].synchronize { yield connection }
+        yield @connections[idx]
       ensure
         held.delete(self)
         Thread.current[THREAD_KEY] = nil if held.empty?
-      end
-    end
-
-    def pick
-      @index_mutex.synchronize do
-        idx = @next % @size
-        @next += 1
-        [idx, @connections[idx]]
+        @free << idx
       end
     end
   end
