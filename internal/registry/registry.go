@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -156,6 +157,10 @@ type ScriptResources struct {
 	sessions  []onnx.NamedSession
 	next      atomic.Uint64
 	Tokenizer tokenizer.Tokenizer
+	// SplitBatch is set for graphs with dynamic activation quantization, whose
+	// output depends on batch composition and padding: emb.run_batch then runs
+	// each item on its own instead of one padded run.
+	SplitBatch bool
 }
 
 // Session returns the next named-tensor session for a scripted run,
@@ -524,9 +529,14 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		sessions = append(sessions, sess)
 	}
 
+	split := bytes.Contains(modelData, []byte("DynamicQuantizeLinear"))
+	if split {
+		log.Printf("  %s: dynamic activation quantization — emb.run_batch runs items one at a time", e.Name)
+	}
+
 	e.scriptSessions.Store(int64(len(sessions)))
 	e.scriptTokenizer.Store(true)
-	return &ScriptResources{sessions: sessions, Tokenizer: tok}, nil
+	return &ScriptResources{sessions: sessions, Tokenizer: tok, SplitBatch: split}, nil
 }
 
 func downloadModel(cfg *config.ModelConfig, name string) error {

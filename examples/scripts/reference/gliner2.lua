@@ -22,10 +22,11 @@ local THRESHOLD = 0.5           -- sigmoid cutoff
 -- Building block 1: generic word split (BertPreTokenizer rules, byte offsets).
 local function split_words(norm)
   local res = emb.tokenize.words(norm)
-  -- this model lowercases words before tokenization (decoder.split_words)
+  -- this model lowercases words before tokenization (decoder.split_words).
+  -- Python lowercases U+0130 (İ) to "i" + U+0307; Go drops the dot.
   local words = {}
   for i = 1, #res.words do
-    words[i] = string.lower(res.words[i])
+    words[i] = string.lower((res.words[i]:gsub("\196\176", "i\204\135")))
   end
   return words, res.starts, res.ends
 end
@@ -91,7 +92,7 @@ for ti = 1, #texts do
       if wids[idx] == combined_idx then found = idx break end
     end
     if found == nil then error("could not locate label marker for " .. labels[i]) end
-    label_positions[i] = found
+    label_positions[i] = found - 1 -- 0-based token index into the sequence
   end
 
   local words_mask, attn, label_mask = {}, {}, {}

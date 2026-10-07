@@ -93,6 +93,10 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 		}
 	}
 
+	if h.SplitBatch != nil && h.SplitBatch() {
+		return runSplitBatch(ls, h, items, opts)
+	}
+
 	merged, err := mergeBatch(items, names, budget)
 	if err != nil {
 		ls.RaiseError("emb.run_batch: %v", err)
@@ -126,6 +130,39 @@ func runBatchHost(ls *lua.LState, h Hosts) int {
 	}
 	ls.Push(result)
 	ls.Push(lua.LNumber(runMs))
+	return 2
+}
+
+// runSplitBatch runs each item as its own inference (no padding, no shared
+// batch), for graphs whose output depends on batch composition. The reply has
+// the same shape as the merged path's.
+func runSplitBatch(ls *lua.LState, h Hosts, items [][]onnx.NamedTensor, opts runOptions) int {
+	result := ls.NewTable()
+	var totalMs float64
+	for i, inputs := range items {
+		outputs, runMs, err := timeRun(h.Run, inputs)
+		if err != nil {
+			ls.RaiseError("emb.run_batch: %v", err)
+			return 0
+		}
+		totalMs += runMs
+		outNames, err := selectOutputNames(outputs, opts)
+		if err != nil {
+			ls.RaiseError("emb.run_batch: %v", err)
+			return 0
+		}
+		if err := chargeOutputs(ls, outputs, outNames); err != nil {
+			ls.RaiseError("emb.run_batch: %v", err)
+			return 0
+		}
+		itemOut := ls.NewTable()
+		for _, name := range outNames {
+			itemOut.RawSetString(name, sliceBatchOutput(ls, outputs[name], 0, 1, opts.packed))
+		}
+		result.RawSetInt(i+1, itemOut)
+	}
+	ls.Push(result)
+	ls.Push(lua.LNumber(totalMs))
 	return 2
 }
 

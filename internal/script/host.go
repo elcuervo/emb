@@ -77,6 +77,9 @@ type Hosts struct {
 	// Run executes one inference over named tensors and returns the graph's
 	// named outputs. Nil makes emb.run unavailable.
 	Run func(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error)
+	// SplitBatch reports whether emb.run_batch must run each item on its own
+	// (graphs whose output depends on batch composition). Nil means batch.
+	SplitBatch func() bool
 	// Embed returns pooled, normalized embeddings for the given texts through
 	// the model's embedding path (the same path the EMB command uses, so
 	// results share the embedding cache). Nil makes emb.embed unavailable;

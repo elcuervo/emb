@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -120,4 +121,31 @@ func TestGLiNERWireCache(t *testing.T) {
 		t.Fatalf("labels arg must change the reply: %q", other)
 	}
 	c.Close()
+}
+
+// TestGLiNERWireBatchMatchesSingle: the int8 export uses dynamic activation
+// quantization, so a multi-text EVSHA must extract per text exactly what one
+// call per text does (emb.run_batch splits instead of padding into one run).
+func TestGLiNERWireBatchMatchesSingle(t *testing.T) {
+	addr, _ := serveGLiNER(t, "")
+	c := dial(t, addr)
+	defer c.Close()
+
+	sha := doCmd(t, c, "EMB.SCRIPT", "LOAD", "gliner2", glinerScriptSrc(t))
+	shaVal := sha[5 : len(sha)-2]
+	labels := []string{"PERSON", "ORG", "PRODUCT", "LOCATION"}
+	texts := []string{
+		"Apple CEO Tim Cook announced iPhone 15.",
+		"Stripe hired Mary in Dublin.",
+		"Google launched the Pixel 9 in Mountain View.",
+	}
+
+	want := fmt.Sprintf("*%d\r\n", len(texts))
+	for _, text := range texts {
+		want += doCmd(t, c, append([]string{"EMB.EVSHA", "gliner2", shaVal, "1", text}, labels...)...)
+	}
+	args := append([]string{"EMB.EVSHA", "gliner2", shaVal, fmt.Sprint(len(texts))}, texts...)
+	if got := doCmd(t, c, append(args, labels...)...); got != want {
+		t.Fatalf("batched reply differs from per-text replies:\n got %q\nwant %q", got, want)
+	}
 }

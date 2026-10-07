@@ -323,6 +323,10 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 			}
 			return r.Session().RunNamed(inputs)
 		},
+		SplitBatch: func() bool {
+			r, err := resolve()
+			return err == nil && r.SplitBatch
+		},
 		EncodePretokenized: func(words []string, maxLen int) ([]int64, []int64, error) {
 			r, err := resolve()
 			if err != nil {
