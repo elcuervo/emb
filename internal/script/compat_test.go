@@ -64,10 +64,10 @@ func TestShippedScriptsCompile(t *testing.T) {
 // once when the version was folded in (design decision 8), again when the KEYS
 // count was folded in (the arity-collision fix), and again when the host API
 // moved to 1.3.0 (bool tensors, encode_plain, special_ids, decode_ordered); it
-// is pinned again here.
+// is pinned again here, now with the v2 key domain and literal/hash discriminator.
 func TestReplyCacheKeyUnchanged(t *testing.T) {
 	got := CacheKey("minilm", "0123456789abcdef0123456789abcdef01234567", []string{"PERSON", "ORG"}, 1, "hello world")
-	const want = "minilm:0123456789abcdef0123456789abcdef01234567:c952bf03c1fdbce28b2b2305d09193f101ccc5661a41e643d55718a1cddaa60e:hello world"
+	const want = "minilm:0123456789abcdef0123456789abcdef01234567:078c853a41caf41cd832d61fdce8f7888a5210232924b4652c8ab441182f72cb:hello world"
 	if got != want {
 		t.Fatalf("reply cache key changed:\n got %q\nwant %q", got, want)
 	}

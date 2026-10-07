@@ -13,7 +13,7 @@ const CacheKeyInlineLimit = 256
 
 // CacheKey builds the content-addressed cache key for a scripted evaluation:
 //
-//	model:sha1(script):sha256(apiVersion|numTexts|count|len|arg...):text
+//	model:sha1(script):sha256(keyVersion|representation|apiVersion|numTexts|count|len|arg...):text
 //
 // numTexts is folded into the digest because the server replies with the
 // script's whole value for one text but one element per text for several; the
@@ -30,9 +30,8 @@ func CacheKey(modelName, scriptSHA string, args []string, numTexts int, text str
 
 // CacheKeyConfig is CacheKey with the script's config digest folded in. The
 // digest is empty for a script with no declared config, and is written to the
-// hash only when non-empty so no-config keys stay byte-identical to the
-// pre-config format. When a config changes, its digest changes and the request
-// misses rather than serving a reply computed under the old config.
+// hash only when non-empty. When a config changes, its digest changes and the
+// request misses rather than serving a reply computed under the old config.
 func CacheKeyConfig(modelName, scriptSHA string, args []string, numTexts int, text, configDigest string) string {
 	return cacheKey(APIVersion, modelName, scriptSHA, args, numTexts, text, configDigest)
 }
@@ -41,6 +40,14 @@ func CacheKeyConfig(modelName, scriptSHA string, args []string, numTexts int, te
 // version-folding behavior is directly testable.
 func cacheKey(apiVersion, modelName, scriptSHA string, args []string, numTexts int, text, configDigest string) string {
 	h := sha256.New()
+	// Version the key independently of the host API: legacy ambiguous keys
+	// must remain cold even when restored from a compatible snapshot.
+	_, _ = h.Write([]byte("emb:reply-key:v2\x00"))
+	if len(text) > CacheKeyInlineLimit {
+		_, _ = h.Write([]byte{1}) // SHA-256 tail
+	} else {
+		_, _ = h.Write([]byte{0}) // literal tail
+	}
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(apiVersion)))
 	_, _ = h.Write(size[:])

@@ -192,11 +192,17 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 }
 
 func (c *Cache) Set(key string, value []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entryBytes := int64(len(key) + len(value) + 48)
+	if c.maxBytes > 0 && entryBytes > c.maxBytes {
+		return
+	}
+
 	// Copy the value: callers pass sub-slices of a larger buffer (one row of a
 	// batch-wide embedding buffer), and retaining one row would pin the batch.
 	value = append([]byte(nil), value...)
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if elem, ok := c.entries[key]; ok {
 		c.ll.MoveToFront(elem)
@@ -205,10 +211,12 @@ func (c *Cache) Set(key string, value []byte) {
 		c.curBytes += int64(len(value))
 		entry.value = value
 		c.generation++
+		for c.maxBytes > 0 && c.curBytes > c.maxBytes {
+			c.evictTailLocked()
+		}
 		return
 	}
 
-	entryBytes := int64(len(key) + len(value) + 48)
 	for c.maxBytes > 0 && c.curBytes+entryBytes > c.maxBytes {
 		if c.evictTailLocked() == nil {
 			break

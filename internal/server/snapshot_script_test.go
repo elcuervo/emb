@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func TestSnapshotQuarantinesAndAdmitsScriptReplies(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "lazy.embcache")
-	key := opaqueKey("laya", "state")
+	key := script.CacheKey("laya", strings.Repeat("a", sha1HexLen), nil, 1, "state")
 	value := []byte(`{"answers":{}}`)
 	snap := CacheSnapshot{Entries: []CacheSnapshotEntry{{Key: key, Value: value}}}
 	stored := map[string]registry.ModelFingerprint{"laya": {Fingerprint: fp, Dim: -1, Loaded: true}}
@@ -121,9 +122,21 @@ func TestScriptEvaluationAdmitsQuarantineBeforeLookup(t *testing.T) {
 	// only come from admission.
 	restored := []byte("$8\r\nrestored\r\n")
 	key := script.CacheKeyConfig("m", sha, nil, 1, "state", loaded.digest)
-	srv.quarantine = map[string]restoreQuarantine{
-		"m": {fingerprint: fp, dim: -1, entries: []pendingRestoreEntry{{Key: key, Value: restored}}},
+	path := filepath.Join(t.TempDir(), "current.embcache")
+	cache := NewCache(1 << 20)
+	cache.Set(key, restored)
+	stored := map[string]registry.ModelFingerprint{"m": {Fingerprint: fp, Dim: -1, Loaded: true}}
+	if _, err := writeSnapshot(context.Background(), path, cache.Snapshot(), stored, 0); err != nil {
+		t.Fatal(err)
 	}
+	result, err := readSnapshot(path, 1<<20, map[string]registry.ModelFingerprint{"m": {Dim: -1, Loaded: false}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.QuarantinedCount != 1 {
+		t.Fatalf("expected lazy restore: %+v", result)
+	}
+	srv.cache, srv.quarantine, srv.quarantineBytes = result.Cache, result.Quarantine, result.QuarantineBytes
 
 	replies, err := srv.evalScripted("m", src, sha, loaded.config, loaded.digest, []string{"state"}, nil)
 	if err != nil {
@@ -150,5 +163,74 @@ func TestScriptEvaluationWithoutPersistence(t *testing.T) {
 	}
 	if len(replies) != 1 || string(replies[0]) != "$5\r\nfresh\r\n" {
 		t.Fatalf("reply = %q, want the script's own value", replies)
+	}
+}
+
+func TestSnapshotLegacyScriptIdentity(t *testing.T) {
+	addr, srv := serveTestWithCacheOptions(t, "1MB")
+	imageAddr, imageSrv, _ := serveImage(t, "1MB")
+	const src = `return KEYS[1]`
+	sha, err := srv.PreloadScript("test", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Explicit legacy metadata fixture: API 1.3.0, one text, no arguments.
+	const legacyMetadata = "916b0b7d3e5eba509cc49f1c31e93025ec144ac6963e10909b98d6486f36efad"
+	legacyKey := "test:" + sha + ":" + legacyMetadata + ":hello"
+	textKey := textCacheKey("test", "hello")
+	imageKey := imageCacheKey("imgA", []byte("image"))
+	textValue, imageValue := bytes.Repeat([]byte{7}, 16), bytes.Repeat([]byte{8}, testImageDim*4)
+	cache := NewCache(1 << 20)
+	cache.Set(legacyKey, []byte("$5\r\nwrong\r\n"))
+	cache.Set(textKey, textValue)
+	cache.Set(imageKey, imageValue)
+	models := map[string]registry.ModelFingerprint{}
+	for model, reg := range map[string]*registry.Registry{"test": srv.reg, "imgA": imageSrv.reg} {
+		entry, err := reg.Resolve(model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fp, err := entry.Fingerprint()
+		if err != nil {
+			t.Fatal(err)
+		}
+		models[model] = registry.ModelFingerprint{Fingerprint: fp, Dim: entry.Dim, Loaded: true}
+	}
+	path := filepath.Join(t.TempDir(), "legacy.embcache")
+	if _, err := writeSnapshot(context.Background(), path, cache.Snapshot(), models, 0); err != nil {
+		t.Fatal(err)
+	}
+	result, err := readSnapshot(path, 1<<20, models)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Restored != 3 {
+		t.Fatalf("restore = %+v", result)
+	}
+	srv.cache.replaceStorageFrom(result.Cache)
+	// Read a second staging cache so the running servers do not share storage.
+	imageResult, err := readSnapshot(path, 1<<20, models)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageSrv.cache.replaceStorageFrom(imageResult.Cache)
+	before := srv.cache.Stats()
+	for range 2 {
+		if got := bulkOf(t, redisCmd(t, addr, "EMB.EVSHA", "test", sha, "1", "hello")); got != "hello" {
+			t.Fatalf("legacy reply served: %q", got)
+		}
+	}
+	after := srv.cache.Stats()
+	if after.Misses != before.Misses+1 || after.Hits != before.Hits+1 {
+		t.Fatalf("script counters: %+v -> %+v", before, after)
+	}
+	if got := bulkOf(t, redisCmd(t, addr, "EMB", "test", "hello")); got != string(textValue) {
+		t.Fatal("restored text missed")
+	}
+	if got := bulkOf(t, redisCmd(t, imageAddr, "EMB.IMG", "imgA", "image")); got != string(imageValue) {
+		t.Fatal("restored image missed")
+	}
+	if srv.cache.Stats().Hits != after.Hits+1 || imageSrv.cache.Stats().Hits != 1 {
+		t.Fatal("embedding requests did not hit")
 	}
 }
