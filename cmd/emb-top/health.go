@@ -31,14 +31,15 @@ const (
 	p95RiseCritical  = 4.0
 	cpuDegradedPct   = 85.0
 	cpuCriticalPct   = 95.0
-	cacheDegradedPct = 30.0
-	cacheCriticalPct = 10.0
 )
 
-// signal is one health chip: its value text and its own severity.
+// signal is one health chip: its value text and its own severity. Only
+// signals marked driving can raise the overall verdict; informational chips
+// are shown but never influence it.
 type signal struct {
-	text  string
-	level healthStatus
+	text    string
+	level   healthStatus
+	driving bool
 }
 
 // healthInput is everything the verdict is derived from, so health() stays a
@@ -58,16 +59,16 @@ type healthInput struct {
 // status is the worst signal level, except that fewer than two polls reads as
 // no-data rather than a verdict.
 func health(in healthInput) (healthStatus, []signal) {
-	conn := signal{text: "connected", level: healthHealthy}
+	conn := signal{text: "connected", level: healthHealthy, driving: true}
 	if !in.connected {
-		conn = signal{text: "reconnecting", level: healthCritical}
+		conn = signal{text: "reconnecting", level: healthCritical, driving: true}
 	}
 	sigs := []signal{conn}
 	if in.polls < 2 {
 		return healthNoData, sigs
 	}
 
-	errSig := signal{text: fmt.Sprintf("err %5.1f%%", in.errRatio*100), level: healthHealthy}
+	errSig := signal{text: fmt.Sprintf("err %5.1f%%", in.errRatio*100), level: healthHealthy, driving: true}
 	switch {
 	case in.errRatio > errRatioCritical:
 		errSig.level = healthCritical
@@ -77,7 +78,7 @@ func health(in healthInput) (healthStatus, []signal) {
 	sigs = append(sigs, errSig)
 
 	if in.p95Us > 0 {
-		latSig := signal{text: fmt.Sprintf("p95 %-7s", fmtLatency(in.p95Us)), level: healthHealthy}
+		latSig := signal{text: fmt.Sprintf("p95 %-7s", fmtLatency(in.p95Us)), level: healthHealthy, driving: true}
 		if in.baselineUs > 0 {
 			ratio := float64(in.p95Us) / float64(in.baselineUs)
 			switch {
@@ -90,7 +91,7 @@ func health(in healthInput) (healthStatus, []signal) {
 		sigs = append(sigs, latSig)
 	}
 
-	cpuSig := signal{text: fmt.Sprintf("cpu %3.0f%%", in.cpuPct), level: healthHealthy}
+	cpuSig := signal{text: fmt.Sprintf("cpu %3.0f%%", in.cpuPct), level: healthHealthy, driving: true}
 	switch {
 	case in.cpuPct > cpuCriticalPct:
 		cpuSig.level = healthCritical
@@ -99,20 +100,15 @@ func health(in healthInput) (healthStatus, []signal) {
 	}
 	sigs = append(sigs, cpuSig)
 
+	// Cache hit rate is a workload property, not node health: it stays a
+	// visible chip but never drives the verdict.
 	if in.hasCache {
-		cacheSig := signal{text: fmt.Sprintf("cache %3.0f%%", in.cachePct), level: healthHealthy}
-		switch {
-		case in.cachePct < cacheCriticalPct:
-			cacheSig.level = healthCritical
-		case in.cachePct < cacheDegradedPct:
-			cacheSig.level = healthDegraded
-		}
-		sigs = append(sigs, cacheSig)
+		sigs = append(sigs, signal{text: fmt.Sprintf("cache %3.0f%%", in.cachePct), level: healthHealthy})
 	}
 
 	worst := healthHealthy
 	for _, s := range sigs {
-		if s.level > worst {
+		if s.driving && s.level > worst {
 			worst = s.level
 		}
 	}

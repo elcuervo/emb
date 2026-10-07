@@ -26,7 +26,7 @@ func TestHealthVerdicts(t *testing.T) {
 		{"latency ok", healthInput{connected: true, polls: 5, p95Us: 1500, baselineUs: 1000}, healthHealthy, "p95 1.5ms  "},
 		{"latency degrade", healthInput{connected: true, polls: 5, p95Us: 3000, baselineUs: 1000}, healthDegraded, "p95 3.0ms  "},
 		{"latency critical", healthInput{connected: true, polls: 5, p95Us: 5000, baselineUs: 1000}, healthCritical, "p95 5.0ms  "},
-		{"cache degrade", healthInput{connected: true, polls: 5, hasCache: true, cachePct: 25}, healthDegraded, "cache  25%"},
+		{"low cache is not a verdict driver", healthInput{connected: true, polls: 5, hasCache: true, cachePct: 2}, healthHealthy, "cache   2%"},
 		{"disconnected", healthInput{connected: false, polls: 5}, healthCritical, "reconnecting"},
 	}
 	for _, tc := range cases {

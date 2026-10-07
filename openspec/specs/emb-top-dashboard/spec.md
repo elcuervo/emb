@@ -237,11 +237,11 @@ polling and resume after a connection loss instead of exiting.
 
 ### Requirement: emb-top renders a health status banner
 
-`emb-top` SHALL derive one overall node health status from its polled metrics — `healthy`, `degraded`, `critical`, or `no data` — and SHALL render it prominently with reason chips for the signals that drive it: error ratio, p95 latency, CPU usage, cache hit rate, active requests, and connection state. Thresholds SHALL be fixed built-in defaults; the change introduces no new flags.
+`emb-top` SHALL derive one overall node health status from its polled metrics — `healthy`, `degraded`, `critical`, or `no data`. The verdict SHALL be driven only by actionable node signals: connection state, error ratio, p95 latency relative to the session baseline, and CPU usage. Cache hit rate SHALL render as an informational chip that cannot raise the status. Thresholds SHALL be fixed built-in defaults; the change introduces no new flags.
 
 #### Scenario: Healthy idle node
 
-- **GIVEN** a reachable node with no recent errors, low CPU, and healthy cache behavior
+- **GIVEN** a reachable node with no recent errors, low CPU, and no connection loss
 - **WHEN** the dashboard renders
 - **THEN** the banner shows `healthy`
 
@@ -260,6 +260,11 @@ polling and resume after a connection loss instead of exiting.
 - **GIVEN** the dashboard has polled fewer than two times
 - **WHEN** it renders
 - **THEN** the banner shows `no data` rather than a health verdict
+
+#### Scenario: Low cache hit rate does not degrade health
+
+- **WHEN** the cache hit rate is below any operational threshold while connection, error ratio, p95 latency and CPU are healthy
+- **THEN** the banner still shows `healthy` and the cache chip is rendered without severity
 
 ### Requirement: emb-top renders latency as a percentile band
 
