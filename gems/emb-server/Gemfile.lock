@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    emb-server (0.4.1)
+    emb-server (0.4.2)
       onnxruntime (~> 0.11)
 
 GEM
