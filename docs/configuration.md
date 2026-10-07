@@ -236,6 +236,12 @@ usage — are visible per model via `EMB.INFO <model>` and globally via `INFO` a
 `EMB.STATS`. See [BENCHMARK.md](../BENCHMARK.md) → *Cache* for hit-rate
 measurements.
 
+Entries include key, value, and per-entry overhead in the byte budget. A write
+that cannot fit by itself is skipped without evicting entries or replacing an
+existing value; inference still returns its computed result. Admissible growing
+replacements evict least-recently-used entries as needed. This bounds accounted
+live cache storage, not process RSS or values retained by in-progress snapshots.
+
 ## Persistent cache snapshots
 
 Snapshots optionally preserve the in-process LRU across restarts. They are
@@ -260,6 +266,12 @@ and sampled host headroom (`total RAM - current RSS - reserve`). Compatible
 entries are admitted MRU-first; checksum failure leaves the live cache empty.
 Model/tokenizer fingerprints are streamed once and cached, so periodic saves
 do not repeatedly read model artifacts.
+
+The script reply-key identity upgrade intentionally makes legacy script replies
+cold: requests recompute them, while compatible text/image entries still hit.
+The snapshot format is unchanged; restored legacy script entries remain bounded
+and leave through normal eviction. Current script replies survive save/restore.
+No legacy-key fallback is used, and rolling back restores the old cache bugs.
 
 Automatic and manual saves briefly capture immutable entry descriptors under
 the cache mutex, then encode, checksum, throttle, sync, and rename in a

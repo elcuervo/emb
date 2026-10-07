@@ -1,6 +1,8 @@
 package script
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -180,5 +182,30 @@ func TestEncodeReplyNullAndError(t *testing.T) {
 				t.Fatalf("Convert = %q, want %q", buf.b.String(), tc.want)
 			}
 		})
+	}
+}
+
+func TestCacheKeyRepresentationIdentity(t *testing.T) {
+	long := strings.Repeat("\x00\xff", CacheKeyInlineLimit)
+	literal := fmt.Sprintf("#%x", sha256.Sum256([]byte(long)))
+	inputs := []string{long, literal, "\x00\xff", "\x00\xfe", strings.Repeat("x", CacheKeyInlineLimit), strings.Repeat("x", CacheKeyInlineLimit+1)}
+	seen := map[string]bool{}
+	for _, input := range inputs {
+		key := CacheKey("m", "s", nil, 1, input)
+		if seen[key] || key != CacheKey("m", "s", nil, 1, input) {
+			t.Fatalf("aliased or unstable key for %q", input)
+		}
+		seen[key] = true
+	}
+	// Fixed pre-domain identity: APIVersion 1.3.0, one text, no args.
+	const legacyMetadata = "916b0b7d3e5eba509cc49f1c31e93025ec144ac6963e10909b98d6486f36efad"
+	for _, input := range inputs {
+		tail := input
+		if len(input) > CacheKeyInlineLimit {
+			tail = fmt.Sprintf("#%x", sha256.Sum256([]byte(input)))
+		}
+		if CacheKey("m", "s", nil, 1, input) == "m:s:"+legacyMetadata+":"+tail {
+			t.Fatal("legacy identity remains addressable")
+		}
 	}
 }

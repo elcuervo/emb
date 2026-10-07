@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"strings"
@@ -530,5 +531,32 @@ func TestScriptCacheLoadHonorsConfigChange(t *testing.T) {
 	got, _ = c.Get("m", sha)
 	if got.config["max_len"] != 16 {
 		t.Fatalf("config-less load clobbered config: %#v", got.config)
+	}
+}
+
+func TestScriptCacheLiteralDigestCollision(t *testing.T) {
+	uncached, _ := serveTestWithCacheOptions(t, "")
+	const src = `return KEYS[1]`
+	long := strings.Repeat("\x00\xff", 257)
+	literal := fmt.Sprintf("#%x", sha256.Sum256([]byte(long)))
+	want := map[string]string{}
+	for _, input := range []string{long, literal} {
+		want[input] = bulkOf(t, redisCmd(t, uncached, "EMB.EVAL", "test", src, "1", input))
+	}
+	for _, order := range [][]string{{long, literal}, {literal, long}} {
+		addr, srv := serveTestWithCacheOptions(t, "1MB")
+		for round := range 2 {
+			for _, input := range order {
+				before := srv.cache.Stats()
+				got := bulkOf(t, redisCmd(t, addr, "EMB.EVAL", "test", src, "1", input))
+				if got != want[input] {
+					t.Fatalf("round %d: reply differs from uncached evaluation", round)
+				}
+				after := srv.cache.Stats()
+				if round == 0 && after.Misses != before.Misses+1 || round == 1 && after.Hits != before.Hits+1 {
+					t.Fatalf("unexpected cache counters: %+v -> %+v", before, after)
+				}
+			}
+		}
 	}
 }
