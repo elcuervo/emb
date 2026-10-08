@@ -91,3 +91,9 @@ kill_timeout = 40
   # that; the server config names /data/models/<name>/model.onnx.
   source = "emb_sandbox_data"
   destination = "/data"
+  # The media-models deploy (CLAP int8 + X-CLIP fp32, ~914 MB) overflowed the
+  # original 3 GB volume mid-download, which the server treats as fatal and
+  # crash-looped the machine until its health checks timed out. A fresh deploy
+  # needs 6. `initial_size` only applies when the volume is created; the live
+  # volume was extended in place with `fly volumes extend`.
+  initial_size = "6GB"

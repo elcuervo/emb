@@ -117,6 +117,13 @@ func (c *Client) Download(repo, filePath, destDir string) (string, error) {
 		return destPath, nil
 	}
 
+	// The caller may name a destination that does not exist yet (a fresh volume,
+	// or one directory shared by several files); Download is the chokepoint that
+	// creates the temp file, so it owns making the directory.
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return "", fmt.Errorf("creating directory %s: %w", destDir, err)
+	}
+
 	url := c.fileURL(repo, filePath)
 	resp, err := c.HTTPClient.Get(url)
 	if err != nil {

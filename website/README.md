@@ -523,7 +523,7 @@ app, allocate its ingress addresses, and attach the host name:
 
 ```bash
 fly apps create emb-sandbox
-just sandbox-deploy                                    # --volume-initial-size 3 on a first deploy
+just sandbox-deploy                                    # --volume-initial-size 6 on a first deploy
 fly ips allocate-v6 -a emb-sandbox                     # free, dedicated
 fly ips allocate-v4 --shared -a emb-sandbox            # free, needed for IPv4 clients
 fly certs add cli.emb.is -a emb-sandbox                # after the CNAME below exists

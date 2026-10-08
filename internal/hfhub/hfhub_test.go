@@ -135,6 +135,20 @@ func TestDownloadWritesAndShortCircuits(t *testing.T) {
 	}
 }
 
+func TestDownloadCreatesMissingDestDir(t *testing.T) {
+	c := newTestClient(t, nil, map[string]string{"model.onnx": "weights"})
+	// Nested under a temp dir that exists, so only Download can create the leaf.
+	dest := filepath.Join(t.TempDir(), "int8", "clap")
+
+	path, err := c.Download("test/model", "onnx/model.onnx", dest)
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if b, err := os.ReadFile(path); err != nil || string(b) != "weights" {
+		t.Fatalf("contents = %q err=%v", b, err)
+	}
+}
+
 func TestDownloadModelFetchesWeightsAndExtras(t *testing.T) {
 	c := newTestClient(t,
 		[]string{"onnx/model.onnx", "tokenizer.json", "config.json", "preprocessor_config.json", "README.md"},

@@ -65,6 +65,12 @@ RUN set -eux; \
     rm -rf /opt/onnx-libs; \
     cp -a $(find /opt -maxdepth 1 -name "onnxruntime-linux-*-${ORT_VER}" -type d)/lib /opt/onnx-libs
 
+# `COPY` preserves symlinks, and several preset scripts are symlinks into
+# scripts/. Dereference the directory here so the runtime image gets the real
+# files instead of links pointing outside /etc/emb/presets. One `cp -RL` keeps
+# this correct as presets are added, rather than a COPY line per script.
+RUN cp -RL /src/website/repl/presets /opt/emb-presets
+
 # Stage 2: minimal runtime image
 FROM debian:bookworm-slim
 
@@ -82,16 +88,12 @@ COPY --from=builder /emb-top /usr/local/bin/emb-top
 # `presets/*.lua` relative to its own directory, and the bridge hashes the same
 # files to build the digest manifest it accepts EMB.EVSHA for.
 COPY --from=builder /src/website/repl/sandbox.yaml /etc/emb/sandbox.yaml
-COPY --from=builder /src/website/repl/presets /etc/emb/presets
-# The decision miniature + its preset travel in the image, so the decision
-# plate needs no download and no volume write. `downloadModel` early-returns
-# when the configured onnx file exists, so the sandbox entry needs no
-# `model_repo` for it. The preset copy is the same bytes `stamp-presets.py`
-# hashes (the repo preset is a symlink to scripts/laya.lua).
+COPY --from=builder /opt/emb-presets /etc/emb/presets
+# The decision miniature travels in the image, so the decision plate needs no
+# download and no volume write. `downloadModel` early-returns when the
+# configured onnx file exists, so the sandbox entry needs no `model_repo` for
+# it.
 COPY --from=builder /src/testdata/laya /etc/emb/laya-model
-COPY --from=builder /src/scripts/laya.lua /etc/emb/presets/laya.lua
-COPY --from=builder /src/scripts/snake.lua /etc/emb/presets/snake.lua
-COPY --from=builder /src/scripts/pacman.lua /etc/emb/presets/pacman.lua
 COPY --from=builder /src/website/repl/run.sh /usr/local/bin/run.sh
 RUN chmod +x /usr/local/bin/run.sh && ldconfig
 
