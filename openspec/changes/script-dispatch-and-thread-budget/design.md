@@ -73,13 +73,36 @@ Promote the profiling load client to a committed command (`cmd/evalbench`). Its 
 
 A `just bench-script` target compares a candidate against a baseline binary (interleaved runs) and fails on any reply mismatch.
 
+**6. Concurrent callers on shared sessions, spinning off.**
+ORT sessions are thread-safe for `Run`. Today `NamedRuntimeSession` serializes runs with a mutex because it keeps a cache of output tensors keyed by shape. Change this:
+- Drop the mutex and allocate outputs per call. GLiNER's only output is `[1, seq, 8, nlab]`, 1–7 KB per call.
+- `script_callers_per_session` (default 1) puts each session into the idle channel that many times, so Decision 1 also governs callers.
+- `allow_spinning: false` sets `session.intra_op.allow_spinning=0`.
+
+With spinning on, concurrent callers fight for cores: 1 session × 8 threads with 8 callers falls to 97 req/s. With spinning off, they share the pool cleanly.
+
+Measured, Mac, 8 threads total:
+
+| Layout | c=1 p50 | c=4 p50 | req/s | sessions |
+|---|---|---|---|---|
+| 4×2 (current) | 23.0 | 29.2 | 133 | 4 |
+| 4×2, spinning off | 24.4 | 27.9 | 145 | 4 |
+| 2×4, 4 callers, spinning off | 19.4 | 26.7 | 164 | 2 |
+| 1×8, 4 callers, spinning off | 18.7 | 29.5 | 146 | 1 |
+| 2×4, 4 callers, spinning on | 15.8 | 30.0 | 118 | 2 |
+
+ORT session options in the gem and in emb are otherwise the same: opt level ALL, sequential, arena and memory pattern on. Raw ORT time is about the same in both (gem 13.9 ms, probe 11.5–14 ms), so emb overhead at 1×8 is about 1.5–2 ms.
+
+*Alternative:* a global ORT thread pool (`CreateEnvWithGlobalThreadPools`, `DisablePerSessionThreads`). Not exposed by `onnxruntime_go`; shared sessions give the same result.
+
 ## Risks / Trade-offs
 
+- **Spinning off adds about 1 ms serial latency** when there is a single caller. It stays opt-in, recommended only with shared callers.
 - **Lower default threads per script session make serial latency worse** for operators who relied on the old default with `script_workers > 1`. That setup was already oversubscribed, so throughput and tail latency improve. The change is documented in configuration docs and the changelog.
 - **A shared queue in the embedding pool changes which worker serves a request.** Outputs are deterministic per session, and sessions are identical, so replies are unaffected. Parity is verified by the benchmark dump.
 - **Benchmarks on a laptop don't predict Fargate x86.** Production numbers come from the new `EMB.STATS` counters and the API's `backend` span tag. Local budgets are relative to the baseline binary, not absolute.
 
 ## Open Questions
 
-- Results of the ORT session-options study (global thread pool, graph optimization level, spinning) may change Decision 3. Fold them in before implementation.
-- Should the recommended production layout for GLiNER be 8×1 (best tail and throughput) or 4×2 (better serial latency)? That depends on the measured production `dispatch_wait_us`.
+- Production layout: 2×4 shared with spinning off (best latency and memory on Mac), 8×1 (best tail), or 4×2? A production 8 vCPU Fargate task is probably 4 physical cores with hyperthreading. Re-run the comparison with `bench/fargate` before choosing, and check against the production `dispatch_wait_us`.
+- Should spinning off become the default when `script_callers_per_session > 1`? It costs about 1 ms serial for a single caller.
