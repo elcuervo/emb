@@ -43,7 +43,7 @@ PRODUCTION_SANDBOX = "https://cli.emb.is"
 # one heuristically cached page dies on the import, so the working loop names
 # them from their own mtimes: `demos.js` gains an export, the page names it, and
 # the template hands the page the current bytes instead of yesterday's.
-LIVE_MODULES = ("demos.js", "tldr.js")
+LIVE_MODULES = ("demos.js", "tldr.js", "fingerprint.js")
 
 
 # The zone the plate may be pointed at through this server, so a local zone can

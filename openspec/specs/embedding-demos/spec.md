@@ -12,12 +12,13 @@ model is a real decision rather than a detail.
 ### Requirement: Every demo teaches the same five things in the same order
 
 Each demo SHALL present, in one fixed order: what the reader is looking at, the
-interaction itself, what just happened (the path from text through a model to a
-vector to a distance), why it matters (the real-world job the demo stands in
-for), and the exact commands the demo issued. A demo MUST NOT offer an
-interaction without the mechanism that produced it and the commands that ran it,
-and the section headings MUST be the same across demos so the gallery reads as
-one curriculum rather than a set of unrelated toys.
+interaction itself, what just happened (the path from the input — text, or a
+picture of a sound or a clip — through a model to a vector to a distance), why
+it matters (the real-world job the demo stands in for), and the exact commands
+the demo issued. A demo MUST NOT offer an interaction without the mechanism that
+produced it and the commands that ran it, and the section headings MUST be the
+same across demos so the gallery reads as one curriculum rather than a set of
+unrelated toys.
 
 #### Scenario: A demo carries all five sections
 
@@ -27,7 +28,7 @@ one curriculum rather than a set of unrelated toys.
 #### Scenario: The mechanism is named, not implied
 
 - **WHEN** the mechanism section is read
-- **THEN** it states that text is tokenized, encoded by a named model, pooled and normalized into a fixed-length vector, and compared by a distance, rather than describing the result as magic
+- **THEN** it states that the input is encoded by a named model, pooled and normalized into a fixed-length vector, and compared by a distance, rather than describing the result as magic
 
 #### Scenario: The commands are the ones that ran
 
@@ -36,11 +37,12 @@ one curriculum rather than a set of unrelated toys.
 
 ### Requirement: The corpus is fixed and the visitor's text is ephemeral
 
-Every demo SHALL search a corpus committed to the repository and embedded before
-deployment. Text a visitor submits MUST be used only to answer that request and
-MUST NOT be stored, added to a shared corpus, or made visible to another
-visitor. A demo MUST NOT introduce a server-side write, a visitor account, or
-mutable shared state, and the sandbox's read-only posture MUST be preserved.
+Every demo SHALL search a corpus of items committed to the repository and
+embedded before deployment. Text a visitor submits MUST be used only to answer
+that request and MUST NOT be stored, added to a shared corpus, or made visible
+to another visitor. A demo MUST NOT introduce a server-side write, a visitor
+account, or mutable shared state, and the sandbox's read-only posture MUST be
+preserved.
 
 #### Scenario: Submitted text leaves no trace
 
@@ -60,10 +62,11 @@ mutable shared state, and the sandbox's read-only posture MUST be preserved.
 ### Requirement: The search is a real vector search over the committed index
 
 Each retrieval demo SHALL run an exact top-k search against a vector index over
-the committed corpus, built from vectors the sandbox's own model produced. A
-demo MUST NOT present a precomputed or hard-coded ranking as a live result. The
-query MUST be embedded by the same model that embedded the corpus, and a
-disagreement MUST fail legibly rather than return meaningless neighbours.
+the committed corpus — its texts, its images, or its media — built from vectors
+the sandbox's own model produced. A demo MUST NOT present a precomputed or
+hard-coded ranking as a live result. The query MUST be embedded by the same
+model that embedded the corpus, and a disagreement MUST fail legibly rather than
+return meaningless neighbours.
 
 #### Scenario: The ranking is computed, not stored
 

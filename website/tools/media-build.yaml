@@ -1,0 +1,35 @@
+# Local config for the offline media-index build.
+#
+# `build-media-index.py` starts a local `emb` with this config, embeds every
+# committed picture, and writes the shipped index. It is not the sandbox's
+# config: `clip_embed.lua` is a build-only preset and must not be preloaded in
+# the sandbox, so it lives here and nowhere else.
+#
+#   nix develop
+#   just build
+#   ./bin/emb -config website/tools/media-build.yaml -listen 127.0.0.1:16400
+#
+# Paths: `onnx`/`tokenizer` resolve against the working directory (run this from
+# the repo root), while `scripts` resolve against this file's directory.
+
+listen: 127.0.0.1:16400
+
+models:
+  clip:
+    onnx: ./models/clip/model_quantized.onnx
+    tokenizer: ./models/clip/tokenizer.json
+    max_length: 77
+    script_preload: true
+    script_workers: 1
+    image:
+      input: pixel_values
+      output: image_embeds
+      size: 224
+      crop: center
+      resample: bicubic
+      rescale: 0.00392156862745098
+      mean: [0.48145466, 0.4578275, 0.40821073]
+      std: [0.26862954, 0.26130258, 0.27577711]
+    scripts:
+      - ../../scripts/clip_embed.lua
+      - ../../scripts/clip_text.lua

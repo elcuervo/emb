@@ -226,6 +226,16 @@ type ModelConfig struct {
 	ONNX      string `yaml:"onnx"`
 	Tokenizer string `yaml:"tokenizer"`
 	ModelRepo string `yaml:"model_repo"`
+	// OnnxFile names the ONNX file *within* ModelRepo to fetch, when it is not
+	// the conventional `model.onnx`/`model_quantized.onnx`. CLAP ships
+	// `onnx/audio_model_quantized.onnx` and `onnx/text_model_quantized.onnx`, and
+	// X-CLIP ships `video_tower.onnx`/`text_tower.onnx`, none of which the
+	// conventional picker would find. Empty keeps the conventional behaviour.
+	OnnxFile string `yaml:"onnx_file"`
+	// TokenizerRepo names the repository the tokenizer comes from when it is not
+	// ModelRepo. X-CLIP's ONNX export ships no tokenizer, so it is taken from the
+	// upstream model repo. Empty uses ModelRepo.
+	TokenizerRepo string `yaml:"tokenizer_repo"`
 	// ModelSubfolder names a folder within ModelRepo when the repository
 	// publishes several checkpoints under separate folders. Empty keeps the
 	// repository root.

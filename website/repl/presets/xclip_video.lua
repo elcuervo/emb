@@ -1,0 +1,1 @@
+../../../scripts/xclip_video.lua

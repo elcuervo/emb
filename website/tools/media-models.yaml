@@ -1,0 +1,44 @@
+# Local config for the audio and video index builds.
+#
+# `build-audio-index.py` and `build-video-index.py` start a local `emb` with this
+# config, embed the shipped music and video with CLAP's audio tower and X-CLIP's
+# video tower, and write `assets/demo/{audio,video}.json`. It is not the
+# sandbox's config: `xclip_video.lua` and `clap_audio.lua` carry multi-megabyte
+# tensors and are build-side or bound by the bridge, so they live here.
+#
+#   nix develop
+#   just build
+#   ./bin/emb -config website/tools/media-models.yaml
+#   python3 website/tools/build-audio-index.py --emb 127.0.0.1:16401
+#   python3 website/tools/build-video-index.py --emb 127.0.0.1:16401
+#
+# `onnx`/`tokenizer` resolve against the working directory (run from the repo
+# root); `scripts` resolve against this file's directory.
+
+listen: 127.0.0.1:16401
+
+models:
+  clap-audio:
+    onnx: ./models/clap/audio_model_quantized.onnx
+    tokenizer: ./models/clap/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts: [ ../../scripts/clap_audio.lua ]
+  clap-text:
+    onnx: ./models/clap/text_model_quantized.onnx
+    tokenizer: ./models/clap/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts: [ ../../scripts/clap_text.lua ]
+  xclip-video:
+    onnx: ./models/xclip/video_tower.onnx
+    tokenizer: ./models/xclip/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts: [ ../../scripts/xclip_video.lua ]
+  xclip-text:
+    onnx: ./models/xclip/text_tower.onnx
+    tokenizer: ./models/xclip/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts: [ ../../scripts/xclip_text.lua ]

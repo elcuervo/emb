@@ -1,0 +1,1 @@
+../../../scripts/clip_text.lua

@@ -139,6 +139,52 @@ models:
       std: [0.26862954, 0.26130258, 0.27577711]
     scripts:
       - presets/zeroshot.lua
+      - presets/clip_text.lua
+
+  # The real audio and video models: CLAP (text-audio) and X-CLIP (text-video),
+  # each a pair of towers sharing one 512-d space. CLAP's text tower takes only
+  # `input_ids` (no attention_mask); X-CLIP declares fixed axes, so its text
+  # tower is exactly [1,77] and its video tower [1,8,3,224,224]. The audio tower
+  # is the one preloaded preset besides zeroshot that the bridge admits binary
+  # for, because a browser can compute the mel it wants.
+  clap-audio:
+    model_repo: Xenova/clap-htsat-unfused
+    onnx_file: onnx/audio_model_quantized.onnx
+    onnx: /data/models/int8/clap/audio_model_quantized.onnx
+    tokenizer: /data/models/int8/clap/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts:
+      - presets/clap_audio.lua
+  clap-text:
+    model_repo: Xenova/clap-htsat-unfused
+    onnx_file: onnx/text_model_quantized.onnx
+    onnx: /data/models/int8/clap/text_model_quantized.onnx
+    tokenizer: /data/models/int8/clap/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts:
+      - presets/clap_text.lua
+  xclip-video:
+    model_repo: imbcmdth/xclip-onnx
+    onnx_file: video_tower.onnx
+    tokenizer_repo: microsoft/xclip-base-patch16-kinetics-600
+    onnx: /data/models/fp32/xclip/video_tower.onnx
+    tokenizer: /data/models/fp32/xclip/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts:
+      - presets/xclip_video.lua
+  xclip-text:
+    model_repo: imbcmdth/xclip-onnx
+    onnx_file: text_tower.onnx
+    tokenizer_repo: microsoft/xclip-base-patch16-kinetics-600
+    onnx: /data/models/fp32/xclip/text_tower.onnx
+    tokenizer: /data/models/fp32/xclip/tokenizer.json
+    script_preload: true
+    script_workers: 1
+    scripts:
+      - presets/xclip_text.lua
 
   # The decision model: a 32-hidden miniature of the Laya architecture shipped
   # inside the image (testdata/laya) rather than downloaded. Its weights are
