@@ -21,6 +21,7 @@ import (
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
+	"github.com/elcuervo/emb/internal/telemetry"
 )
 
 type serverState int64
@@ -135,6 +136,12 @@ type Server struct {
 	scriptRequests  atomic.Int64
 	scriptErrors    atomic.Int64
 	scriptLatencyUs atomic.Int64
+	// telemetryCfg is the resolved OTLP/HTTP export configuration (reported by
+	// CONFIG GET); telemetryOpts carries injected test seams, and
+	// telemetryExport is the running exporter (nil when export is off).
+	telemetryCfg    telemetry.Config
+	telemetryOpts   []telemetry.Option
+	telemetryExport *telemetry.Exporter
 }
 
 // ErrShutdownTimeout reports that accepted work outlived the shutdown
@@ -263,6 +270,17 @@ func WithPersistence(cfg PersistenceConfig) Option {
 	}
 }
 
+// WithTelemetry enables OTLP/HTTP metrics export with the resolved
+// configuration. An empty endpoint (or a disabled configuration) leaves export
+// off; the extra options override exporter seams (a custom Sender or clock) for
+// tests.
+func WithTelemetry(cfg telemetry.Config, opts ...telemetry.Option) Option {
+	return func(s *Server) {
+		s.telemetryCfg = cfg
+		s.telemetryOpts = opts
+	}
+}
+
 func New(addr string, reg *registry.Registry, password string, cacheConfig string, tlsConfig *tls.Config, opts ...Option) *Server {
 	cacheBytes, err := parseCacheConfig(cacheConfig)
 	if err != nil {
@@ -298,6 +316,12 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		o(s)
 	}
 	s.password.Store(password)
+	if s.telemetryCfg.Enabled() {
+		if s.telemetryCfg.ServiceVersion == "" {
+			s.telemetryCfg.ServiceVersion = s.version
+		}
+		s.telemetryExport = telemetry.New(s.telemetryCfg, s.telemetrySnapshot, s.telemetryOpts...)
+	}
 	if s.persistenceCfg != nil && s.persistenceCfg.File != "" && s.cache != nil {
 		s.snapshot = newSnapshotCoordinator(s.cache, s.reg, *s.persistenceCfg)
 		if s.persistenceCfg.Load {
@@ -411,6 +435,7 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
+	s.startTelemetry()
 	return s.srv.Serve(ln)
 }
 
@@ -422,11 +447,20 @@ func (s *Server) Start() (<-chan error, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.startTelemetry()
 	done := make(chan error, 1)
 	go func() {
 		done <- s.srv.Serve(ln)
 	}()
 	return done, nil
+}
+
+// startTelemetry launches the OTLP exporter once the listener is bound. It is
+// a no-op when telemetry is not configured.
+func (s *Server) startTelemetry() {
+	if s.telemetryExport != nil {
+		s.telemetryExport.Start(context.Background())
+	}
 }
 
 func (s *Server) listen() (net.Listener, error) {
@@ -473,6 +507,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.persistenceMu.RUnlock()
 	if coordinator != nil {
 		coordinator.Shutdown(ctx)
+	}
+	if s.telemetryExport != nil {
+		s.telemetryExport.Shutdown(ctx)
 	}
 
 	closeErr := s.srv.Close()
@@ -554,6 +591,9 @@ func (s *Server) Close() error {
 	s.persistenceMu.RUnlock()
 	if coordinator != nil {
 		coordinator.Close()
+	}
+	if s.telemetryExport != nil {
+		s.telemetryExport.Close()
 	}
 	return s.srv.Close()
 }

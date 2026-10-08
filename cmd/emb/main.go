@@ -91,6 +91,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("parsing cache_save_rate_limit: %w", err)
 	}
+	telemetryCfg, err := fc.ResolveTelemetry(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("resolving telemetry config: %w", err)
+	}
+	if telemetryCfg.ServiceVersion == "" {
+		telemetryCfg.ServiceVersion = version
+	}
 	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig,
 		server.WithIdleTimeout(idleTimeout),
 		server.WithMaxConnections(fc.MaxConnections),
@@ -111,6 +118,7 @@ func run() error {
 			SaveRateBytes:  cacheSaveRate,
 			SaveRateRaw:    fc.CacheSaveRateLimit,
 		}),
+		server.WithTelemetry(telemetryCfg),
 	)
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)

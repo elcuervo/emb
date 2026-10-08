@@ -14,6 +14,8 @@ import (
 
 	"github.com/docker/go-units"
 	"gopkg.in/yaml.v3"
+
+	"github.com/elcuervo/emb/internal/telemetry"
 )
 
 type Config struct {
@@ -60,6 +62,8 @@ type Config struct {
 	// the header before full decode). nil = DefaultMaxImagePixels; 0 = unlimited.
 	MaxImagePixels *int64                 `yaml:"max_image_pixels"`
 	Models         map[string]ModelConfig `yaml:"models"`
+	// Telemetry is the optional `telemetry:` block for OTLP/HTTP export.
+	Telemetry TelemetryConfig `yaml:"telemetry"`
 }
 
 // Default payload caps applied when the corresponding top-level key is unset.
@@ -387,6 +391,9 @@ func (c *Config) validate() error {
 	if err := c.validatePersistence(); err != nil {
 		return err
 	}
+	if _, err := c.Telemetry.Overlay(); err != nil {
+		return err
+	}
 	if c.MaxTexts != nil && *c.MaxTexts < 0 {
 		return fmt.Errorf("max_texts must be non-negative")
 	}
@@ -513,13 +520,113 @@ func (c Config) validatePersistence() error {
 
 type FlagConfig struct {
 	Config
-	OrtLib string
+	OrtLib         string
+	TelemetryFlags telemetry.Overlay
+}
+
+// TelemetryConfig is the optional `telemetry:` YAML block. Unset fields fall
+// back to the OTEL_* environment (or a default), so a nil Enabled leaves the
+// standard auto-detection alone.
+type TelemetryConfig struct {
+	Enabled     *bool             `yaml:"enabled"`
+	Endpoint    string            `yaml:"endpoint"`
+	Interval    string            `yaml:"interval"`
+	Headers     []string          `yaml:"headers"`
+	ServiceName string            `yaml:"service_name"`
+	Host        string            `yaml:"host"`
+	Attributes  map[string]string `yaml:"attributes"`
+}
+
+// Overlay converts the YAML block into a partial telemetry configuration.
+func (t TelemetryConfig) Overlay() (telemetry.Overlay, error) {
+	var o telemetry.Overlay
+	if t.Endpoint != "" {
+		o.Endpoint = &t.Endpoint
+	}
+	if t.Interval != "" {
+		d, err := time.ParseDuration(t.Interval)
+		if err != nil {
+			return o, fmt.Errorf("parsing telemetry interval: %w", err)
+		}
+		if d <= 0 {
+			return o, fmt.Errorf("telemetry interval must be positive")
+		}
+		o.Interval = &d
+	}
+	if len(t.Headers) > 0 {
+		o.Headers = t.Headers
+	}
+	if t.ServiceName != "" {
+		o.ServiceName = &t.ServiceName
+	}
+	if t.Host != "" {
+		o.Host = &t.Host
+	}
+	if len(t.Attributes) > 0 {
+		o.Extra = t.Attributes
+	}
+	if t.Enabled != nil {
+		disabled := !*t.Enabled
+		o.Disabled = &disabled
+	}
+	return o, nil
+}
+
+// ResolveTelemetry merges the telemetry sources in precedence order: the
+// OTEL_* environment first, then the YAML telemetry block, then the CLI flags.
+func (fc *FlagConfig) ResolveTelemetry(getenv func(string) string) (telemetry.Config, error) {
+	yamlOverlay, err := fc.Telemetry.Overlay()
+	if err != nil {
+		return telemetry.Config{}, err
+	}
+	return telemetry.FromEnv(getenv).With(yamlOverlay).With(fc.TelemetryFlags), nil
 }
 
 // lenientInt is an int flag that ignores parse errors, preserving the
 // historical CLI behavior where a malformed numeric flag became 0 rather than a
 // fatal error.
 type lenientInt struct{ dst *int }
+
+// stringList is a repeatable string flag (-otel-header k=v -otel-header ...).
+type stringList []string
+
+func (s *stringList) String() string { return strings.Join(*s, ",") }
+
+func (s *stringList) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
+// buildTelemetryFlags turns the parsed -otel-* flags into an overlay.
+func buildTelemetryFlags(endpoint, interval string, headers stringList, service, host string, disabled bool) (telemetry.Overlay, error) {
+	var o telemetry.Overlay
+	if endpoint != "" {
+		o.Endpoint = &endpoint
+	}
+	if interval != "" {
+		d, err := time.ParseDuration(interval)
+		if err != nil {
+			return o, fmt.Errorf("parsing -otel-interval: %w", err)
+		}
+		if d <= 0 {
+			return o, fmt.Errorf("-otel-interval must be positive")
+		}
+		o.Interval = &d
+	}
+	if len(headers) > 0 {
+		o.Headers = headers
+	}
+	if service != "" {
+		o.ServiceName = &service
+	}
+	if host != "" {
+		o.Host = &host
+	}
+	if disabled {
+		o.Disabled = &disabled
+	}
+	return o, nil
+}
 
 func (l lenientInt) String() string {
 	if l.dst == nil {
@@ -553,6 +660,12 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		hasModel     bool
 		hasConfig    bool
 		showVersion  bool
+		otelEndpoint string
+		otelInterval string
+		otelService  string
+		otelHost     string
+		otelHeaders  stringList
+		otelDisabled bool
 	)
 
 	withModel := func(f func(*ModelConfig)) {
@@ -637,6 +750,12 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 	fs.StringVar(&fc.TLSKey, "tls-key", "", "")
 	fs.StringVar(&fc.OrtLib, "ort-lib", "", "")
 	fs.BoolVar(&showVersion, "version", false, "")
+	fs.StringVar(&otelEndpoint, "otel-endpoint", "", "")
+	fs.StringVar(&otelInterval, "otel-interval", "", "")
+	fs.Var(&otelHeaders, "otel-header", "")
+	fs.StringVar(&otelService, "otel-service-name", "", "")
+	fs.StringVar(&otelHost, "otel-host", "", "")
+	fs.BoolVar(&otelDisabled, "otel-disabled", false, "")
 
 	fs.Func("model", "", func(name string) error {
 		currentModel = name
@@ -693,6 +812,11 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 	if showVersion {
 		return nil, fmt.Errorf("__version__")
 	}
+	flags, err := buildTelemetryFlags(otelEndpoint, otelInterval, otelHeaders, otelService, otelHost, otelDisabled)
+	if err != nil {
+		return nil, err
+	}
+	fc.TelemetryFlags = flags
 	if !hasConfig && !hasModel {
 		return nil, fmt.Errorf("no models configured; use -config, or -model with -model-onnx/-model-repo")
 	}

@@ -32,6 +32,16 @@ listen: ":6379"
 # max_image_bytes: 32MB         # per-image byte cap (0 = unlimited)
 # max_image_pixels: 33554432    # decoded pixels per image, header-checked (0 = unlimited)
 
+# telemetry:                     # OTLP/HTTP metrics export; disabled unless an endpoint is set
+#   endpoint: http://localhost:4318
+#   interval: 30s
+#   service_name: emb
+#   host: emb-1
+#   headers:
+#     - "dd-api-key=..."
+#   attributes:
+#     deployment.environment: prod
+
 models:
   minilm:
     onnx: ./models/minilm/model.onnx
@@ -281,3 +291,49 @@ rejects those commands with an explicit error rather than letting an
 unauthenticated client point snapshot writes at an arbitrary path. Bind
 `localhost` for a password-free deployment, or set `password` (and `AUTH`)
 when serving non-loopback clients.
+
+## Telemetry (OpenTelemetry)
+
+`emb` can export its metrics as OpenTelemetry signals over OTLP/HTTP, so a
+collector or a vendor backend (Datadog, for example) can pick them up without a
+bespoke RESP poller. Export is **off** unless an endpoint is configured; with no
+endpoint the server makes no outbound connection.
+
+Exported values come from the same aggregation that feeds `INFO` and
+`EMB.STATS`, so they cannot drift from the commands. Counters are exported with
+**delta** temporality (the increase since the previous export); gauges report
+their current value. Process metrics use OpenTelemetry semantic-convention names
+(`process.memory.usage`, `process.cpu.time`, `process.uptime`); server metrics
+use an `emb.` prefix (`emb.requests`, `emb.tokens`, `emb.errors`,
+`emb.active_requests`, `emb.connections`, `emb.cache.*`, `emb.models.loaded`,
+`emb.truncated.*`, `emb.net.*`). Per-model series carry a `model` attribute.
+
+| Setting / CLI flag | Default | Live update | Meaning |
+|---|---:|---:|---|
+| `telemetry.endpoint` / `-otel-endpoint` | empty | restart | OTLP/HTTP endpoint; empty disables export |
+| `telemetry.interval` / `-otel-interval` | `30s` | restart | Export interval |
+| `telemetry.headers` / `-otel-header` (repeatable) | none | restart | Extra request headers, `key=value` |
+| `telemetry.service_name` / `-otel-service-name` | `emb` | restart | `service.name` resource attribute |
+| `telemetry.host` / `-otel-host` | hostname | restart | `host.name` resource attribute |
+| `telemetry.attributes` | none | restart | Extra resource attributes |
+| `telemetry.enabled` / `-otel-disabled` | `true` | restart | Explicit on/off |
+
+The standard OpenTelemetry environment variables are also honored:
+`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`,
+`OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRIC_EXPORT_INTERVAL`
+(milliseconds), `OTEL_EXPORTER_OTLP_METRICS_HEADERS`, and `OTEL_SDK_DISABLED`.
+When a setting comes from more than one source, a CLI flag wins over the YAML
+`telemetry:` block, which wins over the environment. `OTEL_SDK_DISABLED=true`
+disables export regardless of the other sources.
+
+```bash
+# OTLP/HTTP to a local OpenTelemetry Collector (or the Datadog Agent on :4318)
+./bin/emb -config config.yaml -otel-endpoint http://localhost:4318
+
+# same thing through the environment
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./bin/emb -config config.yaml
+```
+
+A bare endpoint gets the standard `/v1/metrics` path appended. An endpoint that
+already carries a path (for example Datadog's direct intake) is used as-is.
+`CONFIG GET otel*` reports the effective settings; they are read-only.

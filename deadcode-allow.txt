@@ -22,3 +22,10 @@ unreachable func: Eval
 unreachable func: WithScriptDeadline
 unreachable func: Bridge.Execute
 unreachable func: CacheKey
+
+# unreachable func: WithSender / WithLogger
+#   Exporter seams driven only by the telemetry and server tests to inject a
+#   fake transport and capture throttled failure logging without a network or
+#   the global logger.
+unreachable func: WithSender
+unreachable func: WithLogger

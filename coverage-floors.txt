@@ -23,5 +23,6 @@ github.com/elcuervo/emb/internal/registry	78
 github.com/elcuervo/emb/internal/resp	78
 github.com/elcuervo/emb/internal/script	85
 github.com/elcuervo/emb/internal/server	90
+github.com/elcuervo/emb/internal/telemetry	79
 github.com/elcuervo/emb/internal/tokenizer	87
 github.com/elcuervo/emb/website/repl	78
