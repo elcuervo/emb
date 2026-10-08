@@ -78,12 +78,15 @@ func (s *Server) resourceStats() resourceStats {
 }
 
 // modelInfoLine is one row of the Keyspace section (per-loaded-model cache
-// activity). Cache activity absent for a model renders as zeros.
+// activity). Cache activity absent for a model renders as zeros. req/tok/errs
+// carry the per-model inference counters so the telemetry exporter can reuse
+// this aggregation instead of re-gathering them.
 type modelInfoLine struct {
 	name               string
 	dim                int
 	hits, misses       int64
 	evictions, entries int64
+	req, tok, errs     int64
 }
 
 // infoSnapshot gathers the server's current statistics under one consistent
@@ -98,7 +101,7 @@ func (s *Server) infoSnapshot() infoSnapshot {
 		res := &registryEntrySnapshot{dim: m.Dim}
 		if pool := m.LoadedPool(); pool != nil {
 			st := pool.Stats()
-			res.req, res.tok = st.Requests, st.Tokens
+			res.req, res.tok, res.err = st.Requests, st.Tokens, st.Errors
 		}
 		byName[m.Name] = res
 	}
@@ -142,6 +145,9 @@ func (s *Server) infoSnapshot() infoSnapshot {
 			misses:    c.Misses,
 			evictions: c.Evictions,
 			entries:   c.Entries,
+			req:       res.req,
+			tok:       res.tok,
+			errs:      res.err,
 		})
 	}
 
@@ -171,9 +177,9 @@ func (s *Server) infoSnapshot() infoSnapshot {
 // registryEntrySnapshot is a lightweight per-model view used while assembling
 // the snapshot (avoids keeping registry references past the gather).
 type registryEntrySnapshot struct {
-	dim int
-	req int64
-	tok int64
+	dim      int
+	req, tok int64
+	err      int64
 }
 
 // buildInfoSections renders Redis-format INFO sections. An empty `which`

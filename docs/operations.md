@@ -117,6 +117,56 @@ switch is `autotune: off`, which pins the allowance at the configured value.
 A `saturated` class with a high `dispatch_wait_us`/`run_us` ratio is the signal
 that the model is under-provisioned, not under-shared.
 
+### OTLP metrics export
+
+`emb` can push the same metrics over OTLP/HTTP to any collector or vendor
+backend. Export is off until an endpoint is configured:
+
+```bash
+./bin/emb -config config.yaml -otel-endpoint http://localhost:4318
+```
+
+See [Configuration → Telemetry](configuration.md#telemetry-opentelemetry) for the
+settings and the standard `OTEL_*` variables. Counters are sent with delta
+temporality, which is what Datadog's OTLP metrics intake expects.
+
+**Datadog.** Two deployment shapes work:
+
+*Through the Datadog Agent (same host):*
+
+```yaml
+# datadog.yaml
+otlp_config:
+  receiver:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+```
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+OTEL_SERVICE_NAME=emb \
+  ./bin/emb -config config.yaml
+```
+
+*Straight to Datadog's OTLP intake (no Agent, no Collector).* Use your site's
+endpoint and API key; the `resource_attributes_as_tags` option turns the
+resource attributes into Datadog tags:
+
+```bash
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://otlp.datadoghq.com/v1/metrics \
+OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf \
+OTEL_SERVICE_NAME=emb \
+./bin/emb -config config.yaml \
+  -otel-header "dd-api-key=$DD_API_KEY" \
+  -otel-header 'dd-otel-metric-config={"resource_attributes_as_tags": true}'
+```
+
+Useful dashboard queries: `sum:emb.requests{service:emb}.as_count()` (req/s),
+`sum:emb.requests{service:emb} by {model}.as_count()` (per-model),
+`sum:emb.errors{service:emb}.as_count()`, `avg:emb.active_requests{service:emb}`,
+and `avg:process.memory.usage{service:emb}`.
+
 ## Monitoring: emb-top
 
 `emb-top` is a live terminal dashboard for a running `emb` node. It connects
