@@ -43,7 +43,7 @@ func probe(path string, inputs []onnx.NamedTensor) error {
 	if err != nil {
 		return fmt.Errorf("session: %w", err)
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 	res, err := sess.RunNamed(inputs)
 	if err != nil {
 		return fmt.Errorf("run: %w", err)
