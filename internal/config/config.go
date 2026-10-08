@@ -263,6 +263,14 @@ type ModelConfig struct {
 	// scripted sessions follow sharing (off when script_callers_per_session > 1);
 	// embedding and image sessions keep ORT's default.
 	AllowSpinning *bool `yaml:"allow_spinning"`
+	// Capacity selects a model's creation-time layout: "auto" (default; derived
+	// layout plus runtime concurrency adaptation), "latency" (spinning on, one
+	// caller per session), or "throughput" (spinning off, shared sessions).
+	Capacity string `yaml:"capacity"`
+	// Autotune selects whether the runtime concurrency controller is active:
+	// "auto"/"callers" (default) enable it, "off" fixes concurrency at the
+	// configured value.
+	Autotune string `yaml:"autotune"`
 	// Scripts is a list of Lua presets to preload at boot. Each entry is a path
 	// (resolved against the config file's directory) with an optional per-script
 	// config exposed to that script as emb.script.config.
@@ -308,6 +316,23 @@ func (m ModelConfig) ScriptAllowsSpinning() bool {
 	return m.ScriptCallers() <= 1
 }
 
+// CapacityProfile returns the normalized creation-time layout: "latency",
+// "throughput", or "auto" (the default for unset or unknown values).
+func (m ModelConfig) CapacityProfile() string {
+	switch m.Capacity {
+	case "latency", "throughput":
+		return m.Capacity
+	default:
+		return "auto"
+	}
+}
+
+// AutotuneEnabled reports whether the runtime concurrency controller is active.
+// Unset, "auto", and "callers" enable it; "off" fixes concurrency.
+func (m ModelConfig) AutotuneEnabled() bool {
+	return m.Autotune != "off"
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -332,6 +357,12 @@ func Load(path string) (*Config, error) {
 		}
 		if m.ScriptCallersPerSession < 0 {
 			return nil, fmt.Errorf("model %q: script_callers_per_session must be non-negative, got %d", name, m.ScriptCallersPerSession)
+		}
+		if m.Capacity != "" && m.Capacity != "auto" && m.Capacity != "latency" && m.Capacity != "throughput" {
+			return nil, fmt.Errorf("model %q: capacity must be auto|latency|throughput, got %q", name, m.Capacity)
+		}
+		if m.Autotune != "" && m.Autotune != "auto" && m.Autotune != "callers" && m.Autotune != "off" {
+			return nil, fmt.Errorf("model %q: autotune must be auto|callers|off, got %q", name, m.Autotune)
 		}
 		if m.Image != nil {
 			if err := validateImageConfig(name, *m.Image); err != nil {

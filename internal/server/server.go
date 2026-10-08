@@ -1112,9 +1112,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 38)
+		writePairs(conn, 43)
 	} else {
-		writePairs(conn, 31)
+		writePairs(conn, 36)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1179,6 +1179,19 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(scriptRuns))
 	conn.WriteBulkString("script_sessions_busy")
 	conn.WriteInt(int(scriptBusy))
+	// Autotune state for the script path: traffic class, in-flight count, the
+	// current per-session allowance, its cap, and whether the controller runs.
+	scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive := entry.ScriptAutotune()
+	conn.WriteBulkString("script_traffic_class")
+	conn.WriteBulkString(scriptClass)
+	conn.WriteBulkString("script_inflight")
+	conn.WriteInt(int(scriptInflight))
+	conn.WriteBulkString("script_concurrency_current")
+	conn.WriteInt(int(scriptCurrent))
+	conn.WriteBulkString("script_concurrency_target")
+	conn.WriteInt(int(scriptTarget))
+	conn.WriteBulkString("script_autotune_active")
+	conn.WriteInt(boolInt(scriptActive))
 	conn.WriteBulkString("embed_dispatch_wait_us")
 	conn.WriteInt(int(stats.DispatchWaitUs))
 	conn.WriteBulkString("embed_run_us")
@@ -1225,9 +1238,11 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		sreq, serr := m.ScriptStats()
 		sessions, tokenizer := m.ScriptFootprint()
 		scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy := m.ScriptDispatch()
+		scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive := m.ScriptAutotune()
 		if sreq > 0 {
-			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t wait=%dus run=%dus runs=%d busy=%d/%d",
-				m.Name, sreq, serr, sessions, tokenizer, scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy, sessions))
+			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t wait=%dus run=%dus runs=%d busy=%d/%d class=%s inflight=%d conc=%d/%d autotune=%t",
+				m.Name, sreq, serr, sessions, tokenizer, scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy, sessions,
+				scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive))
 		}
 		if pool := m.LoadedPool(); pool != nil {
 			st := pool.Stats()

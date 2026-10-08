@@ -487,6 +487,46 @@ models:
 	}
 }
 
+func TestLoadCapacityAndAutotuneConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  tuned:
+    onnx: ./model.onnx
+    capacity: latency
+    autotune: off
+  plain:
+    onnx: ./model.onnx
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Models["tuned"].CapacityProfile(); got != "latency" {
+		t.Fatalf("capacity = %q, want latency", got)
+	}
+	if cfg.Models["tuned"].AutotuneEnabled() {
+		t.Fatal("autotune: off should disable the controller")
+	}
+	if got := cfg.Models["plain"].CapacityProfile(); got != "auto" {
+		t.Fatalf("default capacity = %q, want auto", got)
+	}
+	if !cfg.Models["plain"].AutotuneEnabled() {
+		t.Fatal("autotune should default on")
+	}
+
+	os.WriteFile(cfgPath, []byte("models:\n  bad:\n    onnx: ./model.onnx\n    capacity: turbo\n"), 0644)
+	if _, err := Load(cfgPath); err == nil {
+		t.Fatal("unknown capacity must fail validation")
+	}
+	os.WriteFile(cfgPath, []byte("models:\n  bad:\n    onnx: ./model.onnx\n    autotune: sometimes\n"), 0644)
+	if _, err := Load(cfgPath); err == nil {
+		t.Fatal("unknown autotune must fail validation")
+	}
+}
+
 func TestPersistenceConfigDefaultsAndValidation(t *testing.T) {
 	defaults := Config{}
 	if !defaults.CacheLoadEnabled() || !defaults.CacheShutdownSaveEnabled() {

@@ -243,6 +243,13 @@ bench-script BASE="" CAND="":
         BASE="$base" CAND="$cand" DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" bash bench/script/run.sh; \
     fi
 
+# Traffic-shape autotune demo (requires: just download-gliner-model). Starts a
+# GLiNER2 server and drives serial/burst phases, printing the detected traffic
+# class and concurrency allowance per phase. Layout via env:
+#   SHAPE=mixed PHASE=3s BURST=8 WORKERS=4 just bench-shape
+bench-shape:
+    @DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" bash bench/script/shape.sh
+
 # Enforce the scripted-inference budgets (latency parity, metal parity,
 # materialization, memory, throughput scaling). Timing- and RSS-sensitive: run
 # on a quiet reference machine. Set EMB_BENCH_REFERENCE=1 to also assert the

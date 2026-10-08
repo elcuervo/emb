@@ -368,6 +368,25 @@ while a session is shared (see `script_callers_per_session` / `allow_spinning`).
 - 8×1 has the best tail (74 ms) and c=16 throughput (157 req/s) but the worst
   serial p50 (35 ms); 2×4 balances both.
 
+### Traffic-shaped autotuning
+
+The runtime controller classifies each scripted model's traffic and adapts the
+per-session concurrency allowance within the configured cap. Driven with
+`SHAPE=mixed PHASE=4s BURST=8 just bench-shape` (GLiNER2, `script_workers: 4`):
+
+| phase | concurrency | req/s | classified | allowance |
+|---|---|---|---|---|
+| serial | 1 | 49.6 | `latency` | 4 → 2 |
+| burst | 8 | 153.6 | `saturated` | 2 (held) |
+| serial | 1 | 48.4 | `latency` | 2 → 1 |
+
+On this host the burst window hit the CPU-saturation gate, so the controller
+refused to grow and would log a provisioning recommendation — the gate working
+as designed (more concurrency cannot create CPU). On a quiet host the burst
+classifies as `throughput` and the allowance doubles toward the cap after two
+windows. The serial phases halve it after three latency windows; idle windows
+hold the current allowance.
+
 ### Unbatched embedding pool (siglip2)
 
 siglip2 `text_model_int8.onnx`, fixed `max_length: 64`, `preload: true`,

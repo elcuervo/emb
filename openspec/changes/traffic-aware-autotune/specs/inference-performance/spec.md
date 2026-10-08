@@ -16,19 +16,3 @@ The server SHALL allow tuning ONNX session execution (execution mode and intra-o
 
 - **WHEN** `workers` and `intra_op_threads` are unset inside a container whose memory limit is smaller than the host's
 - **THEN** the derived worker and thread counts SHALL be based on the container's CPU and memory limits
-
-## ADDED Requirements
-
-### Requirement: Adaptive concurrency for unbatched pools
-
-An unbatched embedding pool's effective in-flight concurrency SHALL adapt to observed traffic within its configured cap, and adapting SHALL NOT change the returned embeddings. Batcher (single-session) pools SHALL be excluded.
-
-#### Scenario: Concurrency grows under burst
-
-- **WHEN** an unbatched pool's in-flight reaches its current allowance while CPU headroom exists
-- **THEN** its allowance SHALL increase, up to the configured cap
-
-#### Scenario: Embeddings are unchanged by adaptation
-
-- **WHEN** the same texts are embedded before and after the allowance changes
-- **THEN** the returned embeddings SHALL be byte-identical

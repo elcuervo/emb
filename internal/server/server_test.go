@@ -894,11 +894,11 @@ func TestServerINFOArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 62 {
-		t.Fatalf("expected 62 declared elements, got %d: %q", declared, resp)
+	if declared != 72 {
+		t.Fatalf("expected 72 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 62 {
-		t.Fatalf("expected 62 actual elements, got %d: %q", actual, resp)
+	if actual != 72 {
+		t.Fatalf("expected 72 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -912,11 +912,11 @@ func TestCacheInfoArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 76 {
-		t.Fatalf("expected 76 declared elements, got %d: %q", declared, resp)
+	if declared != 86 {
+		t.Fatalf("expected 86 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 76 {
-		t.Fatalf("expected 76 actual elements, got %d: %q", actual, resp)
+	if actual != 86 {
+		t.Fatalf("expected 86 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()

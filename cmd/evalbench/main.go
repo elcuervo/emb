@@ -48,6 +48,9 @@ type options struct {
 	dumpPath    string
 	timeout     time.Duration
 	mode        string
+	shape       string
+	shapePhase  time.Duration
+	shapeBurst  int
 }
 
 func run() error {
@@ -63,6 +66,9 @@ func run() error {
 	flag.IntVar(&opt.batch, "batch", 1, "texts per request")
 	flag.StringVar(&opt.dumpPath, "dump", "", "write one base64 reply per request (request order)")
 	flag.StringVar(&opt.mode, "mode", "eval", "eval (EMB.EVAL script) or emb (EMB embedding)")
+	flag.StringVar(&opt.shape, "shape", "", "traffic-shape run: serial, burst, or mixed (overrides -concurrency/-n)")
+	flag.DurationVar(&opt.shapePhase, "shape-phase", 3*time.Second, "duration of each shape phase")
+	flag.IntVar(&opt.shapeBurst, "shape-burst", 16, "burst concurrency for the burst and mixed shapes")
 	flag.DurationVar(&opt.timeout, "timeout", 30*time.Second, "per-request timeout")
 	flag.Parse()
 
@@ -78,6 +84,9 @@ func run() error {
 	}
 	if opt.mode == "emb" && opt.batch != 1 {
 		return fmt.Errorf("-batch must be 1 in emb mode")
+	}
+	if opt.shape != "" && opt.shape != "serial" && opt.shape != "burst" && opt.shape != "mixed" {
+		return fmt.Errorf("-shape must be serial, burst, or mixed, got %q", opt.shape)
 	}
 	if opt.n < 1 {
 		return fmt.Errorf("-n must be positive")
@@ -100,6 +109,10 @@ func run() error {
 	levels, err := parseLevels(opt.concurrency)
 	if err != nil {
 		return err
+	}
+
+	if opt.shape != "" {
+		return runShape(opt, string(script), corpus)
 	}
 
 	var dump *os.File
@@ -127,6 +140,143 @@ func run() error {
 		}
 	}
 	return nil
+}
+
+// requestArgv builds the command for one request. In emb mode it is a single
+// EMB; otherwise an EMB.EVAL with the script and ARGV.
+func requestArgv(opt options, script string, texts []string) []string {
+	if opt.mode == "emb" {
+		return []string{"EMB", opt.model, texts[0]}
+	}
+	argv := make([]string, 0, 4+len(texts)+len(opt.args))
+	argv = append(argv, "EMB.EVAL", opt.model, script, strconv.Itoa(len(texts)))
+	argv = append(argv, texts...)
+	return append(argv, opt.args...)
+}
+
+// shapePhase is one traffic phase: a concurrency level run for a duration.
+type shapePhase struct {
+	name string
+	conc int
+}
+
+func shapePhases(shape string, burst int) []shapePhase {
+	switch shape {
+	case "serial":
+		return []shapePhase{{"serial", 1}}
+	case "burst":
+		return []shapePhase{{"burst", burst}}
+	default: // mixed
+		return []shapePhase{{"serial", 1}, {"burst", burst}, {"serial", 1}}
+	}
+}
+
+// runShape drives fixed serial/burst phases and prints the model's classified
+// traffic class and concurrency allowance at the end of each, proving the
+// autotuner reacts to the traffic shape.
+func runShape(opt options, script string, corpus []string) error {
+	if len(corpus) == 0 {
+		return fmt.Errorf("corpus is empty")
+	}
+	info := resp.NewClient(opt.addr, opt.password, false)
+	info.SetTimeout(opt.timeout)
+	if err := info.Dial(); err != nil {
+		return fmt.Errorf("opening INFO connection: %w", err)
+	}
+	defer func() { _ = info.Close() }()
+
+	for _, ph := range shapePhases(opt.shape, opt.shapeBurst) {
+		var next atomic.Int64
+		var firstErr atomic.Pointer[string]
+		var done atomic.Int64
+		deadline := time.Now().Add(opt.shapePhase)
+		var wg sync.WaitGroup
+		for w := 0; w < ph.conc; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				client := resp.NewClient(opt.addr, opt.password, false)
+				client.SetTimeout(opt.timeout)
+				if err := client.Dial(); err != nil {
+					s := err.Error()
+					firstErr.CompareAndSwap(nil, &s)
+					return
+				}
+				defer func() { _ = client.Close() }()
+				for time.Now().Before(deadline) {
+					i := int(next.Add(1)) - 1
+					argv := requestArgv(opt, script, pickTexts(corpus, i, opt.batch))
+					if err := client.WriteArgv(argv...); err != nil {
+						s := err.Error()
+						firstErr.CompareAndSwap(nil, &s)
+						return
+					}
+					if err := client.Flush(); err != nil {
+						s := err.Error()
+						firstErr.CompareAndSwap(nil, &s)
+						return
+					}
+					rep, err := client.ReadReply()
+					if err == nil {
+						err = rep.Err()
+					}
+					if err != nil {
+						s := err.Error()
+						firstErr.CompareAndSwap(nil, &s)
+						return
+					}
+					done.Add(1)
+				}
+			}()
+		}
+		start := time.Now()
+		wg.Wait()
+		elapsed := time.Since(start)
+		if p := firstErr.Load(); p != nil {
+			return fmt.Errorf("shape %s: %s", ph.name, *p)
+		}
+		state, err := readAutotune(info, opt.model)
+		if err != nil {
+			return fmt.Errorf("reading autotune state: %w", err)
+		}
+		fmt.Printf("shape=%s concurrency=%d req/s=%.1f %s\n", ph.name, ph.conc, float64(done.Load())/elapsed.Seconds(), state)
+	}
+	return nil
+}
+
+// readAutotune reads the script autotune fields from EMB.INFO <model>.
+func readAutotune(c *resp.Client, model string) (string, error) {
+	if err := c.WriteArgv("EMB.INFO", model); err != nil {
+		return "", err
+	}
+	if err := c.Flush(); err != nil {
+		return "", err
+	}
+	rep, err := c.ReadReply()
+	if err != nil {
+		return "", err
+	}
+	if err := rep.Err(); err != nil {
+		return "", err
+	}
+	fields := make(map[string]string, len(rep.Elems)/2)
+	for i := 0; i+1 < len(rep.Elems); i += 2 {
+		fields[rep.Elems[i].Str] = replyScalar(rep.Elems[i+1])
+	}
+	return fmt.Sprintf("class=%s inflight=%s conc=%s/%s autotune=%s",
+		fields["script_traffic_class"], fields["script_inflight"],
+		fields["script_concurrency_current"], fields["script_concurrency_target"],
+		fields["script_autotune_active"]), nil
+}
+
+func replyScalar(r resp.Reply) string {
+	switch r.Type {
+	case ':':
+		return strconv.FormatInt(r.Int, 10)
+	case '$', '+':
+		return r.Str
+	}
+	return ""
 }
 
 func readCorpus(path string) ([]string, error) {
@@ -202,15 +352,7 @@ func runLevel(opt options, script string, corpus []string, concurrency int) (lev
 					return
 				}
 				texts := pickTexts(corpus, i, opt.batch)
-				var argv []string
-				if opt.mode == "emb" {
-					argv = []string{"EMB", opt.model, texts[0]}
-				} else {
-					argv = make([]string, 0, 4+len(texts)+len(opt.args))
-					argv = append(argv, "EMB.EVAL", opt.model, script, strconv.Itoa(len(texts)))
-					argv = append(argv, texts...)
-					argv = append(argv, opt.args...)
-				}
+				argv := requestArgv(opt, script, texts)
 
 				t0 := time.Now()
 				err := client.WriteArgv(argv...)

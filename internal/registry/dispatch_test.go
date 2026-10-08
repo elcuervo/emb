@@ -6,6 +6,7 @@ import (
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 )
 
 // gatedNamedSession parks in RunNamed until release is closed, so a test can
@@ -28,31 +29,46 @@ func (g *gatedNamedSession) RunNamed([]onnx.NamedTensor) (map[string]onnx.NamedT
 
 func (g *gatedNamedSession) Close() error { return nil }
 
+// idleScriptResources builds a ScriptResources over the given sessions with one
+// permit per session (the controller grows the pool at runtime in production).
 func idleScriptResources(sessions ...onnx.NamedSession) *ScriptResources {
 	res := &ScriptResources{
 		sessions: sessions,
-		idle:     make(chan onnx.NamedSession, len(sessions)),
+		pool:     permit.New(sessions, len(sessions), len(sessions)),
+		stop:     make(chan struct{}),
 	}
-	for _, s := range sessions {
-		res.idle <- s
-	}
+	res.allowance.Store(1)
+	res.class.Store(permit.ClassIdle)
 	return res
 }
 
 // TestScriptIdleDispatchUsesFreeSession proves a call runs on the idle session
 // while another session is held busy: under the old round-robin pick the
-// second call would have queued behind the first.
+// second call could queue behind the first.
 func TestScriptIdleDispatchUsesFreeSession(t *testing.T) {
-	busy := newGatedNamedSession()
-	free := newGatedNamedSession()
-	res := idleScriptResources(busy, free)
+	a := newGatedNamedSession()
+	b := newGatedNamedSession()
+	res := idleScriptResources(a, b)
 
 	first := make(chan struct{})
 	go func() {
 		_, _ = res.RunNamed(nil)
 		close(first)
 	}()
-	<-busy.entered // first call is parked in the busy session
+
+	var busy *gatedNamedSession
+	select {
+	case <-a.entered:
+		busy = a
+	case <-b.entered:
+		busy = b
+	case <-time.After(2 * time.Second):
+		t.Fatal("first call never started")
+	}
+	free := a
+	if busy == a {
+		free = b
+	}
 
 	second := make(chan struct{})
 	go func() {
@@ -65,14 +81,10 @@ func TestScriptIdleDispatchUsesFreeSession(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("second call did not reach the idle session")
 	}
-	close(free.release)
-	select {
-	case <-second:
-	case <-time.After(2 * time.Second):
-		t.Fatal("second call did not finish on the idle session")
-	}
-	close(busy.release)
+	close(a.release)
+	close(b.release)
 	<-first
+	<-second
 }
 
 // TestScriptDispatchCountersSerialAndContended checks the wait counter is near
@@ -119,22 +131,25 @@ func TestScriptDispatchCountersSerialAndContended(t *testing.T) {
 	}
 }
 
-// TestIdleSessionsSeedsEachCallerSlot verifies each session enters the idle
-// channel once per configured caller, so that many evaluations may share it.
-func TestIdleSessionsSeedsEachCallerSlot(t *testing.T) {
-	a := &fakeNamedSession{}
-	b := &fakeNamedSession{}
-	idle := idleSessions([]onnx.NamedSession{a, b}, 3)
-	if got := len(idle); got != 6 {
-		t.Fatalf("idle slots = %d, want 6", got)
+// TestSamplerStops verifies the sampler exits promptly and stopSampler is
+// idempotent, so Close never hangs or leaks the goroutine.
+func TestSamplerStops(t *testing.T) {
+	res := idleScriptResources(newGatedNamedSession())
+	res.cap = 4
+	res.allowance.Store(4)
+	res.startSampler(2)
+
+	done := make(chan struct{})
+	go func() {
+		res.stopSampler()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stopSampler did not return")
 	}
-	counts := map[onnx.NamedSession]int{}
-	for i := 0; i < 6; i++ {
-		counts[<-idle]++
-	}
-	if counts[a] != 3 || counts[b] != 3 {
-		t.Fatalf("session slots = %v, want 3 each", counts)
-	}
+	res.stopSampler() // idempotent
 }
 
 // TestScriptIntraOpThreadsDefaultDividesBudget covers the unset default: the

@@ -89,7 +89,7 @@ Each model SHALL accept `capacity: auto|latency|throughput` (default `auto`). `l
 
 ### Requirement: Autotune controls and limits
 
-Each model SHALL accept `autotune: off|callers|auto` (default `auto`). `off` SHALL keep concurrency fixed at the configured value. Adaptation SHALL NOT change the session count or the per-session thread count at runtime, and SHALL NOT apply to a batcher (single-session) embedding pool.
+Each model SHALL accept `autotune: off|callers|auto` (default `auto`). `off` SHALL keep concurrency fixed at the configured value. Adaptation SHALL apply only to named-tensor script sessions and SHALL NOT change the session count or per-session thread count at runtime; embedding and image pools SHALL keep their load-time concurrency.
 
 #### Scenario: Off keeps concurrency fixed
 
@@ -101,7 +101,7 @@ Each model SHALL accept `autotune: off|callers|auto` (default `auto`). `off` SHA
 - **WHEN** the controller adapts
 - **THEN** the session count and per-session thread count SHALL be unchanged
 
-#### Scenario: Batcher pools are excluded
+#### Scenario: Embedding and image pools are unchanged
 
-- **WHEN** a model's embedding pool is a batcher
-- **THEN** the controller SHALL NOT adapt that pool's concurrency
+- **WHEN** a model serves embedding or image traffic
+- **THEN** its pool's concurrency SHALL remain the load-time value

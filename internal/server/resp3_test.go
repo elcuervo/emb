@@ -138,7 +138,7 @@ func TestRESP3IntrospectionMaps(t *testing.T) {
 	// EMB.INFO is a 31-pair map (no cache), same field order as RESP2.
 	c.Write(respCommand("EMB.INFO", "test"))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "%31\r\n$3\r\ndim\r\n:4\r\n") {
+	if !strings.HasPrefix(resp, "%36\r\n$3\r\ndim\r\n:4\r\n") {
 		t.Fatalf("expected EMB.INFO map under RESP3, got %q", resp)
 	}
 

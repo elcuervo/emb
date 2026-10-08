@@ -49,6 +49,7 @@ func TestDispatchObservabilityReported(t *testing.T) {
 	info := statsFields(t, redisCmd(t, addr, "EMB.INFO", "test"))
 	for _, field := range []string{
 		"script_dispatch_wait_us", "script_run_us", "script_runs", "script_sessions_busy",
+		"script_traffic_class", "script_inflight", "script_concurrency_current", "script_concurrency_target", "script_autotune_active",
 		"embed_dispatch_wait_us", "embed_run_us", "embed_runs", "embed_sessions_busy", "embed_sessions_total",
 	} {
 		if _, ok := info[field]; !ok {
@@ -66,6 +67,37 @@ func TestDispatchObservabilityReported(t *testing.T) {
 	perModel := bulkOf(t, stats["per_model"])
 	if !strings.Contains(perModel, "wait=") || !strings.Contains(perModel, "runs=") {
 		t.Fatalf("per_model = %q, want dispatch counters", perModel)
+	}
+}
+
+// TestCacheHitsDoNotCountAsInference proves a reply-cache hit never reaches
+// the inference boundary: the run counter and in-flight gauge stay put.
+func TestCacheHitsDoNotCountAsInference(t *testing.T) {
+	addr, srv := serveScriptTest(t, "1GB")
+	entry, err := srv.reg.Resolve("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := dial(t, addr)
+	defer c.Close()
+
+	if got := doCmd(t, c, "EMB.EVAL", "test", runShapeScript, "1", "same text"); !strings.HasPrefix(got, ":") {
+		t.Fatalf("first evaluation = %q", got)
+	}
+	_, _, runs1, _ := entry.ScriptDispatch()
+	if runs1 < 1 {
+		t.Fatalf("first evaluation ran %d inferences, want >= 1", runs1)
+	}
+
+	if got := doCmd(t, c, "EMB.EVAL", "test", runShapeScript, "1", "same text"); !strings.HasPrefix(got, ":") {
+		t.Fatalf("cached evaluation = %q", got)
+	}
+	_, runUs, runs2, busy := entry.ScriptDispatch()
+	if runs2 != runs1 {
+		t.Fatalf("cache hit ran inference: runs %d -> %d", runs1, runs2)
+	}
+	if runUs == 0 || busy != 0 {
+		t.Fatalf("after cache hit: run_us=%d busy=%d, want runs recorded and no in-flight", runUs, busy)
 	}
 }
 

@@ -105,6 +105,8 @@ models:
 | `script_workers` | auto-tuned | Named-tensor sessions for scripted models (`EMB.EVAL`/`EMB.EVSHA`). `0`/absent auto-tunes from RAM and model size (min 1). With `intra_op_threads` unset, each session gets `max(1, (cores−2)/script_workers)` threads so `sessions × threads ≈ cores` |
 | `script_callers_per_session` | `4` | Concurrent evaluations allowed per scripted session (the analyzed sweet spot). ORT sessions are safe for concurrent `Run`, so a lone scripted model is not serialized behind one session. `0`/absent = 4; set `1` to serialize |
 | `allow_spinning` | follows sharing | Maps to ORT `session.intra_op.allow_spinning`. When unset, scripted sessions spin off while shared (`script_callers_per_session > 1`) so concurrent callers stop fighting for cores, and keep ORT's default otherwise. Embedding and image sessions keep ORT's default unless set explicitly |
+| `autotune` | `auto` | `auto`/`callers` enable the runtime concurrency controller; `off` fixes concurrency at the configured value. Applies to scripted sessions |
+| `capacity` | `auto` | Creation-time layout: `auto` (derived layout plus runtime adaptation), `latency` (spinning on, one caller per session), or `throughput` (spinning off, shared sessions) |
 | `intra_op_threads` | `cores−2` (shared) | ONNX intra-op threads per session. Embedding and image sessions use `cores−2`; scripted sessions divide that budget across `script_workers` (`max(1, (cores−2)/script_workers)`). An explicit value is honoured verbatim for every path. At boot the server logs a warning when the total budget (`sessions × threads` across all models) exceeds the core count |
 | `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
 | `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
@@ -128,6 +130,12 @@ across `script_workers`: `max(1, (cores−2)/script_workers)`. An explicit
 boot when the total configured budget exceeds the core count, naming each
 contributing model with its session and thread counts. The warning never
 changes configuration.
+
+The budget is sized from the process's **effective** limits, not the host's: in
+a container (Fargate, EKS, Docker) `workers` uses the cgroup memory limit and
+the derived thread count uses the cgroup CPU quota. A task that reports the
+host's 32 GB therefore cannot open a session pool sized for 32 GB and get OOM
+killed.
 
 Measured on the reference host (10 cores, GLiNER2 int8, 36-text corpus, no
 reply cache) at concurrency 8:
@@ -170,6 +178,26 @@ the same host (10 cores, GLiNER2 int8, 36 texts) with 8 intra-op threads total:
 `script_callers_per_session` does **not** add sessions — the thread budget above
 counts distinct sessions, so sharing sessions is the memory-for-parallelism
 saving, not a way to exceed the core budget.
+
+### Runtime autotuning
+
+With `capacity: auto` (the default) the server classifies each scripted model's
+traffic every second as `idle`, `latency`, `throughput`, or `saturated` from the
+dispatch-wait/run-time ratio, in-flight count, and process CPU, and adapts the
+per-session concurrency allowance within `script_callers_per_session`:
+
+- `throughput` doubles the allowance toward the cap after two consecutive
+  windows (readiness over raw numbers: 1 → 2 → 4).
+- `latency` halves it after three consecutive windows.
+- `idle` holds the current allowance (no traffic is not evidence of a
+  latency-sensitive workload).
+- `saturated` never grows; it logs a recommendation to raise `script_workers`
+  or `intra_op_threads` instead, because more concurrency cannot create CPU.
+
+The controller never changes the session count or per-session thread count at
+runtime. `capacity: latency` or `throughput` pins the creation-time layout
+without runtime adaptation; `autotune: off` keeps concurrency fixed. See
+[operations](./operations.md#autotune-state) for the observable state.
 
 ## Image models and preprocessing parity
 

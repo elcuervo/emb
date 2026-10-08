@@ -20,6 +20,7 @@ import (
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/hfhub"
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
@@ -158,10 +159,11 @@ func (e *ModelEntry) LoadedPool() *pipeline.Pool {
 // capabilities are type-asserted when building the host binding).
 type ScriptResources struct {
 	sessions []onnx.NamedSession
-	// idle hands out whichever session is free first (a buffered channel
-	// seeded with every session), so a call never queues behind a busy session
-	// while another sits idle.
-	idle      chan onnx.NamedSession
+	// pool hands out leases over the sessions, so a call never queues behind a
+	// busy session while another sits idle. Its capacity is the per-session
+	// concurrency allowance times the session count, and may be resized at
+	// runtime by the autotune controller.
+	pool      *permit.Pool[onnx.NamedSession]
 	next      atomic.Uint64
 	Tokenizer tokenizer.Tokenizer
 	// SplitBatch is set for graphs with dynamic activation quantization, whose
@@ -174,30 +176,58 @@ type ScriptResources struct {
 	dispatchWaitUs atomic.Int64
 	runUs          atomic.Int64
 	runs           atomic.Int64
-	busy           atomic.Int64
+
+	// Autotune state. name, cap, sessions and autotune are immutable after
+	// construction; the rest are published atomically for observability.
+	name        string
+	cap         int
+	autotune    bool
+	allowance   atomic.Int64
+	class       atomic.Value // permit.Class
+	stop        chan struct{}
+	stopOnce    sync.Once
+	samplerWG   sync.WaitGroup
+	samplerOnce sync.Once
 }
 
-// RunNamed runs an inference on the first session that is free. Arrival order
-// is the channel's FIFO handoff: a waiting call takes the next session
-// returned, and a session is never skipped while idle.
+// RunNamed runs an inference on the first session that is free. Waiting calls
+// are served in arrival order by the pool.
 func (r *ScriptResources) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
 	waitStart := time.Now()
-	sess := <-r.idle
+	sess := r.pool.Acquire()
 	r.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
-	r.busy.Add(1)
 	runStart := time.Now()
 	out, err := sess.RunNamed(inputs)
 	r.runUs.Add(time.Since(runStart).Microseconds())
 	r.runs.Add(1)
-	r.busy.Add(-1)
-	r.idle <- sess
+	r.pool.Release(sess)
 	return out, err
 }
 
 // DispatchCounters returns the script path's cumulative dispatch wait and ORT
 // run microseconds, run count, and live busy gauge.
 func (r *ScriptResources) DispatchCounters() (waitUs, runUs, runs, busy int64) {
-	return r.dispatchWaitUs.Load(), r.runUs.Load(), r.runs.Load(), r.busy.Load()
+	return r.dispatchWaitUs.Load(), r.runUs.Load(), r.runs.Load(), int64(r.pool.InFlight())
+}
+
+// InFlight returns the number of evaluations currently running.
+func (r *ScriptResources) InFlight() int64 { return int64(r.pool.InFlight()) }
+
+// Allowance returns the current per-session concurrency allowance.
+func (r *ScriptResources) Allowance() int { return int(r.allowance.Load()) }
+
+// ConcurrencyCap returns the configured per-session allowance ceiling.
+func (r *ScriptResources) ConcurrencyCap() int { return r.cap }
+
+// AutotuneActive reports whether the runtime controller is enabled.
+func (r *ScriptResources) AutotuneActive() bool { return r.autotune }
+
+// TrafficClass returns the most recently classified traffic shape.
+func (r *ScriptResources) TrafficClass() string {
+	if c, ok := r.class.Load().(permit.Class); ok {
+		return string(c)
+	}
+	return string(permit.ClassIdle)
 }
 
 // Session returns the next named-tensor session for a scripted run,
@@ -269,7 +299,7 @@ func New() *Registry {
 // parsing/dispatch so a busy request path cannot starve inference (and vice versa).
 // Machines with ≤ 2 cores floor at 1.
 func defaultIntraOpThreads() int {
-	return scriptIntraOpThreads(0, 1, runtime.GOMAXPROCS(0))
+	return scriptIntraOpThreads(0, 1, EffectiveNumCPU())
 }
 
 // scriptIntraOpThreads returns the intra-op thread count for each script
@@ -390,11 +420,12 @@ func WarnThreadBudget(entries []*ModelEntry, cores int) {
 }
 
 func autoTuneWorkers(modelPath string, maxWorkers int) int {
-	maxCores := runtime.GOMAXPROCS(0)
+	maxCores := EffectiveNumCPU()
 	if maxWorkers > 0 && maxWorkers < maxCores {
 		maxCores = maxWorkers
 	}
-	mem := TotalSystemMemory()
+	// Size from the container's memory limit when cgroup-limited, not the host's.
+	mem := EffectiveMemoryLimit()
 	if mem == 0 {
 		return maxCores
 	}
@@ -631,6 +662,17 @@ func (e *ModelEntry) ScriptDispatch() (waitUs, runUs, runs, busy int64) {
 	return 0, 0, 0, 0
 }
 
+// ScriptAutotune reports the script path's traffic class, in-flight count,
+// current per-session allowance, the configured cap, and whether the runtime
+// controller is active. Zero values mean script resources are not open yet.
+func (e *ModelEntry) ScriptAutotune() (class string, inflight, current, target int64, active bool) {
+	res := e.scriptResPtr.Load()
+	if res == nil {
+		return string(permit.ClassIdle), 0, 0, 0, false
+	}
+	return res.TrafficClass(), res.InFlight(), int64(res.Allowance()), int64(res.ConcurrencyCap()), res.AutotuneActive()
+}
+
 func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	cfg := e.cfg
 
@@ -665,6 +707,25 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		execMode = onnx.ExecModeParallel
 	}
 
+	// Capacity profile decides the creation-time layout: latency pins spinning
+	// on and one caller per session; throughput pins spinning off and the full
+	// cap; auto keeps the derived layout and enables runtime adaptation.
+	profile := cfg.CapacityProfile()
+	spinning := cfg.ScriptAllowsSpinning()
+	callerCap := cfg.ScriptCallers()
+	initialAllowance := callerCap
+	autotune := cfg.AutotuneEnabled()
+	switch profile {
+	case "latency":
+		spinning = true
+		initialAllowance = 1
+		autotune = false
+	case "throughput":
+		spinning = false
+		initialAllowance = callerCap
+		autotune = true
+	}
+
 	// The auto-tuned default never exceeds the embedding path's real session
 	// count (one for a batcher pool, one per worker otherwise), so scripting
 	// cannot multiply a model's footprint beyond what the embedding path
@@ -681,12 +742,12 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	// Unset intra_op_threads divides the cores−2 budget across the sessions,
 	// so workers × threads stays near the core count instead of multiplying it.
 	// An explicit value is honoured verbatim.
-	intraThreads := scriptIntraOpThreads(cfg.IntraOpThreads, numSessions, runtime.GOMAXPROCS(0))
+	intraThreads := scriptIntraOpThreads(cfg.IntraOpThreads, numSessions, EffectiveNumCPU())
 
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
 		sess, err := newNamedSession(
-			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, cfg.ScriptAllowsSpinning(),
+			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, spinning,
 		)
 		if err != nil {
 			for _, opened := range sessions {
@@ -704,25 +765,26 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 
 	e.scriptSessions.Store(int64(len(sessions)))
 	e.scriptTokenizer.Store(true)
-	return &ScriptResources{sessions: sessions, idle: idleSessions(sessions, cfg.ScriptCallers()), Tokenizer: tok, SplitBatch: split}, nil
+
+	res := &ScriptResources{
+		sessions:   sessions,
+		pool:       permit.New(sessions, numSessions*initialAllowance, numSessions*callerCap),
+		Tokenizer:  tok,
+		SplitBatch: split,
+		name:       e.Name,
+		cap:        callerCap,
+		autotune:   autotune,
+		stop:       make(chan struct{}),
+	}
+	res.allowance.Store(int64(initialAllowance))
+	res.class.Store(permit.ClassIdle)
+	if autotune {
+		res.startSampler(EffectiveNumCPU())
+	}
+	return res, nil
 }
 
-// idleSessions seeds the idle dispatch channel with every session `callers`
-// times, so up to that many evaluations run concurrently on each session.
-// ORT sessions are safe for concurrent Run and each call allocates its own
-// outputs.
-func idleSessions(sessions []onnx.NamedSession, callers int) chan onnx.NamedSession {
-	if callers < 1 {
-		callers = 1
-	}
-	idle := make(chan onnx.NamedSession, len(sessions)*callers)
-	for c := 0; c < callers; c++ {
-		for _, sess := range sessions {
-			idle <- sess
-		}
-	}
-	return idle
-}
+// idleSessions was replaced by permit.Pool, which can be resized at runtime.
 
 func downloadModel(cfg *config.ModelConfig, name string) error {
 	dir := filepath.Dir(cfg.ONNX)
@@ -1103,6 +1165,7 @@ func (e *ModelEntry) closeResources() error {
 		closeErrs = append(closeErrs, pool.Close())
 	}
 	if e.scriptRes != nil {
+		e.scriptRes.stopSampler()
 		for _, sess := range e.scriptRes.Sessions() {
 			closeErrs = append(closeErrs, sess.Close())
 		}
