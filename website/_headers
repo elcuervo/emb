@@ -20,9 +20,18 @@
 # The one way this file can hurt a reader is pinning a file immutable that later
 # changes under the same name. `website/tools/published-tree.py` asserts that no
 # `.html`, `.css`, or `.js` path falls under an immutable rule.
+#
+# `no-transform` on the HTML is not tidiness. Cloudflare injects its Web
+# Analytics beacon into the page at the edge unless the origin forbids
+# transformation. In Firefox with a content blocker that beacon is blocked at
+# the network layer, and the browser reports the block as a cross-origin
+# failure plus an integrity mismatch against the empty body, two console
+# warnings on every page view. `no-transform` tells Cloudflare to leave the
+# response alone, so the beacon is never injected and the warnings never fire.
+# Cloudflare documents this switch in the Web Analytics FAQ.
 
 /*
-  Cache-Control: public, max-age=0, must-revalidate
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /assets/css/*
   Cache-Control: public, max-age=0, must-revalidate

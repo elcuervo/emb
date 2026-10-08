@@ -97,7 +97,7 @@ SERVED = frozenset(
         "assets/demo/audio.json",
         "assets/demo/video.json",
         "assets/demo/fingerprints.json",
-        "assets/js/fingerprint.js",
+        "assets/js/tune-id.js",
         "demos/samples/raven.jpg",
         "demos/samples/storm.jpg",
         "demos/samples/portrait.jpg",
