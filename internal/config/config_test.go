@@ -408,6 +408,85 @@ models:
 	}
 }
 
+func TestLoadSharedSessionAndSpinningConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte(`
+models:
+  gliner:
+    onnx: ./model.onnx
+    tokenizer: ./tokenizer.json
+    script_callers_per_session: 4
+    allow_spinning: false
+`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Models["gliner"]
+	if got := m.ScriptCallers(); got != 4 {
+		t.Fatalf("script_callers_per_session = %d, want 4", got)
+	}
+	if m.AllowsSpinning() {
+		t.Fatal("allow_spinning=false should report spinning off")
+	}
+
+	// Unset keeps the shared-caller, spinning-off defaults (out of the box).
+	os.WriteFile(cfgPath, []byte(`
+models:
+  plain:
+    onnx: ./model.onnx
+`), 0644)
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Models["plain"].ScriptCallers(); got != DefaultScriptCallersPerSession {
+		t.Fatalf("default script_callers_per_session = %d, want %d", got, DefaultScriptCallersPerSession)
+	}
+	if cfg.Models["plain"].ScriptAllowsSpinning() {
+		t.Fatal("shared scripted sessions must default to spinning off")
+	}
+	if !cfg.Models["plain"].AllowsSpinning() {
+		t.Fatal("embedding/image sessions must keep ORT's spinning default")
+	}
+
+	// A single caller defaults back to ORT's spinning, and an explicit
+	// allow_spinning always wins.
+	os.WriteFile(cfgPath, []byte(`
+models:
+  solo:
+    onnx: ./model.onnx
+    script_callers_per_session: 1
+  forced:
+    onnx: ./model.onnx
+    script_callers_per_session: 4
+    allow_spinning: true
+`), 0644)
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Models["solo"].ScriptAllowsSpinning() {
+		t.Fatal("a single script caller must keep ORT's spinning default")
+	}
+	if !cfg.Models["forced"].ScriptAllowsSpinning() {
+		t.Fatal("explicit allow_spinning: true must win over the shared default")
+	}
+
+	// A negative caller count is rejected.
+	os.WriteFile(cfgPath, []byte(`
+models:
+  bad:
+    onnx: ./model.onnx
+    script_callers_per_session: -1
+`), 0644)
+	if _, err := Load(cfgPath); err == nil {
+		t.Fatal("negative script_callers_per_session must fail validation")
+	}
+}
+
 func TestPersistenceConfigDefaultsAndValidation(t *testing.T) {
 	defaults := Config{}
 	if !defaults.CacheLoadEnabled() || !defaults.CacheShutdownSaveEnabled() {

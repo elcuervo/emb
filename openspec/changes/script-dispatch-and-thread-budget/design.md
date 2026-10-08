@@ -63,7 +63,7 @@ An explicit `intra_op_threads` is never changed. The boot log warns when `Σ ses
 **4. Observability is counters, not histograms.**
 Each model gets atomic cumulative `dispatch_wait_us`, `run_us` and `runs`, plus gauges `sessions_busy` and `sessions_total`, split into script and embed.
 
-Averages come from deltas between two `EMB.STATS` reads. Datadog can scrape these via the existing stats exporter path, or via a sidecar that diffs counters.
+Averages come from deltas between two `EMB.STATS` reads. A sidecar or the existing stats exporter can diff the cumulative counters.
 
 - Read cost is a few atomic loads.
 - There is no allocation on the hot path beyond two `time.Now()` calls.
@@ -76,8 +76,8 @@ A `just bench-script` target compares a candidate against a baseline binary (int
 **6. Concurrent callers on shared sessions, spinning off.**
 ORT sessions are thread-safe for `Run`. Today `NamedRuntimeSession` serializes runs with a mutex because it keeps a cache of output tensors keyed by shape. Change this:
 - Drop the mutex and allocate outputs per call. GLiNER's only output is `[1, seq, 8, nlab]`, 1–7 KB per call.
-- `script_callers_per_session` (default 1) puts each session into the idle channel that many times, so Decision 1 also governs callers.
-- `allow_spinning: false` sets `session.intra_op.allow_spinning=0`.
+- `script_callers_per_session` (default 4) puts each session into the idle channel that many times, so Decision 1 also governs callers.
+- `allow_spinning` maps to `session.intra_op.allow_spinning`; when unset it defaults to off while a session is shared (`script_callers_per_session > 1`) and to ORT's default for a single caller. Embedding and image sessions keep ORT's default.
 
 With spinning on, concurrent callers fight for cores: 1 session × 8 threads with 8 callers falls to 97 req/s. With spinning off, they share the pool cleanly.
 
@@ -97,12 +97,12 @@ ORT session options in the gem and in emb are otherwise the same: opt level ALL,
 
 ## Risks / Trade-offs
 
-- **Spinning off adds about 1 ms serial latency** when there is a single caller. It stays opt-in, recommended only with shared callers.
+- **Defaulting to shared callers with spinning off costs about 1 ms of serial latency** for a single caller. It is the analyzed best throughput/tail trade, and `script_callers_per_session: 1` or `allow_spinning: true` opts back out.
 - **Lower default threads per script session make serial latency worse** for operators who relied on the old default with `script_workers > 1`. That setup was already oversubscribed, so throughput and tail latency improve. The change is documented in configuration docs and the changelog.
 - **A shared queue in the embedding pool changes which worker serves a request.** Outputs are deterministic per session, and sessions are identical, so replies are unaffected. Parity is verified by the benchmark dump.
-- **Benchmarks on a laptop don't predict Fargate x86.** Production numbers come from the new `EMB.STATS` counters and the API's `backend` span tag. Local budgets are relative to the baseline binary, not absolute.
+- **Benchmarks run on a laptop do not predict every deployment.** The committed harness makes the numbers reproducible and relative to a previous binary; the new `EMB.STATS` counters show the same effects in any environment.
 
-## Open Questions
+## Resolved Decisions
 
-- Production layout: 2×4 shared with spinning off (best latency and memory on Mac), 8×1 (best tail), or 4×2? A production 8 vCPU Fargate task is probably 4 physical cores with hyperthreading. Re-run the comparison with `bench/fargate` before choosing, and check against the production `dispatch_wait_us`.
-- Should spinning off become the default when `script_callers_per_session > 1`? It costs about 1 ms serial for a single caller.
+- **Recommended layout: 2 sessions × 4 threads, 4 callers, spinning off** (best latency and memory), with 8×1 kept as the best-tail option. The defaults share each session with 4 callers and spin off, so a lone scripted model runs the 1×8 shared layout (≈146 req/s) out of the box; `script_workers: 2` gives the recommended 2×4 layout (≈164 req/s). The docs record the table.
+- **Spinning off is the default while a session is shared.** The ~1 ms serial cost for a single caller is the price of the shared throughput; an explicit `allow_spinning` or `script_callers_per_session: 1` overrides it.

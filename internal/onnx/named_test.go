@@ -51,7 +51,7 @@ func TestRunNamedMatchesRun(t *testing.T) {
 	rank := 3
 
 	// Baseline: existing Session path.
-	sess, err := NewRuntimeSessionFromBytes(data, inputNames, outNames[:1], dim, rank, 1, 2, ExecModeSequential)
+	sess, err := NewRuntimeSessionFromBytes(data, inputNames, outNames[:1], dim, rank, 1, 2, ExecModeSequential, true)
 	if err != nil {
 		t.Skipf("session creation failed (model mismatch?): %v", err)
 	}
@@ -67,7 +67,7 @@ func TestRunNamedMatchesRun(t *testing.T) {
 	}
 
 	// Named path with the same inputs, order-independent.
-	named, err := NewNamedRuntimeSessionFromBytes(data, inputNames, outNames, 1, 2, ExecModeSequential)
+	named, err := NewNamedRuntimeSessionFromBytes(data, inputNames, outNames, 1, 2, ExecModeSequential, true)
 	if err != nil {
 		t.Fatalf("creating named session: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestRunNamedErrors(t *testing.T) {
 	data := namedTestModel(t)
 	inputNames, outNames := namedTestInputs(t)
 
-	named, err := NewNamedRuntimeSessionFromBytes(data, inputNames, outNames, 1, 2, ExecModeSequential)
+	named, err := NewNamedRuntimeSessionFromBytes(data, inputNames, outNames, 1, 2, ExecModeSequential, true)
 	if err != nil {
 		t.Fatalf("creating named session: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestRunNamedBoolGraph(t *testing.T) {
 		}
 	}
 
-	sess, err := NewNamedRuntimeSessionFromBytes(data, inputNames, []string{"logits", "act_logits"}, 1, 2, ExecModeSequential)
+	sess, err := NewNamedRuntimeSessionFromBytes(data, inputNames, []string{"logits", "act_logits"}, 1, 2, ExecModeSequential, true)
 	if err != nil {
 		t.Fatal(err)
 	}

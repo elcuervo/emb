@@ -35,6 +35,14 @@ type Stats struct {
 	BatchingMaxBatch  int
 	BatchingMaxTokens int
 	PaddingEfficiency float64
+	// Dispatch/run observability (EMB.STATS/EMB.INFO): cumulative time waiting
+	// for a free worker or queue slot, cumulative inference time, the number of
+	// inference runs, and the live busy/total session gauges.
+	DispatchWaitUs int64
+	RunUs          int64
+	Runs           int64
+	SessionsBusy   int64
+	SessionsTotal  int64
 }
 
 // encodeTexts tokenizes texts into encodings and returns the real token total.

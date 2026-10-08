@@ -31,6 +31,44 @@ func intOf(t *testing.T, tok respToken) int {
 	return tok.val.(int)
 }
 
+// TestDispatchObservabilityReported verifies the per-model dispatch and run
+// counters appear in EMB.INFO and in the per-model EMB.STATS strings, and that
+// an embedding request advances the embed run counter.
+func TestDispatchObservabilityReported(t *testing.T) {
+	addr, _ := serveScriptTest(t, "")
+	c := dial(t, addr)
+	defer c.Close()
+
+	if got := doCmd(t, c, "EMB.EVAL", "test", "return 1", "1", "x"); got != ":1\r\n" {
+		t.Fatalf("evaluation reply = %q", got)
+	}
+	if got := doCmd(t, c, "EMB", "test", "hello"); !strings.HasPrefix(got, "$") {
+		t.Fatalf("EMB reply = %q", got)
+	}
+
+	info := statsFields(t, redisCmd(t, addr, "EMB.INFO", "test"))
+	for _, field := range []string{
+		"script_dispatch_wait_us", "script_run_us", "script_runs", "script_sessions_busy",
+		"embed_dispatch_wait_us", "embed_run_us", "embed_runs", "embed_sessions_busy", "embed_sessions_total",
+	} {
+		if _, ok := info[field]; !ok {
+			t.Fatalf("EMB.INFO missing %q: %#v", field, info)
+		}
+	}
+	if got := intOf(t, info["embed_runs"]); got < 1 {
+		t.Fatalf("embed_runs = %d, want >= 1", got)
+	}
+	if got := intOf(t, info["embed_sessions_total"]); got < 1 {
+		t.Fatalf("embed_sessions_total = %d, want >= 1", got)
+	}
+
+	stats := statsFields(t, redisCmd(t, addr, "EMB.STATS"))
+	perModel := bulkOf(t, stats["per_model"])
+	if !strings.Contains(perModel, "wait=") || !strings.Contains(perModel, "runs=") {
+		t.Fatalf("per_model = %q, want dispatch counters", perModel)
+	}
+}
+
 // TestScriptedEvaluationRecordedInMonitor verifies a completed evaluation
 // appends a MONITOR event carrying the model and text count and no payload.
 func TestScriptedEvaluationRecordedInMonitor(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"sort"
 	"syscall"
 	"time"
@@ -65,6 +66,7 @@ func run() error {
 		modelCount++
 	}
 	reg.SetModelCount(modelCount)
+	registry.WarnThreadBudget(reg.List(), runtime.GOMAXPROCS(0))
 
 	var tlsConfig *tls.Config
 	if fc.TLSCert != "" && fc.TLSKey != "" {

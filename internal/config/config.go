@@ -253,6 +253,16 @@ type ModelConfig struct {
 	// ScriptPreload warms the scripted session + tokenizer at load time
 	// instead of on the first script evaluation.
 	ScriptPreload bool `yaml:"script_preload"`
+	// ScriptCallersPerSession puts each scripted named-tensor session into the
+	// idle dispatch channel this many times, so that many evaluations may run on
+	// it concurrently (ORT sessions are safe for concurrent Run). 0/absent = 1.
+	ScriptCallersPerSession int `yaml:"script_callers_per_session"`
+	// AllowSpinning maps to ORT session.intra_op.allow_spinning. nil/true keeps
+	// ORT's default spinning; false disables it, which shares cores better among
+	// concurrent callers of one session at a small serial cost. When unset,
+	// scripted sessions follow sharing (off when script_callers_per_session > 1);
+	// embedding and image sessions keep ORT's default.
+	AllowSpinning *bool `yaml:"allow_spinning"`
 	// Scripts is a list of Lua presets to preload at boot. Each entry is a path
 	// (resolved against the config file's directory) with an optional per-script
 	// config exposed to that script as emb.script.config.
@@ -263,6 +273,39 @@ type ModelConfig struct {
 	// ImagePreload warms the image named-session pool at load time instead of on
 	// the first EMB.IMG request.
 	ImagePreload bool `yaml:"image_preload"`
+}
+
+// AllowsSpinning reports the effective ORT allow_spinning value for embedding
+// and image sessions: true unless allow_spinning is explicitly false.
+func (m ModelConfig) AllowsSpinning() bool {
+	return m.AllowSpinning == nil || *m.AllowSpinning
+}
+
+// DefaultScriptCallersPerSession is the out-of-the-box number of concurrent
+// evaluations per scripted session. Measured best in the dispatch study: 2
+// sessions x 4 threads shared by 4 callers with spinning off gives the highest
+// throughput and the best c=4 latency of the tested layouts, while a single
+// session shared by 4 callers is close and uses a quarter of the memory.
+const DefaultScriptCallersPerSession = 4
+
+// ScriptCallers returns the effective per-session concurrent caller count:
+// script_callers_per_session, or DefaultScriptCallersPerSession when unset.
+func (m ModelConfig) ScriptCallers() int {
+	if m.ScriptCallersPerSession < 1 {
+		return DefaultScriptCallersPerSession
+	}
+	return m.ScriptCallersPerSession
+}
+
+// ScriptAllowsSpinning reports the effective allow_spinning value for scripted
+// sessions. An explicit allow_spinning always wins; when unset, a shared
+// session spins off (concurrent callers share the thread pool instead of
+// fighting for cores), while a single-caller session keeps ORT's default.
+func (m ModelConfig) ScriptAllowsSpinning() bool {
+	if m.AllowSpinning != nil {
+		return *m.AllowSpinning
+	}
+	return m.ScriptCallers() <= 1
 }
 
 func Load(path string) (*Config, error) {
@@ -286,6 +329,9 @@ func Load(path string) (*Config, error) {
 		}
 		if m.ExecutionMode != "" && m.ExecutionMode != "sequential" && m.ExecutionMode != "parallel" {
 			return nil, fmt.Errorf("model %q: execution_mode must be \"sequential\", \"parallel\", or unset, got %q", name, m.ExecutionMode)
+		}
+		if m.ScriptCallersPerSession < 0 {
+			return nil, fmt.Errorf("model %q: script_callers_per_session must be non-negative, got %d", name, m.ScriptCallersPerSession)
 		}
 		if m.Image != nil {
 			if err := validateImageConfig(name, *m.Image); err != nil {

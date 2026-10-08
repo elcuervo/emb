@@ -36,7 +36,7 @@ When `intra_op_threads` is unset and a model opens more than one named-tensor se
 
 ### Requirement: Shared script sessions with optional spinning
 
-A model SHALL accept `script_callers_per_session` (default 1). Up to that many evaluations SHALL run concurrently on each named-tensor session. Concurrent runs on one session SHALL return the same outputs as serial runs. A model SHALL accept `allow_spinning` (default true), which maps to ORT `session.intra_op.allow_spinning`.
+A model SHALL accept `script_callers_per_session` (default 4). Up to that many evaluations SHALL run concurrently on each named-tensor session. Concurrent runs on one session SHALL return the same outputs as serial runs. A model SHALL accept `allow_spinning`, which maps to ORT `session.intra_op.allow_spinning`. When unset, scripted sessions SHALL spin off while shared (`script_callers_per_session > 1`) and keep ORT's default otherwise; an explicit value SHALL always win.
 
 #### Scenario: Concurrent runs on one session are correct
 
@@ -48,3 +48,13 @@ A model SHALL accept `script_callers_per_session` (default 1). Up to that many e
 
 - **WHEN** a model sets `allow_spinning: false`
 - **THEN** its sessions SHALL be created with `session.intra_op.allow_spinning` set to `0`
+
+#### Scenario: Shared sessions default to spinning off
+
+- **WHEN** a model leaves `allow_spinning` unset and `script_callers_per_session` unset or above 1
+- **THEN** its scripted sessions SHALL be created with `session.intra_op.allow_spinning` set to `0`
+
+#### Scenario: A single caller keeps ORT's spinning
+
+- **WHEN** a model sets `script_callers_per_session: 1` and leaves `allow_spinning` unset
+- **THEN** its scripted sessions SHALL keep ORT's default `allow_spinning`

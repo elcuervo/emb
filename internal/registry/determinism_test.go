@@ -108,7 +108,7 @@ func openRegistry(t *testing.T, cfg config.ModelConfig, sensitive bool) (*Regist
 	newTokenizer = func(string, bool) (tokenizer.Tokenizer, error) { return registryTok{}, nil }
 
 	var opens atomic.Int64
-	newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int) (onnx.Session, error) {
+	newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
 		opens.Add(1)
 		return &fakeSession{sensitive: sensitive}, nil
 	}
@@ -225,7 +225,7 @@ func TestEnsurePoolProbeErrorClassifiesSeparately(t *testing.T) {
 	newTokenizer = func(string, bool) (tokenizer.Tokenizer, error) { return registryTok{}, nil }
 
 	var opens atomic.Int64
-	newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int) (onnx.Session, error) {
+	newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
 		opens.Add(1)
 		return &errSession{}, nil
 	}

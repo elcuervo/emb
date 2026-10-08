@@ -4,7 +4,7 @@ GLiNER2 (`gliner2.lua`, int8 graph with `DynamicQuantizeLinear`) is moving from 
 
 - **Queueing, not compute, dominates under load.** Profiling the script path shows ORT `Run` is 97.4% of a serial request (22.1 of 22.7 ms); all emb overhead (Lua state, tokenize, marshalling, gather/sigmoid, JSON) is about 0.6 ms. At concurrency 8, requests waited a mean **37.7 ms** for a session lock, longer than inference itself. `ScriptResources.Session()` picks round-robin, so a request can queue behind a busy session while another sits idle.
 - **The default thread count oversubscribes the CPU.** `intra_op_threads` defaults to `cores − 2` *per session*. With `script_workers: 4` on 10 cores that is 32 ORT threads, and throughput fell to ~24 req/s at any concurrency. Setting `4 × 2` explicitly gives ~120 req/s.
-- **Production has no visibility into either.** Datadog has no emb-side queue depth, wait time or inference time. The siglip2/E5 tail (p99 ~119 ms vs ~87 ms in-process, and p90 still about +80% since 0.4.x) can't be attributed to queueing or compute.
+- **Production has no visibility into either.** There is no emb-side queue depth, wait time or inference time, so the siglip2/E5 tail (p99 ~119 ms vs ~87 ms in-process, and p90 still about +80% since 0.4.x) cannot be attributed to queueing or compute.
 
 The unbatched embedding `Pool` (production runs with batching disabled since 0.3.0) and the image pool use the same round-robin pick, so the same fix probably also addresses the existing siglip2/E5 tail. That part is a hypothesis this change measures.
 
@@ -13,7 +13,7 @@ The unbatched embedding `Pool` (production runs with batching disabled since 0.3
 - **Idle-first dispatch for script sessions.** `emb.run` / `emb.run_batch` take whichever named-tensor session is free first, instead of a round-robin index. Prototype (about 15 lines, `perf/script-probe`), 4×2, concurrency 8: p90 97 → 69 ms, p99 133–188 → 103 ms; at concurrency 16, p99 216–288 → 166 ms; +3–8% throughput; replies byte-identical; serial latency unchanged.
 - **Idle-first dispatch for unbatched embedding and image pools.** Same policy for `pipeline.Pool` without a batcher and for `registry/image.go`. Adopt only if the measurement gate shows a tail improvement with no serial regression.
 - **Thread-budget-aware default.** When `intra_op_threads` is unset, script sessions default to `max(1, (cores − 2) / script_workers)`. An explicit value is honoured verbatim, but emb logs a boot warning when the total thread budget (sessions × threads across all models) exceeds the core count.
-- **Shared sessions with spinning off.** `NamedRuntimeSession` accepts concurrent `Run` calls: no per-session mutex, and outputs are allocated per call (GLiNER's only output, `logits`, is 1–7 KB). New `script_callers_per_session` fills the idle channel with each session N times. New `allow_spinning` model option maps to `session.intra_op.allow_spinning`.
+- **Shared sessions with spinning off, on by default.** `NamedRuntimeSession` accepts concurrent `Run` calls: no per-session mutex, and outputs are allocated per call (GLiNER's only output, `logits`, is 1–7 KB). New `script_callers_per_session` fills the idle channel with each session N times and defaults to 4; new `allow_spinning` maps to `session.intra_op.allow_spinning` and defaults to off while a session is shared. An unset config therefore shares a lone scripted session (1 session × 8 threads, 4 callers, spinning off ≈ 146 req/s where the old default gave 24); `script_workers: 2` reaches the best measured 2×4 layout.
   - Measured with an ORT probe and a patched emb build: 2 sessions × 4 threads, 4 callers, spinning off gives serial p50 19.4 ms (vs 23.0), c=4 p50 26.7 ms, and 164 req/s (vs 133). Replies are identical and it uses half the sessions.
   - 1 session × 8 threads shared gives 146 req/s on a quarter of the memory.
 - **Dispatch observability.** `EMB.STATS` / `EMB.INFO` report per-model session wait time, ORT run time, and busy/total sessions, for both the script and embedding paths, so the effect can be measured in production.
@@ -35,19 +35,19 @@ None.
 
 - **Code:** `internal/registry/registry.go` (`ScriptResources`, default threads, boot warning), `internal/onnx/named.go` and `runtime.go` (concurrent run, spinning option), `internal/config`, `internal/server/script.go`, `internal/pipeline/pool.go`, `internal/registry/image.go`, stats/info reporting, plus a benchmark command.
 - **Unchanged:** wire protocol, reply format, cache keys and model outputs.
-- **Configuration:** an unset `intra_op_threads` with `script_workers > 1` now yields fewer threads per session, which raises throughput. Explicit configs behave as before.
+- **Configuration:** an unset `intra_op_threads` with `script_workers > 1` now yields fewer threads per session, and unset `script_callers_per_session`/`allow_spinning` now share each scripted session with 4 callers and spin off. These are the analyzed-best defaults, so an out-of-the-box scripted model no longer serializes or oversubscribes. Explicit configs behave as before.
 
 ## Measuring it
 
 | Where | What | Pass |
 |---|---|---|
 | Local, GLiNER corpus (36 texts, `ent_labels`), 4×2, reply cache off | p50 / p90 / p99 at serial, c=4, c=8, c=16; req/s | c=8 p99 ≤ 110 ms; serial p50 within ±5% of baseline; req/s not lower |
-| Local, same | Replies vs 0.4.3 release binary | Byte-identical, 36/36 |
+| Local, same | Replies vs the previous (pre-change) binary | Byte-identical, 36/36 |
 | Local, 2 sessions × 4 threads, 4 callers, spinning off | serial p50, c=4 p50, req/s; replies | ≤ 20 ms, ≤ 28 ms, ≥ 150 req/s; byte-identical |
-| Local, unset `intra_op_threads`, `script_workers: 4` | req/s at c=8 | ≥ 4× the 0.4.3 default (~24 req/s) |
+| Local, defaults only (`script_workers: 2`, everything else unset) | c=4 p50, req/s | Matches the shared layout: ≤ 28 ms, ≥ 145 req/s |
+| Local, unset `intra_op_threads`, `script_workers: 4` | req/s at c=8 | ≥ 4× the old default (~24 req/s) |
 | Local, siglip2 unbatched pool | c=8 / c=16 p99 | Improves or stays within 5%; adopt only if it improves |
-| `EMB.STATS` | `session_wait_us`, `run_us`, `sessions_busy` | Present per model; wait ≈ 0 when serial |
-| Production (Datadog) | `phrase.entities` `backend:remote` vs `local` (58 / 68 / 93 ms); `phrase.embeddings` p90 / p99 before and after; emb `session_wait_us` | Remote p99 ≤ local p99; embeddings p90 back to the 0.3.x level (~42–56 ms at peak hours) |
+| `EMB.STATS` | `dispatch_wait_us`, `run_us`, `sessions_busy` | Present per model; wait ≈ 0 when serial |
 
 ## Non-goals
 

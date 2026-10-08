@@ -102,11 +102,74 @@ models:
 | `preload` | `false` | Load model at startup instead of on first request |
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
 | `workers` | auto-tuned | Number of worker goroutines |
-| `intra_op_threads` | `cores−2` | ONNX intra-op threads per session. Defaults to `cores−2` to reserve cores for request parsing/dispatch; set explicitly to override |
+| `script_workers` | auto-tuned | Named-tensor sessions for scripted models (`EMB.EVAL`/`EMB.EVSHA`). `0`/absent auto-tunes from RAM and model size (min 1). With `intra_op_threads` unset, each session gets `max(1, (cores−2)/script_workers)` threads so `sessions × threads ≈ cores` |
+| `script_callers_per_session` | `4` | Concurrent evaluations allowed per scripted session (the analyzed sweet spot). ORT sessions are safe for concurrent `Run`, so a lone scripted model is not serialized behind one session. `0`/absent = 4; set `1` to serialize |
+| `allow_spinning` | follows sharing | Maps to ORT `session.intra_op.allow_spinning`. When unset, scripted sessions spin off while shared (`script_callers_per_session > 1`) so concurrent callers stop fighting for cores, and keep ORT's default otherwise. Embedding and image sessions keep ORT's default unless set explicitly |
+| `intra_op_threads` | `cores−2` (shared) | ONNX intra-op threads per session. Embedding and image sessions use `cores−2`; scripted sessions divide that budget across `script_workers` (`max(1, (cores−2)/script_workers)`). An explicit value is honoured verbatim for every path. At boot the server logs a warning when the total budget (`sessions × threads` across all models) exceeds the core count |
 | `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
 | `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
 | `image_preload` | `false` | Warm the image named-session pool at startup instead of on first `EMB.IMG` |
 | `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies. Batching is batch-determinism gated automatically (no flag): dynamic-quantized int8 graphs degrade to the worker pool at load (see *Batch determinism*) |
+
+## Thread budget
+
+ONNX Runtime allocates `intra_op_threads` per session. Summed across every
+session of every model, that budget should stay near the core count, or the
+sessions contend for the CPU and throughput falls while tail latency rises.
+The rule is:
+
+```
+workers × threads ≈ cores
+```
+
+When `intra_op_threads` is unset, scripted sessions divide the `cores−2` budget
+across `script_workers`: `max(1, (cores−2)/script_workers)`. An explicit
+`intra_op_threads` is honoured verbatim for every path, and the server warns at
+boot when the total configured budget exceeds the core count, naming each
+contributing model with its session and thread counts. The warning never
+changes configuration.
+
+Measured on the reference host (10 cores, GLiNER2 int8, 36-text corpus, no
+reply cache) at concurrency 8:
+
+| workers × threads | serial p50 | c=4 p50 | req/s | p99 |
+|---|---|---|---|---|
+| 8 × 1 | 38 ms | 39 ms | 184 | 72 ms |
+| 4 × 2 | 23.6 ms | 26.7 ms | 143 | 103 ms |
+| 2 × 4 | 16 ms | 38 ms | 98 | 154 ms |
+| 1 × 8 | 13–17 ms | 58 ms | 63 | 268 ms |
+| 4 × default (8) | 29 ms | – | 24 | 865 ms |
+
+`8×1` gives the best tail and throughput; `4×2` trades some of that for a
+better serial latency. Pick from the production `dispatch_wait_us` and `run_us`
+counters (see [operations](./operations.md)), not from the laptop numbers
+above.
+
+## Shared scripted sessions and spinning
+
+Out of the box, each scripted session is shared by `script_callers_per_session`
+(4) evaluations, and spinning is off while a session is shared. A lone scripted
+model therefore does not serialize behind one session: measured on the
+reference host, one session × 8 threads with 4 callers and spinning off gives
+146 req/s where the old `cores−2`-per-session default gave 24. Set
+`allow_spinning: true` or `script_callers_per_session: 1` to get ORT's spinning
+back (about 1 ms better serial latency for a single caller).
+
+The recommended layout, which the defaults produce for `script_workers: 2` on
+10 cores, is **2 sessions × 4 threads, 4 callers, spinning off**. Measured on
+the same host (10 cores, GLiNER2 int8, 36 texts) with 8 intra-op threads total:
+
+| layout | c=1 p50 | c=4 p50 | req/s | sessions |
+|---|---|---|---|---|
+| 4×2 (default before this change) | 23.0 ms | 29.2 ms | 133 | 4 |
+| 4×2, spinning off | 24.4 ms | 27.9 ms | 145 | 4 |
+| **2×4, 4 callers, spinning off** | 19.4 ms | 26.7 ms | 164 | 2 |
+| 1×8, 4 callers, spinning off | 18.7 ms | 29.5 ms | 146 | 1 |
+| 2×4, 4 callers, spinning on | 15.8 ms | 30.0 ms | 118 | 2 |
+
+`script_callers_per_session` does **not** add sessions — the thread budget above
+counts distinct sessions, so sharing sessions is the memory-for-parallelism
+saving, not a way to exceed the core budget.
 
 ## Image models and preprocessing parity
 

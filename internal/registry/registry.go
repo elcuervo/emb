@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/hfhub"
@@ -31,7 +32,7 @@ import (
 //	named-tensor script sessions → ModelEntry → Registry.Close → effectiveEmbeddingSessions (default) or explicit script_workers
 //	shared tokenizer            → ModelEntry → Registry.Close (exactly once) → 1 per model
 //	image sessions              → ModelEntry → Registry.Close / closeImageSessions → image pool size
-//	output tensors              → onnx.NamedRuntimeSession.outCache → eviction or Close → maxCachedOutputShapes
+//	per-call output tensors      → onnx.NamedRuntimeSession.RunNamed → destroyed after each run → len(graph outputs)
 //	script source / bytecode    → scriptCache / Compiler → eviction or EMB.SCRIPT FLUSH → per-model caps
 //
 // Every owner releases on close; a model whose resources were never created
@@ -67,6 +68,9 @@ type ModelEntry struct {
 	scriptOnce   sync.Once
 	scriptRes    *ScriptResources
 	scriptResErr error
+	// scriptResPtr publishes scriptRes atomically, so observability can read
+	// the dispatch counters without forcing a lazy open or racing the Once.
+	scriptResPtr atomic.Pointer[ScriptResources]
 	// scripted-evaluation counters and resource footprint, reported by
 	// EMB.STATS/EMB.INFO (see ScriptStats / ScriptFootprint). Updated
 	// atomically and never reset.
@@ -150,21 +154,56 @@ func (e *ModelEntry) LoadedPool() *pipeline.Pool {
 }
 
 // ScriptResources bundles what a scripted evaluation needs for a model: a
-// pool of named-tensor sessions (parallel scripted executions, round-robin)
-// and the tokenizer (its plain/offsets/word-level capabilities are
-// type-asserted when building the host binding).
+// pool of named-tensor sessions and the tokenizer (its plain/offsets/word-level
+// capabilities are type-asserted when building the host binding).
 type ScriptResources struct {
-	sessions  []onnx.NamedSession
+	sessions []onnx.NamedSession
+	// idle hands out whichever session is free first (a buffered channel
+	// seeded with every session), so a call never queues behind a busy session
+	// while another sits idle.
+	idle      chan onnx.NamedSession
 	next      atomic.Uint64
 	Tokenizer tokenizer.Tokenizer
 	// SplitBatch is set for graphs with dynamic activation quantization, whose
 	// output depends on batch composition and padding: emb.run_batch then runs
 	// each item on its own instead of one padded run.
 	SplitBatch bool
+
+	// Dispatch observability (EMB.STATS/EMB.INFO): cumulative wait for a free
+	// session, cumulative ORT run time, run count, and the live busy gauge.
+	dispatchWaitUs atomic.Int64
+	runUs          atomic.Int64
+	runs           atomic.Int64
+	busy           atomic.Int64
+}
+
+// RunNamed runs an inference on the first session that is free. Arrival order
+// is the channel's FIFO handoff: a waiting call takes the next session
+// returned, and a session is never skipped while idle.
+func (r *ScriptResources) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+	waitStart := time.Now()
+	sess := <-r.idle
+	r.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
+	r.busy.Add(1)
+	runStart := time.Now()
+	out, err := sess.RunNamed(inputs)
+	r.runUs.Add(time.Since(runStart).Microseconds())
+	r.runs.Add(1)
+	r.busy.Add(-1)
+	r.idle <- sess
+	return out, err
+}
+
+// DispatchCounters returns the script path's cumulative dispatch wait and ORT
+// run microseconds, run count, and live busy gauge.
+func (r *ScriptResources) DispatchCounters() (waitUs, runUs, runs, busy int64) {
+	return r.dispatchWaitUs.Load(), r.runUs.Load(), r.runs.Load(), r.busy.Load()
 }
 
 // Session returns the next named-tensor session for a scripted run,
-// round-robin across the pool (each session serializes its own runs).
+// round-robin across the pool (each session serializes its own runs). It stays
+// for callers that need a specific instance (Close, tests); scripted dispatch
+// uses RunNamed.
 func (r *ScriptResources) Session() onnx.NamedSession {
 	i := r.next.Add(1) - 1
 	return r.sessions[i%uint64(len(r.sessions))]
@@ -230,11 +269,124 @@ func New() *Registry {
 // parsing/dispatch so a busy request path cannot starve inference (and vice versa).
 // Machines with ≤ 2 cores floor at 1.
 func defaultIntraOpThreads() int {
-	cores := runtime.GOMAXPROCS(0)
-	if cores <= 2 {
-		return 1
+	return scriptIntraOpThreads(0, 1, runtime.GOMAXPROCS(0))
+}
+
+// scriptIntraOpThreads returns the intra-op thread count for each script
+// session: the explicit configured value when set, else the cores−2 budget
+// divided across the sessions (at least 1). With one session it equals
+// defaultIntraOpThreads, so a single-session model is unchanged.
+func scriptIntraOpThreads(configured, sessions, cores int) int {
+	if configured > 0 {
+		return configured
 	}
-	return cores - 2
+	threads := cores - 2
+	if cores <= 2 {
+		threads = 1
+	}
+	if sessions > 1 {
+		threads = max(1, threads/sessions)
+	}
+	return threads
+}
+
+// threadUse is one path's share of a model's ORT intra-op thread budget.
+type threadUse struct {
+	path     string
+	sessions int
+	threads  int
+}
+
+// configuredScriptSessions returns how many scripted sessions the model will
+// open, derived from configuration without opening anything. Zero means the
+// model has no scripted surface configured.
+func (e *ModelEntry) configuredScriptSessions() int {
+	if e.cfg.ScriptWorkers <= 0 && !e.cfg.ScriptPreload && len(e.cfg.Scripts) == 0 {
+		return 0
+	}
+	n := e.cfg.ScriptWorkers
+	if n <= 0 {
+		n = effectiveEmbeddingSessions(&e.cfg)
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// threadUses derives each path's session and per-session thread counts from
+// configuration only. Script sessions use the divided default; embedding and
+// image sessions use the configured (or default) intra_op_threads.
+func (e *ModelEntry) threadUses() []threadUse {
+	th := e.cfg.IntraOpThreads
+	if th <= 0 {
+		th = defaultIntraOpThreads()
+	}
+	var uses []threadUse
+	if e.Embeddable() {
+		uses = append(uses, threadUse{"embed", effectiveEmbeddingSessions(&e.cfg), th})
+	}
+	if n := e.configuredScriptSessions(); n > 0 {
+		st := th
+		if e.cfg.IntraOpThreads <= 0 && n > 1 {
+			st = max(1, th/n)
+		}
+		uses = append(uses, threadUse{"script", n, st})
+	}
+	if e.cfg.Image != nil {
+		n := autoTuneWorkers(e.cfg.ONNX, 0)
+		if n < 1 {
+			n = 1
+		}
+		uses = append(uses, threadUse{"image", n, th})
+	}
+	return uses
+}
+
+// ThreadBudgetEntry is one model/path group's contribution to the intra-op
+// thread budget.
+type ThreadBudgetEntry struct {
+	Model    string
+	Path     string
+	Sessions int
+	Threads  int
+}
+
+// OversubscribedThreads returns every model/path session group when the total
+// configured intra-op thread budget (sessions × threads, across embedding,
+// image and script) exceeds cores, or nil when it is within budget. It never
+// changes configuration.
+func OversubscribedThreads(entries []*ModelEntry, cores int) []ThreadBudgetEntry {
+	var out []ThreadBudgetEntry
+	total := 0
+	for _, e := range entries {
+		for _, u := range e.threadUses() {
+			total += u.sessions * u.threads
+			out = append(out, ThreadBudgetEntry{e.Name, u.path, u.sessions, u.threads})
+		}
+	}
+	if total <= cores {
+		return nil
+	}
+	return out
+}
+
+// WarnThreadBudget logs a boot warning when the configured intra-op thread
+// budget exceeds the core count, naming each contributing model with its
+// session and thread counts. It never changes configuration.
+func WarnThreadBudget(entries []*ModelEntry, cores int) {
+	overs := OversubscribedThreads(entries, cores)
+	if overs == nil {
+		return
+	}
+	parts := make([]string, 0, len(overs))
+	total := 0
+	for _, o := range overs {
+		total += o.Sessions * o.Threads
+		parts = append(parts, fmt.Sprintf("%s/%s=%d sessions × %d threads", o.Model, o.Path, o.Sessions, o.Threads))
+	}
+	log.Printf("WARNING: intra-op thread budget oversubscribed: %s = %d > %d cores; set intra_op_threads or reduce workers/script_workers",
+		strings.Join(parts, ", "), total, cores)
 }
 
 func autoTuneWorkers(modelPath string, maxWorkers int) int {
@@ -305,8 +457,8 @@ func effectiveEmbeddingSessions(cfg *config.ModelConfig) int {
 // newRuntimeSession creates one inference session from weights bytes. It is a
 // package var so tests can inject counting/batch-sensitive fakes and prove
 // the probe runs exactly once per model lifetime.
-var newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int) (onnx.Session, error) {
-	return onnx.NewRuntimeSessionFromBytes(data, inputNames, outputNames, dim, rank, intraOpThreads, interOpThreads, execMode)
+var newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
+	return onnx.NewRuntimeSessionFromBytes(data, inputNames, outputNames, dim, rank, intraOpThreads, interOpThreads, execMode, allowSpinning)
 }
 
 func (e *ModelEntry) ensurePool() error {
@@ -389,6 +541,7 @@ func (e *ModelEntry) ensurePool() error {
 			intraThreads,
 			cfg.InterOpThreads,
 			execMode,
+			cfg.AllowsSpinning(),
 		)
 	}
 
@@ -449,8 +602,8 @@ func (e *ModelEntry) ensurePool() error {
 // newNamedSession creates one named-tensor session for the scripted/image
 // paths. It is a package var so tests can inject a partial-construction failure
 // and count that already-opened sessions are closed.
-var newNamedSession = func(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads, execMode int) (onnx.NamedSession, error) {
-	return onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, intraOpThreads, interOpThreads, execMode)
+var newNamedSession = func(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.NamedSession, error) {
+	return onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, intraOpThreads, interOpThreads, execMode, allowSpinning)
 }
 
 // ScriptResources lazily opens the generic named-tensor session and the
@@ -461,8 +614,21 @@ var newNamedSession = func(data []byte, inputNames, outputNames []string, intraO
 func (e *ModelEntry) ScriptResources() (*ScriptResources, error) {
 	e.scriptOnce.Do(func() {
 		e.scriptRes, e.scriptResErr = e.openScriptResources()
+		if e.scriptRes != nil {
+			e.scriptResPtr.Store(e.scriptRes)
+		}
 	})
 	return e.scriptRes, e.scriptResErr
+}
+
+// ScriptDispatch reports the script path's cumulative dispatch wait and run
+// microseconds, run count and live busy gauge, without opening resources.
+// Zero values mean the model has not run a scripted inference yet.
+func (e *ModelEntry) ScriptDispatch() (waitUs, runUs, runs, busy int64) {
+	if res := e.scriptResPtr.Load(); res != nil {
+		return res.DispatchCounters()
+	}
+	return 0, 0, 0, 0
 }
 
 func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
@@ -494,10 +660,6 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 		return nil, fmt.Errorf("reading model file for %q: %w", e.Name, err)
 	}
 
-	intraThreads := cfg.IntraOpThreads
-	if intraThreads <= 0 {
-		intraThreads = defaultIntraOpThreads()
-	}
 	execMode := onnx.ExecModeSequential
 	if cfg.ExecutionMode == "parallel" {
 		execMode = onnx.ExecModeParallel
@@ -515,10 +677,16 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	if numSessions < 1 {
 		numSessions = 1
 	}
+
+	// Unset intra_op_threads divides the cores−2 budget across the sessions,
+	// so workers × threads stays near the core count instead of multiplying it.
+	// An explicit value is honoured verbatim.
+	intraThreads := scriptIntraOpThreads(cfg.IntraOpThreads, numSessions, runtime.GOMAXPROCS(0))
+
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
 		sess, err := newNamedSession(
-			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
+			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, cfg.ScriptAllowsSpinning(),
 		)
 		if err != nil {
 			for _, opened := range sessions {
@@ -536,7 +704,24 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 
 	e.scriptSessions.Store(int64(len(sessions)))
 	e.scriptTokenizer.Store(true)
-	return &ScriptResources{sessions: sessions, Tokenizer: tok, SplitBatch: split}, nil
+	return &ScriptResources{sessions: sessions, idle: idleSessions(sessions, cfg.ScriptCallers()), Tokenizer: tok, SplitBatch: split}, nil
+}
+
+// idleSessions seeds the idle dispatch channel with every session `callers`
+// times, so up to that many evaluations run concurrently on each session.
+// ORT sessions are safe for concurrent Run and each call allocates its own
+// outputs.
+func idleSessions(sessions []onnx.NamedSession, callers int) chan onnx.NamedSession {
+	if callers < 1 {
+		callers = 1
+	}
+	idle := make(chan onnx.NamedSession, len(sessions)*callers)
+	for c := 0; c < callers; c++ {
+		for _, sess := range sessions {
+			idle <- sess
+		}
+	}
+	return idle
 }
 
 func downloadModel(cfg *config.ModelConfig, name string) error {

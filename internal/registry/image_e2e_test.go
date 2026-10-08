@@ -75,7 +75,7 @@ func newVisionImageResources(t *testing.T, dir string, image *config.ImageConfig
 	}
 	sort.Strings(outputNames)
 
-	sess, err := onnx.NewNamedRuntimeSessionFromBytes(modelData, inputNames, outputNames, 1, 1, onnx.ExecModeSequential)
+	sess, err := onnx.NewNamedRuntimeSessionFromBytes(modelData, inputNames, outputNames, 1, 1, onnx.ExecModeSequential, true)
 	if err != nil {
 		t.Fatalf("opening vision session: %v", err)
 	}
