@@ -2,8 +2,6 @@ package onnx
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
@@ -51,37 +49,27 @@ type NamedSession interface {
 
 // NamedRuntimeSession is a generic ONNX session that runs arbitrary named
 // input/output tensor sets, distinct from the pooled RuntimeSession used by
-// the embedding pipeline. ORT sessions serialize their runs, so an instance
-// must not run concurrently (the embedded mutex queues concurrent callers).
+// the embedding pipeline. ORT sessions are safe for concurrent Run calls, so a
+// session supports concurrent callers (bounded by
+// script_callers_per_session); outputs are allocated per call.
 //
-// Ownership: the session owns its output-tensor cache (outCache) and the ORT
-// session handle. Both are released by Close (idempotent); an evicted cache
-// entry has its tensors destroyed rather than left to the garbage collector.
-// The cache is bounded by maxCachedOutputShapes.
+// Ownership: the session owns the ORT session handle, released by Close
+// (idempotent). Callers must not Close while a Run is in flight (the registry
+// drains evaluations before closing).
 type NamedRuntimeSession struct {
 	session    *ort.DynamicAdvancedSession
 	inputNames []string
 	outNames   []string
-	mu         sync.Mutex
-	closed     bool
-	// outCache reuses output tensors across calls whose input shapes match a
-	// previous call, so a hot loop (repeat evaluations of the same shape) does
-	// not pay a per-call output allocation and ORT memory-pattern re-plan. It
-	// is bounded and cleared on Close. When a cached buffer does not fit a new
-	// call's output shape, the run is retried with auto-allocation and the
-	// entry dropped, so correctness never depends on the heuristic.
-	outCache map[string][]ort.Value
+	closeOnce  sync.Once
+	closeErr   error
 }
-
-// maxCachedOutputShapes bounds the per-session output-tensor cache. Each entry
-// retains one full output set for a given input-shape signature.
-const maxCachedOutputShapes = 4
 
 // NewNamedRuntimeSessionFromBytes opens a scripted-model session from ONNX
 // bytes. The intra/inter-op thread and execution-mode options mirror
-// NewRuntimeSessionFromBytes.
-func NewNamedRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads int, execMode int) (*NamedRuntimeSession, error) {
-	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode)
+// NewRuntimeSessionFromBytes. allowSpinning maps to ORT
+// session.intra_op.allow_spinning.
+func NewNamedRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*NamedRuntimeSession, error) {
+	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode, allowSpinning)
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +89,9 @@ func NewNamedRuntimeSessionFromBytes(data []byte, inputNames, outputNames []stri
 // RunNamed runs the session with the given named inputs (matched by name
 // against the graph's registered inputs, order-independent) and returns every
 // registered output keyed by name. Missing or unknown inputs are errors, as
-// are duplicate names.
+// are duplicate names. Outputs are allocated per call, so concurrent callers
+// do not share buffers.
 func (s *NamedRuntimeSession) RunNamed(inputs []NamedTensor) (map[string]NamedTensor, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	byName := make(map[string]NamedTensor, len(inputs))
 	for _, in := range inputs {
 		if _, dup := byName[in.Name]; dup {
@@ -134,37 +120,12 @@ func (s *NamedRuntimeSession) RunNamed(inputs []NamedTensor) (map[string]NamedTe
 		}
 	}()
 
-	// Reuse the output tensors allocated for an identical input-shape signature;
-	// ORT writes into them directly, skipping per-call allocation.
-	sig := inputShapeSignature(s.inputNames, inputs)
-	var outputs []ort.Value
-	cached := false
-	if c, ok := s.outCache[sig]; ok && len(c) == len(s.outNames) {
-		outputs, cached = c, true
-	} else {
-		outputs = make([]ort.Value, len(s.outNames))
-	}
-
+	outputs := make([]ort.Value, len(s.outNames))
 	if err := s.session.Run(values, outputs); err != nil {
-		if cached {
-			// The cached buffers did not fit this call's output shapes (the
-			// signature did not capture the difference): drop them and retry
-			// with ORT auto-allocation.
-			s.dropOutputs(sig)
-			outputs = make([]ort.Value, len(s.outNames))
-			if retryErr := s.session.Run(values, outputs); retryErr != nil {
-				destroyValues(outputs)
-				return nil, fmt.Errorf("onnx run: %w", retryErr)
-			}
-			cached = false
-		} else {
-			destroyValues(outputs)
-			return nil, fmt.Errorf("onnx run: %w", err)
-		}
+		destroyValues(outputs)
+		return nil, fmt.Errorf("onnx run: %w", err)
 	}
-	if !cached {
-		s.cacheOutputs(sig, outputs)
-	}
+	defer destroyValues(outputs)
 
 	result := make(map[string]NamedTensor, len(s.outNames))
 	for i, name := range s.outNames {
@@ -177,62 +138,8 @@ func (s *NamedRuntimeSession) RunNamed(inputs []NamedTensor) (map[string]NamedTe
 	return result, nil
 }
 
-// inputShapeSignature identifies a call by the shapes of its inputs, in the
-// graph's registered input order. It is the key for the output-tensor cache.
-func inputShapeSignature(names []string, inputs []NamedTensor) string {
-	byName := make(map[string][]int64, len(inputs))
-	for _, in := range inputs {
-		byName[in.Name] = in.Shape
-	}
-	var b strings.Builder
-	for _, n := range names {
-		b.WriteString(n)
-		for _, d := range byName[n] {
-			b.WriteByte(',')
-			b.WriteString(strconv.FormatInt(d, 10))
-		}
-		b.WriteByte(';')
-	}
-	return b.String()
-}
-
-// cacheOutputs takes ownership of a freshly allocated output set, evicting a
-// deterministic entry when the cache is full.
-func (s *NamedRuntimeSession) cacheOutputs(sig string, outputs []ort.Value) {
-	for _, v := range outputs {
-		if v == nil {
-			return // auto-allocation failed to fill; nothing to cache
-		}
-	}
-	if s.outCache == nil {
-		s.outCache = make(map[string][]ort.Value, maxCachedOutputShapes)
-	}
-	if _, exists := s.outCache[sig]; exists {
-		s.dropOutputs(sig)
-	}
-	if len(s.outCache) >= maxCachedOutputShapes {
-		oldest := ""
-		for k := range s.outCache {
-			if oldest == "" || k < oldest {
-				oldest = k
-			}
-		}
-		s.dropOutputs(oldest)
-	}
-	s.outCache[sig] = outputs
-}
-
-// dropOutputs destroys and forgets one cached output set.
-func (s *NamedRuntimeSession) dropOutputs(sig string) {
-	if s.outCache == nil {
-		return
-	}
-	destroyValues(s.outCache[sig])
-	delete(s.outCache, sig)
-}
-
-// destroyValue releases one ORT value. It is a package var so the eviction and
-// close paths can be tested with counting fakes without an ONNX environment.
+// destroyValue releases one ORT value. It is a package var so the release path
+// can be tested with counting fakes without an ONNX environment.
 var destroyValue = func(v ort.Value) { _ = v.Destroy() }
 
 func destroyValues(values []ort.Value) {
@@ -243,26 +150,11 @@ func destroyValues(values []ort.Value) {
 	}
 }
 
-// CachedOutputSets reports how many output-shape signatures the session is
-// currently retaining (bounded by maxCachedOutputShapes).
-func (s *NamedRuntimeSession) CachedOutputSets() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.outCache)
-}
-
 func (s *NamedRuntimeSession) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return nil
-	}
-	s.closed = true
-	for sig := range s.outCache {
-		s.dropOutputs(sig)
-	}
-	s.outCache = nil
-	return s.session.Destroy()
+	s.closeOnce.Do(func() {
+		s.closeErr = s.session.Destroy()
+	})
+	return s.closeErr
 }
 
 func namedTensorValue(t NamedTensor) (ort.Value, error) {

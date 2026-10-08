@@ -22,7 +22,7 @@ func BenchmarkRuntimeSessionRun(b *testing.B) {
 		data,
 		[]string{"input_ids", "attention_mask", "token_type_ids"},
 		[]string{"last_hidden_state"},
-		384, 3, 1, 2, ExecModeSequential,
+		384, 3, 1, 2, ExecModeSequential, true,
 	)
 	if err != nil {
 		b.Fatal(err)

@@ -35,8 +35,8 @@ type RuntimeSession struct {
 	outFlat   int
 }
 
-func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int) (*RuntimeSession, error) {
-	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode)
+func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*RuntimeSession, error) {
+	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode, allowSpinning)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, d
 	return newRuntimeSession(session, inputNames, dim, outputRank), nil
 }
 
-func newSessionOptions(intraOpThreads, interOpThreads int, execMode int) (*ort.SessionOptions, error) {
+func newSessionOptions(intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*ort.SessionOptions, error) {
 	opts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("creating session options: %w", err)
@@ -71,6 +71,11 @@ func newSessionOptions(intraOpThreads, interOpThreads int, execMode int) (*ort.S
 		// Only opt into parallel graph execution explicitly; sequential is the
 		// ORT default and the documented fit for mostly-serial encoder graphs.
 		_ = opts.SetExecutionMode(ort.ExecutionModeParallel)
+	}
+	// allow_spinning: false shares cores better among concurrent callers of one
+	// session. Only set it when disabled, so unset keeps ORT's own default.
+	if !allowSpinning {
+		_ = opts.AddSessionConfigEntry("session.intra_op.allow_spinning", "0")
 	}
 	_ = opts.SetLogSeverityLevel(ort.LoggingLevelFatal)
 

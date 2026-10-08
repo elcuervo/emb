@@ -65,6 +65,7 @@ func run() error {
 		modelCount++
 	}
 	reg.SetModelCount(modelCount)
+	registry.WarnThreadBudget(reg.List(), registry.EffectiveNumCPU())
 
 	var tlsConfig *tls.Config
 	if fc.TLSCert != "" && fc.TLSKey != "" {

@@ -334,6 +334,156 @@ Caveat: the second model leg was measured with `minilm` (fp32, 3D) as an availab
 stand-in; the operator's custom `e5` export should be substituted for the production twin.
 With the LRU cache enabled and repeated texts, cache hits dominate regardless.
 
+## Scripted models: dispatch, thread budget and spinning (GLiNER2)
+
+Reference host: Apple M4, 10 cores, 24 GB, macOS 26.6.2. Corpus:
+`bench/script/gliner-corpus.txt` (36 texts). The shape and profile runs below
+use the shape harness's default five labels (`PERSON ORG PRODUCT LOCATION
+EVENT`); the A/B matrix uses `run.sh`'s default eight (`… FEATURE CURRENCY
+DATE`). Reply cache off. The baseline is the pre-change binary built at `HEAD`;
+the candidate is this change. Measured with
+`just bench-script <base-bin> <cand-bin>`, which runs `cmd/evalbench`
+interleaved and fails on any reply difference.
+
+With `intra_op_threads` unset, `script_workers` sessions divide the cores−2
+budget, each session defaults to 4 concurrent callers, and spinning is off
+while a session is shared (see `script_callers_per_session` / `allow_spinning`).
+
+| `script_workers` | binary | serial p50 | c=4 p50 | c=8 p50 | c=8 p99 | c=8 req/s |
+|---|---|---|---|---|---|---|
+| 1 (unset default) | baseline | 15.3 ms | 57.8 ms | 116.0 ms | 128.5 ms | 68.7 |
+| 1 | candidate | 15.5 ms | 28.1 ms | 57.5 ms | 65.4 ms | 137.8 |
+| 2 (recommended) | baseline | 20.6 ms | 97.4 ms | 193.9 ms | 314.2 ms | 40.5 |
+| 2 | candidate | 15.1 ms | 29.0 ms | 49.4 ms | 105.8 ms | 145.5 |
+| 4 | baseline | 21.3 ms | 135.7 ms | 218.3 ms | 528.1 ms | 33.4 |
+| 4 | candidate | 21.3 ms | 31.7 ms | 49.3 ms | 97.9 ms | 149.4 |
+| 8 (= 8×1) | baseline | 21.4 ms | 151.1 ms | 276.9 ms | 652.7 ms | 28.0 |
+| 8 | candidate | 35.0 ms | 37.7 ms | 55.3 ms | 74.4 ms | 141.6 |
+
+- Replies are byte-identical for every layout and every concurrency level.
+- **Out of the box** (`script_workers` and every other knob unset → 1 session ×
+  8 threads, 4 callers, spinning off) the candidate runs 137.8 req/s at c=8
+  with p99 65 ms, up from 68.7 req/s / 129 ms, serial p50 within 2%.
+- **2×4 is the recommended layout**: serial p50 15.1 ms, c=4 p50 29.0 ms,
+  c=8 p99 105.8 ms (≤ 110 ms), 145.5 req/s. It beats the old 4×2 default
+  (`script_workers: 4`, `intra_op_threads` unset) at 3.5–4.5× the throughput.
+- 8×1 has the best tail (74 ms) and c=16 throughput (157 req/s) but the worst
+  serial p50 (35 ms); 2×4 balances both.
+
+### Traffic-shaped autotuning
+
+The runtime controller classifies each scripted model's traffic and adapts the
+per-session concurrency allowance within the configured cap: it expands straight
+to the cap on the first `throughput` window and halves only after ten
+consecutive `latency` windows, so a burst never queues behind a low allowance
+and a short serial lull never starves the next burst. Driven with
+`SHAPE=mixed PHASE=12s BURST=8 just bench-shape` (GLiNER2, `script_workers: 4`):
+
+| phase | concurrency | req/s | classified | allowance |
+|---|---|---|---|---|
+| serial | 1 | 48.0 | `idle` | 4 → 2 |
+| burst | 8 | 149.1 | `saturated` | 2 → 4 |
+| serial | 1 | 47.0 | `latency` | 4 → 2 |
+
+The burst window reached the CPU-saturation gate after expanding, so the
+controller held at the cap and would log a provisioning recommendation rather
+than growing past it (more concurrency cannot create CPU). The serial phases
+halve the allowance after ten latency windows; idle windows hold.
+
+#### The control loop, sampled per second
+
+Sampling `EMB.INFO gliner2` once a second while
+`SHAPE=mixed PHASE=15s BURST=8 WORKERS=4 just bench-shape` drives the phases
+(five labels, `script_workers: 4`, so the cap is 4):
+
+| t | class | inflight | allowance |
+|---|---|---|---|
+| 5 s | `latency` | 1 | 4 |
+| 10 s | `latency` | 1 | **2** |
+| 15 s | `latency` | 8 | 2 |
+| 16 s | `throughput` | 7 | **4** |
+| 17 s | `saturated` | 7 | 4 |
+| 30 s | `saturated` | 1 | 4 |
+| 31 s | `latency` | 0 | 4 |
+| 40 s | `latency` | 1 | **2** |
+| 45 s | `latency` | 8 | 2 |
+| 46 s | `throughput` | 8 | **4** |
+| 60 s | `saturated` | 1 | 4 |
+| 61 s | `latency` | 1 | 4 |
+| 70 s | `latency` | 1 | **2** |
+
+The two cycles are identical: the allowance shrinks after ten sustained `latency`
+windows, the first burst window re-expands it to the cap, and `saturated` holds
+it there while `inflight` sits at the eight concurrent requests.
+
+#### Out of the box and capacity profiles
+
+Out of the box (`script_workers: 0`, so the pool size is auto-derived; eight
+labels), two interleaved samples, `N=200`, `CONCS=1,8`:
+
+| metric | pre-change | candidate |
+|---|---|---|
+| serial p50 | 18.43 / 18.04 ms | 19.21 / 18.33 ms |
+| c=8 req/s | 44.7 / 59.0 | **100.5 / 112.3** |
+| c=8 p99 | 704 / 140 ms | 123 / 85 ms |
+
+Reproduce with
+`WORKERS=0 CONCS=1,8 N=200 SAMPLES=2 just bench-script <base-bin> <cand-bin>`;
+replies are byte-identical across both samples. The controller itself is
+neutral against the static cap it replaced — with `script_workers: 4` and five
+labels, `CONCS=1,8 N=150`:
+
+| arm | c=1 req/s | serial p50 | c=8 req/s | c=8 p50 | c=8 p99 |
+|---|---|---|---|---|---|
+| `autotune: off` (cap fixed) | 46.9 | 21.14 ms | 150.2 | 50.74 ms | 80.68 ms |
+| `capacity: auto` | 46.9 | 21.03 ms | 151.8 | 49.85 ms | 73.04 ms |
+| `capacity: throughput` | 46.8 | 21.20 ms | 149.5 | 51.45 ms | 84.19 ms |
+| `capacity: latency` | 49.3 | 20.16 ms | 121.6 | 65.00 ms | 75.19 ms |
+
+Reproduce a row with `capacity: <profile>` in the generated config (the harness
+reads `CAPACITY`/`AUTOTUNE`):
+
+```bash
+WORKERS=4 ARGS="PERSON ORG PRODUCT LOCATION EVENT" CAPACITY=latency AUTOTUNE=auto \
+  CONCS=1,8 N=150 just bench-script <cand-bin> <cand-bin>
+```
+
+`auto` and `throughput` match the fixed-cap arm within noise; `latency` buys
+~5% on serial p50 for ~20% of burst throughput, which is the trade the profile
+names. The controller's own contribution is adaptation, not throughput.
+
+#### Guardrails
+
+The same runs assert the safety properties:
+
+- **Reply identity** — `run.sh` interleaves the two binaries, dumps
+  request-ordered replies, and exits non-zero on any difference; both out-of-the-box
+  samples report `OK: replies identical`.
+- **Ruby client** — `gems/emb`'s suite passes against the adaptive server
+  (203 examples, 0 failures) with `EMB.READY` answering `+OK`.
+- **CPU gate** — entering `saturated` logs one provisioning recommendation per
+  model (`… script inference is CPU-saturated; consider raising script_workers
+  or intra_op_threads`) and the allowance holds instead of growing.
+- **Kill switch** — `autotune: off` pins the allowance at the configured value.
+
+### Unbatched embedding pool (siglip2)
+
+siglip2 `text_model_int8.onnx`, fixed `max_length: 64`, `preload: true`,
+`batching: {timeout: 0}`, 4 workers × 2 threads. Baseline vs candidate, EMB on
+the same corpus:
+
+| concurrency | binary | p50 | p90 | p99 | req/s |
+|---|---|---|---|---|---|
+| 1 | baseline | 31.73 ms | 31.84 ms | 32.38 ms | 31.4 |
+| 1 | candidate | 31.73 ms | 31.82 ms | 32.09 ms | 31.5 |
+| 8 | baseline | 107.22 ms | 130.32 ms | 144.04 ms | 74.8 |
+| 8 | candidate | 105.19 ms | 114.04 ms | 117.38 ms | 75.1 |
+| 16 | baseline | 218.11 ms | 260.47 ms | 282.58 ms | 73.9 |
+| 16 | candidate | 219.74 ms | 228.34 ms | 242.00 ms | 72.4 |
+
+Serial is unchanged and embeddings are byte-identical; p99 improves 18% at c=8
+and 14% at c=16, so the work-conserving pool is kept.
+
 ## Client-side (Ruby)
 
 The Ruby benchmarks run the end-to-end harness against live server(s) via

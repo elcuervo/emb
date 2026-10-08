@@ -53,6 +53,25 @@ counters, and the effective
 check to classify a CPU/stuck-traffic incident as volume, saturation, or
 churn (and to confirm no memory leak: RSS/goroutines flat between polls).
 
+### Dispatch and run counters
+
+`EMB.INFO <model>` and the per-model lines of `EMB.STATS` report, separately for
+the script path (`script_*`) and the embedding path (`embed_*`):
+
+- `dispatch_wait_us` — cumulative time requests spent waiting for a free
+  session or worker
+- `run_us` — cumulative ORT inference time
+- `runs` — inference runs
+- `sessions_busy` / `sessions_total` — live session occupancy
+
+All are cumulative except the gauges, and reads are atomic. Derive an average
+from two reads: `(wait_us₂ − wait_us₁) / (runs₂ − runs₁)` is the mean dispatch
+wait per run, and the same for `run_us`. A serial workload keeps the mean wait
+near zero; when concurrency exceeds `sessions_total`, the wait grows and
+`sessions_busy` sits at `sessions_total`. A rising `run_us` at flat load points
+at CPU contention (see the thread budget in
+[configuration](./configuration.md#thread-budget)).
+
 `MONITOR [seq] [limit]` exposes the last completed-request events (up to 8192,
 oldest evicted) for per-request visibility: latency percentiles, error and
 volume attribution per model. It is named after Redis's `MONITOR` but is a
@@ -77,6 +96,26 @@ and `CONFIG SET` tunes it at runtime — including **live cache resizing**
 new connections only). Read-only parameters (listen address, TLS, models) are
 reported by `GET` but rejected by `SET`. Both require authentication, matching
 Redis semantics.
+
+### Autotune state
+
+`EMB.INFO <model>` also reports the script path's runtime autotune state:
+
+- `script_traffic_class` — `idle`, `latency`, `throughput`, or `saturated`
+- `script_inflight` — evaluations running right now
+- `script_concurrency_current` — effective per-session allowance
+- `script_concurrency_target` — the configured cap it may grow to
+- `script_autotune_active` — 1 when the controller is adapting, 0 when fixed
+  (`capacity: latency`/`throughput` or `autotune: off`)
+
+Reading it is how you tell queueing from compute: `latency` with `inflight`
+below `script_sessions` means capacity is idle; `throughput` means requests are
+sharing sessions; `saturated` means CPU is the bottleneck and the controller
+refuses to grow — expect a `script inference is CPU-saturated` log line and
+raise `script_workers`/`intra_op_threads` rather than concurrency. The kill
+switch is `autotune: off`, which pins the allowance at the configured value.
+A `saturated` class with a high `dispatch_wait_us`/`run_us` ratio is the signal
+that the model is under-provisioned, not under-shared.
 
 ## Monitoring: emb-top
 

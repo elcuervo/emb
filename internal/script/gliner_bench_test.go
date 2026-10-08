@@ -49,7 +49,7 @@ func benchGLiNER(b *testing.B) (Hosts, string) {
 		}
 		intra = n
 	}
-	sess, err := onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, intra, 2, onnx.ExecModeSequential)
+	sess, err := onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, intra, 2, onnx.ExecModeSequential, true)
 	if err != nil {
 		b.Fatalf("opening gliner session: %v", err)
 	}

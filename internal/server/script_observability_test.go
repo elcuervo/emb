@@ -31,6 +31,76 @@ func intOf(t *testing.T, tok respToken) int {
 	return tok.val.(int)
 }
 
+// TestDispatchObservabilityReported verifies the per-model dispatch and run
+// counters appear in EMB.INFO and in the per-model EMB.STATS strings, and that
+// an embedding request advances the embed run counter.
+func TestDispatchObservabilityReported(t *testing.T) {
+	addr, _ := serveScriptTest(t, "")
+	c := dial(t, addr)
+	defer c.Close()
+
+	if got := doCmd(t, c, "EMB.EVAL", "test", "return 1", "1", "x"); got != ":1\r\n" {
+		t.Fatalf("evaluation reply = %q", got)
+	}
+	if got := doCmd(t, c, "EMB", "test", "hello"); !strings.HasPrefix(got, "$") {
+		t.Fatalf("EMB reply = %q", got)
+	}
+
+	info := statsFields(t, redisCmd(t, addr, "EMB.INFO", "test"))
+	for _, field := range []string{
+		"script_dispatch_wait_us", "script_run_us", "script_runs", "script_sessions_busy",
+		"script_traffic_class", "script_inflight", "script_concurrency_current", "script_concurrency_target", "script_autotune_active",
+		"embed_dispatch_wait_us", "embed_run_us", "embed_runs", "embed_sessions_busy", "embed_sessions_total",
+	} {
+		if _, ok := info[field]; !ok {
+			t.Fatalf("EMB.INFO missing %q: %#v", field, info)
+		}
+	}
+	if got := intOf(t, info["embed_runs"]); got < 1 {
+		t.Fatalf("embed_runs = %d, want >= 1", got)
+	}
+	if got := intOf(t, info["embed_sessions_total"]); got < 1 {
+		t.Fatalf("embed_sessions_total = %d, want >= 1", got)
+	}
+
+	stats := statsFields(t, redisCmd(t, addr, "EMB.STATS"))
+	perModel := bulkOf(t, stats["per_model"])
+	if !strings.Contains(perModel, "wait=") || !strings.Contains(perModel, "runs=") {
+		t.Fatalf("per_model = %q, want dispatch counters", perModel)
+	}
+}
+
+// TestCacheHitsDoNotCountAsInference proves a reply-cache hit never reaches
+// the inference boundary: the run counter and in-flight gauge stay put.
+func TestCacheHitsDoNotCountAsInference(t *testing.T) {
+	addr, srv := serveScriptTest(t, "1GB")
+	entry, err := srv.reg.Resolve("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := dial(t, addr)
+	defer c.Close()
+
+	if got := doCmd(t, c, "EMB.EVAL", "test", runShapeScript, "1", "same text"); !strings.HasPrefix(got, ":") {
+		t.Fatalf("first evaluation = %q", got)
+	}
+	_, _, runs1, _ := entry.ScriptDispatch()
+	if runs1 < 1 {
+		t.Fatalf("first evaluation ran %d inferences, want >= 1", runs1)
+	}
+
+	if got := doCmd(t, c, "EMB.EVAL", "test", runShapeScript, "1", "same text"); !strings.HasPrefix(got, ":") {
+		t.Fatalf("cached evaluation = %q", got)
+	}
+	_, runUs, runs2, busy := entry.ScriptDispatch()
+	if runs2 != runs1 {
+		t.Fatalf("cache hit ran inference: runs %d -> %d", runs1, runs2)
+	}
+	if runUs == 0 || busy != 0 {
+		t.Fatalf("after cache hit: run_us=%d busy=%d, want runs recorded and no in-flight", runUs, busy)
+	}
+}
+
 // TestScriptedEvaluationRecordedInMonitor verifies a completed evaluation
 // appends a MONITOR event carrying the model and text count and no payload.
 func TestScriptedEvaluationRecordedInMonitor(t *testing.T) {

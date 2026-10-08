@@ -64,24 +64,6 @@ func TestScriptSessionAutoTuneMinOne(t *testing.T) {
 	}
 }
 
-func TestScriptSessionRoundRobin(t *testing.T) {
-	entry := scriptFixture(t, 3, false)
-	res, err := entry.ScriptResources()
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := res.Session()
-	b := res.Session()
-	c := res.Session()
-	d := res.Session()
-	if a == b || b == c || a == c {
-		t.Fatalf("expected 3 distinct sessions, got a=%p b=%p c=%p", a, b, c)
-	}
-	if d != a {
-		t.Fatalf("round-robin did not wrap back to the first session: d=%p a=%p", d, a)
-	}
-}
-
 func TestScriptPreloadWarmsAtLoad(t *testing.T) {
 	entry := scriptFixture(t, 1, true)
 	if entry.scriptRes == nil {

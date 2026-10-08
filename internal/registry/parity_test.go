@@ -173,7 +173,7 @@ func TestPartialScriptPoolConstructionClosesOpened(t *testing.T) {
 
 	var created, closed atomic.Int64
 	injected := errors.New("injected session failure")
-	newNamedSession = func([]byte, []string, []string, int, int, int) (onnx.NamedSession, error) {
+	newNamedSession = func([]byte, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
 		if created.Add(1) == 3 {
 			return nil, injected
 		}

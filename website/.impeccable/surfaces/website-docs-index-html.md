@@ -231,3 +231,58 @@ envelope*; and *your text → your Lua → a typed reply*. Each is drawn complet
 and animates once as it scrolls into view, and stands still under
 `prefers-reduced-motion`. The strips add rhythm to a page that is otherwise
 prose, tables and code, and they add no claim the section does not already make.
+
+---
+## Amendment — adaptive-capacity documentation and three measured plates (change `website-autotune-docs`)
+
+**Scope: sections 04, 06 and 07 and nothing else.** Every heading, ledger row,
+code specimen, section order and anchor above is unchanged; no new top-level
+section is introduced, and the surface keeps its single orange-free paper/dark
+rhythm.
+
+**What changes.** The reference now carries the runtime capacity controller the
+server ships:
+
+- **04 Configuration** gains `script_callers_per_session`, `capacity` and
+  `autotune` rows in the model-options ledger, plus an *Adaptive capacity*
+  subsection stating the three creation-time layouts and the precedence rule
+  (an explicit `allow_spinning` and `autotune: off` win over a profile).
+- **06 Operations** gains an *Autotune state* subsection: the five
+  `EMB.INFO <model>` fields, how to read class against `inflight`, and the
+  `autotune: off` kill switch.
+- **07 Benchmarks** gains *Adaptive capacity — a scripted model*: the
+  out-of-the-box comparison, the per-second control loop, and the profile
+  tradeoff, plus a guardrail note.
+
+**New atom: `.plate` — and why it is not a new visual language.**
+A `.plate` is a `<figure>` whose SVG is drawn only from the poster's existing
+vocabulary: the ruled graticule (`--rule-soft`), the axis rule (`--rule`), mono
+caps labels, small filled points, and **exactly one** orange signal
+(`--accent`) per plate. It adds no hue, gradient, radius, shadow or second
+font; `docs.css` declares no custom property. The three plates are:
+
+1. *Out of the box* — an improvement-factor bar chart (burst req/s ×2.05,
+   burst p50 ×2.22, serial p50 ×1.03 parity) with a `no change` reference line.
+2. *The control loop* — the per-second allowance as the orange step line, the
+   in-flight runs as a faint ink area, the cap as a dashed hairline, and the
+   serial/burst phases named below.
+3. *Pick your corner* — serial p50 against burst req/s, with `auto`,
+   `throughput` and the fixed cap collapsed into one coincident point and
+   `latency` drawn apart.
+
+**The measured figures are captioned, never typed twice.** Every number on a
+plate also appears in its caption and in `BENCHMARK.md` with its reproduction
+command, per the surface's provenance rule. The `plate__svg` wrapper scrolls
+sideways at a 720px (desktop) / 840px (mobile) minimum so the technical labels
+never compute below the 12px/14px floors — the same posture as the `emb-top`
+frame, and the caption carries every value the scroll can hide on a phone.
+
+**Detector.** `impeccable detect --json` over `website/docs/index.html` and
+`website/assets/css/docs.css` finds **18 findings, identical to the same run at
+`HEAD`** (13 `cramped-padding`, 2 `clipped-overflow-container`, 1
+`overused-font`, 1 `tight-leading`, 1 `wide-tracking`); the plates add none.
+
+**Claims scoping.** The out-of-the-box improvement is attributed to the
+adaptive-capacity work as a whole, and the plate and prose both state that the
+controller's own effect against the fixed cap it replaced is parity — so the
+surface cannot be read as claiming the controller adds throughput it does not.
