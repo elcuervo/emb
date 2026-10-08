@@ -12,8 +12,10 @@
 #   SCRIPT          Lua script (default examples/scripts/reference/gliner2.lua)
 #   ARGS            space-separated script ARGV, e.g. entity labels
 #   MODEL           model name (default gliner2)
-#   WORKERS         script_workers for the generated config (default 4)
+#   WORKERS         script_workers for the generated config (default 4; empty omits it)
 #   INTRA           intra_op_threads; empty exercises the unset default
+#   CAPACITY        capacity profile (auto|latency|throughput); empty omits it
+#   AUTOTUNE        autotune mode (auto|callers|off); empty omits it
 #   CONCS           concurrency list (default 1,4,8,16)
 #   N               requests per concurrency level (default 200)
 #   SAMPLES         interleaved A/B rounds (default 3)
@@ -53,8 +55,10 @@ cfg="$tmp/gliner.yaml"
   echo "    onnx: $ONNX"
   echo "    tokenizer: $TOKENIZER"
   echo "    script_preload: true"
-  echo "    script_workers: $WORKERS"
+  [ -n "$WORKERS" ] && echo "    script_workers: $WORKERS"
   [ -n "$INTRA" ] && echo "    intra_op_threads: $INTRA"
+  [ -n "${CAPACITY:-}" ] && echo "    capacity: $CAPACITY"
+  [ -n "${AUTOTUNE:-}" ] && echo "    autotune: $AUTOTUNE"
 } > "$cfg"
 
 argflags=()
@@ -103,7 +107,7 @@ for s in $(seq 1 "$SAMPLES"); do
   if [ $((s % 2)) -eq 1 ]; then order="base cand"; else order="cand base"; fi
   for which in $order; do
     if [ "$which" = base ]; then bin=$BASE; else bin=$CAND; fi
-    echo "== sample $s: $which ($bin) workers=$WORKERS intra=${INTRA:-unset}" >&2
+    echo "== sample $s: $which ($bin) workers=${WORKERS:-unset} intra=${INTRA:-unset} capacity=${CAPACITY:-unset} autotune=${AUTOTUNE:-unset}" >&2
     run_bin "$which" "$bin"
   done
   if ! cmp -s "$tmp/base.dump" "$tmp/cand.dump"; then

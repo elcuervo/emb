@@ -214,3 +214,85 @@
    sideways rather than wrapping, exactly as it does on the landing: box-drawing
    art wrapped mid-run is not the dashboard. */
 .topviz--doc .topviz__screen{ padding-bottom: 2px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   emb — documentation surface · measured plates
+
+   A plate is a measured figure: the ruled graticule, mono caps labels and
+   small filled marks the poster already owns, plus exactly one orange signal.
+   It declares no custom property and adds no colour, font or radius -- the
+   tokens all come from `styles.css`. The SVG scales with the measure, so the
+   wrapper sets a minimum width and the plate scrolls sideways on a phone
+   rather than shrinking its technical labels below the committed floor.
+   ══════════════════════════════════════════════════════════════════════ */
+.plate{
+  margin: clamp(22px, 2.6vw, 36px) 0 clamp(16px, 2vw, 26px);
+  min-width: 0;
+}
+.plate__wrap{ overflow-x: auto; }
+.plate__svg{
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+}
+.plate__grid{ stroke: var(--rule-soft); stroke-width: 1; }
+.plate__axis{ stroke: var(--rule); stroke-width: 1; }
+.plate__cap-line{ stroke: var(--muted); stroke-width: 1; stroke-dasharray: 5 5; }
+.plate__area{ fill: var(--fg); opacity: .09; }
+.plate__signal{ fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.plate__bar{ fill: var(--accent); }
+.plate__point{ fill: var(--fg); }
+.plate__point--accent{ fill: var(--accent-ink); }
+.plate__label{
+  font-family: var(--mono);
+  font-size: 12px;
+  fill: var(--muted);
+  letter-spacing: .04em;
+}
+.plate__label--strong{ fill: var(--fg); }
+.plate__cap{
+  margin-top: clamp(10px, 1.1vw, 16px);
+  max-width: 82ch;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  line-height: 1.65;
+  color: var(--muted);
+}
+.plate__cap strong{ color: var(--fg); font-weight: 700; }
+.plate__legend{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px clamp(18px, 2.4vw, 34px);
+  margin-top: clamp(10px, 1.1vw, 16px);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.02vw, 12.5px);
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.plate__legend b{ color: var(--fg); font-weight: 700; }
+.plate__legend i{
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 7px;
+  vertical-align: -1px;
+}
+.plate__swatch--signal{ background: var(--accent); }
+.plate__swatch--area{ background: var(--fg); opacity: .22; }
+.plate__swatch--cap{
+  width: 16px !important;
+  height: 0 !important;
+  border-top: 1px dashed var(--muted);
+  vertical-align: 4px;
+}
+
+@media (max-width: 1000px){
+  .plate__svg{ min-width: 840px; }
+  .plate__svg text{ font-size: 14px; }
+  .plate__cap, .plate__legend{ font-size: 14px; }
+}
+
+@media print{
+  .plate{ break-inside: avoid; }
+}

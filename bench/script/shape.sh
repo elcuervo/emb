@@ -4,7 +4,9 @@
 # class and concurrency allowance after each phase.
 #
 # Env: SHAPE (serial|burst|mixed), PHASE (per-phase duration), BURST
-# (burst concurrency), PORT, CORPUS, SCRIPT, ARGS, WORKERS, INTRA, ONNX, TOKENIZER.
+# (burst concurrency), PORT, CORPUS, SCRIPT, ARGS, WORKERS, INTRA, ONNX, TOKENIZER,
+# CAPACITY (auto|latency|throughput; empty omits it), AUTOTUNE (auto|callers|off;
+# empty omits it).
 set -euo pipefail
 
 SHAPE=${SHAPE:-mixed}
@@ -41,6 +43,8 @@ cfg="$tmp/gliner.yaml"
   echo "    script_preload: true"
   echo "    script_workers: $WORKERS"
   [ -n "$INTRA" ] && echo "    intra_op_threads: $INTRA"
+  [ -n "${CAPACITY:-}" ] && echo "    capacity: $CAPACITY"
+  [ -n "${AUTOTUNE:-}" ] && echo "    autotune: $AUTOTUNE"
 } > "$cfg"
 
 "$tmp/emb" -config "$cfg" >"$tmp/server.log" 2>&1 &

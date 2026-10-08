@@ -336,10 +336,12 @@ With the LRU cache enabled and repeated texts, cache hits dominate regardless.
 
 ## Scripted models: dispatch, thread budget and spinning (GLiNER2)
 
-Reference host: Apple M-series, 10 cores, 24 GB. Corpus:
-`bench/script/gliner-corpus.txt` (36 texts, labels
-`PERSON ORG PRODUCT LOCATION EVENT`), reply cache off. The baseline is the
-pre-change binary built at `HEAD`; the candidate is this change. Measured with
+Reference host: Apple M4, 10 cores, 24 GB, macOS 26.6.2. Corpus:
+`bench/script/gliner-corpus.txt` (36 texts). The shape and profile runs below
+use the shape harness's default five labels (`PERSON ORG PRODUCT LOCATION
+EVENT`); the A/B matrix uses `run.sh`'s default eight (`… FEATURE CURRENCY
+DATE`). Reply cache off. The baseline is the pre-change binary built at `HEAD`;
+the candidate is this change. Measured with
 `just bench-script <base-bin> <cand-bin>`, which runs `cmd/evalbench`
 interleaved and fails on any reply difference.
 
@@ -387,6 +389,82 @@ The burst window reached the CPU-saturation gate after expanding, so the
 controller held at the cap and would log a provisioning recommendation rather
 than growing past it (more concurrency cannot create CPU). The serial phases
 halve the allowance after ten latency windows; idle windows hold.
+
+#### The control loop, sampled per second
+
+Sampling `EMB.INFO gliner2` once a second while
+`SHAPE=mixed PHASE=15s BURST=8 WORKERS=4 just bench-shape` drives the phases
+(five labels, `script_workers: 4`, so the cap is 4):
+
+| t | class | inflight | allowance |
+|---|---|---|---|
+| 5 s | `latency` | 1 | 4 |
+| 10 s | `latency` | 1 | **2** |
+| 15 s | `latency` | 8 | 2 |
+| 16 s | `throughput` | 7 | **4** |
+| 17 s | `saturated` | 7 | 4 |
+| 30 s | `saturated` | 1 | 4 |
+| 31 s | `latency` | 0 | 4 |
+| 40 s | `latency` | 1 | **2** |
+| 45 s | `latency` | 8 | 2 |
+| 46 s | `throughput` | 8 | **4** |
+| 60 s | `saturated` | 1 | 4 |
+| 61 s | `latency` | 1 | 4 |
+| 70 s | `latency` | 1 | **2** |
+
+The two cycles are identical: the allowance shrinks after ten sustained `latency`
+windows, the first burst window re-expands it to the cap, and `saturated` holds
+it there while `inflight` sits at the eight concurrent requests.
+
+#### Out of the box and capacity profiles
+
+Out of the box (`script_workers: 0`, so the pool size is auto-derived; eight
+labels), two interleaved samples, `N=200`, `CONCS=1,8`:
+
+| metric | pre-change | candidate |
+|---|---|---|
+| serial p50 | 18.43 / 18.04 ms | 19.21 / 18.33 ms |
+| c=8 req/s | 44.7 / 59.0 | **100.5 / 112.3** |
+| c=8 p99 | 704 / 140 ms | 123 / 85 ms |
+
+Reproduce with
+`WORKERS=0 CONCS=1,8 N=200 SAMPLES=2 just bench-script <base-bin> <cand-bin>`;
+replies are byte-identical across both samples. The controller itself is
+neutral against the static cap it replaced — with `script_workers: 4` and five
+labels, `CONCS=1,8 N=150`:
+
+| arm | c=1 req/s | serial p50 | c=8 req/s | c=8 p50 | c=8 p99 |
+|---|---|---|---|---|---|
+| `autotune: off` (cap fixed) | 46.9 | 21.14 ms | 150.2 | 50.74 ms | 80.68 ms |
+| `capacity: auto` | 46.9 | 21.03 ms | 151.8 | 49.85 ms | 73.04 ms |
+| `capacity: throughput` | 46.8 | 21.20 ms | 149.5 | 51.45 ms | 84.19 ms |
+| `capacity: latency` | 49.3 | 20.16 ms | 121.6 | 65.00 ms | 75.19 ms |
+
+Reproduce a row with `capacity: <profile>` in the generated config (the harness
+reads `CAPACITY`/`AUTOTUNE`):
+
+```bash
+WORKERS=4 ARGS="PERSON ORG PRODUCT LOCATION EVENT" CAPACITY=latency AUTOTUNE=auto \
+  CONCS=1,8 N=150 just bench-script <cand-bin> <cand-bin>
+```
+
+`auto` and `throughput` match the fixed-cap arm within noise; `latency` buys
+~5% on serial p50 for ~20% of burst throughput, which is the trade the profile
+names. The controller's own contribution is adaptation, not throughput.
+
+#### Guardrails
+
+The same runs assert the safety properties:
+
+- **Reply identity** — `run.sh` interleaves the two binaries, dumps
+  request-ordered replies, and exits non-zero on any difference; both out-of-the-box
+  samples report `OK: replies identical`.
+- **Ruby client** — `gems/emb`'s suite passes against the adaptive server
+  (203 examples, 0 failures) with `EMB.READY` answering `+OK`.
+- **CPU gate** — entering `saturated` logs one provisioning recommendation per
+  model (`… script inference is CPU-saturated; consider raising script_workers
+  or intra_op_threads`) and the allowance holds instead of growing.
+- **Kill switch** — `autotune: off` pins the allowance at the configured value.
 
 ### Unbatched embedding pool (siglip2)
 

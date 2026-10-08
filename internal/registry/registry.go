@@ -700,6 +700,8 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	// Capacity profile decides the creation-time layout: latency pins spinning
 	// on and one caller per session; throughput pins spinning off and the full
 	// cap; auto keeps the derived layout and enables runtime adaptation.
+	// A profile selects a default layout only: an explicit allow_spinning or
+	// autotune value always wins over it.
 	profile := cfg.CapacityProfile()
 	spinning := cfg.ScriptAllowsSpinning()
 	callerCap := cfg.ScriptCallers()
@@ -707,13 +709,16 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	autotune := cfg.AutotuneEnabled()
 	switch profile {
 	case "latency":
-		spinning = true
+		if cfg.AllowSpinning == nil {
+			spinning = true
+		}
 		initialAllowance = 1
 		autotune = false
 	case "throughput":
-		spinning = false
+		if cfg.AllowSpinning == nil {
+			spinning = false
+		}
 		initialAllowance = callerCap
-		autotune = true
 	}
 
 	// The auto-tuned default never exceeds the embedding path's real session

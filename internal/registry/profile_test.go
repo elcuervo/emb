@@ -55,4 +55,28 @@ func TestCapacityProfiles(t *testing.T) {
 	if res.AutotuneActive() {
 		t.Fatal("autotune off must disable the controller")
 	}
+
+	// A profile selects a default layout; an explicit value always wins.
+	noSpin, yesSpin := false, true
+
+	sp, res = run(config.ModelConfig{ScriptWorkers: 2, Capacity: "latency", AllowSpinning: &noSpin})
+	if len(sp) != 2 || sp[0] {
+		t.Fatalf("latency+allow_spinning=false spinning = %v, want off", sp)
+	}
+	if res.Allowance() != 1 || res.AutotuneActive() {
+		t.Fatalf("latency+allow_spinning=false allowance=%d active=%v, want 1/false", res.Allowance(), res.AutotuneActive())
+	}
+
+	sp, res = run(config.ModelConfig{ScriptWorkers: 2, Capacity: "throughput", AllowSpinning: &yesSpin})
+	if len(sp) != 2 || !sp[0] {
+		t.Fatalf("throughput+allow_spinning=true spinning = %v, want on", sp)
+	}
+
+	_, res = run(config.ModelConfig{ScriptWorkers: 2, ScriptCallersPerSession: 4, Capacity: "throughput", Autotune: "off"})
+	if res.AutotuneActive() {
+		t.Fatal("capacity: throughput must not force the controller past autotune: off")
+	}
+	if res.Allowance() != 4 {
+		t.Fatalf("throughput+autotune=off allowance = %d, want the configured cap 4", res.Allowance())
+	}
 }
