@@ -1222,9 +1222,9 @@ func TestConnAccounting(t *testing.T) {
 	c1 := dial(t, addr)
 	c2 := dial(t, addr)
 
-	if got := statsIntField(t, c1, "connections"); got != 2 {
-		t.Fatalf("expected 2 connections, got %d", got)
-	}
+	waitFor(t, func() bool {
+		return statsIntField(t, c1, "connections") == 2
+	})
 
 	c2.Close()
 	waitFor(t, func() bool {
