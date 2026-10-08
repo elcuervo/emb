@@ -2641,7 +2641,7 @@ html.js.is-ready .hero__prose{
   padding: 0 .3em;
   border: 1px solid currentColor;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
   vertical-align: .14em;
@@ -3740,4 +3740,43 @@ button.rec__gw:focus-visible{ outline: 2px solid var(--accent); outline-offset: 
 @media (max-width: 520px){
   .rec__sentence{ grid-template-columns: auto minmax(0, 1fr); }
   .rec__sentence .rec__esc{ grid-column: 2; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
+   THE MEDIA PLATE — name the tune, find the moment
+   Composed from the gallery's own atoms: hairline rules, tracked mono labels,
+   the dark plate, the accent spent once per figure. No card, no radius.
+   ═══════════════════════════════════════════════════════════════════════ */
+.media__h{ margin:clamp(30px,3.4vw,54px) 0 4px; font-family:var(--mono); font-size:12px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--muted); }
+.media__h:first-of-type{ margin-top:0; }
+.media__lede{ margin:0 0 18px; max-width:62ch; color:var(--muted); font-size:14px; line-height:1.6; }
+.media__queries{ display:flex; flex-wrap:wrap; gap:8px; }
+
+/* the audio rig: constellation on the left, votes on the right */
+.media__grid{ display:grid; gap:clamp(18px,2.4vw,36px); grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); align-items:start; margin-top:16px; }
+.media__canvas{ width:100%; aspect-ratio:2 / 1; display:block; border:1px solid var(--rule-dark); background:#0e0e0d; }
+.media__cap{ margin:8px 0 0; font-family:var(--mono); font-size:12px; letter-spacing:.04em; color:var(--muted); }
+.media__cap b{ color:var(--bg); font-weight:600; }
+.media__votes{ display:grid; gap:4px; }
+.media__vote{ display:grid; grid-template-columns:minmax(0,1fr) 3.4em; gap:8px; align-items:center;
+  font-family:var(--mono); font-size:12px; color:var(--muted); }
+.media__vote i{ display:block; height:10px; background:var(--rule-dark); }
+.media__vote.is-hit{ color:var(--bg); }
+.media__vote.is-hit i{ background:var(--accent); }
+.media__vote b{ text-align:right; font-weight:500; }
+.media__player audio{ width:100%; height:36px; display:block; }
+video.media__player,.media__player video,.media__player img{ width:100%; height:auto; display:block; border:1px solid var(--rule-dark); background:#0e0e0d; }
+
+/* the video rig: the strip of shipped stills, the best one marked */
+.media__frames{ display:grid; grid-template-columns:repeat(8,1fr); gap:4px; margin-top:14px; }
+.media__frame{ position:relative; padding:0; border:1px solid var(--rule-dark); background:#0e0e0d; cursor:pointer; }
+.media__frame img{ width:100%; height:auto; display:block; opacity:.72; }
+.media__frame.is-hit{ border-color:var(--accent); }
+.media__frame.is-hit img{ opacity:1; }
+.media__frame:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+@media (max-width:900px){
+  .media__grid{ grid-template-columns:1fr; }
+  .media__frames{ grid-template-columns:repeat(4,1fr); }
 }

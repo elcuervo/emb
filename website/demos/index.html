@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph, the decision, the zone</title>
 <link rel="canonical" href="https://emb.is/demos/">
-<meta name="description" content="Thirteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute — and decide — beside the model, and how a DNS zone asks the same model a question.">
+<meta name="description" content="Fourteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute — and decide — beside the model, how a DNS zone asks the same model a question, and how a fingerprint names a recording while an embedding only describes it.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph, the decision, the zone">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="A gallery of thirteen demos that embed real text and images and search a real index, over one author's public-domain corpus.">
+<meta property="og:description" content="A gallery of fourteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus.">
 <meta property="og:url" content="https://emb.is/demos/">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph, the decision, the zone">
-<meta name="twitter:description" content="A gallery of thirteen demos that embed real text and images and search a real index, over one author's public-domain corpus.">
+<meta name="twitter:description" content="A gallery of fourteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 
@@ -81,21 +81,22 @@
         <div>
           <h1 class="plate__title" id="plate-h">The demos gallery</h1>
           <p class="plate__teaches">
-            Thirteen demonstrations of one idea, run against a real server and a
+            Fourteen demonstrations of one idea, run against a real server and a
             real index. The first four answer <em>what is a vector</em> and <em>why
             does it help</em>; the next six answer <em>why emb</em> — several
             models, six languages in one space, an image beside them, and a
             batcher and a cache that make it cheap; the last two are the
             scripting layer computing structure beside the model, then answering
             typed questions; and the last is the same model reached over DNS,
-            from a deployment of its own. Read them in order, or jump to the one
+            from a deployment of its own. The last identifies a recording by its
+            fingerprint and searches a clip by a phrase. Read them in order, or jump to the one
             you came for — each stands on its own.
           </p>
-        <p class="tldr">Thirteen short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
+        <p class="tldr">Fourteen short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
         </div>
         <div>
           <p class="fig"><b>THE ATLAS</b>
-            · <b>thirteen plates</b>
+            · <b>fourteen plates</b>
             · <b data-fig-count>2 782</b> passages
             · <b data-fig-works>86</b> works
             · <b data-fig-model>all-MiniLM-L6-v2</b>
@@ -173,6 +174,11 @@
           <span class="ord__n">13</span>
           <span class="ord__t"><a href="dns.html">The zone</a> <span class="chip-new">new</span></span>
           <span class="ord__w"><b>PLATE V</b> · Every name under dns.emb.is is a sentence and every TXT record is the emoji it matches — semantic retrieval reached over the most boring protocol there is, on a deployment of its own. The algebra is playable: compose with what the ranking just showed you.<br>Teaches: the model behind a protocol you already speak, why the record carries the answer while the working rides beside it, and what a conjunction asks that a sum cannot.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">14</span>
+          <span class="ord__t"><a href="medium.html">The medium</a> <span class="chip-new">new</span></span>
+          <span class="ord__w"><b>PLATE VI</b> · A Shazam-style fingerprint names the exact recording from a noisy four-second excerpt, computed live in your browser; the sandbox's own model reads the same excerpt as a picture and can only describe it. Then a typed phrase finds the moment in a clip, frame by frame.<br>Teaches: the trade between an exact fingerprint and an embedding, and cross-modal search over video without a second model.</span>
         </li>
           </ol>
         </div></div>

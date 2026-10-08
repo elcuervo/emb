@@ -139,6 +139,7 @@ models:
       std: [0.26862954, 0.26130258, 0.27577711]
     scripts:
       - presets/zeroshot.lua
+      - presets/clip_text.lua
 
   # The decision model: a 32-hidden miniature of the Laya architecture shipped
   # inside the image (testdata/laya) rather than downloaded. Its weights are

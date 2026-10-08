@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the medium — name the tune, find the moment</title>
+<link rel="canonical" href="https://emb.is/demos/medium.html">
+<meta name="description" content="Two ways to find a medium. A Shazam-style fingerprint names the exact recording from a noisy four-second excerpt, computed live in the browser; the sandbox's own model reads the same excerpt as a picture and can only describe it. Then a clip is searched frame by frame by a typed phrase.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the medium — name the tune, find the moment">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="A fingerprint names the exact recording; an embedding says what kind of thing it is. Then a clip is searched frame by frame by a phrase.">
+<meta property="og:url" content="https://emb.is/demos/medium.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the medium — name the tune, find the moment">
+<meta name="twitter:description" content="A fingerprint names the exact recording; an embedding says what kind of thing it is.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="index.html"><span>Gallery</span> <b>All the plates</b> <span aria-hidden="true">&#8594;</span></a></nav>
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">VI.</span>The medium</h1>
+          <p class="plate__teaches">
+            Two ways to find a medium, and they answer different questions. A
+            fingerprint names the exact recording from a four-second excerpt,
+            even a noisy one, by matching the constellation of its spectrogram —
+            computed in your browser. An embedding cannot name it at all; it can
+            only say what kind of thing it is. Then a clip is searched frame by
+            frame by a phrase, which is the embedding's half of that trade.
+          </p>
+        <p class="tldr">A Shazam-style fingerprint identifies the exact recording live in the browser; emb's model reads the same excerpt as a picture and can only describe it. Then a typed phrase finds the moment in a clip.</p>
+        </div>
+        <div>
+          <p class="fig"><b>THE MEDIUM</b>
+            · <b data-fig-tracks>&#8230;</b> tracks
+            · <b data-fig-hashes>&#8230;</b> hashes
+            · <b data-fig-frames>&#8230;</b> frames
+            · <b data-fig-model>clip</b>
+            · <b data-fig-dim>&#8230;</b> dimensions</p>
+          <p class="fig"><b>CORPUS</b> · Five open-licensed music excerpts and one public-domain clip, all committed with the gallery; the fingerprint database is built from the shipped audio.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+            <p class="block__deck">A fingerprint is not an embedding. It is a sparse map of the loudest points in a spectrogram, paired into hundreds of short hashes and stored with the time they occurred. Match a query by looking those hashes up: the recording that shares many of them <em>at one consistent offset</em> is the answer, and the size of that agreement is the evidence. It survives noise, because noise does not move the loud points; it does not survive a different performance, because a different performance has different points.</p>
+            <p class="block__deck">An embedding is the opposite trade. The sandbox's model turns the same excerpt into a picture and a vector, which puts it near other things that <em>look</em> alike — the same instrument, the same texture — but cannot tell one performance from another. Both readings are below, on the same four seconds. Then the video half does with a phrase what the fingerprint does with a hash.</p>
+</div></div>
+    </section>
+
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <div class="mech" data-mech></div>
+
+            <div data-live class="rig media" data-rig="medium"
+                 data-emb-preset-clip-text="12046e131453a01ef02ab5bb3bbf3b3bf44f524d"
+                 data-emb-preset-zeroshot="963c9a2b273dab8e6022893e9f338987e4581d60">
+
+              <h3 class="media__h">Name that tune</h3>
+              <p class="media__lede">Pick an excerpt. Your browser decodes it, finds the spectral peaks, hashes them, and looks them up in the shipped database — nothing is uploaded and no answer is stored in the page.</p>
+              <div class="media__queries" role="group" aria-label="The excerpts to identify" data-queries></div>
+
+              <div class="media__grid">
+                <div>
+                  <canvas class="media__canvas" data-spectro width="640" height="280" role="img" aria-label="The query's spectrogram with its fingerprint peaks marked"></canvas>
+                  <p class="media__cap" data-spectro-cap>the query — its fingerprint peaks are the bright points</p>
+                </div>
+                <div>
+                  <div class="media__votes" data-votes aria-live="polite"></div>
+                  <p class="media__cap" data-result>pick an excerpt above</p>
+                  <div class="media__player" data-player></div>
+                  <p class="media__cap" data-embed></p>
+                </div>
+              </div>
+
+              <h3 class="media__h">Find the moment</h3>
+              <p class="media__lede">The clip is sixteen shipped stills, each embedded before deployment. Type what you are looking for; the phrase is embedded live and the stills are ranked by cosine.</p>
+              <form class="rig__form" data-form>
+                <label class="sr-only" for="m-q">A phrase to find the moment by</label>
+                <input class="rig__input" id="m-q" autocomplete="off" spellcheck="false" value="a duck on the water">
+                <button class="rig__go" type="submit">Find the moment</button>
+              </form>
+              <div class="media__grid">
+                <div>
+                  <video class="media__player" data-clip controls playsinline preload="metadata"
+                         src="media/clips/mallard.mp4" aria-label="A public-domain clip of a mallard on water"></video>
+                  <p class="media__cap" data-moment>the clip</p>
+                </div>
+                <div>
+                  <div class="media__frames" data-frames role="group" aria-label="The clip's shipped stills; the nearest to the phrase is marked"></div>
+                  <p class="media__cap" data-moment-readout>type a phrase to rank the frames</p>
+                </div>
+              </div>
+
+              <p class="rig__state" data-state>ready when you are</p>
+              <details class="cmds" data-cmds hidden>
+                <summary class="cmds__h">the commands this run sent</summary>
+                <div class="cmds__body" data-cmds-body></div>
+              </details>
+            </div>
+
+      </div></div>
+    </section>
+
+    <!-- the massif, as a reading break: the same cut-out the gallery reuses. -->
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-foothill.png" width="1152" height="144" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+            <p class="block__deck">The fingerprint ran entirely in your browser. The excerpt was decoded to 11 kHz mono, cut into frames, windowed and transformed with a radix-2 FFT; the loudest local maxima became the constellation; neighbouring peaks were paired into <span class="t-cmd">(f1, f2, Δt)</span> hashes. Each hash was looked up in a database built offline from the shipped tracks, and the offset of every hit was counted; the track with hundreds of hits at a single offset won. That histogram is the figure.</p>
+            <p class="block__deck">The same excerpt was then drawn as a picture and sent to the sandbox's own preloaded <span class="t-cmd">zeroshot.lua</span>, which embedded it beside eight candidate descriptions and returned the nearest. It is a different question with a different kind of answer: the first names the recording, the second describes it, and neither is the other. The video half sent one phrase to <span class="t-cmd">clip_text.lua</span> for a live text embedding and ranked the sixteen shipped frame vectors the same way the atlas ranks passages.</p>
+</div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+            <p class="block__deck">Reach for the cheap, exact tool when the question is exact. A fingerprint costs a few kilobytes per track and answers "which recording is this" better than any model — but it can only ever answer that, and only for a recording it was given. Reach for the embedding when the question is about meaning — "find the moment someone is in the water", "more like this" — and accept that it describes rather than identifies.</p>
+            <p class="block__deck"><b>What this does not prove.</b> The model read a picture of the audio, not the audio: a spectrogram is a rendering, and the model has no reason to have learned what one means, so its description is a weak guess and the margin is printed to say so. The fingerprint matched the exact recordings in this library and nothing else; a different performance of the same piece would not match, which is the point of it. And the frame search ranks sixteen stills of motion — order and sound are gone before the model sees anything.</p>
+</div></div>
+    </section>
+
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+            <p class="block__deck">The fingerprint is browser code and no command crosses the wire; the two modelled readings are scripted calls against preloaded presets.</p>
+<figure class="code"><pre class="code__body"><code># the fingerprint: nothing is sent. peaks -> hashes -> lookups -> offset votes
+hash = (f1 &lt;&lt; 20) | (f2 &lt;&lt; 10) | dt            # 10 bits each
+votes[track, lib_t - query_t] += 1               # the winning offset
+
+# the model's reading of the same excerpt, as a picture:
+EMB.EVSHA clip &lt;zeroshot.lua sha1&gt; 1 &lt;spectrogram jpeg&gt; "solo piano" "a flute" …
+# -> { label = "a flute", score = 0.26, probs = {…}, scores = {…} }
+
+# the video phrase, embedded live and ranked against the shipped frame vectors:
+EMB.EVSHA clip &lt;clip_text.lua sha1&gt; 1 "a duck on the water"
+# -> { shape = {1,512}, bytes = &lt;float32&gt;, dtype = "f32" }
+
+# the frame vectors were built offline, one call per still:
+EMB.EVSHA clip &lt;clip_embed.lua sha1&gt; 1 &lt;frame jpeg&gt;</code></pre>
+        <figcaption class="code__cap">The fingerprint is the browser's own DSP; <span class="t-cmd">zeroshot.lua</span> describes the excerpt, <span class="t-cmd">clip_text.lua</span> embeds the phrase, and the build-only <span class="t-cmd">clip_embed.lua</span> embedded the stills. One model, one scripted call per reading, no upload.</figcaption>
+      </figure>
+      </div></div>
+    </section>
+  <div class="shell">
+    <nav class="plate-nav" aria-label="The gallery">
+      <a class="plate-nav__link" href="dns.html"><span class="plate-nav__k">Previous</span><span class="plate-nav__t">The zone</span></a>
+    </nav>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, tween, mechanism, playStages, unfold } from '../assets/js/demos.js';
+import { SR, HOP, decodeAudio, spectrogram, pickPeaks, fingerprint, match } from '../assets/js/fingerprint.js';
+const g = gallery();
+const MODEL = 'clip';
+const root = document.querySelector('[data-rig="medium"]');
+const state = root.querySelector('[data-state]');
+const mech = mechanism(document.querySelector('[data-mech]'), [
+  { glyph: 'photo', label: 'your excerpt' },
+  { glyph: 'score', label: 'peaks to hashes' },
+  { glyph: 'model', label: 'look up, then read' },
+  { glyph: 'graph', label: 'named and described' }
+]);
+mech.all();
+
+const LABELS = ['solo piano', 'solo guitar', 'a flute', 'brass band', 'string orchestra', 'percussion', 'electronic music', 'a human voice'];
+let fingerprints = null;
+let frames = null;
+let retry = null;
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); if (retry) { retry(); } });
+}
+
+/* ── the fingerprint rig ─────────────────────────────────────────────── */
+
+function decodeVector(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
+  return new Float32Array(bytes.buffer);
+}
+
+/* The site's own ramp, so a spectrogram is drawn in the plate's palette. */
+const RAMP = [[0, [11, 11, 11]], [0.3, [107, 105, 99]], [0.62, [194, 61, 0]], [0.82, [255, 90, 31]], [1, [243, 240, 232]]];
+function ramp(t) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < RAMP.length - 1; i++) {
+    const [lo, c0] = RAMP[i], [hi, c1] = RAMP[i + 1];
+    if (t >= lo && t <= hi) {
+      const w = (t - lo) / (hi - lo);
+      return [c0[0] + (c1[0] - c0[0]) * w, c0[1] + (c1[1] - c0[1]) * w, c0[2] + (c1[2] - c0[2]) * w];
+    }
+  }
+  return RAMP[RAMP.length - 1][1];
+}
+function renderSpectrogram(canvas, db, bins, frames, peaks) {
+  canvas.width = frames; canvas.height = bins;
+  const ctx = canvas.getContext('2d');
+  const image = ctx.createImageData(frames, bins);
+  const flat = [];
+  for (let f = 0; f < bins; f++) { for (let t = 0; t < frames; t++) { flat.push(db[f][t]); } }
+  flat.sort((a, b) => a - b);
+  const lo = flat[Math.floor(flat.length * 0.05)], hi = flat[Math.floor(flat.length * 0.995)];
+  for (let f = 0; f < bins; f++) {
+    for (let t = 0; t < frames; t++) {
+      // low frequency at the bottom: row 0 of the image is the top
+      const row = bins - 1 - f;
+      const [r, g2, b] = ramp((db[f][t] - lo) / Math.max(1e-6, hi - lo));
+      const p = (row * frames + t) * 4;
+      image.data[p] = r; image.data[p + 1] = g2; image.data[p + 2] = b; image.data[p + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  ctx.fillStyle = '#F3F0E8';
+  (peaks || []).forEach((p) => { ctx.fillRect(p.t, bins - 1 - p.f, Math.max(1, frames / 400), Math.max(1, bins / 200)); });
+}
+function renderVotes(ranked, tracks) {
+  const byTrack = new Map();
+  ranked.forEach((r) => { byTrack.set(r.track, Math.max(byTrack.get(r.track) || 0, r.votes)); });
+  const max = Math.max(1, ...[...byTrack.values()]);
+  const best = ranked[0] ? ranked[0].track : -1;
+  root.querySelector('[data-votes]').replaceChildren(...tracks.map((track, i) => el('div',
+    { class: 'media__vote' + (i === best ? ' is-hit' : '') },
+    [el('span', { text: track.title }), el('i', { style: 'width:' + Math.round(100 * (byTrack.get(i) || 0) / max) + '%' }),
+     el('b', { text: String(byTrack.get(i) || 0) })])));
+}
+/* The running order of a query: the fingerprint (exact) then the model (a
+ * description), both from the same four seconds. */
+async function identify(query) {
+  retry = () => identify(query);
+  g.begin();
+  mech.reset(); playStages(mech, 150, 60);
+  setState('running');
+  try {
+    if (!fingerprints) {
+      const response = await fetch(new URL('../assets/demo/fingerprints.json', import.meta.url));
+      if (!response.ok) { throw new Error('the fingerprint database is not on this origin'); }
+      fingerprints = await response.json();
+    }
+    const bytes = await (await fetch(new URL('media/music/' + query.file, import.meta.url))).arrayBuffer();
+    const samples = await decodeAudio(bytes);
+    const { db, bins, frames: count } = spectrogram(samples);
+    const peaks = pickPeaks(db, bins, count);
+    const hashes = fingerprint(peaks);
+    const { best, ranked } = match(hashes, fingerprints.hashes);
+    renderSpectrogram(root.querySelector('[data-spectro]'), db, bins, count, peaks);
+    root.querySelector('[data-spectro-cap]').textContent =
+      'the query — ' + peaks.length + ' peaks, ' + hashes.size + ' hashes';
+    renderVotes(ranked, fingerprints.tracks);
+    if (!best) {
+      root.querySelector('[data-result]').textContent = 'no track in the library shares this excerpt';
+      root.querySelector('[data-embed]').textContent = '';
+      setState('ready');
+      return;
+    }
+    const track = fingerprints.tracks[best.track];
+    const seconds = best.offset * HOP / SR;
+    root.querySelector('[data-result]').replaceChildren(
+      el('b', { text: track.title }), document.createTextNode(' · ' + track.composer + ' · ' + track.licence),
+      el('br'), document.createTextNode(best.votes + ' hashes agreed at one offset (' + seconds.toFixed(2) + ' s in)'));
+    const audio = el('audio', { controls: '', preload: 'metadata', src: new URL('media/music/' + track.file, import.meta.url).href, 'aria-label': 'The identified track' });
+    audio.addEventListener('loadedmetadata', () => { try { audio.currentTime = seconds; } catch (e) { /* seek is best-effort */ } });
+    root.querySelector('[data-player]').replaceChildren(audio);
+    setState('ready');
+    // the model's reading of the same spectrogram, as a picture
+    root.querySelector('[data-embed]').textContent = 'asking the model what it looks like…';
+    const canvas = root.querySelector('[data-spectro]');
+    const jpeg = await new Promise((resolve) => canvas.toBlob((blob) => blob.arrayBuffer().then((b) => resolve(new Uint8Array(b))), 'image/jpeg', 0.85));
+    const reply = await g.imagePreset(MODEL, root.getAttribute('data-emb-preset-zeroshot'), jpeg, LABELS);
+    const scores = (reply.scores || []).map(Number);
+    const sorted = scores.slice().sort((a, b) => b - a);
+    const margin = scores.length > 1 ? sorted[0] - sorted[1] : 0;
+    root.querySelector('[data-embed]').replaceChildren(
+      document.createTextNode('the model, reading the same excerpt as a picture: '),
+      el('b', { text: '"' + reply.label + '"' }), document.createTextNode(' · cosine ' + Number(reply.score).toFixed(4) + ' · margin ' + margin.toFixed(4)));
+  } catch (err) {
+    setState(err.state || 'error', err.message);
+  } finally {
+    unfold(root, g.trace());
+  }
+}
+
+/* ── the video rig ───────────────────────────────────────────────────── */
+
+async function loadFrames() {
+  if (frames) { return frames; }
+  const response = await fetch(new URL('../assets/demo/frames.json', import.meta.url));
+  if (!response.ok) { throw new Error('the frame index is not on this origin'); }
+  const doc = await response.json();
+  doc.frames.forEach((f) => { f.vec = decodeVector(f.vector); delete f.vector; });
+  frames = doc;
+  return doc;
+}
+function showFrames(doc, scores) {
+  const best = scores ? scores.indexOf(Math.max.apply(null, scores)) : -1;
+  root.querySelector('[data-frames]').replaceChildren(...doc.frames.map((f, i) => el('button', {
+    type: 'button', class: 'media__frame' + (i === best ? ' is-hit' : ''),
+    'data-index': String(i), 'aria-label': 'the still at ' + f.t.toFixed(1) + ' seconds',
+    'aria-pressed': String(i === best)
+  }, [el('img', { src: f.picture, alt: 'A still from the clip at ' + f.t.toFixed(1) + ' seconds', loading: 'lazy' })])));
+}
+function seekTo(video, t) {
+  const apply = () => { try { video.currentTime = t; } catch (e) { /* a browser that cannot seek: the readout still says the frame */ } };
+  if (video.readyState >= 2) { apply(); } else { video.addEventListener('canplay', apply, { once: true }); }
+}
+function cosine(a, b) {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; }
+  return dot;
+}
+async function findMoment() {
+  const phrase = root.querySelector('#m-q').value.trim();
+  if (!phrase) { return; }
+  retry = findMoment;
+  g.begin();
+  setState('running');
+  try {
+    const doc = await loadFrames();
+    const reply = await g.preset(MODEL, root.getAttribute('data-emb-preset-clip-text'), [phrase]);
+    if (!reply || !reply.bytes) { throw new Error('the sandbox returned no embedding'); }
+    const query = decodeVector(reply.bytes);
+    const scores = doc.frames.map((f) => cosine(query, f.vec));
+    showFrames(doc, scores);
+    const order = scores.map((s, i) => i).sort((a, b) => scores[b] - scores[a]);
+    const best = doc.frames[order[0]];
+    const video = root.querySelector('[data-clip]');
+    seekTo(video, best.t);
+    root.querySelector('[data-moment-readout]').replaceChildren(
+      el('b', { text: 'the nearest frame is at ' + best.t.toFixed(2) + ' s' }),
+      el('br'), document.createTextNode('"' + phrase + '" · ' + order.slice(0, 3).map((i) => doc.frames[i].t.toFixed(1) + 's ' + Number(scores[i]).toFixed(3)).join(' · ')));
+    root.querySelector('[data-moment]').textContent = 'the clip — moved to the matching frame';
+    setState('ready');
+  } catch (err) {
+    setState(err.state || 'error', err.message);
+  } finally {
+    unfold(root, g.trace());
+  }
+}
+
+/* ── wiring ──────────────────────────────────────────────────────────── */
+
+let current = 'q1';
+async function loadQueries() {
+  const doc = fingerprints || await (await fetch(new URL('../assets/demo/fingerprints.json', import.meta.url))).json();
+  fingerprints = doc;
+  root.querySelector('[data-queries]').replaceChildren(...doc.queries.map((q, i) => el('button', {
+    type: 'button', class: 'btn btn--sm', 'data-query': q.id, 'aria-pressed': String(i === 0),
+    text: 'excerpt ' + (i + 1)
+  })));
+  return doc.queries;
+}
+root.querySelector('[data-queries]').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-query]');
+  if (!button) { return; }
+  current = button.getAttribute('data-query');
+  root.querySelectorAll('[data-query]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+  const query = (fingerprints.queries || []).find((q) => q.id === current);
+  if (query) { identify(query); }
+});
+root.querySelector('[data-frames]').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-index]');
+  if (!button || !frames) { return; }
+  const video = root.querySelector('[data-clip]');
+  seekTo(video, frames.frames[Number(button.getAttribute('data-index'))].t);
+  video.play().catch(() => {});
+});
+root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); findMoment(); });
+
+loadQueries().then(async () => {
+  document.querySelector('[data-fig-tracks]').textContent = String(fingerprints.tracks.length);
+  document.querySelector('[data-fig-hashes]').textContent = String(Object.keys(fingerprints.hashes).length);
+  const doc = await loadFrames();
+  document.querySelector('[data-fig-frames]').textContent = String(doc.frames.length);
+  document.querySelector('[data-fig-dim]').textContent = String(doc.dimension);
+  document.querySelector('[data-fig-model]').textContent = doc.model;
+  showFrames(doc, null);
+}).catch(() => {});
+
+</script>
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>
