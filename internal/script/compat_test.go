@@ -3,13 +3,14 @@ package script
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/elcuervo/emb/internal/onnx"
 )
 
-// TestAPIVersionReadable verifies emb.API_VERSION is exposed and stable.
+// TestAPIVersionReadable verifies emb.API_VERSION is exposed and reports the
+// build version the server injected, falling back to DefaultVersion when no
+// ldflag set one.
 func TestAPIVersionReadable(t *testing.T) {
 	v, err := EvalWithHosts(`return emb.API_VERSION`, nil, nil, Hosts{}, EvalOptions{})
 	if err != nil {
@@ -18,8 +19,14 @@ func TestAPIVersionReadable(t *testing.T) {
 	if v.String() != APIVersion || APIVersion == "" {
 		t.Fatalf("emb.API_VERSION = %q, want %q", v.String(), APIVersion)
 	}
-	if !strings.HasPrefix(APIVersion, "1.") {
-		t.Fatalf("unexpected API version %q", APIVersion)
+	if APIVersion != DefaultVersion {
+		t.Fatalf("unset build version = %q, want %q", APIVersion, DefaultVersion)
+	}
+	// SetVersion is the one write, and it moves the reported value with it.
+	SetVersion("9.9.9")
+	defer SetVersion("")
+	if got, err := EvalWithHosts(`return emb.API_VERSION`, nil, nil, Hosts{}, EvalOptions{}); err != nil || got.String() != "9.9.9" {
+		t.Fatalf("emb.API_VERSION after SetVersion = %q (err %v), want 9.9.9", got, err)
 	}
 }
 
@@ -59,15 +66,19 @@ func TestShippedScriptsCompile(t *testing.T) {
 }
 
 // TestReplyCacheKeyUnchanged pins the content-addressed reply-cache key format
-// (with the host API version and the KEYS count folded into the digest) so the
+// (with the server version and the KEYS count folded into the digest) so the
 // cache identity of existing scripts cannot drift silently. The digest changed
-// once when the version was folded in (design decision 8), again when the KEYS
-// count was folded in (the arity-collision fix), and again when the host API
-// moved to 1.3.0 (bool tensors, encode_plain, special_ids, decode_ordered); it
-// is pinned again here, now with the v2 key domain and literal/hash discriminator.
+// when the version was folded in, again when the KEYS count was folded in (the
+// arity-collision fix), again at host API 1.3.0 (bool tensors, encode_plain,
+// special_ids, decode_ordered), again with the v2 key domain and literal/hash
+// discriminator, and once more when the script API version became the server
+// version. It is pinned against a fixed version here so the format is tested,
+// not the build.
 func TestReplyCacheKeyUnchanged(t *testing.T) {
+	SetVersion("0.4.3.pre3")
+	defer SetVersion("")
 	got := CacheKey("minilm", "0123456789abcdef0123456789abcdef01234567", []string{"PERSON", "ORG"}, 1, "hello world")
-	const want = "minilm:0123456789abcdef0123456789abcdef01234567:078c853a41caf41cd832d61fdce8f7888a5210232924b4652c8ab441182f72cb:hello world"
+	const want = "minilm:0123456789abcdef0123456789abcdef01234567:297bb1bfc91255f5a26dfce04dfebe683cadb3f5f275cb9b24f69e4491fc7d0a:hello world"
 	if got != want {
 		t.Fatalf("reply cache key changed:\n got %q\nwant %q", got, want)
 	}

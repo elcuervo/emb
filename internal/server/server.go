@@ -607,9 +607,12 @@ func (s *Server) SetDraining() {
 }
 
 // SetVersion injects the build version (reported by INFO's redis_version /
-// emb_version). The default is "dev", matching the -version flag default.
+// emb_version). The default is "dev", matching the -version flag default. The
+// scripted surface reports and cache-keys the same value as emb.API_VERSION,
+// so it moves with s.version rather than carrying a second version of its own.
 func (s *Server) SetVersion(v string) {
 	s.version = v
+	script.SetVersion(v)
 }
 
 // SetTLSConfigPaths records the raw TLS cert/key paths for CONFIG GET. The

@@ -61,6 +61,7 @@ SERVED = frozenset(
         "index.html",
         "404.html",
         "docs/index.html",
+        "scripting/index.html",
         "gem/index.html",
         "demos/index.html",
         "demos/vector.html",
