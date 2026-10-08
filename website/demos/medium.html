@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>emb — demos: the medium — name the tune, find the moment</title>
+<title>emb — demos: the medium — identify the tune, describe the music and the footage</title>
 <link rel="canonical" href="https://emb.is/demos/medium.html">
-<meta name="description" content="Two ways to find a medium. A Shazam-style fingerprint names the exact recording from a noisy four-second excerpt, computed live in the browser; the sandbox's own model reads the same excerpt as a picture and can only describe it. Then a clip is searched frame by frame by a typed phrase.">
+<meta name="description" content="A Shazam-style fingerprint names the exact recording from a noisy four-second excerpt, computed live in the browser. Beside it, real models answer the semantic question: CLAP retrieves music by a phrase, and X-CLIP retrieves footage by a phrase, both over an index built offline and queried live.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — demos: the medium — name the tune, find the moment">
@@ -78,20 +78,21 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">VI.</span>The medium</h1>
           <p class="plate__teaches">
-            Two ways to find a medium, and they answer different questions. A
+            Three ways to find a medium, each answering a different question. A
             fingerprint names the exact recording from a four-second excerpt,
             even a noisy one, by matching the constellation of its spectrogram —
-            computed in your browser. An embedding cannot name it at all; it can
-            only say what kind of thing it is. Then a clip is searched frame by
-            frame by a phrase, which is the embedding's half of that trade.
+            computed in your browser. CLAP, a real text-audio model, cannot name
+            it but finds music by meaning from a phrase. X-CLIP, a real video
+            model, does the same for footage, mixing eight frames inside its
+            graph rather than reading one picture.
           </p>
-        <p class="tldr">A Shazam-style fingerprint identifies the exact recording live in the browser; emb's model reads the same excerpt as a picture and can only describe it. Then a typed phrase finds the moment in a clip.</p>
+        <p class="tldr">A fingerprint names the exact recording; CLAP finds music by meaning and X-CLIP finds footage by meaning — real audio and video models, queried live.</p>
         </div>
         <div>
           <p class="fig"><b>THE MEDIUM</b>
             · <b data-fig-tracks>&#8230;</b> tracks
             · <b data-fig-hashes>&#8230;</b> hashes
-            · <b data-fig-frames>&#8230;</b> frames
+            · <b data-fig-frames>&#8230;</b> clips
             · <b data-fig-model>clip</b>
             · <b data-fig-dim>&#8230;</b> dimensions</p>
           <p class="fig"><b>CORPUS</b> · Five open-licensed music excerpts and one public-domain clip, all committed with the gallery; the fingerprint database is built from the shipped audio.</p>
@@ -116,7 +117,9 @@
 
             <div data-live class="rig media" data-rig="medium"
                  data-emb-preset-clip-text="12046e131453a01ef02ab5bb3bbf3b3bf44f524d"
-                 data-emb-preset-zeroshot="963c9a2b273dab8e6022893e9f338987e4581d60">
+                 data-emb-preset-zeroshot="963c9a2b273dab8e6022893e9f338987e4581d60"
+                 data-emb-preset-clap-text="a642b8fd2df34f14e47dee6bde9c1c4bf88bba91"
+                 data-emb-preset-xclip-text="70bea6840641e80f6b310c5aed45960f4d0d2324">
 
               <h3 class="media__h">Name that tune</h3>
               <p class="media__lede">Pick an excerpt. Your browser decodes it, finds the spectral peaks, hashes them, and looks them up in the shipped database — nothing is uploaded and no answer is stored in the page.</p>
@@ -135,23 +138,34 @@
                 </div>
               </div>
 
-              <h3 class="media__h">Find the moment</h3>
-              <p class="media__lede">The clip is sixteen shipped stills, each embedded before deployment. Type what you are looking for; the phrase is embedded live and the stills are ranked by cosine.</p>
-              <form class="rig__form" data-form>
-                <label class="sr-only" for="m-q">A phrase to find the moment by</label>
-                <input class="rig__input" id="m-q" autocomplete="off" spellcheck="false" value="a duck on the water">
-                <button class="rig__go" type="submit">Find the moment</button>
+              <h3 class="media__h">Describe what you hear — CLAP</h3>
+              <p class="media__lede">A real text-audio model. The five excerpts below were embedded by CLAP's audio tower before deployment; your phrase is embedded live by its text tower and the tracks are ranked across the shared space. This is what the picture never could do: a phrase finds the music by meaning.</p>
+              <form class="rig__form" data-audio-form>
+                <label class="sr-only" for="a-q">A phrase to find music by</label>
+                <input class="rig__input" id="a-q" autocomplete="off" spellcheck="false" value="a solo piano">
+                <button class="rig__go" type="submit">Find the music</button>
               </form>
               <div class="media__grid">
                 <div>
-                  <video class="media__player" data-clip controls playsinline preload="metadata"
-                         src="media/clips/mallard.mp4" aria-label="A public-domain clip of a mallard on water"></video>
-                  <p class="media__cap" data-moment>the clip</p>
+                  <div class="media__votes" data-audio-rank aria-live="polite"></div>
+                  <p class="media__cap" data-audio-readout>type a phrase to rank the music</p>
                 </div>
+                <div class="media__player" data-audio-player></div>
+              </div>
+
+              <h3 class="media__h">Describe what you see — X-CLIP</h3>
+              <p class="media__lede">A real video model, not a picture of one. Each clip was sampled into eight frames — the export's fixed contract — and embedded by X-CLIP's video tower, which mixes the frames inside the graph; your phrase is embedded live by its text tower. The margins here are small, and the plate prints them: eight frames of satellite footage is a hard question.</p>
+              <form class="rig__form" data-video-form>
+                <label class="sr-only" for="v-q">A phrase to find footage by</label>
+                <input class="rig__input" id="v-q" autocomplete="off" spellcheck="false" value="a rocket launching into the sky">
+                <button class="rig__go" type="submit">Find the footage</button>
+              </form>
+              <div class="media__grid">
                 <div>
-                  <div class="media__frames" data-frames role="group" aria-label="The clip's shipped stills; the nearest to the phrase is marked"></div>
-                  <p class="media__cap" data-moment-readout>type a phrase to rank the frames</p>
+                  <div class="media__votes" data-video-rank aria-live="polite"></div>
+                  <p class="media__cap" data-video-readout>type a phrase to rank the footage</p>
                 </div>
+                <div class="media__player" data-video-player></div>
               </div>
 
               <p class="rig__state" data-state>ready when you are</p>
@@ -173,17 +187,12 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">The fingerprint ran entirely in your browser. The excerpt was decoded to 11 kHz mono, cut into frames, windowed and transformed with a radix-2 FFT; the loudest local maxima became the constellation; neighbouring peaks were paired into <span class="t-cmd">(f1, f2, Δt)</span> hashes. Each hash was looked up in a database built offline from the shipped tracks, and the offset of every hit was counted; the track with hundreds of hits at a single offset won. That histogram is the figure.</p>
-            <p class="block__deck">The same excerpt was then drawn as a picture and sent to the sandbox's own preloaded <span class="t-cmd">zeroshot.lua</span>, which embedded it beside eight candidate descriptions and returned the nearest. It is a different question with a different kind of answer: the first names the recording, the second describes it, and neither is the other. The video half sent one phrase to <span class="t-cmd">clip_text.lua</span> for a live text embedding and ranked the sixteen shipped frame vectors the same way the atlas ranks passages.</p>
-</div></div>
-    </section>
-
-    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
-      <div class="shell block__inner"><div class="block__body">
-        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+            <p class="block__deck">The fingerprint ran entirely in your browser: an 11 kHz decode, a windowed FFT, the loudest local maxima as a constellation, neighbouring peaks paired into <span class="t-cmd">(f1, f2, Δt)</span> hashes, each looked up in a database built from the shipped audio, and the offset of every hit counted. The track with hundreds of hits at one offset won. That histogram is the figure.</p>
+            <p class="block__deck">Then two real models answered the semantic question. <b>CLAP</b> is a text-audio model: the five excerpts were decoded to 48 kHz, turned into the log-mel the model's own feature extractor defines, and embedded by CLAP's <b>audio tower</b> offline; your phrase went to its <b>text tower</b> live and the two were compared in one 512-d space. <b>X-CLIP</b> is a text-video model: each clip was sampled into eight frames and embedded by its <b>video tower</b>, which mixes the frames inside the graph, and your phrase by its <b>text tower</b>. Both phrase embeds are one scripted call each.</p>
+<h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
             <p class="block__deck">Reach for the cheap, exact tool when the question is exact. A fingerprint costs a few kilobytes per track and answers "which recording is this" better than any model — but it can only ever answer that, and only for a recording it was given. Reach for the embedding when the question is about meaning — "find the moment someone is in the water", "more like this" — and accept that it describes rather than identifies.</p>
-            <p class="block__deck"><b>What this does not prove.</b> The model read a picture of the audio, not the audio: a spectrogram is a rendering, and the model has no reason to have learned what one means, so its description is a weak guess and the margin is printed to say so. The fingerprint matched the exact recordings in this library and nothing else; a different performance of the same piece would not match, which is the point of it. And the frame search ranks sixteen stills of motion — order and sound are gone before the model sees anything.</p>
+            <p class="block__deck"><b>What this does not prove.</b> The fingerprint matched these exact recordings and nothing else — a different performance of the same piece would not match, which is the point of it. CLAP is trained on general audio, so its reading of a genre is a similarity, not a fact: it puts every "guitar" phrase on the lap-steel track and finds the folk guitar only by character. X-CLIP's export is a third party's, and eight evenly-spaced frames is its fixed contract — it mixes motion inside the graph, but the sampling is not a tuning knob, and its margins on this satellite footage are small (0.254 for the launch, 0.216 for the turtle). A close cosine is a retrieval score, not an understanding of the medium.
 </div></div>
     </section>
 
@@ -196,17 +205,17 @@
 hash = (f1 &lt;&lt; 20) | (f2 &lt;&lt; 10) | dt            # 10 bits each
 votes[track, lib_t - query_t] += 1               # the winning offset
 
-# the model's reading of the same excerpt, as a picture:
-EMB.EVSHA clip &lt;zeroshot.lua sha1&gt; 1 &lt;spectrogram jpeg&gt; "solo piano" "a flute" …
-# -> { label = "a flute", score = 0.26, probs = {…}, scores = {…} }
-
-# the video phrase, embedded live and ranked against the shipped frame vectors:
-EMB.EVSHA clip &lt;clip_text.lua sha1&gt; 1 "a duck on the water"
+# CLAP: a phrase -> the text tower -> a 512-d vector, scored against audio.json
+EMB.EVSHA clap-text &lt;clap_text.lua sha1&gt; 1 "a solo piano"
 # -> { shape = {1,512}, bytes = &lt;float32&gt;, dtype = "f32" }
 
-# the frame vectors were built offline, one call per still:
-EMB.EVSHA clip &lt;clip_embed.lua sha1&gt; 1 &lt;frame jpeg&gt;</code></pre>
-        <figcaption class="code__cap">The fingerprint is the browser's own DSP; <span class="t-cmd">zeroshot.lua</span> describes the excerpt, <span class="t-cmd">clip_text.lua</span> embeds the phrase, and the build-only <span class="t-cmd">clip_embed.lua</span> embedded the stills. One model, one scripted call per reading, no upload.</figcaption>
+# X-CLIP: a phrase -> the text tower -> a 512-d vector, scored against video.json
+EMB.EVSHA xclip-text &lt;xclip_text.lua sha1&gt; 1 "a rocket launching into the sky"
+
+# the indexed media were embedded offline by the other towers:
+EMB.EVSHA clap-audio &lt;clap_audio.lua sha1&gt; 1 &lt;packed log-mel f32&gt;
+EMB.EVSHA xclip-video &lt;xclip_video.lua sha1&gt; 1 &lt;8 frames f32&gt;</code></pre>
+        <figcaption class="code__cap">The fingerprint is the browser's own DSP and sends nothing. CLAP and X-CLIP each embed the phrase live in one scripted call, against an index their own other tower built offline. No upload; the only binary the sandbox ever receives is an allowlisted preset's tensor.</figcaption>
       </figure>
       </div></div>
     </section>
@@ -359,55 +368,88 @@ async function identify(query) {
   }
 }
 
-/* ── the video rig ───────────────────────────────────────────────────── */
+/* ── the CLAP and X-CLIP rigs ──────────────────────────────────────────
+ *
+ * Both are the same shape: a phrase embedded live by the model's text tower,
+ * ranked by cosine against media the model's other tower embedded at build
+ * time. The audio vectors came from CLAP's audio tower over a log-mel; the
+ * video vectors from X-CLIP's video tower over eight frames. */
 
-async function loadFrames() {
-  if (frames) { return frames; }
-  const response = await fetch(new URL('../assets/demo/frames.json', import.meta.url));
-  if (!response.ok) { throw new Error('the frame index is not on this origin'); }
-  const doc = await response.json();
-  doc.frames.forEach((f) => { f.vec = decodeVector(f.vector); delete f.vector; });
-  frames = doc;
-  return doc;
-}
-function showFrames(doc, scores) {
-  const best = scores ? scores.indexOf(Math.max.apply(null, scores)) : -1;
-  root.querySelector('[data-frames]').replaceChildren(...doc.frames.map((f, i) => el('button', {
-    type: 'button', class: 'media__frame' + (i === best ? ' is-hit' : ''),
-    'data-index': String(i), 'aria-label': 'the still at ' + f.t.toFixed(1) + ' seconds',
-    'aria-pressed': String(i === best)
-  }, [el('img', { src: f.picture, alt: 'A still from the clip at ' + f.t.toFixed(1) + ' seconds', loading: 'lazy' })])));
-}
-function seekTo(video, t) {
-  const apply = () => { try { video.currentTime = t; } catch (e) { /* a browser that cannot seek: the readout still says the frame */ } };
-  if (video.readyState >= 2) { apply(); } else { video.addEventListener('canplay', apply, { once: true }); }
-}
+let audioIndex = null;
+let videoIndex = null;
+
 function cosine(a, b) {
   let dot = 0;
   for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; }
   return dot;
 }
-async function findMoment() {
-  const phrase = root.querySelector('#m-q').value.trim();
+async function indexAt(path, slot) {
+  const response = await fetch(new URL(path, import.meta.url));
+  if (!response.ok) { throw new Error('the ' + slot + ' index is not on this origin'); }
+  return response.json();
+}
+async function loadAudio() {
+  if (!audioIndex) { audioIndex = await indexAt('../assets/demo/audio.json', 'audio'); }
+  return audioIndex;
+}
+async function loadVideo() {
+  if (!videoIndex) { videoIndex = await indexAt('../assets/demo/video.json', 'video'); }
+  return videoIndex;
+}
+/* One ranked row per medium: label, a bar, and the cosine. The winner takes the
+ * figure's single accent. */
+function showRank(node, rows, label, player) {
+  const max = Math.max.apply(null, rows.map((r) => r.score).concat([1e-6]));
+  node.replaceChildren(...rows.map((r, i) => el('div', { class: 'media__vote' + (i === 0 ? ' is-hit' : '') }, [
+    el('span', { text: label(r) }),
+    el('i', { style: 'width:' + Math.round(100 * Math.max(0, r.score) / max) + '%' }),
+    el('b', { text: Number(r.score).toFixed(3) })
+  ])));
+  const win = rows[0];
+  player.replaceChildren(win.audio);
+  return win;
+}
+async function describeAudio() {
+  const phrase = root.querySelector('#a-q').value.trim();
   if (!phrase) { return; }
-  retry = findMoment;
+  retry = describeAudio;
   g.begin();
   setState('running');
   try {
-    const doc = await loadFrames();
-    const reply = await g.preset(MODEL, root.getAttribute('data-emb-preset-clip-text'), [phrase]);
+    const doc = await loadAudio();
+    const reply = await g.preset('clap-text', root.getAttribute('data-emb-preset-clap-text'), [phrase]);
     if (!reply || !reply.bytes) { throw new Error('the sandbox returned no embedding'); }
     const query = decodeVector(reply.bytes);
-    const scores = doc.frames.map((f) => cosine(query, f.vec));
-    showFrames(doc, scores);
-    const order = scores.map((s, i) => i).sort((a, b) => scores[b] - scores[a]);
-    const best = doc.frames[order[0]];
-    const video = root.querySelector('[data-clip]');
-    seekTo(video, best.t);
-    root.querySelector('[data-moment-readout]').replaceChildren(
-      el('b', { text: 'the nearest frame is at ' + best.t.toFixed(2) + ' s' }),
-      el('br'), document.createTextNode('"' + phrase + '" · ' + order.slice(0, 3).map((i) => doc.frames[i].t.toFixed(1) + 's ' + Number(scores[i]).toFixed(3)).join(' · ')));
-    root.querySelector('[data-moment]').textContent = 'the clip — moved to the matching frame';
+    const rows = doc.tracks.map((t) => ({ t: t, score: cosine(query, decodeVector(doc.vectors[t.id])),
+      audio: el('audio', { controls: '', preload: 'metadata', src: new URL('media/music/' + t.file, import.meta.url).href, 'aria-label': 'The nearest track' }) }));
+    rows.sort((a, b) => b.score - a.score);
+    const win = showRank(root.querySelector('[data-audio-rank]'), rows, (r) => r.t.title, root.querySelector('[data-audio-player]'));
+    root.querySelector('[data-audio-readout]').replaceChildren(
+      el('b', { text: win.t.title }), document.createTextNode(' · ' + win.t.artist + ' · ' + win.t.licence + ' · cosine ' + win.score.toFixed(3)));
+    setState('ready');
+  } catch (err) {
+    setState(err.state || 'error', err.message);
+  } finally {
+    unfold(root, g.trace());
+  }
+}
+async function describeVideo() {
+  const phrase = root.querySelector('#v-q').value.trim();
+  if (!phrase) { return; }
+  retry = describeVideo;
+  g.begin();
+  setState('running');
+  try {
+    const doc = await loadVideo();
+    const reply = await g.preset('xclip-text', root.getAttribute('data-emb-preset-xclip-text'), [phrase]);
+    if (!reply || !reply.bytes) { throw new Error('the sandbox returned no embedding'); }
+    const query = decodeVector(reply.bytes);
+    const rows = doc.clips.map((c) => ({ c: c, score: cosine(query, decodeVector(doc.vectors[c.id])),
+      audio: el('video', { controls: '', playsinline: '', preload: 'metadata', src: new URL('media/video/' + c.file, import.meta.url).href, 'aria-label': 'The nearest clip' }) }));
+    rows.sort((a, b) => b.score - a.score);
+    const win = showRank(root.querySelector('[data-video-rank]'), rows, (r) => r.c.title, root.querySelector('[data-video-player]'));
+    root.querySelector('[data-video-readout]').replaceChildren(
+      el('b', { text: win.c.title }), document.createTextNode(' · ' + win.c.source + ' · ' + win.c.licence + ' · cosine ' + win.score.toFixed(3)));
     setState('ready');
   } catch (err) {
     setState(err.state || 'error', err.message);
@@ -436,23 +478,15 @@ root.querySelector('[data-queries]').addEventListener('click', (e) => {
   const query = (fingerprints.queries || []).find((q) => q.id === current);
   if (query) { identify(query); }
 });
-root.querySelector('[data-frames]').addEventListener('click', (e) => {
-  const button = e.target.closest('[data-index]');
-  if (!button || !frames) { return; }
-  const video = root.querySelector('[data-clip]');
-  seekTo(video, frames.frames[Number(button.getAttribute('data-index'))].t);
-  video.play().catch(() => {});
-});
-root.querySelector('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); findMoment(); });
+root.querySelector('[data-audio-form]').addEventListener('submit', (e) => { e.preventDefault(); describeAudio(); });
+root.querySelector('[data-video-form]').addEventListener('submit', (e) => { e.preventDefault(); describeVideo(); });
 
-loadQueries().then(async () => {
+Promise.all([loadQueries(), loadAudio(), loadVideo()]).then(([, audio, video]) => {
   document.querySelector('[data-fig-tracks]').textContent = String(fingerprints.tracks.length);
   document.querySelector('[data-fig-hashes]').textContent = String(Object.keys(fingerprints.hashes).length);
-  const doc = await loadFrames();
-  document.querySelector('[data-fig-frames]').textContent = String(doc.frames.length);
-  document.querySelector('[data-fig-dim]').textContent = String(doc.dimension);
-  document.querySelector('[data-fig-model]').textContent = doc.model;
-  showFrames(doc, null);
+  document.querySelector('[data-fig-frames]').textContent = String(video.clips.length);
+  document.querySelector('[data-fig-dim]').textContent = String(audio.dimension);
+  document.querySelector('[data-fig-model]').textContent = audio.model + ' + ' + video.model;
 }).catch(() => {});
 
 </script>

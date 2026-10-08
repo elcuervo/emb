@@ -31,9 +31,17 @@ import (
 //go:embed terminal.js index.html stats.html
 var terminalFS embed.FS
 
-// imagePresetName is the sandbox preset allowed to carry binary, and the only
-// call the base64 argument form is admitted for.
+// imagePresetName is the sandbox's image preset, and binaryPresetNames is the
+// set of preloaded presets admitted to carry binary arguments: the image preset,
+// and the audio encoder whose input is exactly the mel tensor a browser
+// computes. Binary is still refused for every other command, so a text preset
+// can never carry bytes.
 const imagePresetName = "zeroshot"
+
+var binaryPresetNames = map[string]bool{
+	imagePresetName: true,
+	"clap_audio":    true,
+}
 
 // execRequest is the one command path: the argv a client would send to emb,
 // and the protocol version to carry it on. There is no per-visitor state, so
@@ -223,9 +231,9 @@ func (b *Bridge) handleExec(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, env)
 }
 
-// decodeBinary turns the request's base64 image arguments into the raw bytes
+// decodeBinary turns the request's base64 binary arguments into the raw bytes
 // emb expects. Binary is not a second command surface: it is admitted only for
-// the sandbox's own preloaded image preset, called by digest, and it is bounded
+// a preloaded preset named on the allowlist, called by digest, and it is bounded
 // by the image caps. Everything else is refused before a byte reaches the
 // server, and the decoded indices are returned so the text-byte cap can skip
 // them.
@@ -233,8 +241,8 @@ func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
 	if len(req.Bin) == 0 {
 		return req.Args, nil, nil
 	}
-	if !b.isImageCall(req.Args) {
-		return nil, nil, fmt.Errorf("binary arguments are accepted only by the sandbox's image preset")
+	if !b.isBinaryCall(req.Args) {
+		return nil, nil, fmt.Errorf("binary arguments are accepted only by the sandbox's image or audio preset")
 	}
 	if b.limits.MaxImages > 0 && len(req.Bin) > b.limits.MaxImages {
 		return nil, nil, fmt.Errorf("request carries %d images, above the sandbox cap of %d", len(req.Bin), b.limits.MaxImages)
@@ -250,7 +258,7 @@ func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
 			return nil, nil, fmt.Errorf("binary argument %d is not valid base64", i)
 		}
 		if b.limits.MaxImageBytes > 0 && len(raw) > b.limits.MaxImageBytes {
-			return nil, nil, fmt.Errorf("image is %d bytes, above the sandbox image cap of %d", len(raw), b.limits.MaxImageBytes)
+			return nil, nil, fmt.Errorf("binary argument is %d bytes, above the sandbox binary cap of %d", len(raw), b.limits.MaxImageBytes)
 		}
 		args[i] = string(raw)
 		bin[i] = true
@@ -258,14 +266,15 @@ func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
 	return args, bin, nil
 }
 
-// isImageCall reports whether argv calls the sandbox's preloaded image preset by
-// digest. The digest must be one the server preloaded and the preset must be the
-// image one, so the binary transport cannot be pointed at a text preset.
-func (b *Bridge) isImageCall(args []string) bool {
+// isBinaryCall reports whether argv calls a preloaded preset named on the binary
+// allowlist by digest. The digest must be one the server preloaded and the preset
+// must be on the allowlist, so the binary transport cannot be pointed at a text
+// preset.
+func (b *Bridge) isBinaryCall(args []string) bool {
 	if len(args) < 4 || !strings.EqualFold(args[0], "emb.evsha") {
 		return false
 	}
-	return b.presets[args[1]][args[2]] == imagePresetName
+	return binaryPresetNames[b.presets[args[1]][args[2]]]
 }
 
 // Execute runs one command through the whole contract and returns the reply

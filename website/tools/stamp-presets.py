@@ -41,9 +41,12 @@ PRESETS = {
     "between": ("minilm", "website/repl/presets/between.lua"),
     "graph": ("minilm", "website/repl/presets/graph.lua"),
     "zeroshot": ("clip", "website/repl/presets/zeroshot.lua"),
-    # The media plates' text branch: the query phrase, embedded live. The
+    # The media plates' text branches: the query phrase, embedded live. The
     # canonical file lives at the repo root; the sandbox preset is a symlink.
     "clip-text": ("clip", "website/repl/presets/clip_text.lua"),
+    # The real audio and video models' text towers, embedded live per query.
+    "clap-text": ("clap-text", "website/repl/presets/clap_text.lua"),
+    "xclip-text": ("xclip-text", "website/repl/presets/xclip_text.lua"),
     # The canonical file lives at the repo root (emb-laya ships it); the
     # sandbox preset is a symlink to it, so one set of bytes is hashed and
     # shipped.

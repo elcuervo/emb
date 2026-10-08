@@ -1,52 +1,6 @@
-# media-demos Specification
+# Spec Delta
 
-## Purpose
-Lets the gallery put a real medium — a recording, a clip — beside the model's own
-reading of it, and show honestly which questions each can answer: a fingerprint
-names the exact recording, an embedding describes it, and a phrase finds the
-moment in a clip.
-
-## Requirements
-
-### Requirement: A media demo ships its media and accepts no upload
-
-A demo whose input is a recording or a clip SHALL ship that medium in the
-repository and MUST NOT accept a visitor's file, microphone, or camera. The
-model receives the medium only as a picture derived from a shipped asset, and a
-visitor supplies nothing but a query.
-
-#### Scenario: The demo accepts no upload
-
-- **WHEN** a media plate is rendered
-- **THEN** it offers only media committed to the repository, with no file input, drop target, paste path, or capture device
-
-#### Scenario: A played medium is a shipped asset
-
-- **WHEN** a reader hears or watches a medium the plate names
-- **THEN** the bytes played are a committed asset, not a visitor's recording
-
-### Requirement: A fingerprint names the exact recording, computed live
-
-A plate that identifies a recording SHALL compute the query's fingerprint in the
-browser from the shipped excerpt — spectral peaks, paired hashes, and an offset
-histogram — and MUST NOT present a stored answer as the result. The library's
-hashes SHALL be built from the shipped audio by the same algorithm, and the
-plate SHALL show the agreement that produced the answer.
-
-#### Scenario: The query is fingerprinted where it runs
-
-- **WHEN** a reader identifies an excerpt
-- **THEN** the peaks, the hashes, and the winning offset are computed in the browser from that excerpt, and the count of agreeing hashes is shown
-
-#### Scenario: A degraded excerpt still matches
-
-- **WHEN** the library is asked to identify an excerpt degraded with noise
-- **THEN** it returns the correct recording and the agreement it found, rather than failing or guessing
-
-#### Scenario: The database ships with a verified answer
-
-- **WHEN** the fingerprint database is built
-- **THEN** every shipped query is matched against the built library and the build fails if a query does not recover its track
+## MODIFIED Requirements
 
 ### Requirement: A modelled reading describes rather than identifies
 
@@ -113,15 +67,3 @@ NOT begin until the reader asks for it.
 
 - **WHEN** the phrase names a clip
 - **THEN** the shipped clip can be played, and it does not autoplay
-
-### Requirement: Every displayed figure comes from the shipped data
-
-Every number a media plate displays — the track count, the hash count, the frame
-count, the dimension, the model, each score and margin, the licences — SHALL be
-read from the shipped index, the build output, or the server's reply, rather
-than transcribed into the page.
-
-#### Scenario: A figure is read, not typed
-
-- **WHEN** the plate renders its figures
-- **THEN** each comes from the fingerprint database, the frame index, or the model's reply, so a rebuild cannot leave the page describing the previous build

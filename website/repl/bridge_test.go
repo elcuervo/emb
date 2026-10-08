@@ -1074,10 +1074,10 @@ func TestCORSSameHostDifferentPortIsAllowed(t *testing.T) {
 	}
 }
 
-func TestDecodeBinaryOnlyForTheImagePreset(t *testing.T) {
+func TestDecodeBinaryOnlyForAllowlistedPresets(t *testing.T) {
 	l := testLimits()
 	b := newTestBridge(t, "127.0.0.1:1",
-		presets{"clip": {"abc123": imagePresetName}, "minilm": {"def456": "rank"}}, l)
+		presets{"clip": {"abc123": imagePresetName}, "clap-audio": {"fed987": "clap_audio"}, "minilm": {"def456": "rank"}}, l)
 
 	// Larger than the text cap on purpose: the decoded image must be bounded by
 	// the image cap, not the 2 KiB text cap.
@@ -1102,7 +1102,19 @@ func TestDecodeBinaryOnlyForTheImagePreset(t *testing.T) {
 		t.Fatalf("decoded image hit the text cap: %v", err)
 	}
 
-	t.Run("not an image preset", func(t *testing.T) {
+	t.Run("an allowlisted audio preset is admitted", func(t *testing.T) {
+		mel := bytes.Repeat([]byte{0x01, 0x02, 0x03, 0x04}, 1024)
+		enc := base64.StdEncoding.EncodeToString(mel)
+		args := []string{"EMB.EVSHA", "clap-audio", "fed987", "1", enc}
+		got, bin, err := b.decodeBinary(execRequest{Args: args, Bin: []int{4}})
+		if err != nil {
+			t.Fatalf("valid mel refused: %v", err)
+		}
+		if !bytes.Equal([]byte(got[4]), mel) || !bin[4] {
+			t.Fatal("mel was not decoded back to raw bytes")
+		}
+	})
+	t.Run("not an allowlisted preset", func(t *testing.T) {
 		text := []string{"EMB.EVSHA", "minilm", "def456", "1", encoded}
 		if _, _, err := b.decodeBinary(execRequest{Args: text, Bin: []int{4}}); err == nil {
 			t.Fatal("binary accepted for a text preset")
@@ -1117,8 +1129,8 @@ func TestDecodeBinaryOnlyForTheImagePreset(t *testing.T) {
 	t.Run("over the image cap", func(t *testing.T) {
 		big := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0}, l.MaxImageBytes+1))
 		over := []string{"EMB.EVSHA", "clip", "abc123", "1", big}
-		if _, _, err := b.decodeBinary(execRequest{Args: over, Bin: []int{4}}); err == nil || !strings.Contains(err.Error(), "image cap") {
-			t.Fatalf("oversized image err = %v, want an image-cap refusal", err)
+		if _, _, err := b.decodeBinary(execRequest{Args: over, Bin: []int{4}}); err == nil || !strings.Contains(err.Error(), "binary cap") {
+			t.Fatalf("oversized binary err = %v, want a binary-cap refusal", err)
 		}
 	})
 	t.Run("over the image count", func(t *testing.T) {

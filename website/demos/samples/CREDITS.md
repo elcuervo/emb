@@ -42,11 +42,28 @@ Ilić, licensed CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/), via
 Wikimedia Commons.** The other four carry no attribution obligation; credited
 here anyway.
 
-## Video (the clip the plate searches)
+## Video (the footage the plate searches)
 
-`clips/mallard.mp4` — "Mallard Duck Swims By Camera (Wide Screen)", from the
-Internet Archive's `stock_footage` collection, dedicated to the public domain
-under the Creative Commons Public Domain Dedication and Certification
-(`http://creativecommons.org/licenses/publicdomain/`), no attribution required.
-Its sixteen stills under `media/frames/` are cut from it with ffmpeg and embedded
-by the sandbox's own model.
+Six short public-domain clips, transcoded to 480p H.264 MP4 (12 s, no audio) so
+every browser plays them, and sampled into eight frames by
+`website/tools/build-video-index.py` for X-CLIP.
+
+| File | Title | Source | Licence |
+|---|---|---|---|
+| `video/volcano.mp4` | Sarychev Peak eruption from the ISS | NASA | Public domain |
+| `video/moon.mp4` | Moon transit of the sun (STEREO-B) | NASA | Public domain |
+| `video/arecibo.mp4` | Collapse of the Arecibo Radio Telescope | NSF | Public domain |
+| `video/turtle.mp4` | An olive ridley turtle close up | USFWS | Public domain |
+| `video/launch.mp4` | STS-134 launch | NASA | Public domain |
+| `video/storm.mp4` | A February 2011 storm crossing the U.S. | NOAA/NASA | Public domain |
+
+## Models
+
+The plate's semantic half is two real, openly-licensed ONNX models:
+
+- **CLAP** — `Xenova/clap-htsat-unfused` (Apache-2.0), int8 audio and text towers
+  sharing a 512-d space. The log-mel is computed by `website/tools/clap_mel.py`,
+  validated against Transformers' own feature extractor.
+- **X-CLIP** — `imbcmdth/xclip-onnx` (MIT), a third-party export of
+  `microsoft/xclip-base-patch16-kinetics-600`; video and text towers in one
+  512-d space.

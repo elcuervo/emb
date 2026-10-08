@@ -800,8 +800,30 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 		}
 	}
 	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
+	client := hfhub.New()
+	// A model may name an exact file and a separate tokenizer repo. CLAP and
+	// X-CLIP both ship weights the conventional picker cannot find, and X-CLIP's
+	// export carries no tokenizer at all.
+	if cfg.OnnxFile != "" {
+		if _, err := client.Download(cfg.ModelRepo, cfg.OnnxFile, dir); err != nil {
+			return fmt.Errorf("downloading %s: %w", cfg.ModelRepo, err)
+		}
+		tokenizerRepo := cfg.TokenizerRepo
+		if tokenizerRepo == "" {
+			tokenizerRepo = cfg.ModelRepo
+		}
+		if cfg.Tokenizer != "" {
+			if _, err := os.Stat(cfg.Tokenizer); err != nil {
+				if _, err := client.Download(tokenizerRepo, "tokenizer.json", dir); err != nil {
+					return fmt.Errorf("downloading tokenizer from %s: %w", tokenizerRepo, err)
+				}
+			}
+		}
+		log.Printf("  downloaded %s to %s", name, dir)
+		return nil
+	}
 	preferQuantized := cfg.Quantize != "off" && cfg.Quantize != ""
-	if err := hfhub.New().DownloadModel(cfg.ModelRepo, cfg.ModelSubfolder, dir, preferQuantized); err != nil {
+	if err := client.DownloadModel(cfg.ModelRepo, cfg.ModelSubfolder, dir, preferQuantized); err != nil {
 		return fmt.Errorf("downloading %s: %w", cfg.ModelRepo, err)
 	}
 	log.Printf("  downloaded %s to %s", name, dir)
