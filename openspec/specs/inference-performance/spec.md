@@ -4,6 +4,7 @@
 Specifies that `emb` MAY execute embedding post-processing (L2 normalization, mean/CLS pooling, float32 little-endian marshalling) outside the scalar Go loop — for both 2D pre-pooled models and 3D-output models — and MAY tune ONNX inference sessions and the batching window for concurrent multi-model serving, while preserving retrieval-correct embeddings (cosine ≥ 0.99 of the fp32 baseline) and the fp32 wire format.
 
 ## Requirements
+
 ### Requirement: Fast pre-pooled output path
 
 For a pre-pooled (2D-output, `pooling: none`) model, the server SHALL return the model's pooled embedding as little-endian float32 bytes of length `dim * 4` per text, and MAY do so with minimal work (reused buffers and zero-copy marshalling). When normalization is disabled and pooling is baked into the graph, the path SHALL perform no normalization and no pooling arithmetic.
@@ -57,3 +58,27 @@ The server SHALL allow tuning ONNX session execution (execution mode and intra-o
 - **WHEN** an `EMB.MULTI` embeds the same text through two models
 - **THEN** both models SHALL return correct, length-`dim*4` embeddings
 - **AND** session options SHALL be configurable per model (execution mode and `intra_op_threads`)
+
+### Requirement: Work-conserving dispatch for unbatched pools
+
+Unbatched embedding pools and image session pools SHALL dispatch each request to a free worker or session when one exists, rather than to a fixed round-robin index. Embeddings SHALL be unchanged.
+
+#### Scenario: Free worker serves the request
+
+- **GIVEN** an unbatched pool with two workers, one busy with a long request
+- **WHEN** a new request arrives
+- **THEN** it SHALL be served by the free worker without waiting for the busy one
+
+#### Scenario: Embeddings unchanged
+
+- **WHEN** the same texts are embedded before and after the dispatch change
+- **THEN** the returned embeddings SHALL be byte-identical
+
+### Requirement: Thread oversubscription warning
+
+At boot, the server SHALL log a warning when the total intra-op threads across all loaded sessions (embedding, image and script) exceed the available cores. The warning SHALL name the contributing models with their session and thread counts. The configuration SHALL NOT be changed.
+
+#### Scenario: Oversubscribed configuration warns
+
+- **WHEN** a model is configured with `script_workers: 4` and `intra_op_threads: 8` on a 10-core host
+- **THEN** the boot log SHALL contain a warning naming that model, 4 sessions and 8 threads
