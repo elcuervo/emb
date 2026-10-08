@@ -164,7 +164,6 @@ type ScriptResources struct {
 	// concurrency allowance times the session count, and may be resized at
 	// runtime by the autotune controller.
 	pool      *permit.Pool[onnx.NamedSession]
-	next      atomic.Uint64
 	Tokenizer tokenizer.Tokenizer
 	// SplitBatch is set for graphs with dynamic activation quantization, whose
 	// output depends on batch composition and padding: emb.run_batch then runs
@@ -228,15 +227,6 @@ func (r *ScriptResources) TrafficClass() string {
 		return string(c)
 	}
 	return string(permit.ClassIdle)
-}
-
-// Session returns the next named-tensor session for a scripted run,
-// round-robin across the pool (each session serializes its own runs). It stays
-// for callers that need a specific instance (Close, tests); scripted dispatch
-// uses RunNamed.
-func (r *ScriptResources) Session() onnx.NamedSession {
-	i := r.next.Add(1) - 1
-	return r.sessions[i%uint64(len(r.sessions))]
 }
 
 // Sessions exposes the pool for Close and tests.

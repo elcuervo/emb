@@ -11,11 +11,13 @@ import (
 // values land inside the measured best band and keeping them fixed avoids a
 // tuning matrix.
 const (
-	autotuneWindow      = time.Second
-	autotuneCPUHigh     = 0.90
-	autotuneWaitRatio   = 0.25
-	autotuneGrowAfter   = 2
-	autotuneShrinkAfter = 3
+	autotuneWindow    = time.Second
+	autotuneCPUHigh   = 0.90
+	autotuneWaitRatio = 0.25
+	// Expand to the cap after one throughput window; contract only after
+	// sustained (10 s) latency so a short serial lull never starves a burst.
+	autotuneGrowAfter   = 1
+	autotuneShrinkAfter = 10
 )
 
 // startSampler starts the traffic sampler for a scripted model. It is a no-op

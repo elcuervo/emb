@@ -50,7 +50,7 @@ otherwise                       → latency
 
 **3. AIMD on a resizable permit pool, not the channel.**
 Replace the fixed buffered `idle chan` with a small permit structure over the fixed set of sessions: `Acquire` returns the least-recently-used session, `Release` returns it, and `SetCapacity(n)` adds or removes permits (`1 ≤ n ≤ cap`). Growing adds permits; shrinking removes *free* permits only — an in-flight permit is never revoked and the capacity takes effect as it returns.
-Control law: double the allowance after 2 consecutive `throughput` windows while CPU has headroom and the allowance is below the cap; halve it after 3 consecutive `latency` windows. An `idle` window holds (no traffic is not evidence of a latency-sensitive workload, and shrinking under idle starves the next burst). At most one change per window.
+Control law: expand the allowance straight to the cap after 1 `throughput` window; halve it after 10 consecutive `latency` windows (≈10 s). An `idle` window holds (no traffic is not evidence of a latency-sensitive workload). At most one change per window. Fast expansion keeps a burst from queueing behind a low allowance; slow contraction keeps a short serial lull from starving the next burst.
 *Alternative:* rebuild the buffered channel — impossible; channels cannot be resized.
 *Alternative:* `golang.org/x/sync/semaphore` — grows but cannot shrink to a new ceiling cleanly and adds a dependency.
 

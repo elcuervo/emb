@@ -92,25 +92,19 @@ func NewController(cap, initial, growAfter, shrinkAfter int) *Controller {
 	return &Controller{cap: cap, allowance: initial, growAfter: growAfter, shrinkAfter: shrinkAfter}
 }
 
-// Allowance returns the current per-session allowance.
-func (c *Controller) Allowance() int { return c.allowance }
-
-// Cap returns the ceiling.
-func (c *Controller) Cap() int { return c.cap }
-
 // Observe folds one window's class in and reports the resulting allowance,
 // whether it changed, and whether a provisioning recommendation should be
-// logged. Throughput doubles the allowance (bounded by the cap); sustained
-// latency halves it (bounded below by 1). Idle holds: no traffic is not
-// evidence of a latency-sensitive workload, and shrinking under idle would
-// make the next burst ramp from a needlessly low allowance.
+// logged. Throughput expands the allowance straight to the cap after its dwell
+// (fast expansion keeps a burst from queueing behind a low allowance);
+// sustained latency halves it (bounded below by 1). Idle holds: no traffic is
+// not evidence of a latency-sensitive workload.
 func (c *Controller) Observe(class Class) (allowance int, changed, recommend bool) {
 	switch class {
 	case ClassThroughput:
 		c.shrinkStreak = 0
 		c.growStreak++
 		if c.growStreak >= c.growAfter && c.allowance < c.cap {
-			c.allowance = min(c.cap, c.allowance*2)
+			c.allowance = c.cap
 			c.growStreak = 0
 			return c.allowance, true, false
 		}

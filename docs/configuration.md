@@ -186,9 +186,10 @@ traffic every second as `idle`, `latency`, `throughput`, or `saturated` from the
 dispatch-wait/run-time ratio, in-flight count, and process CPU, and adapts the
 per-session concurrency allowance within `script_callers_per_session`:
 
-- `throughput` doubles the allowance toward the cap after two consecutive
-  windows (readiness over raw numbers: 1 → 2 → 4).
-- `latency` halves it after three consecutive windows.
+- `throughput` expands the allowance straight to the cap after one window, so
+  a burst never queues behind a low allowance.
+- `latency` halves it after ten consecutive windows (~10 s), so a short serial
+  lull does not starve the next burst.
 - `idle` holds the current allowance (no traffic is not evidence of a
   latency-sensitive workload).
 - `saturated` never grows; it logs a recommendation to raise `script_workers`

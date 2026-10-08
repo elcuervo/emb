@@ -246,6 +246,11 @@ func runShape(opt options, script string, corpus []string) error {
 
 // readAutotune reads the script autotune fields from EMB.INFO <model>.
 func readAutotune(c *resp.Client, model string) (string, error) {
+	// The shape run outlives the connection's original 30s deadline, so refresh
+	// it before each read.
+	if err := c.SetDeadline(time.Now().Add(c.Timeout())); err != nil {
+		return "", err
+	}
 	if err := c.WriteArgv("EMB.INFO", model); err != nil {
 		return "", err
 	}

@@ -50,13 +50,13 @@ func TestClassify(t *testing.T) {
 }
 
 func TestControllerGrowsUnderBurst(t *testing.T) {
-	c := NewController(4, 1, 2, 3)
+	c := NewController(4, 1, 2, 10)
 	if a, changed, _ := c.Observe(ClassThroughput); changed || a != 1 {
 		t.Fatalf("first window changed=%v allowance=%d, want no change at 1", changed, a)
 	}
 	a, changed, _ := c.Observe(ClassThroughput)
-	if !changed || a != 2 {
-		t.Fatalf("second window changed=%v allowance=%d, want change to 2", changed, a)
+	if !changed || a != 4 {
+		t.Fatalf("second window changed=%v allowance=%d, want change to the cap 4", changed, a)
 	}
 }
 
@@ -75,26 +75,23 @@ func TestControllerShrinksWhenQuiet(t *testing.T) {
 
 func TestControllerIdleHolds(t *testing.T) {
 	c := NewController(4, 4, 2, 3)
+	last := 4
 	for i := 0; i < 6; i++ {
-		if _, changed, _ := c.Observe(ClassIdle); changed {
+		a, changed, _ := c.Observe(ClassIdle)
+		if changed {
 			t.Fatalf("idle changed the allowance on window %d", i)
 		}
+		last = a
 	}
-	if a := c.Allowance(); a != 4 {
-		t.Fatalf("idle moved allowance to %d, want 4 held", a)
+	if last != 4 {
+		t.Fatalf("idle moved allowance to %d, want 4 held", last)
 	}
 }
 
-func TestControllerDoublesToCap(t *testing.T) {
-	c := NewController(8, 1, 1, 3)
-	if a, changed, _ := c.Observe(ClassThroughput); !changed || a != 2 {
-		t.Fatalf("first throughput window = %d/%v, want 2/true", a, changed)
-	}
-	if a, _, _ := c.Observe(ClassThroughput); a != 4 {
-		t.Fatalf("second throughput window = %d, want 4", a)
-	}
-	if a, _, _ := c.Observe(ClassThroughput); a != 8 {
-		t.Fatalf("third throughput window = %d, want 8", a)
+func TestControllerJumpsToCap(t *testing.T) {
+	c := NewController(8, 1, 1, 10)
+	if a, changed, _ := c.Observe(ClassThroughput); !changed || a != 8 {
+		t.Fatalf("first throughput window = %d/%v, want 8/true", a, changed)
 	}
 	if a, changed, _ := c.Observe(ClassThroughput); changed || a != 8 {
 		t.Fatalf("allowance past cap: %d/%v, want 8 held", a, changed)
@@ -121,12 +118,13 @@ func TestControllerSaturationRecommendsOnce(t *testing.T) {
 }
 
 func TestControllerDampsAlternatingLoad(t *testing.T) {
-	c := NewController(4, 1, 2, 3)
+	c := NewController(4, 1, 2, 10)
+	last := 1
 	for i := 0; i < 6; i++ {
 		c.Observe(ClassThroughput)
-		c.Observe(ClassLatency)
+		last, _, _ = c.Observe(ClassLatency)
 	}
-	if a := c.Allowance(); a != 1 {
-		t.Fatalf("alternating load moved allowance to %d, want 1", a)
+	if last != 1 {
+		t.Fatalf("alternating load moved allowance to %d, want 1", last)
 	}
 }

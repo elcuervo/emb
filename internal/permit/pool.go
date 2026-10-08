@@ -4,7 +4,10 @@
 // it.
 package permit
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 // Pool hands out leases over a fixed set of items. Capacity is the maximum
 // number of concurrent leases and can grow or shrink at runtime; the item set
@@ -14,14 +17,15 @@ import "sync"
 // Invariant: len(available) == capacity - leased. SetCapacity preserves it by
 // only adding or removing free permits, so an in-flight lease is never revoked.
 type Pool[T any] struct {
-	mu          sync.Mutex
-	cond        *sync.Cond
-	items       []T
-	available   []T
-	capacity    int
-	leased      int
-	maxCapacity int
-	next        int // round-robin cursor over items for added permits
+	mu           sync.Mutex
+	cond         *sync.Cond
+	items        []T
+	available    []T
+	capacity     int
+	leased       int
+	leasedAtomic atomic.Int64
+	maxCapacity  int
+	next         int // round-robin cursor over items for added permits
 }
 
 // New builds a pool over items with the given initial and maximum capacity.
@@ -65,6 +69,7 @@ func (p *Pool[T]) Acquire() T {
 	item := p.available[len(p.available)-1]
 	p.available = p.available[:len(p.available)-1]
 	p.leased++
+	p.leasedAtomic.Add(1)
 	return item
 }
 
@@ -74,10 +79,18 @@ func (p *Pool[T]) Release(item T) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.leased--
+	p.leasedAtomic.Add(-1)
+	added := false
 	if want := p.capacity - p.leased; len(p.available) < want {
 		p.available = append(p.available, item)
+		added = true
 	}
-	p.cond.Broadcast()
+	// Signal exactly one waiter per returned permit: broadcasting wakes every
+	// blocked caller on each completion, and the herd's re-sleep dominates the
+	// tail under high concurrency.
+	if added {
+		p.cond.Signal()
+	}
 }
 
 // SetCapacity changes the maximum concurrent leases, clamped to [1, max]. A
@@ -104,6 +117,8 @@ func (p *Pool[T]) SetCapacity(n int) {
 		p.available = p.available[:len(p.available)-drop]
 	}
 	p.capacity = n
+	// Capacity changes are rare (at most once per sampling window); waking all
+	// waiters is fine here because an increase may free several at once.
 	p.cond.Broadcast()
 }
 
@@ -114,15 +129,9 @@ func (p *Pool[T]) Capacity() int {
 	return p.capacity
 }
 
-// MaxCapacity returns the configured ceiling.
-func (p *Pool[T]) MaxCapacity() int { return p.maxCapacity }
-
-// InFlight returns the number of leases currently held.
-func (p *Pool[T]) InFlight() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.leased
-}
+// InFlight returns the number of leases currently held. It is lock-free so the
+// observability path never contends with Run.
+func (p *Pool[T]) InFlight() int { return int(p.leasedAtomic.Load()) }
 
 // Available returns the number of free leases.
 func (p *Pool[T]) Available() int {

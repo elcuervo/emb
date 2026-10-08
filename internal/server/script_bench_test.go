@@ -482,7 +482,7 @@ func directGraphRun(tb testing.TB, entry *registry.ModelEntry, text string) {
 		{Name: "attention_mask", Shape: []int64{1, seq}, DType: onnx.TensorInt64, Int64: mask},
 		{Name: "token_type_ids", Shape: []int64{1, seq}, DType: onnx.TensorInt64, Int64: make([]int64, len(ids))},
 	}
-	if _, err := res.Session().RunNamed(inputs); err != nil {
+	if _, err := res.Sessions()[0].RunNamed(inputs); err != nil {
 		tb.Fatal(err)
 	}
 }

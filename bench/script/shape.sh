@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SHAPE=${SHAPE:-mixed}
-PHASE=${PHASE:-3s}
+PHASE=${PHASE:-12s}
 BURST=${BURST:-8}
 PORT=${PORT:-16499}
 CORPUS=${CORPUS:-bench/script/gliner-corpus.txt}

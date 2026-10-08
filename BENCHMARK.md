@@ -371,21 +371,22 @@ while a session is shared (see `script_callers_per_session` / `allow_spinning`).
 ### Traffic-shaped autotuning
 
 The runtime controller classifies each scripted model's traffic and adapts the
-per-session concurrency allowance within the configured cap. Driven with
-`SHAPE=mixed PHASE=4s BURST=8 just bench-shape` (GLiNER2, `script_workers: 4`):
+per-session concurrency allowance within the configured cap: it expands straight
+to the cap on the first `throughput` window and halves only after ten
+consecutive `latency` windows, so a burst never queues behind a low allowance
+and a short serial lull never starves the next burst. Driven with
+`SHAPE=mixed PHASE=12s BURST=8 just bench-shape` (GLiNER2, `script_workers: 4`):
 
 | phase | concurrency | req/s | classified | allowance |
 |---|---|---|---|---|
-| serial | 1 | 49.6 | `latency` | 4 → 2 |
-| burst | 8 | 153.6 | `saturated` | 2 (held) |
-| serial | 1 | 48.4 | `latency` | 2 → 1 |
+| serial | 1 | 48.0 | `idle` | 4 → 2 |
+| burst | 8 | 149.1 | `saturated` | 2 → 4 |
+| serial | 1 | 47.0 | `latency` | 4 → 2 |
 
-On this host the burst window hit the CPU-saturation gate, so the controller
-refused to grow and would log a provisioning recommendation — the gate working
-as designed (more concurrency cannot create CPU). On a quiet host the burst
-classifies as `throughput` and the allowance doubles toward the cap after two
-windows. The serial phases halve it after three latency windows; idle windows
-hold the current allowance.
+The burst window reached the CPU-saturation gate after expanding, so the
+controller held at the cap and would log a provisioning recommendation rather
+than growing past it (more concurrency cannot create CPU). The serial phases
+halve the allowance after ten latency windows; idle windows hold.
 
 ### Unbatched embedding pool (siglip2)
 
