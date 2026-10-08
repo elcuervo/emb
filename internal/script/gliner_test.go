@@ -61,7 +61,7 @@ func loadGLiNER(t *testing.T) (session onnx.NamedSession, tok tokenizer.Pretoken
 	}
 	sort.Strings(outputNames)
 
-	sess, err := onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, 1, 2, onnx.ExecModeSequential)
+	sess, err := onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, 1, 2, onnx.ExecModeSequential, true)
 	if err != nil {
 		t.Fatalf("opening gliner session: %v", err)
 	}

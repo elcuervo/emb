@@ -225,10 +225,30 @@ download-gliner-model:
 bench-gliner intra="4":
     @EMB_BENCH_INTRA={{intra}} go test ./internal/script/ -bench=BenchmarkGLiNERExtract -benchtime=5x -run=^$
 
-# Scripted-inference benchmarks for the production-scripting change
-# (requires: just download-model)
-bench-script:
-    @go test ./internal/server/ -bench="BenchmarkScript" -benchmem -run=^$ -benchtime=20x
+# Scripted-inference benchmarks.
+#
+# No args: the Go BenchmarkScript suite (requires: just download-model).
+# With a baseline and candidate binary: an interleaved A/B run of cmd/evalbench
+# against a GLiNER2 layout, failing on any reply difference (requires: just
+# download-gliner-model). Layout via env: WORKERS/INTRA/CONCS/N/SAMPLES.
+#   just bench-script ./bin/emb-baseline ./bin/emb
+#   just bench-script BASE=./bin/emb-baseline CAND=./bin/emb
+#   WORKERS=2 SAMPLES=3 just bench-script BASE=./bin/emb-baseline CAND=./bin/emb
+bench-script BASE="" CAND="":
+    @base="{{BASE}}"; cand="{{CAND}}"; base="${base#BASE=}"; cand="${cand#CAND=}"; \
+    if [ -z "$base" ]; then \
+        go test ./internal/server/ -bench="BenchmarkScript" -benchmem -run=^$ -benchtime=20x; \
+    else \
+        [ -n "$cand" ] || { echo "ERROR: set a candidate alongside the baseline"; exit 1; }; \
+        BASE="$base" CAND="$cand" DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" bash bench/script/run.sh; \
+    fi
+
+# Traffic-shape autotune demo (requires: just download-gliner-model). Starts a
+# GLiNER2 server and drives serial/burst phases, printing the detected traffic
+# class and concurrency allowance per phase. Layout via env:
+#   SHAPE=mixed PHASE=3s BURST=8 WORKERS=4 just bench-shape
+bench-shape:
+    @DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" bash bench/script/shape.sh
 
 # Enforce the scripted-inference budgets (latency parity, metal parity,
 # materialization, memory, throughput scaling). Timing- and RSS-sensitive: run
@@ -342,6 +362,12 @@ bench-ruby-multi config="bench-cpu-partition.yaml":
     (cd gems/emb && EMB_BENCH_PORT2=16380 EMB_BENCH_APP_CPUS={{app_cpus}} EMB_BENCH_BENCH_CPUS={{bench_cpus}} $(bench) bundle exec ruby bench/bench.rb); \
     status=$?; \
     exit $status
+
+# Pool head-of-line-blocking gate (model-free): drives the real emb client
+# through the shared repro mock with occasional slow replies, from more threads
+# than the pool has connections, and fails when p90 reaches the slow path.
+bench-pool-gate:
+    @cd gems/emb && bundle exec ruby ../../bench/repro/pool-hol/gate.rb
 
 # Run all benchmarks
 bench-all: bench-redis bench-cache

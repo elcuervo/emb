@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -110,7 +111,10 @@ func TestCacheLifecycleConcurrent(t *testing.T) {
 			<-start
 			for i := range 500 {
 				key := fmt.Sprintf("m%d:k%d", worker&1, i&31)
-				c.Set(key, []byte{byte(i)})
+				c.Set(key, bytes.Repeat([]byte{byte(i)}, 1+i%3000))
+				if st := c.Stats(); st.CurBytes > st.MaxBytes {
+					t.Errorf("budget exceeded: %+v", st)
+				}
 				c.Get(key)
 				if i%73 == 0 {
 					_ = c.Snapshot()
@@ -138,5 +142,78 @@ func TestCacheLifecycleConcurrent(t *testing.T) {
 	st := c.Stats()
 	if st.CurBytes < 0 || st.CurBytes > st.MaxBytes {
 		t.Fatalf("cache accounting invalid: %+v", st)
+	}
+}
+
+func TestCacheAdmissionBudget(t *testing.T) {
+	// Initial entries cost 52 bytes: three key bytes, one value, 48 overhead.
+	for _, tc := range []struct {
+		name, key  string
+		size       int
+		rejected   bool
+		keys       []string
+		evictions  int64
+		generation uint64
+	}{
+		{"oversized insert", "d:3", 158, true, []string{"c:2", "b:1", "a:0"}, 0, 3},
+		{"oversized replacement", "a:0", 158, true, []string{"c:2", "b:1", "a:0"}, 0, 3},
+		{"growing replacement", "a:0", 106, false, []string{"a:0"}, 2, 6},
+		{"exact total", "a:0", 53, false, []string{"a:0", "c:2", "b:1"}, 0, 4},
+		{"exact entry", "a:0", 157, false, []string{"a:0"}, 2, 6},
+		{"exact insert", "d:3", 1, false, []string{"d:3", "c:2", "b:1", "a:0"}, 0, 4},
+		{"shrinking replacement", "a:0", 0, false, []string{"a:0", "c:2", "b:1"}, 0, 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewCache(208)
+			for _, key := range []string{"a:0", "b:1", "c:2"} {
+				c.Set(key, []byte{1})
+			}
+			before := c.Stats()
+			old := c.Snapshot()
+			value := bytes.Repeat([]byte{2}, tc.size)
+			c.Set(tc.key, value)
+			snap, st := c.Snapshot(), c.Stats()
+			if tc.rejected && !reflect.DeepEqual(before, st) {
+				t.Fatalf("rejected write mutated stats: %+v -> %+v", before, st)
+			}
+			if len(snap.Entries) != len(tc.keys) {
+				t.Fatalf("entries = %v", snap.Entries)
+			}
+			var total int64
+			counts := map[string]int64{}
+			for i, e := range snap.Entries {
+				want := []byte{1}
+				if e.Key == tc.key && !tc.rejected {
+					want = value
+				}
+				if e.Key != tc.keys[i] || !bytes.Equal(e.Value, want) {
+					t.Fatalf("entry %d = %v, want %s/%v", i, e, tc.keys[i], want)
+				}
+				total += int64(len(e.Key) + len(e.Value) + 48)
+				counts[modelOf(e.Key)]++
+			}
+			if st.CurBytes != total || total > st.MaxBytes || st.Entries != len(tc.keys) || st.Evictions != tc.evictions || st.Generation != tc.generation || st.Hits != 0 || st.Misses != 0 {
+				t.Fatalf("bad accounting: %+v", st)
+			}
+			for model, ms := range st.ByModel {
+				evicted := max(before.ByModel[model].Entries-counts[model], 0)
+				if ms != (CacheModelStats{Entries: counts[model], Evictions: evicted}) {
+					t.Fatalf("model %s: %+v", model, ms)
+				}
+			}
+			for _, e := range old.Entries {
+				if !bytes.Equal(e.Value, []byte{1}) {
+					t.Fatal("snapshot value mutated")
+				}
+			}
+		})
+	}
+	for _, budget := range []int64{0, -1} {
+		c := NewCache(budget)
+		c.Set("m:k", make([]byte, 1000))
+		c.Set("m:k", make([]byte, 2000))
+		if c.Stats().CurBytes != 2051 {
+			t.Fatal("non-positive budget semantics changed")
+		}
 	}
 }

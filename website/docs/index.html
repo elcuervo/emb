@@ -87,7 +87,7 @@
         remains the source of truth.
       </p>
       <p class="doc-note">
-        <strong>Pre-1.0.</strong> emb is at v<span data-emb-version>0.4.1</span>
+        <strong>Pre-1.0.</strong> emb is at v<span data-emb-version>0.4.3.pre1</span>
         and interfaces may still move. Commands, configuration keys and reply
         shapes on this page describe that version.
       </p>
@@ -410,7 +410,41 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <dd>Default <code>[]</code>. Lua scripts to preload at boot; relative paths resolve against the config file's directory. An invalid script — bad syntax, missing file, oversized — fails startup.</dd>
         <dt>batching</dt>
         <dd>Default <code>{timeout: 1, max_batch: 32, max_batch_tokens: 16384}</code>.</dd>
+        <dt>script_callers_per_session</dt>
+        <dd>Default <code>4</code>. How many scripted evaluations may share one named-tensor session at once; the runtime controller adapts within it.</dd>
+        <dt>capacity</dt>
+        <dd>Default <code>auto</code>. The creation-time layout: <code>auto</code> keeps the derived layout and adapts at runtime, <code>latency</code> pins spinning on with one caller per session, <code>throughput</code> pins shared sessions with spinning off.</dd>
+        <dt>autotune</dt>
+        <dd>Default <code>auto</code>. <code>auto</code>/<code>callers</code> run the concurrency controller; <code>off</code> fixes concurrency at the configured value.</dd>
       </dl>
+
+      <h3 class="doc-h3">Adaptive capacity</h3>
+      <p class="doc-prose">
+        Scripted models are <em>shared</em>: several evaluations run at once on
+        one named-tensor session, up to
+        <code>script_callers_per_session</code>. Out of the box the server
+        observes each model's traffic shape and moves the effective allowance
+        inside that cap — shrinking under sustained serial traffic and
+        re-expanding to the cap on the first burst — so neither an unusually
+        serial nor an unusually bursty workload needs a hand-picked layout.
+      </p>
+      <dl class="doc-cmds">
+        <dt>auto (default)</dt>
+        <dd>The derived layout, with the controller active; the allowance tracks the observed traffic class.</dd>
+        <dt>latency</dt>
+        <dd>Pinned for round trips: ORT spinning on, one caller per session, controller off.</dd>
+        <dt>throughput</dt>
+        <dd>Pinned for concurrency: shared sessions with spinning off, allowance at the cap, controller active.</dd>
+      </dl>
+      <p class="doc-prose">
+        A profile picks a <em>default</em>; an explicit setting wins. An explicit
+        <code>allow_spinning</code> is kept, and <code>autotune: off</code> pins
+        the allowance at the configured value even under
+        <code>capacity: throughput</code>. A model whose class stays
+        <code>saturated</code> is CPU-bound — more concurrency cannot help — so
+        the controller holds the allowance and logs one recommendation to raise
+        <code>script_workers</code> or <code>intra_op_threads</code> instead.
+      </p>
 
       <h3 class="doc-h3">Batching</h3>
       <p class="doc-prose">
@@ -679,6 +713,33 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <code>SET</code>. Both require authentication, matching Redis.
       </p>
 
+      <h3 class="doc-h3">Autotune state</h3>
+      <p class="doc-prose">
+        <code>EMB.INFO &lt;model&gt;</code> reports the script path's live
+        capacity state, so an operator can tell queueing from compute without
+        guessing:
+      </p>
+      <dl class="doc-cmds">
+        <dt>script_traffic_class</dt>
+        <dd><code>idle</code>, <code>latency</code>, <code>throughput</code>, or <code>saturated</code> — the class of the most recent sampling window.</dd>
+        <dt>script_inflight</dt>
+        <dd>Evaluations running right now, counted at the inference boundary; cache hits never reach it.</dd>
+        <dt>script_concurrency_current</dt>
+        <dd>The effective per-session allowance the controller is using.</dd>
+        <dt>script_concurrency_target</dt>
+        <dd>The configured cap, <code>script_callers_per_session</code>.</dd>
+        <dt>script_autotune_active</dt>
+        <dd><code>1</code> while the controller is adapting, <code>0</code> when it is fixed.</dd>
+      </dl>
+      <p class="doc-prose">
+        <code>latency</code> with <code>inflight</code> at the session count is
+        the serial case; <code>throughput</code> with <code>inflight</code>
+        above it is a burst; <code>saturated</code> means the process is
+        CPU-bound and the allowance is held. The kill switch is
+        <code>autotune: off</code>, which pins the allowance at the configured
+        value for the process lifetime.
+      </p>
+
       <h3 class="doc-h3">emb-top</h3>
       <!-- The recorded take, played on request. The same run the landing
            page's plate shows, and the same publishing step writes both
@@ -767,6 +828,178 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
         <dt>cpu partition</dt>
         <dd>6 CPUs for the server, 4 for the tooling. The server is bounded by <code>GOMAXPROCS</code> and <code>intra_op_threads</code>, hard-pinned with <code>taskset -c</code> on Linux. The partition is measurement methodology, not a throughput knob.</dd>
       </dl>
+
+      <h3 class="doc-h3">Adaptive capacity — a scripted model</h3>
+      <p class="doc-prose">
+        The figures above use <code>EMB</code> on an embedding model. These use a
+        <em>scripted</em> model — GLiNER2 int8, 36 texts, reply cache off, on
+        the same Apple M4. Out of the box, with no
+        <code>script_workers</code> and no profile, the burst case runs
+        <strong>2.0×</strong> the throughput at <strong>2.0×</strong> the p50
+        latency of the pre-change binary, with serial latency unchanged. The
+        gain belongs to the adaptive-capacity work as a whole: the fixed
+        shared-session default it shipped with was already the measured best,
+        so the controller's own effect against that default is parity — and the
+        first plate says so.
+      </p>
+
+      <figure class="plate" id="plate-out-of-box">
+        <div class="plate__wrap">
+<svg class="plate__svg" viewBox="0 0 720 172" role="img" aria-labelledby="fig2-t">
+        <title id="fig2-t">Out-of-the-box improvement factor per metric: burst throughput and burst latency about twofold, serial latency unchanged</title>
+        <line class="plate__grid" x1="210.0" y1="26" x2="210.0" y2="132"/>
+        <text class="plate__label" x="210.0" y="150" text-anchor="middle">1.0×</text>
+        <line class="plate__grid" x1="349.3" y1="26" x2="349.3" y2="132"/>
+        <text class="plate__label" x="349.3" y="150" text-anchor="middle">1.5×</text>
+        <line class="plate__grid" x1="488.6" y1="26" x2="488.6" y2="132"/>
+        <text class="plate__label" x="488.6" y="150" text-anchor="middle">2.0×</text>
+        <line class="plate__axis" x1="210.0" y1="26" x2="210.0" y2="132"/>
+        <text class="plate__label plate__label--strong" x="210.0" y="18" text-anchor="middle">no change</text>
+        <text class="plate__label plate__label--strong" x="196" y="44" text-anchor="end">burst req/s (c=8)</text>
+        <rect class="plate__bar" x="210.0" y="33" width="292.5" height="14"/>
+        <text class="plate__label plate__label--strong" x="216.0" y="29">2.05×</text>
+        <text class="plate__label plate__label--strong" x="196" y="76" text-anchor="end">burst p50 (ms)</text>
+        <rect class="plate__bar" x="210.0" y="65" width="341.1" height="14"/>
+        <text class="plate__label plate__label--strong" x="216.0" y="61">2.22×</text>
+        <text class="plate__label plate__label--strong" x="196" y="108" text-anchor="end">serial p50 (ms)</text>
+        <rect class="plate__bar" x="210.0" y="97" width="8.1" height="14"/>
+        <text class="plate__label plate__label--strong" x="216.0" y="93">1.03×</text>
+        </svg>
+        </div>
+        <figcaption class="plate__cap">
+          <strong>Out of the box</strong> · pre-change binary vs HEAD ·
+          <strong>burst req/s 51.9 → 106.4</strong> (<strong>2.05×</strong>) ·
+          <strong>burst p50 141.7 → 63.7 ms</strong> (<strong>2.22×</strong>) ·
+          <strong>serial p50 18.2 → 18.8 ms</strong> (parity, <strong>1.03×</strong>).
+          Two interleaved samples, mean; replies byte-identical.
+          Reproduce with
+          <code>WORKERS=0 CONCS=1,8 N=200 SAMPLES=2 just bench-script &lt;base-bin&gt; &lt;cand-bin&gt;</code>.
+        </figcaption>
+      </figure>
+
+      <p class="doc-prose">
+        The controller's job is to keep the allowance where the traffic is, not
+        to add throughput. Sampling <code>EMB.INFO gliner2</code> once a second
+        through serial → burst → serial → burst → serial
+        (<code>SHAPE=mixed PHASE=15s BURST=8 WORKERS=4 just bench-shape</code>):
+      </p>
+
+      <figure class="plate" id="plate-control-loop">
+        <div class="plate__wrap">
+<svg class="plate__svg" viewBox="0 0 720 268" role="img" aria-labelledby="fig1-t">
+        <title id="fig1-t">Concurrency allowance and in-flight runs over a serial, burst, serial, burst, serial traffic shape</title>
+        <line class="plate__grid" x1="58" y1="196.0" x2="700" y2="196.0"/>
+        <text class="plate__label" x="48" y="200.0" text-anchor="end">0</text>
+        <line class="plate__grid" x1="58" y1="153.5" x2="700" y2="153.5"/>
+        <text class="plate__label" x="48" y="157.5" text-anchor="end">2</text>
+        <line class="plate__grid" x1="58" y1="111.0" x2="700" y2="111.0"/>
+        <text class="plate__label" x="48" y="115.0" text-anchor="end">4</text>
+        <line class="plate__grid" x1="58" y1="68.5" x2="700" y2="68.5"/>
+        <text class="plate__label" x="48" y="72.5" text-anchor="end">6</text>
+        <line class="plate__grid" x1="58" y1="26.0" x2="700" y2="26.0"/>
+        <text class="plate__label" x="48" y="30.0" text-anchor="end">8</text>
+        <line class="plate__grid" x1="186.4" y1="26" x2="186.4" y2="196"/>
+        <line class="plate__grid" x1="314.8" y1="26" x2="314.8" y2="196"/>
+        <line class="plate__grid" x1="443.2" y1="26" x2="443.2" y2="196"/>
+        <line class="plate__grid" x1="571.6" y1="26" x2="571.6" y2="196"/>
+        <line class="plate__axis" x1="58" y1="196" x2="700" y2="196"/>
+        <line class="plate__axis" x1="58" y1="26" x2="58" y2="196"/>
+        <line class="plate__cap-line" x1="58" y1="111.0" x2="700" y2="111.0"/>
+        <text class="plate__label plate__label--strong" x="64" y="103.0">CAP 4</text>
+        <path class="plate__area" d="M 58.0,174.8 L 186.4,174.8 L 186.4,174.8 L 195.0,174.8 L 195.0,26.0 L 314.8,26.0 L 314.8,174.8 L 443.2,174.8 L 443.2,174.8 L 451.8,174.8 L 451.8,26.0 L 571.6,26.0 L 571.6,174.8 L 700.0,174.8 L 700.0,174.8 L 700,174.8 L 700,196 L 58,196 Z"/>
+        <path class="plate__signal" d="M 100.8,111.0 L 143.6,111.0 L 143.6,153.5 L 186.4,153.5 L 195.0,153.5 L 195.0,111.0 L 314.8,111.0 L 400.4,111.0 L 400.4,153.5 L 443.2,153.5 L 451.8,153.5 L 451.8,111.0 L 571.6,111.0 L 657.2,111.0 L 657.2,153.5 L 700.0,153.5"/>
+        <text class="plate__label" x="122.2" y="218" text-anchor="middle">serial c=1</text>
+        <text class="plate__label" x="250.6" y="218" text-anchor="middle">burst c=8</text>
+        <text class="plate__label" x="379.0" y="218" text-anchor="middle">serial c=1</text>
+        <text class="plate__label" x="507.4" y="218" text-anchor="middle">burst c=8</text>
+        <text class="plate__label" x="635.8" y="218" text-anchor="middle">serial c=1</text>
+        <text class="plate__label" x="58" y="238" text-anchor="start">seconds →</text>
+        <text class="plate__label" x="186.4" y="238" text-anchor="middle">15</text>
+        <text class="plate__label" x="314.8" y="238" text-anchor="middle">30</text>
+        <text class="plate__label" x="443.2" y="238" text-anchor="middle">45</text>
+        <text class="plate__label" x="571.6" y="238" text-anchor="middle">60</text>
+        <text class="plate__label" x="700.0" y="238" text-anchor="middle">75</text>
+        </svg>
+        </div>
+        <div class="plate__legend">
+          <span><i class="plate__swatch--signal" aria-hidden="true"></i><b>allowance</b> — the orange step</span>
+          <span><i class="plate__swatch--area" aria-hidden="true"></i>in-flight runs</span>
+          <span><i class="plate__swatch--cap" aria-hidden="true"></i>cap 4</span>
+        </div>
+        <figcaption class="plate__cap">
+          <strong>The control loop.</strong> Serial windows classify
+          <code>latency</code> and the allowance halves to <strong>2</strong>
+          after ten sustained windows. The first burst window classifies
+          <code>throughput</code> and re-expands it to the cap in a single tick;
+          from the next tick the class is <code>saturated</code> (in-flight 8,
+          CPU ≥ 90%) and the allowance <strong>holds at 4</strong>. Per-phase
+          req/s: serial <strong>46.8</strong>, burst <strong>149.6</strong>,
+          serial <strong>46.8</strong>. Values recorded in
+          <code>BENCHMARK.md</code>.
+        </figcaption>
+      </figure>
+
+      <p class="doc-prose">
+        The <code>capacity</code> profiles let an operator pin the layout
+        directly. Measured at <code>script_workers: 4</code>, five labels:
+      </p>
+
+      <figure class="plate" id="plate-profiles">
+        <div class="plate__wrap">
+<svg class="plate__svg" viewBox="0 0 720 300" role="img" aria-labelledby="fig3-t">
+        <title id="fig3-t">Serial p50 against burst throughput for the capacity profiles: auto, throughput and the fixed cap coincide; latency trades throughput for serial latency</title>
+        <line class="plate__grid" x1="135.6" y1="40" x2="135.6" y2="230"/>
+        <text class="plate__label" x="135.6" y="250" text-anchor="middle">20.0</text>
+        <line class="plate__grid" x1="299.4" y1="40" x2="299.4" y2="230"/>
+        <text class="plate__label" x="299.4" y="250" text-anchor="middle">20.5</text>
+        <line class="plate__grid" x1="463.3" y1="40" x2="463.3" y2="230"/>
+        <text class="plate__label" x="463.3" y="250" text-anchor="middle">21.0</text>
+        <line class="plate__grid" x1="627.2" y1="40" x2="627.2" y2="230"/>
+        <text class="plate__label" x="627.2" y="250" text-anchor="middle">21.5</text>
+        <line class="plate__grid" x1="70" y1="190.4" x2="660" y2="190.4"/>
+        <text class="plate__label" x="60" y="194.4" text-anchor="end">120</text>
+        <line class="plate__grid" x1="70" y1="150.8" x2="660" y2="150.8"/>
+        <text class="plate__label" x="60" y="154.8" text-anchor="end">130</text>
+        <line class="plate__grid" x1="70" y1="111.2" x2="660" y2="111.2"/>
+        <text class="plate__label" x="60" y="115.2" text-anchor="end">140</text>
+        <line class="plate__grid" x1="70" y1="71.7" x2="660" y2="71.7"/>
+        <text class="plate__label" x="60" y="75.7" text-anchor="end">150</text>
+        <line class="plate__axis" x1="70" y1="230" x2="660" y2="230"/>
+        <line class="plate__axis" x1="70" y1="40" x2="70" y2="230"/>
+        <line class="plate__cap-line" x1="188.0" y1="184.1" x2="505.9" y2="69.7"/>
+        <circle class="plate__point" cx="188.0" cy="184.1" r="6"/>
+        <text class="plate__label plate__label--strong" x="200.0" y="189.1" text-anchor="start">latency</text>
+        <text class="plate__label" x="200.0" y="206.1" text-anchor="start">20.16 ms / 121.6</text>
+        <circle class="plate__point plate__point--accent" cx="505.9" cy="69.7" r="6"/>
+        <text class="plate__label plate__label--strong" x="491.9" y="61.7" text-anchor="end">auto · throughput · off</text>
+        <text class="plate__label" x="491.9" y="78.7" text-anchor="end">21.1 ms / 150–152</text>
+        <text class="plate__label" x="365.0" y="276" text-anchor="middle">serial p50 (ms) →</text>
+        <text class="plate__label" transform="translate(20,135.0) rotate(-90)" text-anchor="middle">burst req/s (c=8) →</text>
+        </svg>
+        </div>
+        <figcaption class="plate__cap">
+          <strong>Pick your corner.</strong> Serial p50 (ms) against burst
+          req/s (c=8). <code>auto</code> <strong>21.03 ms / 151.8</strong>,
+          <code>throughput</code> <strong>21.20 / 149.5</strong>,
+          <code>off</code> (fixed cap) <strong>21.14 / 150.2</strong> — within
+          noise of each other. <code>latency</code> is the deliberate trade:
+          <strong>20.16 ms / 121.6</strong>, about 5% off serial p50 for about
+          20% of burst throughput. Reproduce a row with
+          <code>WORKERS=4 ARGS="PERSON ORG PRODUCT LOCATION EVENT"
+          CAPACITY=latency CONCS=1,8 N=150 just bench-script &lt;cand-bin&gt; &lt;cand-bin&gt;</code>.
+        </figcaption>
+      </figure>
+
+      <p class="doc-note">
+        <strong>Guardrails, same runs.</strong> Replies are byte-identical
+        between the two binaries — the harness interleaves them and exits
+        non-zero on any difference. The Ruby client suite passes against the
+        adaptive server (203 examples, 0 failures) with
+        <code>EMB.READY</code> answering <code>+OK</code>. Entering
+        <code>saturated</code> logs one provisioning recommendation and holds
+        the allowance; <code>autotune: off</code> pins it. Every figure here is
+        recorded in <code>BENCHMARK.md</code> with its reproduction command.
+      </p>
 
       <h3 class="doc-h3">Multi-threaded — ten ONNX Runtime workers</h3>
       <dl class="doc-cmds">
@@ -866,7 +1099,7 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
 
       <dl class="doc-status">
         <dt>VERSION</dt>
-        <dd>v<span data-emb-version>0.4.1</span></dd>
+        <dd>v<span data-emb-version>0.4.3.pre1</span></dd>
         <dt>STABILITY</dt>
         <dd>Pre-1.0. Interfaces may still move between releases; pin the version you deploy.</dd>
         <dt>LICENCE</dt>

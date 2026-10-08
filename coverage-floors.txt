@@ -18,6 +18,7 @@ github.com/elcuervo/emb/internal/emoji	97
 github.com/elcuervo/emb/internal/hfhub	90
 github.com/elcuervo/emb/internal/imageproc	81
 github.com/elcuervo/emb/internal/onnx	78
+github.com/elcuervo/emb/internal/permit	88
 github.com/elcuervo/emb/internal/pipeline	87
 github.com/elcuervo/emb/internal/registry	78
 github.com/elcuervo/emb/internal/resp	78

@@ -36,7 +36,7 @@ value per text. The whitelisted host blocks:
 | Block | Purpose |
 |-------|---------|
 | `emb.run(spec [, opts])` | Named-tensor inference → `{name = {shape, data, dtype}}` per output; `opts = {bytes = true, outputs = {"name", ...}}` |
-| `emb.run_batch({item, ...} [, opts])` | One model call for N items (padded into a single session run), same `opts` |
+| `emb.run_batch({item, ...} [, opts])` | One model call for N items (padded into a single session run; one run per item for graphs with `DynamicQuantizeLinear`, whose output depends on batch composition), same `opts` |
 | `emb.embed(text \| {texts...} [, {bytes = true}])` | **Pooled, normalized embedding(s)** through the server's embedding path: shares the batcher, the `model:text` cache, and the ORT sessions with `EMB` |
 | `emb.image.embed(bytes \| {bytes...} [, {bytes = true}])` | Pooled image embedding(s) from the model's image branch, in the same space as `emb.embed` (URLs rejected) |
 | `emb.similarity(a, b [, metric])` | **Higher = more similar**: `cosine` (default), `dot` |

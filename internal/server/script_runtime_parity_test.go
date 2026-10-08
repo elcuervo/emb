@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/elcuervo/emb/internal/config"
-	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/registry"
 )
 
@@ -319,20 +318,10 @@ func TestScriptedLifecycleNoAccumulation(t *testing.T) {
 }
 
 // TestScriptedFailureModesReleaseResources verifies each classic failure mode
-// leaves the model usable and the output-tensor cache bounded, with no growth
-// across repetition.
+// leaves the model usable after repeated failures. Outputs are allocated and
+// destroyed per call, so there is no per-session output cache to leak.
 func TestScriptedFailureModesReleaseResources(t *testing.T) {
-	addr, srv := serveScriptTest(t, "")
-	entry, err := srv.reg.Resolve("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Open the scripted session up front so its cache is observable.
-	res, err := entry.ScriptResources()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sess := res.Sessions()[0]
+	addr, _ := serveScriptTest(t, "")
 
 	modes := []struct {
 		name   string
@@ -347,22 +336,11 @@ func TestScriptedFailureModesReleaseResources(t *testing.T) {
 	defer c.Close()
 	for _, m := range modes {
 		t.Run(m.name, func(t *testing.T) {
-			before := cachedOutputSets(t, sess)
 			for i := 0; i < 3; i++ {
 				got := doCmd(t, c, "EMB.EVAL", "test", m.script, "1", "hello")
 				if !strings.HasPrefix(got, "-ERR") {
 					t.Fatalf("failure mode reply = %q, want an error", got)
 				}
-			}
-			after := cachedOutputSets(t, sess)
-			// At most one new shape signature may be retained by a run that
-			// succeeded before the script failed; nothing accumulates over
-			// repeated failures.
-			if after > before+1 {
-				t.Fatalf("retained output sets grew %d -> %d across repeated failures", before, after)
-			}
-			if after > maxCachedOutputSetAssertion {
-				t.Fatalf("retained output sets %d exceed the documented cap %d", after, maxCachedOutputSetAssertion)
 			}
 			// The model stays usable after a failure.
 			if got := doCmd(t, c, "EMB.EVAL", "test", "return 7", "1", "ok"); got != ":7\r\n" {
@@ -372,10 +350,6 @@ func TestScriptedFailureModesReleaseResources(t *testing.T) {
 	}
 }
 
-// maxCachedOutputSetAssertion mirrors onnx.maxCachedOutputShapes; the script
-// session cache cap, restated here because the constant is unexported.
-const maxCachedOutputSetAssertion = 4
-
 // unknownOutputScript runs the graph successfully and then asks for an output
 // that does not exist, so the failure happens after the run.
 const unknownOutputScript = `local e = emb.tokenize.encode(KEYS[1], 8)
@@ -383,17 +357,6 @@ local out = emb.run({input_ids = {shape = {1, #e.ids}, data = e.ids},
   attention_mask = {shape = {1, #e.mask}, data = e.mask},
   token_type_ids = {shape = {1, #e.ids}, fill = 0, dtype = "i64"}}, {outputs = {"nonexistent"}})
 return 1`
-
-// cachedOutputSets returns the number of output-shape signatures a scripted
-// session is retaining.
-func cachedOutputSets(t *testing.T, sess onnx.NamedSession) int {
-	t.Helper()
-	s, ok := sess.(interface{ CachedOutputSets() int })
-	if !ok {
-		t.Fatalf("scripted session %T does not expose CachedOutputSets", sess)
-	}
-	return s.CachedOutputSets()
-}
 
 // TestScriptSourceCacheBounded verifies the per-model script source cache stays
 // at its cap under many distinct scripts, and that each model is bounded

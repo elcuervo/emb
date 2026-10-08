@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'timeout'
+
+# Polls until the block is true or a bounded timeout elapses. Sequences gated
+# threads; the bounded waits only establish the setup, not the pass/fail timing.
+def wait_until(timeout: 2)
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+  sleep(0.001) until yield || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+end
 
 class RecordingRedisClient
   attr_reader :calls
@@ -60,6 +68,36 @@ class ConcurrentRedisClient
     ensure
       @guard.synchronize { @active -= 1 }
       @tracker.leave
+    end
+  end
+end
+
+class GatedRedisClient
+  attr_reader :id
+
+  def initialize(id)
+    @id = id
+    @mutex = Mutex.new
+    @cond = ConditionVariable.new
+    @entered = false
+    @open = false
+  end
+
+  def call
+    @mutex.synchronize do
+      @entered = true
+      @cond.broadcast
+      @cond.wait(@mutex) until @open
+    end
+    @id
+  end
+
+  def entered? = @mutex.synchronize { @entered }
+
+  def release
+    @mutex.synchronize do
+      @open = true
+      @cond.broadcast
     end
   end
 end
@@ -168,6 +206,36 @@ RSpec.describe Emb::RoundRobinPool do
     end
   end
 
+  describe 'work-conserving selection' do
+    it 'serves a waiting command from the first freed connection' do
+      conns = [GatedRedisClient.new('a'), GatedRedisClient.new('b')]
+      pool = described_class.new(2) { conns.shift }
+
+      a = Thread.new { pool.with { |c| c.call } }
+      wait_until { pool.connections.count(&:entered?) == 1 }
+      a_conn = pool.connections.find(&:entered?)
+      b_conn = (pool.connections - [a_conn]).first
+
+      b = Thread.new { pool.with { |c| c.call } }
+      wait_until { pool.connections.count(&:entered?) == 2 }
+
+      # Third command must wait: both connections are held.
+      c_result = Queue.new
+      c = Thread.new { c_result << pool.with { |conn| conn.call } }
+      sleep 0.05
+      expect(c_result).to be_empty
+
+      # Freeing one connection must serve C immediately, without waiting for
+      # the still-held connection (the pre-fix fixed-index wait blocks here
+      # until A is released, so the bounded pop below times out and fails).
+      b_conn.release
+      expect(Timeout.timeout(1) { c_result.pop }).to eq(b_conn.id)
+
+      a_conn.release
+      [a, b, c].each { |t| t.join(2) }
+    end
+  end
+
   describe 'error propagation' do
     it 'raises server error replies unchanged' do
       pool = described_class.new(2) { RaisingRedisClient.new }
@@ -218,6 +286,30 @@ RSpec.describe Emb::RoundRobinPool do
     end
   end
 
+  describe 'asynchronous interruption' do
+    # The window between taking an index and arming the release ensure: an async
+    # Thread#kill/#raise here must not leak the index (regression: pool shrank
+    # permanently, the next command blocked forever).
+    it 'returns a taken index when interrupted before the block runs' do
+      pool = described_class.new(1) { RecordingRedisClient.new }
+      source = File.expand_path('../../lib/emb/round_robin_pool.rb', __dir__)
+      target = File.readlines(source, encoding: Encoding::UTF_8)
+                   .index { |line| line.strip == 'held[self] = idx' } + 1
+
+      tracer = TracePoint.new(:line) do |tp|
+        next unless tp.path == source && tp.lineno == target
+
+        tracer.disable
+        Thread.current.raise('simulated async interrupt')
+      end
+      tracer.enable
+      expect { pool.with { |_c| } }.to raise_error(RuntimeError, /simulated/)
+      tracer.disable
+
+      expect(Timeout.timeout(1) { pool.with { |_c| :ok } }).to eq(:ok)
+    end
+  end
+
   describe 'fork safety' do
     it 'keeps working in the child after fork without sharing connections' do
       skip 'Process.fork unavailable' unless Process.respond_to?(:fork)
@@ -233,6 +325,22 @@ RSpec.describe Emb::RoundRobinPool do
       end
       _, status = Process.wait2(pid)
       expect(status.exitstatus).to eq(0)
+    end
+
+    it "keeps the forking thread's held connection out of the child free queue" do
+      skip 'Process.fork unavailable' unless Process.respond_to?(:fork)
+
+      pool = described_class.new(2) { RecordingRedisClient.new }
+      double_acquired = nil
+      pool.with do |held|
+        child = Process.fork do
+          other = Thread.new { pool.with { |c| c } }.value
+          exit!(held.equal?(other) ? 1 : 0)
+        end
+        _, status = Process.wait2(child)
+        double_acquired = status.exitstatus == 1
+      end
+      expect(double_acquired).to be(false)
     end
   end
 

@@ -23,17 +23,22 @@ type Worker struct {
 	totalLat  atomic.Int64
 	tokens    atomic.Int64
 	errors    atomic.Int64
+	runs      atomic.Int64
+	busy      atomic.Int64
 	stop      chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
 	closeErr  error
 }
 
-func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, normalize bool, pooling string) *Worker {
+// NewWorker starts a worker reading from reqChan. The channel is shared by
+// every worker in an unbatched pool, so a request is served by whichever
+// worker is free rather than a fixed round-robin index.
+func NewWorker(sess onnx.Session, tok tokenizer.Tokenizer, dim, maxLen int, normalize bool, pooling string, reqChan chan Request) *Worker {
 	w := &Worker{
 		session:   sess,
 		tokenizer: tok,
-		reqChan:   make(chan Request),
+		reqChan:   reqChan,
 		dim:       dim,
 		maxLen:    maxLen,
 		normalize: normalize,
@@ -55,8 +60,9 @@ func (w *Worker) run() {
 			return
 		}
 		start := time.Now()
-
+		w.busy.Add(1)
 		resp := w.process(req.Texts)
+		w.busy.Add(-1)
 
 		w.requests.Add(1)
 		w.totalLat.Add(time.Since(start).Microseconds())
@@ -74,6 +80,7 @@ func (w *Worker) process(texts []string) Response {
 	var totalTokens int
 	for _, text := range texts {
 		emb, toks, err := processBatch(w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
+		w.runs.Add(1)
 		totalTokens += toks
 		if err != nil {
 			w.tokens.Add(int64(totalTokens))
@@ -116,12 +123,18 @@ func (w *Worker) Close() error {
 }
 
 type Pool struct {
-	workers   []*Worker
-	batcher   *Batcher
-	next      atomic.Uint64
+	workers []*Worker
+	batcher *Batcher
+	// req is the shared request channel every unbatched worker reads from: a
+	// work-conserving queue, so a free worker takes the next request instead of
+	// the caller picking a fixed round-robin index.
+	req       chan Request
 	pooling   string
 	normalize bool
 	maxLen    int
+	// dispatchWaitUs accumulates time a request spent waiting for a free worker
+	// (the send handoff). Batcher pools measure their own queue instead.
+	dispatchWaitUs atomic.Int64
 	// tok is the tokenizer shared by every worker/batcher in the pool. It is
 	// retained so the scripted path can reuse it instead of loading a second
 	// tokenizer for the same model (see registry.openScriptResources).
@@ -175,12 +188,14 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 		}
 		sessions = append(sessions, sess)
 	}
+	req := make(chan Request)
 	workers := make([]*Worker, len(sessions))
 	for i, sess := range sessions {
-		workers[i] = NewWorker(sess, tok, dim, maxLen, normalize, pooling)
+		workers[i] = NewWorker(sess, tok, dim, maxLen, normalize, pooling, req)
 	}
 	return &Pool{
 		workers:   workers,
+		req:       req,
 		pooling:   pooling,
 		normalize: normalize,
 		maxLen:    maxLen,
@@ -202,11 +217,10 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 	if p.batcher != nil {
 		return p.batcher.Embed(texts)
 	}
-	idx := p.next.Add(1) - 1
-	w := p.workers[idx%uint64(len(p.workers))]
-
 	result := make(chan Response, 1)
-	w.reqChan <- Request{Texts: texts, Result: result}
+	waitStart := time.Now()
+	p.req <- Request{Texts: texts, Result: result}
+	p.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
 	return <-result, nil
 }
 
@@ -225,31 +239,45 @@ func (p *Pool) Stats() Stats {
 			BatchingMaxBatch:  p.batcher.maxBatch,
 			BatchingMaxTokens: p.batcher.maxBatchTokens,
 			PaddingEfficiency: p.batcher.paddingEfficiency(),
+			DispatchWaitUs:    p.batcher.dispatchWaitUs.Load(),
+			RunUs:             p.batcher.totalLat.Load(),
+			Runs:              p.batcher.runs.Load(),
+			SessionsBusy:      p.batcher.busy.Load(),
+			SessionsTotal:     1,
 		}
 	}
 	var totalReqs int64
 	var totalLat int64
 	var totalTokens int64
 	var totalErrors int64
+	var totalRuns int64
+	var busy int64
 	for _, w := range p.workers {
 		totalReqs += w.Requests()
 		totalLat += w.totalLat.Load()
 		totalTokens += w.Tokens()
 		totalErrors += w.Errors()
+		totalRuns += w.runs.Load()
+		busy += w.busy.Load()
 	}
 	avg := 0.0
 	if totalReqs > 0 {
 		avg = float64(totalLat) / float64(totalReqs)
 	}
 	return Stats{
-		Requests:   totalReqs,
-		AvgLatency: avg,
-		NumWorkers: len(p.workers),
-		Tokens:     totalTokens,
-		Errors:     totalErrors,
-		Pooling:    p.pooling,
-		Normalize:  p.normalize,
-		MaxLen:     p.maxLen,
+		Requests:       totalReqs,
+		AvgLatency:     avg,
+		NumWorkers:     len(p.workers),
+		Tokens:         totalTokens,
+		Errors:         totalErrors,
+		Pooling:        p.pooling,
+		Normalize:      p.normalize,
+		MaxLen:         p.maxLen,
+		DispatchWaitUs: p.dispatchWaitUs.Load(),
+		RunUs:          totalLat,
+		Runs:           totalRuns,
+		SessionsBusy:   busy,
+		SessionsTotal:  int64(len(p.workers)),
 	}
 }
 

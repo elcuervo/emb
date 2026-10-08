@@ -27,10 +27,14 @@ type imagePlanResult struct {
 // named-tensor sessions (round-robin, so concurrent EMB.IMG requests do not
 // serialize) and the immutable preprocessing plan resolved at load.
 type ImageResources struct {
-	// Sessions is the named-tensor session pool (round-robin). It is exported so
-	// tests can inject a fake; callers should use Session().
+	// Sessions is the named-tensor session pool. It is exported so tests can
+	// inject a fake; callers should use RunNamed (or Session for a specific
+	// instance).
 	Sessions []onnx.NamedSession
-	next     atomic.Uint64
+	// idle hands out whichever session is free first, so concurrent EMB.IMG
+	// requests never queue behind a busy session while another is idle.
+	idle chan onnx.NamedSession
+	next atomic.Uint64
 
 	// Plan is the resolved, immutable preprocessing plan.
 	Plan imageproc.Plan
@@ -51,6 +55,19 @@ func (r *ImageResources) Session() onnx.NamedSession {
 	return r.Sessions[i%uint64(len(r.Sessions))]
 }
 
+// RunNamed runs an inference on the first session that is free. A
+// test-injected pool without an idle channel (idle == nil) falls back to
+// round-robin.
+func (r *ImageResources) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+	if r.idle == nil {
+		return r.Session().RunNamed(inputs)
+	}
+	sess := <-r.idle
+	out, err := sess.RunNamed(inputs)
+	r.idle <- sess
+	return out, err
+}
+
 // Embed runs one batched inference over the preprocessed image tensors and
 // returns one little-endian float32 embedding per image, in order. Exactly one
 // session run executes regardless of the batch size.
@@ -68,7 +85,7 @@ func (r *ImageResources) Embed(tensors [][]float32) ([][]byte, error) {
 		copy(batch[i*elem:], t)
 	}
 	shape := []int64{int64(n), 3, int64(r.Plan.Size), int64(r.Plan.Size)}
-	outs, err := r.Session().RunNamed([]onnx.NamedTensor{{
+	outs, err := r.RunNamed([]onnx.NamedTensor{{
 		Name:  r.Plan.Input,
 		Shape: shape,
 		DType: onnx.TensorFloat32,
@@ -213,7 +230,7 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
 		sess, err := newNamedSession(
-			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode,
+			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, cfg.AllowsSpinning(),
 		)
 		if err != nil {
 			for _, opened := range sessions {
@@ -225,8 +242,13 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 	}
 
 	e.imageSessions.Store(int64(len(sessions)))
+	idle := make(chan onnx.NamedSession, len(sessions))
+	for _, sess := range sessions {
+		idle <- sess
+	}
 	return &ImageResources{
 		Sessions:     sessions,
+		idle:         idle,
 		Plan:         plan,
 		OutputTensor: imageOutput,
 		Pooling:      cfg.Pooling,

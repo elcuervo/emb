@@ -1152,9 +1152,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 29)
+		writePairs(conn, 43)
 	} else {
-		writePairs(conn, 22)
+		writePairs(conn, 36)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1208,6 +1208,40 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(boolInt(scriptTokenizer))
 	conn.WriteBulkString("image_sessions")
 	conn.WriteInt(int(entry.ImageFootprint()))
+	// Per-model dispatch observability, split into the script and embedding
+	// paths. Averages come from deltas between two EMB.INFO/EMB.STATS reads.
+	scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy := entry.ScriptDispatch()
+	conn.WriteBulkString("script_dispatch_wait_us")
+	conn.WriteInt(int(scriptWaitUs))
+	conn.WriteBulkString("script_run_us")
+	conn.WriteInt(int(scriptRunUs))
+	conn.WriteBulkString("script_runs")
+	conn.WriteInt(int(scriptRuns))
+	conn.WriteBulkString("script_sessions_busy")
+	conn.WriteInt(int(scriptBusy))
+	// Autotune state for the script path: traffic class, in-flight count, the
+	// current per-session allowance, its cap, and whether the controller runs.
+	scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive := entry.ScriptAutotune()
+	conn.WriteBulkString("script_traffic_class")
+	conn.WriteBulkString(scriptClass)
+	conn.WriteBulkString("script_inflight")
+	conn.WriteInt(int(scriptInflight))
+	conn.WriteBulkString("script_concurrency_current")
+	conn.WriteInt(int(scriptCurrent))
+	conn.WriteBulkString("script_concurrency_target")
+	conn.WriteInt(int(scriptTarget))
+	conn.WriteBulkString("script_autotune_active")
+	conn.WriteInt(boolInt(scriptActive))
+	conn.WriteBulkString("embed_dispatch_wait_us")
+	conn.WriteInt(int(stats.DispatchWaitUs))
+	conn.WriteBulkString("embed_run_us")
+	conn.WriteInt(int(stats.RunUs))
+	conn.WriteBulkString("embed_runs")
+	conn.WriteInt(int(stats.Runs))
+	conn.WriteBulkString("embed_sessions_busy")
+	conn.WriteInt(int(stats.SessionsBusy))
+	conn.WriteBulkString("embed_sessions_total")
+	conn.WriteInt(int(stats.SessionsTotal))
 	if s.cache != nil {
 		cs := s.cache.Stats()
 		hitRate := 0.0
@@ -1243,9 +1277,12 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	for _, m := range models {
 		sreq, serr := m.ScriptStats()
 		sessions, tokenizer := m.ScriptFootprint()
+		scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy := m.ScriptDispatch()
+		scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive := m.ScriptAutotune()
 		if sreq > 0 {
-			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t",
-				m.Name, sreq, serr, sessions, tokenizer))
+			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t wait=%dus run=%dus runs=%d busy=%d/%d class=%s inflight=%d conc=%d/%d autotune=%t",
+				m.Name, sreq, serr, sessions, tokenizer, scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy, sessions,
+				scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive))
 		}
 		if pool := m.LoadedPool(); pool != nil {
 			st := pool.Stats()
@@ -1263,9 +1300,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			// Always surface the verdict, reason, and effective timeout (0 when
 			// batching is off or degraded): the batch-determinism spec requires
 			// both in EMB.STATS regardless of gating outcome.
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s",
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus run=%dus runs=%d busy=%d/%d",
 				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize,
-				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo))
+				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo,
+				st.DispatchWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
 		}
 	}
 

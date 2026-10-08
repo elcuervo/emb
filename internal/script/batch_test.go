@@ -88,9 +88,33 @@ func TestRunBatchRejectsBatchDimGT1(t *testing.T) {
 	// An item declaring a batch dim greater than 1 would have its data
 	// mis-segmented by the merge (rows advance by the inner size only), so it
 	// is rejected outright.
+	cc := &countingSession{}
+	hosts := batchHosts(cc)
+	hosts.SplitBatch = func() bool { return true }
 	src := `return emb.run_batch({ { x = {shape = {2, 2}, data = {1, 2, 3, 4}} } })`
-	if _, err := EvalWithHosts(src, nil, nil, batchHosts(&countingSession{}), EvalOptions{}); err == nil {
+	if _, err := EvalWithHosts(src, nil, nil, hosts, EvalOptions{}); err == nil {
 		t.Fatal("expected batch-dim>1 item to be rejected")
+	}
+	if cc.calls != 0 {
+		t.Fatalf("expected invalid input to skip inference, got %d calls", cc.calls)
+	}
+}
+
+func TestRunBatchSplitCallsPerItem(t *testing.T) {
+	cc := &countingSession{}
+	hosts := batchHosts(cc)
+	hosts.SplitBatch = func() bool { return true }
+	v, err := EvalWithHosts(`
+local outs = emb.run_batch({
+  { input_ids = {shape = {1, 2}, data = {10, 20}} },
+  { input_ids = {shape = {1, 3}, data = {30, 40, 50}} }
+})
+return outs[1].logits.shape[2] .. "|" .. outs[2].logits.data[3]`, nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.calls != 2 || v.String() != "2|50.5" {
+		t.Fatalf("calls/result = %d/%q, want 2/%q", cc.calls, v.String(), "2|50.5")
 	}
 }
 

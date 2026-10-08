@@ -40,6 +40,9 @@ type Batcher struct {
 	totalLat        atomic.Int64
 	tokens          atomic.Int64
 	errors          atomic.Int64
+	runs            atomic.Int64
+	busy            atomic.Int64
+	dispatchWaitUs  atomic.Int64
 	realTokens      atomic.Int64
 	processedSlots  atomic.Int64
 	done            chan struct{}
@@ -116,7 +119,9 @@ func (b *Batcher) Embed(texts []string) (Response, error) {
 	defer b.active.Done()
 
 	result := make(chan Response, 1)
+	waitStart := time.Now()
 	b.reqChan <- Request{Texts: texts, Result: result}
+	b.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
 	return <-result, nil
 }
 
@@ -135,6 +140,7 @@ func (b *Batcher) run() {
 			return
 		}
 		start := time.Now()
+		b.busy.Add(1)
 
 		all := make([]Encoding, 0, len(batch))
 		offsets := make([]int, len(batch))
@@ -146,6 +152,8 @@ func (b *Batcher) run() {
 		}
 
 		resp, seqLen, err := b.process(all)
+		b.busy.Add(-1)
+		b.runs.Add(1)
 		if err == nil {
 			// Track padding efficiency: real tokens / processed token-slots.
 			b.tokens.Add(int64(totalTokens))
