@@ -154,3 +154,27 @@ func TestParseFlagsNoModels(t *testing.T) {
 		t.Fatalf("expected no-models error, got %v", err)
 	}
 }
+
+// TestParseFlagsConfigCacheFileOverride is the regression for a config file
+// that sets cache_save but no cache_file, with cache_file supplied on the CLI.
+// File validation must run after all flags are parsed, not inside -config.
+func TestParseFlagsConfigCacheFileOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("models:\n  test:\n    onnx: ./model.onnx\ncache_save: 30s\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fc, err := ParseFlags([]string{"-config", path, "-cache-file", "/data/cache.embcache"})
+	if err != nil {
+		t.Fatalf("config + CLI cache-file must parse: %v", err)
+	}
+	if fc.CacheFile != "/data/cache.embcache" || fc.CacheSave != "30s" {
+		t.Fatalf("merged persistence not retained: %#v", fc.Config)
+	}
+
+	// Direct Load stays strict: the same YAML without an override must fail.
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "cache_save requires cache_file") {
+		t.Fatalf("Load must reject cache_save without cache_file, got %v", err)
+	}
+}

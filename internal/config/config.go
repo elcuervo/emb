@@ -347,7 +347,24 @@ func (m ModelConfig) AutotuneEnabled() bool {
 	return m.Autotune != "off"
 }
 
+// Load reads a YAML config and validates it strictly. Callers that apply CLI
+// overrides after loading (ParseFlags) use loadFile and validate the merged
+// config once every flag has been parsed.
 func Load(path string) (*Config, error) {
+	cfg, err := loadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// loadFile parses a YAML config and runs the checks that do not depend on CLI
+// overrides. The shared Config.validate() is left to the caller so overrides
+// applied after -config are seen by it.
+func loadFile(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config: %w", err)
@@ -400,10 +417,6 @@ func Load(path string) (*Config, error) {
 				return nil, err
 			}
 		}
-	}
-
-	if err := cfg.validate(); err != nil {
-		return nil, err
 	}
 
 	return &cfg, nil
@@ -774,7 +787,7 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 
 	fs.StringVar(&fc.Listen, "listen", fc.Listen, "")
 	fs.Func("config", "", func(s string) error {
-		cfg, err := Load(s)
+		cfg, err := loadFile(s)
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}
