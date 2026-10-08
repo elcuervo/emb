@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — scripting: the Lua host API, sandbox, budgets, reply grammar</title>
+<link rel="canonical" href="https://emb.is/scripting/">
+<meta name="description" content="Reference for emb's scripting engine: EMB.EVAL, EMB.EVSHA and EMB.SCRIPT, the sandbox, the complete emb.* host API, tensor specs, the Lua-to-RESP reply grammar, evaluation budgets and reply-cache identity.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — scripting: the Lua host API, sandbox, budgets, reply grammar">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Reference for emb's scripting engine: EMB.EVAL, EMB.EVSHA and EMB.SCRIPT, the sandbox, the complete emb.* host API, tensor specs, the reply grammar, budgets and cache identity.">
+<meta property="og:url" content="https://emb.is/scripting/">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — scripting: the Lua host API, sandbox, budgets, reply grammar">
+<meta name="twitter:description" content="The complete scripting reference for emb: commands, sandbox, host API, tensors, replies, budgets and cache identity.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/inter-900-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<link rel="stylesheet" href="../assets/css/docs.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../demos/index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="index.html">Scripting</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="../demos/index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Scripting <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <div class="doc-head">
+      <h1>Scripting</h1>
+      <p class="doc-lede">
+        The plain pipeline is <code>model(input) &#8594; output</code>. A script
+        rewrites the edges around that same call in Lua —
+        <code>model(fn(input)) &#8594; output</code> — so a raw-logits model can
+        answer as a labelled classifier, or a cross-encoder can answer with a
+        score. This page is the complete reference for the scripting engine:
+        the commands, the sandbox it runs in, every host function, the tensor
+        and reply forms, the budgets, and the cache identity.
+      </p>
+      <p class="doc-note">
+        <strong>Pre-1.0.</strong> emb is at v<span data-emb-version>0.4.3.pre3</span>
+        and interfaces may still move. emb has one version: the scripting surface
+        reports it as <code>emb.API_VERSION</code>, and the same value is folded
+        into every reply-cache key, so an upgrade never serves a reply computed
+        under an older surface.
+      </p>
+      <p class="tldr">Everything the scripting engine is: the commands, the sandbox, the emb.* host API, tensors, replies, budgets and cache identity.</p>
+    </div>
+
+    <nav class="doc-toc" aria-labelledby="toc-h">
+      <h2 id="toc-h">CONTENTS</h2>
+      <ol>
+        <li><a href="#surface"><span class="doc-toc__n">01</span><span>The script surface</span></a></li>
+        <li><a href="#commands"><span class="doc-toc__n">02</span><span>Commands</span></a></li>
+        <li><a href="#preload"><span class="doc-toc__n">03</span><span>Preloading from config</span></a></li>
+        <li><a href="#sandbox"><span class="doc-toc__n">04</span><span>The sandbox</span></a></li>
+        <li><a href="#api"><span class="doc-toc__n">05</span><span>The host API</span></a></li>
+        <li><a href="#tensors"><span class="doc-toc__n">06</span><span>Tensors and replies</span></a></li>
+        <li><a href="#budgets"><span class="doc-toc__n">07</span><span>Budgets</span></a></li>
+        <li><a href="#cache"><span class="doc-toc__n">08</span><span>Caching and identity</span></a></li>
+      </ol>
+    </nav>
+  </div>
+
+    <!-- ═══════════════════════════════════════════════════ 01 · SURFACE -->
+    <section class="block block--paper" id="surface" aria-labelledby="surface-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="surface-h">01 · The script surface</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        A script is evaluated <strong>once per request</strong>, in a fresh
+        sandboxed Lua state. The request's texts arrive positionally in
+        <code>KEYS</code> and the command's remaining arguments in
+        <code>ARGV</code>, exactly as Redis exposes them. The script's return
+        value is converted to RESP and sent as the reply. The wrapper also
+        passes <code>KEYS</code> and <code>ARGV</code> as function arguments, so
+        an explicit <code>function(KEYS, ARGV)</code> signature works too.
+      </p>
+
+      <p class="doc-prose">
+        A single-text request returns the script's value itself. A multi-text
+        request runs the script once with every text in <code>KEYS</code>, and
+        the script must return one value per text — an array whose elements
+        correspond 1:1 to the texts, in order. A multi-text result that is not
+        such an array is an error reply.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">local</span> enc <span class="t-dim">=</span> emb.tokenize.<span class="t-cmd">encode</span>(<span class="t-str">KEYS[1]</span>, <span class="t-num">512</span>)
+<span class="t-cmd">local</span> out <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({
+  input_ids      <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids},  data <span class="t-dim">=</span> enc.ids  },
+  attention_mask <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids},  data <span class="t-dim">=</span> enc.mask },
+})
+<span class="t-cmd">local</span> probs <span class="t-dim">=</span> emb.math.<span class="t-cmd">softmax</span>(out.logits.data)
+<span class="t-cmd">local</span> idx, score <span class="t-dim">=</span> emb.math.<span class="t-cmd">argmax</span>(probs)
+<span class="t-cmd">return</span> { label <span class="t-dim">=</span> ARGV[idx], confidence <span class="t-dim">=</span> score }</pre>
+        <figcaption class="code__cap">
+          <code>examples/scripts/snippets/sst2.lua</code> — a raw-logits text
+          model answering as a labelled classifier, with the labels in
+          <code>ARGV</code>.
+        </figcaption>
+      </figure>
+
+      <p class="doc-note">
+        <strong>Scripts are pure compute.</strong> Identical inputs always
+        produce identical replies, which is what makes a reply cacheable and a
+        deployment reproducible. See <a href="#sandbox">04 · The sandbox</a> for
+        exactly what is removed to guarantee it.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════ 02 · COMMANDS -->
+    <section class="block block--dark" id="commands" aria-labelledby="commands-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="commands-h">02 · Commands</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        Scripts are cached per model, keyed by the SHA1 of their bytes.
+        <code>EMB.EVAL</code> sends the source inline; <code>EMB.EVSHA</code>
+        calls a cached script by its digest. The model must already be mounted
+        in config — scripts and arguments never require a config change.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>EMB.EVAL &lt;model&gt; &lt;script&gt; &lt;numtexts&gt; &lt;text...&gt; &lt;arg...&gt;</dt>
+        <dd>Compile and run an inline script against the model. The <code>numtexts</code> texts become <code>KEYS</code>; the remaining arguments become <code>ARGV</code>. A <code>numtexts</code> that does not match the actual number of text arguments is a wrong-arity error, and nothing executes.</dd>
+        <dt>EMB.EVSHA &lt;model&gt; &lt;sha&gt; &lt;numtexts&gt; &lt;text...&gt; &lt;arg...&gt;</dt>
+        <dd>Run a script already cached for the model, by SHA1, with the same <code>KEYS</code>/<code>ARGV</code> semantics as <code>EMB.EVAL</code>. An unknown digest is a no-such-script error.</dd>
+        <dt>EMB.SCRIPT LOAD &lt;model&gt; &lt;script&gt;</dt>
+        <dd>Compile and cache the script (rejecting a script that does not compile), and reply with its SHA1. Scripts can also be preloaded at boot from config.</dd>
+        <dt>EMB.SCRIPT EXISTS &lt;model&gt; &lt;sha...&gt;</dt>
+        <dd>One <code>1</code>/<code>0</code> per digest, in order, for the model's cache.</dd>
+        <dt>EMB.SCRIPT FLUSH [&lt;model&gt;]</dt>
+        <dd>Drop the model's cached scripts, or every model's when the model is omitted. The compiled-prototype cache is dropped with it.</dd>
+      </dl>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">EMB.SCRIPT LOAD</span> sst2 <span class="t-str">"…sst2.lua…"</span>
+<span class="t-dim"># → "77c1e0c01d3c43e8f07b262869d13c21b93b28f9"</span>
+
+<span class="t-cmd">EMB.EVSHA</span> sst2 <span class="t-str">"77c1e0c0…"</span> <span class="t-num">1</span> <span class="t-str">"this film is great"</span> NEGATIVE POSITIVE
+<span class="t-dim"># → label POSITIVE / confidence 0.99 / scores […]</span></pre>
+        <figcaption class="code__cap">
+          Load once, call by digest. The reply is the script's converted return
+          value.
+        </figcaption>
+      </figure>
+
+      <p class="doc-note">
+        <strong>Capability is detected, not refused.</strong> When a model
+        cannot produce embeddings, <code>emb.embed</code> is absent rather than
+        an error at call time, so a script can branch on
+        <code>type(emb.embed)</code>. The same gating applies to the image
+        block. The server never refuses to evaluate a script on version grounds.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 03 · PRELOAD -->
+    <section class="block block--paper" id="preload" aria-labelledby="preload-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="preload-h">03 · Preloading from config</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        A model entry can name script files to load at boot, so
+        <code>EMB.EVSHA</code> works without a client-side
+        <code>EMB.SCRIPT LOAD</code> round-trip. An entry is either a string
+        naming a source file, or a mapping with a required <code>path</code> and
+        an optional <code>config</code>. Relative paths resolve against the
+        directory holding the config file.
+      </p>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">models</span><span class="t-dim">:</span>
+  <span class="t-cmd">sst2</span><span class="t-dim">:</span>
+    <span class="t-cmd">path</span><span class="t-dim">:</span> <span class="t-str">./models/sst2.onnx</span>
+    <span class="t-cmd">scripts</span><span class="t-dim">:</span>
+      <span class="t-dim">-</span> <span class="t-str">./scripts/classify.lua</span>
+      <span class="t-dim">-</span> <span class="t-cmd">path</span><span class="t-dim">:</span> <span class="t-str">./scripts/laya.lua</span>
+        <span class="t-cmd">config</span><span class="t-dim">:</span>
+          <span class="t-cmd">max_len</span><span class="t-dim">:</span> <span class="t-num">64</span>
+          <span class="t-cmd">temperature</span><span class="t-dim">:</span> [<span class="t-num">1.6</span>, <span class="t-num">1.25</span>, <span class="t-num">1.98</span>]</pre>
+        <figcaption class="code__cap">
+          Both entry forms preload the same script; the string form declares an
+          empty config.
+        </figcaption>
+      </figure>
+
+      <p class="doc-prose">
+        The mapping's <code>config</code> is exposed to that script alone as
+        <code>emb.script.config</code> — a Lua table of the same shape
+        <code>json.decode</code> produces, and an empty table when the entry
+        declares none, so <code>emb.script.config.x or fallback</code> reads the
+        fallback. The server never interprets a key; it validates only that the
+        config is a mapping. The config participates in the script's reply-cache
+        identity, so editing it invalidates replies computed under the old one.
+      </p>
+
+      <p class="doc-note">
+        <strong>Preload is validated, not trusted.</strong> At boot each path
+        must name a readable regular file, the source must fit the size cap, and
+        the script must compile; a missing file, an oversized script, invalid
+        Lua, or a malformed config is fatal and prevents startup, naming the
+        path. Each valid script is cached by SHA1 and its compiled prototype is
+        cached so the first <code>EMB.EVSHA</code> skips the compile step.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 04 · SANDBOX -->
+    <section class="block block--dark" id="sandbox" aria-labelledby="sandbox-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="sandbox-h">04 · The sandbox</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        Every evaluation runs in a fresh Lua state with only a curated subset of
+        the standard library open. Anything with hidden state, I/O, or an
+        external loader is removed after the libraries are opened, and each
+        invocation gets a new state, so no global leaks between evaluations and
+        a runaway script kills only its own request.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>os · io · debug</dt>
+        <dd>The clock, the filesystem, and the debug hooks are unavailable.</dd>
+        <dt>load · dofile · loadfile · module · require</dt>
+        <dd>There is no loader and no module system; a script is self-contained.</dd>
+        <dt>channel · coroutine</dt>
+        <dd>Concurrency primitives and cooperative scheduling are unavailable.</dd>
+        <dt>math.random · math.randomseed</dt>
+        <dd>Randomness is unavailable, so a reply is a pure function of its inputs.</dd>
+      </dl>
+
+      <p class="doc-prose">
+        What remains is the deterministic core — strings, tables, the numeric
+        library, pattern matching — plus the host surface documented below. The
+        result is a script whose reply depends only on its source, its
+        <code>KEYS</code>/<code>ARGV</code>, its config, and the model, which is
+        exactly what the reply cache relies on.
+      </p>
+
+      <p class="doc-note">
+        <strong>Resources open lazily.</strong> A script that returns a constant
+        allocates nothing: named-tensor sessions and the tokenizer are created on
+        the first <code>emb.run</code>, <code>emb.run_batch</code>, or
+        <code>emb.tokenize.*</code> call, and image resources on the first
+        <code>emb.image.*</code> call. Named-tensor sessions are a separate pool
+        from the embedding path, sized by the model's <code>script_workers</code>
+        (unset or <code>0</code> auto-tunes, bounded by the embedding pool's own
+        session count), so scripting never adds more model instances than the
+        embedding path already committed to.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ 05 · API -->
+    <section class="block block--paper" id="api" aria-labelledby="api-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="api-h">05 · The host API</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        These are the only host functions a script can reach. Everything else is
+        the standard library subset described above. Arguments shown in brackets
+        are optional; functions marked <em>unavailable</em> for a model are
+        absent rather than raising, so <code>type()</code> detects them.
+      </p>
+
+      <h3 class="doc-h3">Inference</h3>
+      <dl class="doc-cmds">
+        <dt>emb.run(inputs [, opts])</dt>
+        <dd>One inference over named tensors. Returns the graph's named outputs — <code>{name = {shape, data, dtype}}</code> — as a first value and the model call's duration in milliseconds as a second. <code>opts</code> accepts <code>{bytes = true}</code> for packed outputs and <code>{outputs = {name, …}}</code> to materialize only the named graph outputs.</dd>
+        <dt>emb.run_batch(items [, opts])</dt>
+        <dd>An array of input-spec tables, each <code>{name = {shape, …}}</code>, merged into one padded inference run and returned as an array of per-item output maps, plus the call's duration. All items must declare the same tensor names, ranks, and dtypes; padding extends each tensor to the batch maximum, zero-filled, and masking semantics stay the script's responsibility. For graphs whose output depends on batch composition, each item runs on its own.</dd>
+        <dt>emb.embed(text | {text, …}[, {bytes = true}])</dt>
+        <dd>Pooled, normalized embeddings through the same path the <code>EMB</code> command uses — same pool, same batcher, same cache — so a text embedded here and by <code>EMB</code> shares one cache entry. A string yields one vector, an array yields one per text, and <code>{bytes = true}</code> returns packed little-endian float32 instead of per-element arrays.</dd>
+      </dl>
+
+      <h3 class="doc-h3">Similarity and distance</h3>
+      <dl class="doc-cmds">
+        <dt>emb.similarity(a, b [, metric])</dt>
+        <dd><em>Higher is more similar.</em> Metrics: <code>cosine</code> (default), <code>dot</code>. Both operands may be a per-element array or a packed float32 string and must have equal length.</dd>
+        <dt>emb.distance(a, b [, metric])</dt>
+        <dd><em>Lower is closer.</em> Metrics: <code>l2</code> (default), <code>l2sq</code>, <code>cosine</code> (as <code>1 − cosine</code>).</dd>
+      </dl>
+
+      <h3 class="doc-h3">Tokenization</h3>
+      <dl class="doc-cmds">
+        <dt>emb.tokenize.encode(text, max_len)</dt>
+        <dd>The model tokenizer's own pipeline, returning <code>{ids, mask, offsets}</code> with per-token byte offsets.</dd>
+        <dt>emb.tokenize.encode_pair(first, second, max_len)</dt>
+        <dd>The BERT-family pair template, returning <code>{ids, mask, offsets, sep}</code>, with the separator position for the two segments.</dd>
+        <dt>emb.tokenize.encode_plain(text, max_len)</dt>
+        <dd>Like <code>encode</code> but with no special tokens, returning <code>{ids}</code>. Useful for building a model's template yourself.</dd>
+        <dt>emb.tokenize.words(text)</dt>
+        <dd>A generic word split following BertPreTokenizer rules, returning <code>{words, starts, ends}</code> with byte offsets.</dd>
+        <dt>emb.tokenize.pretokenized(words, max_len)</dt>
+        <dd>Encode an already-split word list, returning <code>{ids, word_ids}</code> — the id of the word each token came from.</dd>
+        <dt>emb.tokenize.special_ids()</dt>
+        <dd>The model's special token ids: <code>{mask, cls, sep, pad, mask_token}</code>.</dd>
+      </dl>
+
+      <h3 class="doc-h3">Images</h3>
+      <dl class="doc-cmds">
+        <dt>emb.image.preprocess(bytes)</dt>
+        <dd>Decode raw image bytes and apply the model's configured preprocessing (size, crop, resample, rescale, mean, std), returning a tensor spec <code>{shape = {1, 3, H, W}, bytes = &lt;float32&gt;, dtype = "f32", input = &lt;tensor name&gt;}</code> that <code>emb.run</code> accepts with no per-element Lua table. Preprocessing is deterministic and bounded by the same byte and pixel caps as <code>EMB.IMG</code>.</dd>
+        <dt>emb.image.info()</dt>
+        <dd>The model's configured preprocessing plan: <code>{input, size, crop, resample, rescale, mean, std}</code>.</dd>
+        <dt>emb.image.embed(bytes | {bytes, …})</dt>
+        <dd>Pooled, normalized image embeddings for raw encoded image bytes, in the model's shared text/image space. Shares the same image cache and resources as <code>EMB.IMG</code>, so an image embedded by either path is a hit for the other.</dd>
+      </dl>
+
+      <h3 class="doc-h3">Vector math</h3>
+      <dl class="doc-cmds">
+        <dt>emb.math.sigmoid(x) · emb.math.softmax(v) · emb.math.argmax(v)</dt>
+        <dd>Element-wise primitives. Each accepts a per-element array or a packed float32 string and is vectorized per array; a scalar returns a scalar. <code>softmax</code> is numerically stable and <code>argmax</code> returns the 1-based index and its value.</dd>
+        <dt>emb.math.float32_bytes(v)</dt>
+        <dd>Pack numbers into one little-endian float32 bulk — <code>unpack('e*')</code> on the client — byte-compatible with the <code>bytes</code> tensor field.</dd>
+        <dt>emb.math.dot(a, b) · emb.math.cosine(a, b) · emb.math.l2(a, b)</dt>
+        <dd>Pairwise inner product, cosine similarity, and Euclidean distance over two operands of equal element count.</dd>
+        <dt>emb.math.norm(a)</dt>
+        <dd>The L2 norm. <code>dot</code>, <code>l2</code>, and <code>norm</code> define the empty operand as <code>0</code>; <code>cosine</code> errors on it, because its denominator is zero.</dd>
+        <dt>emb.math.mean_pool(hidden, shape, mask)</dt>
+        <dd>Masked mean over a <code>{batch, seq, dim}</code> hidden tensor, ignoring masked positions.</dd>
+        <dt>emb.math.cls(hidden, shape)</dt>
+        <dd>The first sequence position's vector — the CLS representation.</dd>
+        <dt>emb.math.topk(values, k)</dt>
+        <dd>The <code>k</code> largest values as <code>{index, value}</code> entries, descending, 1-based indices, stable on ties.</dd>
+        <dt>emb.math.gather(values, indices)</dt>
+        <dd><code>values[indices[i]]</code> for each index — sparse lookups without a Lua loop.</dd>
+        <dt>emb.math.slice(tensor, shape, offset, length)</dt>
+        <dd>A contiguous span of a shaped tensor.</dd>
+        <dt>emb.math.scale(values, factor) · emb.math.add(a, b)</dt>
+        <dd>Element-wise product by a scalar, and element-wise sum of two equal-length operands.</dd>
+      </dl>
+
+      <h3 class="doc-h3">JSON and the script's own facts</h3>
+      <dl class="doc-cmds">
+        <dt>json.encode(value) · json.decode(raw)</dt>
+        <dd>Structured replies and parsing. A decoded JSON object becomes a string-keyed Lua table.</dd>
+        <dt>json.decode_ordered(raw)</dt>
+        <dd>Like <code>json.decode</code>, except each JSON object becomes an array of <code>{k = &lt;key&gt;, v = &lt;value&gt;}</code> pairs in document order, with a trailing <code>n = &lt;count&gt;</code> sentinel; arrays decode as plain integer-keyed tables. Use this when object key order is load-bearing, because a plain Lua table cannot hold <code>nil</code> and string-key iteration is not deterministic in the sandbox VM.</dd>
+        <dt>json.null</dt>
+        <dd>The null sentinel, so <code>null</code> round-trips inside arrays.</dd>
+        <dt>emb.script.config</dt>
+        <dd>The running script's own declared config, from the preload entry. An empty table when none was declared; semantically opaque to the server.</dd>
+        <dt>emb.API_VERSION</dt>
+        <dd>The server's version, as a string — the same value <code>INFO</code> reports as <code>emb_version</code>. It is folded into reply-cache identity, so an upgrade never replays a reply computed under an older host surface.</dd>
+      </dl>
+
+      <p class="doc-note">
+        <strong>Prefer <code>emb.embed</code> for embeddings and scoring.</strong>
+        It is pooled, normalized, cached, and shares the server's batcher and
+        sessions with <code>EMB</code>. For a large graph output, request
+        <code>{bytes = true}</code> and reduce it with <code>emb.math.*</code>
+        rather than indexing element-by-element — a packed buffer crosses into
+        the host once and the reduction runs in Go, not Lua.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════ 06 · TENSORS -->
+    <section class="block block--dark" id="tensors" aria-labelledby="tensors-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="tensors-h">06 · Tensors and replies</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        An input spec is a named tensor with exactly one of <code>data</code>,
+        <code>fill</code>, or <code>bytes</code>. Every output carries its
+        <code>dtype</code>, so a returned tensor is already a valid input spec
+        and no dtype is re-inferred from element values — an all-integral
+        float32 output would otherwise be mistaken for <code>i64</code>.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>{shape = {…}, data = {…}, dtype?}</dt>
+        <dd>A per-element array. Integral numbers infer <code>i64</code> unless a <code>dtype</code> is given.</dd>
+        <dt>{shape = {…}, fill = n, dtype?}</dt>
+        <dd>A constant tensor built host-side: every element equals <code>n</code>, allocated by the server with no Lua data table. A fractional <code>fill</code> infers <code>f32</code>.</dd>
+        <dt>{shape = {…}, bytes = &lt;string&gt;, dtype}</dt>
+        <dd>Raw little-endian elements. <code>dtype</code> is required — there is no inference from content — and the byte length must equal <code>elements × width</code> exactly. This is where a packed output or an <code>emb.math.float32_bytes</code> buffer goes back in.</dd>
+        <dt>dtype</dt>
+        <dd><code>"f32"</code> (4 bytes), <code>"i64"</code> (8 bytes), or <code>"b1"</code> (1 byte). A packed tensor round-trips with the shape it was returned with, so a dtype never needs re-inferring.</dd>
+      </dl>
+
+      <figure class="code">
+<pre class="code__body"><span class="t-cmd">local</span> out <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({ input_ids <span class="t-dim">=</span> { shape <span class="t-dim">=</span> {<span class="t-num">1</span>, #enc.ids}, data <span class="t-dim">=</span> enc.ids } }, { bytes <span class="t-dim">=</span> <span class="t-cmd">true</span> })
+<span class="t-dim">-- out.logits.bytes is a packed float32 string; feed it back unchanged:</span>
+<span class="t-cmd">local</span> again <span class="t-dim">=</span> emb.<span class="t-cmd">run</span>({ logits <span class="t-dim">=</span> { shape <span class="t-dim">=</span> out.logits.shape, bytes <span class="t-dim">=</span> out.logits.bytes, dtype <span class="t-dim">=</span> out.logits.dtype } })</pre>
+        <figcaption class="code__cap">
+          A packed output is byte-compatible with the <code>bytes</code> input
+          field, so a tensor can cross the Lua boundary without ever becoming a
+          table.
+        </figcaption>
+      </figure>
+
+      <h3 class="doc-h3">The reply grammar</h3>
+      <p class="doc-prose">
+        The script's return value converts to RESP2 by a fixed grammar. Keys are
+        converted in sorted order, so identical tables always produce identical
+        bytes — the content-addressed reply cache depends on it.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>string</dt>
+        <dd>A bulk string. Byte-safe: UTF-8, JSON, and arbitrary binary all pass through.</dd>
+        <dt>number (integral) · number (fractional)</dt>
+        <dd>An integral number is an integer reply; a fractional number is a bulk string, because RESP2 has no double — the decimal is not truncated.</dd>
+        <dt>true · nil · false</dt>
+        <dd><code>true</code> is the integer <code>1</code>; <code>nil</code> and <code>false</code> are a null reply.</dd>
+        <dt>list table (keys 1…n)</dt>
+        <dd>An array reply, converted recursively. An empty table is an empty array.</dd>
+        <dt>string-keyed table</dt>
+        <dd>A flat field/value pair array — the <code>HGETALL</code> shape — sorted by key. Values nest: a hash value may itself be an array, hash, bulk, integer, or null.</dd>
+        <dt>{err = "message"}</dt>
+        <dd>An error reply. A message containing CR or LF is rejected rather than written, so an error can never splice a second RESP frame onto the wire.</dd>
+      </dl>
+
+      <p class="doc-note">
+        <strong>Mixed keys are an error.</strong> A table whose keys are some
+        integers and some strings has no unambiguous reply form and is rejected
+        at conversion. Use an array for a sequence and a string-keyed table for a
+        record, never both in one table.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════ 07 · BUDGETS -->
+    <section class="block block--paper" id="budgets" aria-labelledby="budgets-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="budgets-h">07 · Budgets</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        Every cap below is enforced before the allocation it bounds, so a
+        pathological script fails with an error instead of exhausting the server.
+        The tensor caps are charged across the whole evaluation: data, fill, and
+        merged batch tensors, plus every materialized output, draw on one budget,
+        so a loop of individually valid calls cannot sidestep the total.
+      </p>
+
+      <dl class="doc-cmds">
+        <dt>64 KiB — script source</dt>
+        <dd>The maximum script size, checked before compilation. Both <code>EMB.SCRIPT LOAD</code> and boot preloading use it, and an oversized script is <code>script exceeds size limit</code>.</dd>
+        <dt>30 s — evaluation deadline</dt>
+        <dd>Wall-clock bound on one evaluation. Scripts are pure compute, so a real workload finishes in microseconds; exceeding it is <code>script deadline exceeded</code>.</dd>
+        <dt>16,777,216 elements — one tensor</dt>
+        <dd>The per-tensor element cap, applied to a <code>fill</code> or a packed input before the host allocates it (≈64 MiB at 4 bytes per element).</dd>
+        <dt>67,108,864 elements — one evaluation</dt>
+        <dd>The total tensor-element budget shared by every <code>emb.run</code> and <code>emb.run_batch</code> call in one evaluation (≈256 MiB at 4 bytes per element), including merged batch tensors and every materialized output.</dd>
+        <dt>256 MiB — one output tensor</dt>
+        <dd>The byte cap on a single materialized output. Packed and per-element forms both materialize the whole tensor, so the cap applies to either.</dd>
+        <dt>256 bytes — cache-key tail</dt>
+        <dd>An input text at or below this length is inlined into the reply-cache key; a longer one becomes a SHA-256 digest instead, so one key cannot retain megabytes.</dd>
+        <dt>1,024 — compiled prototypes per model</dt>
+        <dd>The bound on the per-model compiled-script cache, so <code>EMB.EVAL</code> with unbounded unique inline scripts cannot grow it without limit.</dd>
+      </dl>
+
+      <p class="doc-note">
+        <strong>Outputs are metered too.</strong> A materialized output is
+        charged against the evaluation's element budget exactly like an input,
+        so the packed form cannot be used as a way around the total. What the
+        budget does not bound is the model's own inference cost — only the
+        scripting side's allocation.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 08 · CACHE -->
+    <section class="block block--dark" id="cache" aria-labelledby="cache-h">
+  <div class="shell">
+  <div class="block__body">
+    <h2 class="block__head" id="cache-h">08 · Caching and identity</h2>
+    <div class="doc-body">
+
+      <p class="doc-prose">
+        Scripts are cached per model by the SHA1 of their source bytes —
+        Redis's own script digest. The compiled-prototype cache is separate and
+        keyed by <code>(model, wrapped source)</code>, so a repeat
+        <code>EMB.EVSHA</code> skips parsing and compiling while still
+        instantiating a fresh sandboxed state for every evaluation.
+      </p>
+
+      <p class="doc-prose">
+        Scripted <em>replies</em> are content-addressed under a second key,
+        built so that two different requests cannot collide and a changed
+        surface cannot serve a stale value:
+      </p>
+
+      <figure class="code">
+<pre class="code__body">model <span class="t-dim">:</span> sha1(script) <span class="t-dim">:</span> sha256(
+  key-version <span class="t-dim">|</span> representation <span class="t-dim">|</span> server-version <span class="t-dim">|</span> config-digest <span class="t-dim">|</span>
+  num-texts <span class="t-dim">|</span> arg-count <span class="t-dim">|</span> length <span class="t-dim">|</span> arg <span class="t-dim">…</span>
+) <span class="t-dim">:</span> text    <span class="t-dim">-- inlined when short, else #sha256(text)</span></pre>
+        <figcaption class="code__cap">
+          The reply-cache key. Each field is length-framed, so
+          <code>nil</code>, <code>[""]</code>, and <code>["a","b"]</code> versus
+          <code>["a\x00b"]</code> all hash differently.
+        </figcaption>
+      </figure>
+
+      <p class="doc-prose">
+        Four things are folded in deliberately. The <strong>server version</strong>
+        (<code>emb.API_VERSION</code>) means an upgrade never replays a reply
+        computed under an older host surface. The <strong>config digest</strong>
+        means editing a preloaded script's <code>config</code> misses rather than
+        serving the old answer. The <strong>text count</strong> keeps the
+        single-text namespace (the script's value itself) apart from the
+        multi-text one (one element per text). And the <strong>representation
+        byte</strong> separates a short literal input from the digest of a long
+        one, so a short text equal to <code>#&lt;sha256&gt;</code> cannot alias a
+        long payload's reply.
+      </p>
+
+      <p class="doc-note">
+        <strong>The cache is per text.</strong> A multi-text request is a hit
+        only when every text is; a miss re-evaluates once with all texts in
+        <code>KEYS</code>, so the script always sees the true request context. A
+        request with a repeated text is not cacheable, because the per-text reply
+        would be ambiguous. When caching is off, the script runs and the reply is
+        computed directly.
+      </p>
+
+      <p class="doc-prose">
+        Because the server version is one of the folded fields, <strong>cached
+        replies do not survive an upgrade</strong> — a restored snapshot warms
+        only the keys matching the running version. That is the intended trade of
+        a single version: correctness over warmth.
+      </p>
+
+    </div>
+  </div>
+  </div>
+    </section>
+
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>

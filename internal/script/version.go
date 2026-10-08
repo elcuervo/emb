@@ -1,14 +1,28 @@
 package script
 
-// APIVersion identifies the host-function surface available to scripts, so a
-// script written against a newer server can detect an older one and report a
-// capability error itself. It changes when host functions are added, removed,
-// or change semantics, and stays stable for performance-only changes.
+// emb has ONE version: the repository VERSION file, injected into the binary
+// and set here by the server. There is no separate script API version. Scripts
+// reading emb.API_VERSION therefore learn the server they are talking to, and
+// the same value is folded into reply-cache identity so an upgrade that changes
+// host semantics can never serve a reply computed under the old surface.
 //
-// History:
-//
-//	1.0.0 — emb.run / emb.run_batch / emb.tokenize.* / emb.math.{sigmoid,softmax,argmax,float32_bytes} / emb.image.{preprocess,info} / json
-//	1.1.0 — emb.embed / emb.image.embed / emb.similarity / emb.distance; packed and selective emb.run outputs; emb.math.{dot,cosine,l2,norm,mean_pool,cls,topk,gather,slice,scale,add}
-//	1.2.0 — array (default-form) outputs carry dtype; json.null round-trips inside arrays; scalar softmax/argmax; one empty-operand rule for the math module; integer-only scalar math arguments; host API version folded into the reply-cache key
-//	1.3.0 — bool tensors (dtype "b1") in emb.run inputs/outputs; emb.tokenize.encode_plain (no special tokens); emb.tokenize.special_ids (incl. mask_token); json.decode_ordered (order-preserving objects)
-const APIVersion = "1.3.0"
+// It is a package variable rather than a constant because the value comes from
+// the build (main.version via Server.SetVersion), not from source. SetVersion
+// is called once during startup, before any connection is served, so the read
+// on the evaluation path is never racing a write.
+var APIVersion = DefaultVersion
+
+// DefaultVersion is reported when no build version was injected: `go test`,
+// `go run`, and any build without -ldflags -X main.version. INFO reports the
+// same value as emb_version, so the two can never disagree.
+const DefaultVersion = "dev"
+
+// SetVersion sets the version reported as emb.API_VERSION and folded into
+// reply-cache keys. An empty value (a build with no ldflag) keeps
+// DefaultVersion. It must be called before the server serves requests.
+func SetVersion(v string) {
+	if v == "" {
+		v = DefaultVersion
+	}
+	APIVersion = v
+}

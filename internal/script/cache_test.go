@@ -197,7 +197,9 @@ func TestCacheKeyRepresentationIdentity(t *testing.T) {
 		}
 		seen[key] = true
 	}
-	// Fixed pre-domain identity: APIVersion 1.3.0, one text, no args.
+	// Fixed pre-unification identity (host API 1.3.0, one text, no args): the
+	// old digest must not remain addressable now that the key folds the server
+	// version and a v2 domain.
 	const legacyMetadata = "916b0b7d3e5eba509cc49f1c31e93025ec144ac6963e10909b98d6486f36efad"
 	for _, input := range inputs {
 		tail := input
