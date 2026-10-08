@@ -180,7 +180,7 @@ When `intra_op_threads` is unset and a model opens more than one named-tensor se
 
 ### Requirement: Shared script sessions with optional spinning
 
-A model SHALL accept `script_callers_per_session` (default 4). Up to that many evaluations SHALL run concurrently on each named-tensor session. Concurrent runs on one session SHALL return the same outputs as serial runs. A model SHALL accept `allow_spinning`, which maps to ORT `session.intra_op.allow_spinning`. When unset, scripted sessions SHALL spin off while shared (`script_callers_per_session > 1`) and keep ORT's default otherwise; an explicit value SHALL always win.
+A model SHALL accept `script_callers_per_session` as a per-session concurrency cap (default 4). Up to that many evaluations SHALL run concurrently on each named-tensor session; within the cap the effective allowance SHALL be governed by `inference-capacity-autotune`. Concurrent runs on one session SHALL return the same outputs as serial runs. A model SHALL accept `allow_spinning`, which maps to ORT `session.intra_op.allow_spinning`. When unset, scripted sessions SHALL spin off while shared (`script_callers_per_session > 1` or `capacity: throughput`) and keep ORT's default otherwise; an explicit value SHALL always win.
 
 #### Scenario: Concurrent runs on one session are correct
 
@@ -202,6 +202,11 @@ A model SHALL accept `script_callers_per_session` (default 4). Up to that many e
 
 - **WHEN** a model sets `script_callers_per_session: 1` and leaves `allow_spinning` unset
 - **THEN** its scripted sessions SHALL keep ORT's default `allow_spinning`
+
+#### Scenario: The cap bounds adaptive concurrency
+
+- **WHEN** `script_callers_per_session: 4` is configured and the controller raises concurrency under load
+- **THEN** at most four evaluations SHALL run concurrently on any one session
 
 ### Requirement: Explicit session settings win over capacity profiles
 
