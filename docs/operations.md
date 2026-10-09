@@ -223,6 +223,11 @@ Select a row with `j`/`k` and press enter to open that node's per-model
 dashboard; escape returns to the fleet. The single-node dashboard is unchanged
 when exactly one node is monitored.
 
+![The emb-top fleet view: an aggregate band above one row per node, each node showing its share of fleet requests against 1/N, its own verdict and an activity strip](assets/emb-top-cluster-a1cddf33.gif)
+
+*Two nodes under load · emb-top watching `127.0.0.1:16379` and
+`127.0.0.1:16380`. Re-record with `just website-clusterviz`.*
+
 - `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a
   compatibility alias for a single node, and the `localhost:6379` default
   applies only when no node flag is given. Each entry is `host:port`, a bare

@@ -49,6 +49,16 @@ Files here:
 | `publish.py` | writes the take, the frame, the caption and the figures into the page, the served set in `published-tree.py`, and the capture into the documentation |
 | `runs/` | the last run's `raw.cast`, `take.cast`, `frame.cast`, `frame.txt`, `node.log`, `traffic.log`, `samples.txt` — gitignored, unserved, and the only way to check what the artifacts show |
 
+## The fleet capture
+
+`just website-clusterviz` records the same recorder against a fleet instead of
+one node: it starts two nodes from `models.yaml` (`:16379` and `:16380`), runs
+`emb-top -nodes a,b` in front and `cluster-traffic.sh` behind, and writes one
+animated GIF to `docs/assets/emb-top-cluster-<sha8>.gif` for
+`docs/operations.md`. It does not touch the site plate, which shows one node.
+The scripts are `run-cluster.sh` and `cluster-traffic.sh`, siblings of the
+single-node pair.
+
 ## The plate is the recording, and the frame is what it falls back to
 
 The page's plate plays `take.cast` — the recording trimmed to the dashboard's own

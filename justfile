@@ -687,6 +687,57 @@ website-topviz: build
       --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port; \
     python3 website/tools/published-tree.py
 
+# Record the fleet view's capture from a real two-node run (see
+# website/tools/topviz/README.md).
+#
+# The same recorder as `website-topviz`, but the dashboard watches two nodes
+# (`-nodes a,b`) and the output is a single animated GIF for
+# docs/operations.md. It writes docs/assets/emb-top-cluster-<sha8>.gif and
+# prints the name; update the reference in docs/operations.md when the hash
+# changes. Needs the full dev shell and the four topviz models, like
+# `website-topviz`.
+website-clusterviz: build
+    @set -eu; \
+    cfg=website/tools/topviz/models.yaml; \
+    runs=website/tools/topviz/runs; \
+    portA=16379; portB=16380; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    for tool in redis-cli asciinema agg; do \
+      command -v $tool >/dev/null 2>&1 || { echo "website-clusterviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
+    done; \
+    if [ -z "{{ort_lib}}" ]; then echo "website-clusterviz: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
+    for onnx in $(grep -E '^[[:space:]]+onnx:' $cfg | awk '{print $2}'); do \
+      if [ ! -f "$onnx" ]; then echo "website-clusterviz: missing $onnx"; exit 1; fi; \
+    done; \
+    for p in $portA $portB; do \
+      if redis-cli -p $p ping >/dev/null 2>&1; then echo "website-clusterviz: something already answers on :$p"; exit 1; fi; \
+    done; \
+    mkdir -p $runs; \
+    tmp=$(mktemp -d /tmp/emb-clusterviz.XXXXXX); \
+    trap 'kill $(cat $runs/node-a.pid) $(cat $runs/node-b.pid) 2>/dev/null || true; rm -rf $tmp' EXIT; \
+    echo "website-clusterviz: starting two nodes"; \
+    ./bin/emb -config $cfg -listen 127.0.0.1:$portA > $runs/cluster-node-a.log 2>&1 & echo $! > $runs/node-a.pid; \
+    ./bin/emb -config $cfg -listen 127.0.0.1:$portB > $runs/cluster-node-b.log 2>&1 & echo $! > $runs/node-b.pid; \
+    for p in $portA $portB; do \
+      tag=$([ "$p" = "$portA" ] && echo a || echo b); \
+      deadline=$(( $(date +%s) + 300 )); \
+      until redis-cli -p $p EMB.READY 2>/dev/null | grep -q OK; do \
+        kill -0 $(cat $runs/node-$tag.pid) 2>/dev/null || { echo "website-clusterviz: node on :$p exited"; tail -20 $runs/cluster-node-$tag.log; exit 1; }; \
+        if [ $(date +%s) -ge $deadline ]; then echo "website-clusterviz: node on :$p not ready within 300s"; exit 1; fi; \
+        sleep 1; \
+      done; \
+    done; \
+    echo "website-clusterviz: recording (about a minute)"; \
+    EMB_CLUSTERVIZ_A=127.0.0.1:$portA EMB_CLUSTERVIZ_B=127.0.0.1:$portB \
+      asciinema record --headless --quiet --overwrite --window-size 120x32 \
+      -c website/tools/topviz/run-cluster.sh $runs/cluster-raw.cast; \
+    python3 website/tools/topviz/trim.py $runs/cluster-raw.cast $runs/cluster-take.cast; \
+    agg --quiet --theme "$theme" --font-size 12 --line-height 1.4 \
+      --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/cluster-take.cast $tmp/cluster.gif; \
+    sha=$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()[:8])" $tmp/cluster.gif); \
+    cp $tmp/cluster.gif docs/assets/emb-top-cluster-$sha.gif; \
+    echo "website-clusterviz: wrote docs/assets/emb-top-cluster-$sha.gif"
+
 # `website/` is edited and `website/` is published, so `.assetsignore` is the
 # only thing between an authoring file and a public URL -- which makes this
 # check load-bearing rather than a convenience. It fails both ways: a file that
