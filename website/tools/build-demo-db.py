@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """Embed the gallery's corpus, index it, and write the atlas's numbers.
 
-This is the offline half of the gallery: the corpus in `poe.jsonl` goes through
-a **local** `emb` server, and the vectors land in a committed SQLite database
-with one `sqlite-vec` table per model, plus the build-time 2D projection and
-cluster regions the atlas draws. The browser never embeds the corpus; it embeds
-one query and searches the shipped index.
+This is the text stage of the gallery's one index. The corpus in `poe.jsonl`
+goes through a **local** `emb` server, and the vectors land in the shared working
+file (`assets/demo/index.build.db`) as one `sqlite-vec` table per model, plus the
+build-time 2D projection and cluster regions the atlas draws. The media and
+fingerprint stages append their own tables to the same file; the finalize step
+hashes it, names it `gallery-<hash8>.db`, and writes the one manifest. The
+browser never embeds the corpus; it embeds one query and searches the shipped
+index.
 
     just website-demos                      # minilm + bge-small
     python3 website/tools/build-demo-db.py --models minilm,bge-small
-
-Two files come out, both content-hashed in their names so a rebuild cannot be
-served stale and a returning visitor cannot receive the previous index:
-
-    website/assets/demo/poe-<hash8>.db      the index
-    website/assets/demo/poe-<hash8>.json    its manifest
+    python3 website/tools/demo_index.py finalize
 
 Everything a page displays is read from the manifest rather than typed into the
 page: dimensions, counts, precision, the model names, the cluster labels, and the
@@ -22,7 +20,7 @@ recall probe. Nothing about a vector is transcribed.
 
 The pipeline, in order:
 
-  1. read the corpus and hash it (the hash names the output),
+  1. read the corpus and hash it (the index's identity),
   2. ask the server for `EMB.MODELS` and refuse to continue if a requested model
      is not the model the server serves -- a mismatch is a loud failure, not a
      silently wrong index,
@@ -31,7 +29,8 @@ The pipeline, in order:
   5. quantize to int8 and build a `vec0` table per model,
   6. measure the index's `recall@k` against an exact float32 search over the same
      vectors, so the precision is a measurement rather than a promise,
-  7. write both files and delete the previous ones.
+  7. write the working file; the media stages append to it and `demo_index.py
+     finalize` names the one shipped artefact.
 
 `int8` halves the corpus's vectors and costs nothing a demo can perceive; the
 recall probe in the manifest is what says so.
@@ -47,15 +46,15 @@ import random
 import re
 import socket
 import sqlite3
-import struct
 import sys
 from pathlib import Path
 
 import numpy as np
 
+import demo_index
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORPUS = REPO_ROOT / "website" / "tools" / "demos" / "poe.jsonl"
-OUT_DIR = REPO_ROOT / "website" / "assets" / "demo"
 
 DEFAULT_MODELS = ["minilm", "bge-small"]
 DEFAULT_EMB = "127.0.0.1:16379"
@@ -283,15 +282,6 @@ def regions(points: np.ndarray, labels: np.ndarray, works: list[str], model: str
     return out
 
 
-def display(path: Path) -> str:
-    """A repo-relative path when it has one, so a --out inside the repo reads
-    short and a throwaway --out outside it still prints."""
-    try:
-        return str(path.relative_to(REPO_ROOT))
-    except ValueError:
-        return str(path)
-
-
 def quantize(matrix: np.ndarray) -> bytes:
     """int8 vectors: the embeddings are unit-length, so ×127 is the whole scale."""
     clipped = np.clip(np.rint(matrix * 127.0), -128, 127).astype(np.int64)
@@ -313,26 +303,6 @@ def approximate_topk(db: sqlite3.Connection, table: str, queries: np.ndarray, k:
         ).fetchall()
         out.append({row[0] for row in rows})
     return out
-
-
-def load_extension(db: sqlite3.Connection, path: str | None) -> None:
-    candidates = [path] if path else []
-    env = os.environ.get("SQLITE_VEC_EXT")
-    if env:
-        candidates.append(env)
-    lib = os.environ.get("SQLITE_VEC_LIB")
-    if lib:
-        candidates.extend(str(p) for p in sorted(Path(lib).glob("vec0.*")))
-    for candidate in candidates:
-        if candidate and Path(candidate).exists():
-            db.enable_load_extension(True)
-            db.load_extension(candidate)
-            db.enable_load_extension(False)
-            return
-    sys.exit(
-        "build-demo-db: sqlite-vec is not on the path.\n"
-        "  run inside `nix develop`, which exports SQLITE_VEC_LIB, or pass --sqlite-vec <vec0.dylib>"
-    )
 
 
 def report_regions(models: list[str], passages: list[dict], vectors: dict[str, np.ndarray], n: int) -> None:
@@ -366,7 +336,6 @@ def main() -> int:
     parser.add_argument("--emb", default=os.environ.get("EMB_ADDR", DEFAULT_EMB),
                         help=f"the local emb server (default: {DEFAULT_EMB})")
     parser.add_argument("--corpus", type=Path, default=CORPUS)
-    parser.add_argument("--out", type=Path, default=OUT_DIR)
     parser.add_argument("--sqlite-vec", default=None, help="path to the sqlite-vec extension")
     parser.add_argument("--report-regions", type=int, default=0, metavar="N",
                         help="print each computed region's closest passages and exit; this is what the hand-naming reads")
@@ -420,16 +389,10 @@ def main() -> int:
         report_regions(models, passages, vectors, args.report_regions)
         return 0
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    db_path = args.out / f"poe-{corpus_hash[:8]}.db"
-    tmp_path = db_path.with_suffix(".db.part")
-    if tmp_path.exists():
-        tmp_path.unlink()
-
-    db = sqlite3.connect(tmp_path)
-    load_extension(db, args.sqlite_vec)
-    db.execute("PRAGMA journal_mode = DELETE")
-    db.execute("PRAGMA page_size = 4096")
+    db = demo_index.open_working(fresh=True)
+    demo_index.load_extension(db, args.sqlite_vec)
+    for table in ("passages", "projection", "regions", *(details[m]["table"] for m in models)):
+        db.execute(f"DROP TABLE IF EXISTS {table}")
     db.execute(
         "CREATE TABLE passages (rowid INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL, "
         "work TEXT NOT NULL, year INTEGER NOT NULL, idx INTEGER NOT NULL, "
@@ -481,6 +444,8 @@ def main() -> int:
         recall = sum(len(e & a) for e, a in zip(expected, actual)) / (len(expected) * RECALL_K)
 
         detail["projection"] = "pca2"
+        detail["element_type"] = "int8"
+        detail["vector_type"] = "vec_int8"
         detail["recall_at_k"] = round(recall, 4)
         detail["recall_k"] = RECALL_K
         detail["regions"] = cluster_rows
@@ -489,46 +454,26 @@ def main() -> int:
 
     db.commit()
     sqlite_vec_version = db.execute("SELECT vec_version()").fetchone()[0]
-    db.execute("VACUUM")
-    db.close()
-
-    identity = json.dumps({"corpus": corpus_hash, "models": models, "precision": "int8",
-                           "k": KMEANS_K, "recall": RECALL_K}, sort_keys=True)
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
-    # A stable name derived from the index's identity, so the file can also keep
-    # the identity-derived name the manifest points at.
-    final_db = args.out / f"poe-{corpus_hash[:8]}.db"
-    tmp_path.replace(final_db)
-
     try:
         corpus_path = str(args.corpus.relative_to(REPO_ROOT))
     except ValueError:
         corpus_path = str(args.corpus)
-    manifest = {
-        "asset": {"db": final_db.name, "bytes": final_db.stat().st_size, "hash": digest},
+    demo_index.set_meta(db, "index", {
         "attribution": ATTRIBUTION,
         "count": len(passages),
         "corpus": {"path": corpus_path, "sha256": corpus_hash,
                    "works": len({p["work"] for p in passages}), "words": sum(len(p["text"].split()) for p in passages)},
-        "generated_by": "website/tools/build-demo-db.py",
         "models": manifest_models,
         "precision": "int8",
         "sqlite_vec": sqlite_vec_version,
         "vector_type": "vec_int8",
-    }
-    manifest_path = args.out / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    })
+    db.commit()
+    db.execute("VACUUM")
+    db.close()
 
-    # A stale index is a page that describes a corpus that is no longer there.
-    # The manifest keeps its stable name so the page has one entry point; only
-    # the index is content-hashed, which is what makes its name unservable-stale.
-    for stale in args.out.glob("*"):
-        if stale not in (final_db, manifest_path):
-            stale.unlink()
-            print(f"removed stale {stale.name}")
-
-    print(f"wrote {display(final_db)} ({final_db.stat().st_size} bytes)")
-    print(f"wrote {display(manifest_path)}")
+    print(f"wrote {demo_index.WORK_DB.relative_to(REPO_ROOT)} ({len(passages)} passages)")
+    print("run `python3 website/tools/demo_index.py finalize` to name the shipped index")
     conn.close()
     return 0
 

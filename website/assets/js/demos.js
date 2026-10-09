@@ -176,6 +176,26 @@ function quantize(vector) {
   return out;
 }
 
+/* The float32 case's query bytes, little-endian like the server's own packed
+ * reply: the index's media tables are `float[512]`, and sqlite-vec reads the
+ * blob's four-byte groups in that order. */
+function f32Bytes(vector) {
+  const bytes = new Uint8Array(vector.length * 4);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < vector.length; i++) { view.setFloat32(i * 4, vector[i], true); }
+  return bytes;
+}
+
+/* The dot product of a query with a stored float32 vector. Media vectors are
+ * unit-length, so this is the cosine the plate prints — computed once, here,
+ * rather than re-implemented by every plate that ranks a medium. */
+function dotF32(vector, blob) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  let dot = 0;
+  for (let i = 0; i < vector.length; i++) { dot += vector[i] * view.getFloat32(i * 4, true); }
+  return dot;
+}
+
 function openIndex() {
   if (indexPromise) { return indexPromise; }
   indexPromise = (async () => {
@@ -274,6 +294,41 @@ export function gallery() {
 
   async function index() { return openIndex(); }
 
+  /* The one vector search: reads the model's table from the manifest, binds
+   * the query in that table's element type (`vec_int8` with a quantized
+   * vector, or `vec_f32` with its raw bytes), and returns the ranked rows. A
+   * float table also carries the dot product of the query with each stored
+   * vector, so a plate can print a score without a cosine loop of its own. */
+  async function vectorSearch(model, vector, k) {
+    const { db, manifest } = await index();
+    const entry = table(manifest, model);
+    const limit = Math.max(1, Math.min(Number(k) || 7, 32));
+    const int8 = (entry.element_type || 'int8') !== 'float32';
+    const select = int8 ? 'rowid, distance' : 'rowid, distance, embedding';
+    const hit = rows(db, 'SELECT ' + select + ' FROM ' + entry.table +
+      ' WHERE embedding MATCH ' + (int8 ? 'vec_int8' : 'vec_f32') + '(?) AND k = ? ORDER BY distance',
+      [int8 ? quantize(vector) : f32Bytes(vector), limit]);
+    return hit.map((r) => ({
+      rowid: r[0], distance: r[1], score: int8 ? null : dotF32(vector, r[2]),
+      model: model, vector: vector
+    }));
+  }
+
+  /* A scripted model call whose reply a search consumes. Kept apart from the
+   * returned `preset` so the search verb and a plate read the same bytes. */
+  async function presetReply(model, sha, texts, args) {
+    if (!sha) { throw new SandboxError('error', 'no preset digest was stamped for this plate'); }
+    const argv = ['EMB.EVSHA', model, sha, String(texts.length)].concat(texts, args || []);
+    const reply = envelopeValue(await run(() => send(argv)));
+    // The server's own contract decides the shape: one text returns the value
+    // itself, N texts return one value per text. A single hash and a list of
+    // hashes are both arrays on the wire, so the count is the only reliable
+    // discriminator -- guessing from the elements would read a one-hash reply
+    // as a list of its own fields.
+    if (texts.length === 1) { return pairsToObject(reply) || reply; }
+    return Array.isArray(reply) ? reply.map((item) => pairsToObject(item) || item) : reply;
+  }
+
   return {
     get origin() { return origin; },
     get state() { return state; },
@@ -303,21 +358,54 @@ export function gallery() {
     /* Text in, the query's own vector out. The corpus is searched locally. */
     embed,
 
+    /* The gallery's one vector search, for a plate that already holds its
+     * query vector (a scripted reply decoded, or an embedding). */
+    async searchVector(model, vector, k) {
+      return run(async () => vectorSearch(model, vector, k));
+    },
+
     /* Text in, ranked neighbours out: embed through the sandbox, then a
      * `vec0` k-nearest query over the committed index on this machine. */
     async search(model, text, k) {
       if (!text || !String(text).trim()) {
         throw new SandboxError('error', 'a search needs a query');
       }
-      return run(async () => {
-        const entry = table((await index()).manifest, model);
-        const vector = await embed(model, text);
-        const limit = Math.max(1, Math.min(Number(k) || 7, 32));
-        const sql = 'SELECT rowid, distance FROM ' + entry.table +
-          ' WHERE embedding MATCH vec_int8(?) AND k = ? ORDER BY distance';
-        const hit = rows((await index()).db, sql, [quantize(vector), limit]);
-        return hit.map((r) => ({ rowid: r[0], distance: r[1], model: model, vector: vector }));
-      });
+      const vector = await embed(model, text);
+      return run(async () => vectorSearch(model, vector, k));
+    },
+
+    /* A media phrase: the model's own text tower, run as a preloaded script,
+     * then the same vector search. The script's reply is the server's packed
+     * little-endian float32, decoded here and passed on unchanged. */
+    async searchPreset(model, sha, text, k) {
+      const reply = await presetReply(model, sha, [text]);
+      const bytes = reply && reply.bytes;
+      if (!bytes) {
+        throw new SandboxError('error', 'the sandbox returned no vector for ' + model);
+      }
+      return run(async () => vectorSearch(model, b64Float32(bytes), k));
+    },
+
+    /* One medium's own numbers and rows, read from the shared manifest. */
+    async media(kind) {
+      const section = ((await index()).manifest.media || {})[kind];
+      if (!section) {
+        throw new SandboxError('error', 'the index holds no ' + kind + ' media');
+      }
+      return section;
+    },
+
+    /* The fingerprint library as a Map: one SELECT, then the plate's own
+     * matcher walks it exactly as it walked the JSON object before. */
+    async fingerprints() {
+      const db = (await index()).db;
+      const library = new Map();
+      for (const [hash, track, offset] of rows(db, 'SELECT hash, track, offset FROM fingerprints')) {
+        let entries = library.get(hash);
+        if (!entries) { entries = []; library.set(hash, entries); }
+        entries.push([track, offset]);
+      }
+      return library;
     },
 
     /* The passages a rowid set names, in the order asked. */
@@ -360,16 +448,7 @@ export function gallery() {
     /* A preloaded preset by digest: the sandbox runs its own bytes. The digest
      * comes from the page's stamped attribute, never from this module. */
     async preset(model, sha, texts, args) {
-      if (!sha) { throw new SandboxError('error', 'no preset digest was stamped for this plate'); }
-      const argv = ['EMB.EVSHA', model, sha, String(texts.length)].concat(texts, args || []);
-      const reply = envelopeValue(await run(() => send(argv)));
-      // The server's own contract decides the shape: one text returns the value
-      // itself, N texts return one value per text. A single hash and a list of
-      // hashes are both arrays on the wire, so the count is the only reliable
-      // discriminator -- guessing from the elements would read a one-hash reply
-      // as a list of its own fields.
-      if (texts.length === 1) { return pairsToObject(reply) || reply; }
-      return Array.isArray(reply) ? reply.map((item) => pairsToObject(item) || item) : reply;
+      return presetReply(model, sha, texts, args);
     },
 
     /* The image preset: raw bytes in, a label distribution out. `bytes` is a

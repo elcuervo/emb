@@ -1,8 +1,8 @@
 /* Music fingerprinting in the browser — the query half of the plate.
  *
  * A Shazam-style fingerprint is a sparse constellation of spectrogram peaks,
- * paired into `(f1, f2, dt)` hashes. The library's hashes ship precomputed
- * (`assets/demo/fingerprints.json`); this module computes the *query*'s hashes
+ * paired into `(f1, f2, dt)` hashes. The library's hashes ship precomputed in
+ * the gallery's shared index; this module computes the *query*'s hashes
  * live from the shipped excerpt, then matches them by looking for the recording
  * that shares many hashes at one consistent time offset. Nothing is uploaded
  * and nothing is a stored ranking: the votes are counted here, from the audio.
@@ -139,11 +139,13 @@ export function fingerprint(peaks) {
 }
 
 /* Hash lookup, then the offset histogram: the recording that shares hashes at
- * one consistent offset wins, and the size of that vote is the evidence. */
+ * one consistent offset wins, and the size of that vote is the evidence.
+ * `hashes` is the Map `gallery().fingerprints()` returns: one entry per hash,
+ * holding the `[track, offset]` pairs the shared index stored. */
 export function match(query, hashes) {
   const votes = new Map();
   query.forEach((qt, h) => {
-    const entries = hashes[h];
+    const entries = hashes.get(h);
     if (!entries) { return; }
     entries.forEach(([track, lt]) => {
       const key = track + ':' + (lt - qt);

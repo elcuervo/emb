@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Embed the video library with X-CLIP and write the shipped video index.
+"""Embed the video library with X-CLIP into the gallery's shared index.
 
 The video half of the plate, the real way: each committed clip is sampled into
 **eight** frames (the export's fixed contract), resized and centre-cropped to
 224x224 RGB in [0,1] — X-CLIP's own mean/std are inside the graph — and packed
 `[1,8,3,224,224]` float32 into the X-CLIP **video tower** through the build-time
 preset. The query is a phrase embedded by the X-CLIP **text tower** live in the
-sandbox, and the two share a 512-d space.
+sandbox, and the two share a 512-d space. The video vectors are appended as
+`vec_xclip(embedding float[512])` in the gallery's one index.
 
     just website-media-models        # needs a local emb with xclip-video/xclip-text
 
@@ -17,11 +18,10 @@ build fails if one does not.
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
-import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -30,9 +30,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+import demo_index
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VIDEO = REPO_ROOT / "website" / "demos" / "media" / "video"
-OUT = REPO_ROOT / "website" / "assets" / "demo" / "video.json"
 VIDEO_PRESET = REPO_ROOT / "scripts" / "xclip_video.lua"
 TEXT_PRESET = REPO_ROOT / "scripts" / "xclip_text.lua"
 DEFAULT_EMB = "127.0.0.1:16401"
@@ -95,7 +96,6 @@ def load_resp():
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--emb", default=os.environ.get("EMB_ADDR", DEFAULT_EMB))
-    parser.add_argument("--out", default=str(OUT))
     args = parser.parse_args()
 
     m = load_resp()
@@ -137,21 +137,40 @@ def main() -> int:
         conn.close()
 
     document = {
-        "generated_by": "website/tools/build-video-index.py",
         "model": "xclip",
         "dimension": int(matrix.shape[1]),
         "frames": FRAMES,
         "clips": clips,
         "queries": queries,
-        "vectors": {LIBRARY[i]["id"]: base64.b64encode(matrix[i].astype("<f4").tobytes()).decode()
-                    for i in range(len(LIBRARY))},
     }
-    payload = json.dumps({"clips": clips, "queries": queries, "vectors": document["vectors"]},
-                         sort_keys=True, separators=(",", ":"))
-    document["sha256"] = hashlib.sha256(payload.encode()).hexdigest()
-    out = Path(args.out)
-    out.write_text(json.dumps(document) + "\n", encoding="utf-8")
-    print(f"wrote {out} ({len(clips)} clips, {len(queries)} pinned queries)")
+    db = demo_index.open_working()
+    demo_index.load_extension(db)
+    db.execute("DROP TABLE IF EXISTS vec_xclip")
+    db.execute("DROP TABLE IF EXISTS video_clips")
+    db.execute("CREATE VIRTUAL TABLE vec_xclip USING vec0(embedding float[512])")
+    db.execute("CREATE TABLE video_clips (rowid INTEGER PRIMARY KEY, id TEXT, title TEXT, source TEXT, "
+               "licence TEXT, file TEXT, frames INTEGER, sha256 TEXT)")
+    for i, (clip, vector) in enumerate(zip(clips, matrix), start=1):
+        db.execute("INSERT INTO video_clips (rowid, id, title, source, licence, file, frames, sha256) "
+                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   (i, clip["id"], clip["title"], clip["source"], clip["licence"],
+                    clip["file"], clip["frames"], clip["sha256"]))
+        db.execute("INSERT INTO vec_xclip (rowid, embedding) VALUES (?, vec_f32(?))",
+                   (i, sqlite3.Binary(vector.astype("<f4").tobytes())))
+    demo_index.set_meta(db, "media.video", {
+        "model": document["model"],
+        "table": "vec_xclip",
+        "element_type": "float32",
+        "vector_type": "vec_f32",
+        "dimension": document["dimension"],
+        "frames": FRAMES,
+        "clips": [{**clip, "rowid": i + 1} for i, clip in enumerate(clips)],
+        "queries": queries,
+        "generated_by": "website/tools/build-video-index.py",
+    })
+    db.commit()
+    db.close()
+    print(f"wrote {len(clips)} clips into {demo_index.WORK_DB.relative_to(REPO_ROOT)}")
     return 0
 
 

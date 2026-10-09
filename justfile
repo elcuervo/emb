@@ -788,11 +788,13 @@ website-poe-check:
     python3 website/tools/demos/fetch-poe.py --check
 
 # `website-demos` embeds the committed corpus against a **local** `emb` and
-# writes the committed index: one `vec0` table per model, the build-time 2D
-# projection, the named cluster regions, and the manifest every gallery figure
-# is read from. It starts its own server on :16389 with the sandbox's own config
-# (paths rewritten to ./models) and stops it again, so the index is built by the
-# models the sandbox serves.
+# writes the text stage of the gallery's shared index: one `vec0` table per
+# model, the build-time 2D projection, and the named cluster regions. It starts
+# its own server on :16389 with the sandbox's own config (paths rewritten to
+# ./models) and stops it again, so the index is built by the models the sandbox
+# serves. The finalize step names the one artefact and writes the manifest every
+# gallery figure is read from; the media targets append their tables to the same
+# working file.
 #
 #   just website-demos                       # minilm + bge-small
 #   just website-demos models=minilm
@@ -814,34 +816,41 @@ website-demos models="minilm,bge-small": build
     DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config "$cfg" > /tmp/emb-demos.log 2>&1 & echo $! > /tmp/emb-demos.pid; \
     for i in $(seq 1 300); do redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
     redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK || { echo "website-demos: emb did not become ready"; tail -20 /tmp/emb-demos.log; exit 1; }; \
-    python3 website/tools/build-demo-db.py --emb 127.0.0.1:$port --models "{{models}}"
+    python3 website/tools/build-demo-db.py --emb 127.0.0.1:$port --models "{{models}}"; \
+    python3 website/tools/demo_index.py finalize
 
-# `website-media` builds both shipped media indexes: the clip's frame vectors
-# (embedded by a local `emb` carrying the same fused CLIP export the sandbox
-# serves, through the build-only `clip_embed.lua`) and the music fingerprint
-# database (pure DSP, no server). It needs the clip model and `ffmpeg`+`ffprobe`
-# on PATH:
+# `website-media` appends the music fingerprint database (pure DSP, no server) to
+# the gallery's shared index, then names the one artefact. The clip's frame
+# vectors (`build-frame-index.py`, embedded by a local `emb` carrying the same
+# fused CLIP export the sandbox serves, through the build-only `clip_embed.lua`)
+# are appended too when their clip is present; it is not shipped on `main`, so
+# the stage is skipped here. It needs `ffmpeg`+`ffprobe` on PATH:
 #
-#   just download-model-quantized repo=Xenova/clip-vit-base-patch32 dir=./models/clip
 #   just website-media
 website-media: build
     @set -eu; \
-    port=16400; \
-    if [ -z "{{ort_lib}}" ]; then echo "website-media: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
-    [ -f models/clip/model_quantized.onnx ] || { echo "website-media: missing models/clip/model_quantized.onnx"; \
-      echo "  fetch it with: just download-model-quantized repo=Xenova/clip-vit-base-patch32 dir=./models/clip"; exit 1; }; \
-    trap 'kill $(cat /tmp/emb-media.pid) 2>/dev/null || true' EXIT; \
-    echo "website-media: emb on 127.0.0.1:$port"; \
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config website/tools/media-build.yaml > /tmp/emb-media-build.log 2>&1 & echo $! > /tmp/emb-media.pid; \
-    for i in $(seq 1 300); do redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
-    redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK || { echo "website-media: emb did not become ready"; tail -20 /tmp/emb-media-build.log; exit 1; }; \
-    python3 website/tools/build-frame-index.py --emb 127.0.0.1:$port; \
-    python3 website/tools/build-fingerprints.py
+    if [ -f website/demos/media/clips/mallard.mp4 ]; then \
+      port=16400; \
+      if [ -z "{{ort_lib}}" ]; then echo "website-media: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
+      [ -f models/clip/model_quantized.onnx ] || { echo "website-media: missing models/clip/model_quantized.onnx"; \
+        echo "  fetch it with: just download-model-quantized repo=Xenova/clip-vit-base-patch32 dir=./models/clip"; exit 1; }; \
+      trap 'kill $(cat /tmp/emb-media.pid) 2>/dev/null || true' EXIT; \
+      echo "website-media: emb on 127.0.0.1:$port"; \
+      DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" ./bin/emb -config website/tools/media-build.yaml > /tmp/emb-media-build.log 2>&1 & echo $! > /tmp/emb-media.pid; \
+      for i in $(seq 1 300); do redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
+      redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK || { echo "website-media: emb did not become ready"; tail -20 /tmp/emb-media-build.log; exit 1; }; \
+      python3 website/tools/build-frame-index.py --emb 127.0.0.1:$port; \
+      kill $(cat /tmp/emb-media.pid) 2>/dev/null || true; \
+      trap - EXIT; \
+    fi; \
+    python3 website/tools/build-fingerprints.py; \
+    python3 website/tools/demo_index.py finalize
 
-# `website-media-models` builds the two real-model indexes: the music embedded by
-# CLAP's audio tower (over a log-mel) and the footage by X-CLIP's video tower
-# (over eight frames), each with a pinned retrieval evaluation. It needs the two
-# model directories and `ffmpeg`/`ffprobe` on PATH:
+# `website-media-models` appends the two real-model indexes to the shared index:
+# the music embedded by CLAP's audio tower (over a log-mel) and the footage by
+# X-CLIP's video tower (over eight frames), each with a pinned retrieval
+# evaluation, then names the one artefact. It needs the two model directories
+# and `ffmpeg`/`ffprobe` on PATH:
 #
 #   # CLAP (int8) and X-CLIP, into ./models/{clap,xclip}
 #   just website-media-models
@@ -858,7 +867,8 @@ website-media-models: build
     for i in $(seq 1 300); do redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
     redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK || { echo "website-media-models: emb did not become ready"; tail -20 /tmp/emb-media-models.log; exit 1; }; \
     python3 website/tools/build-audio-index.py --emb 127.0.0.1:$port; \
-    python3 website/tools/build-video-index.py --emb 127.0.0.1:$port
+    python3 website/tools/build-video-index.py --emb 127.0.0.1:$port; \
+    python3 website/tools/demo_index.py finalize
 
 # Re-vendor the browser's pinned `sqlite-vec` build, exactly as
 # `just website-player` does for the asciinema player. Two files come out of the

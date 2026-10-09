@@ -2,7 +2,7 @@
 #
 # `build-audio-index.py` and `build-video-index.py` start a local `emb` with this
 # config, embed the shipped music and video with CLAP's audio tower and X-CLIP's
-# video tower, and write `assets/demo/{audio,video}.json`. It is not the
+# video tower, and append the vectors to the gallery's shared index. It is not the
 # sandbox's config: `xclip_video.lua` and `clap_audio.lua` carry multi-megabyte
 # tensors and are build-side or bound by the bridge, so they live here.
 #

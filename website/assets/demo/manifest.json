@@ -1,8 +1,8 @@
 {
   "asset": {
-    "bytes": 6410240,
-    "db": "poe-85ee3149.db",
-    "hash": "66e3304e"
+    "bytes": 11087872,
+    "db": "gallery-22c933ba.db",
+    "hash": "22c933ba"
   },
   "attribution": "Texts: Edgar Allan Poe (1809–1849), public domain, via Project Gutenberg.",
   "corpus": {
@@ -12,10 +12,350 @@
     "works": 86
   },
   "count": 2782,
-  "generated_by": "website/tools/build-demo-db.py",
+  "fingerprints": {
+    "buckets": 13060,
+    "hash_bits": {
+      "freq": 10,
+      "time": 10
+    },
+    "hop": 256,
+    "n_fft": 1024,
+    "queries": [
+      {
+        "detected": 1,
+        "file": "queries/q1.mp3",
+        "id": "q1",
+        "offset": 172,
+        "track": 1,
+        "verified": true,
+        "votes": 209
+      },
+      {
+        "detected": 2,
+        "file": "queries/q2.mp3",
+        "id": "q2",
+        "offset": 388,
+        "track": 2,
+        "verified": true,
+        "votes": 103
+      },
+      {
+        "detected": 3,
+        "file": "queries/q3.mp3",
+        "id": "q3",
+        "offset": 129,
+        "track": 3,
+        "verified": true,
+        "votes": 315
+      },
+      {
+        "detected": 4,
+        "file": "queries/q4.mp3",
+        "id": "q4",
+        "offset": 388,
+        "track": 4,
+        "verified": true,
+        "votes": 172
+      },
+      {
+        "detected": 0,
+        "file": "queries/q5.mp3",
+        "id": "q5",
+        "offset": 129,
+        "track": 0,
+        "verified": true,
+        "votes": 220
+      },
+      {
+        "detected": 2,
+        "file": "queries/q6.mp3",
+        "id": "q6",
+        "note": "the same steel-guitar excerpt, degraded with pink noise",
+        "offset": 215,
+        "track": 2,
+        "verified": true,
+        "votes": 223
+      }
+    ],
+    "sample_rate": 11025,
+    "table": "fingerprints",
+    "tracks": [
+      {
+        "composer": "Ceremonial Brass, United States Air Force Band",
+        "file": "brass.mp3",
+        "hashes": 2507,
+        "id": "brass",
+        "idx": 0,
+        "licence": "Public domain",
+        "seconds": 14.3,
+        "sha256": "e347abe7551c13af",
+        "title": "Adjutant's Call"
+      },
+      {
+        "composer": "Gorgoroth6669",
+        "file": "flute.mp3",
+        "hashes": 2762,
+        "id": "flute",
+        "idx": 1,
+        "licence": "CC0 1.0",
+        "seconds": 15.0,
+        "sha256": "6df666e3dd61eee4",
+        "title": "DiZi Chinese Flute Sample"
+      },
+      {
+        "composer": "Eagledj",
+        "file": "steel.mp3",
+        "hashes": 2714,
+        "id": "steel",
+        "idx": 2,
+        "licence": "CC0 1.0",
+        "seconds": 15.0,
+        "sha256": "011bd0e916f9ec22",
+        "title": "Steel guitar playing Hawaiian music"
+      },
+      {
+        "composer": "U Can Unlearn Guitar",
+        "file": "guitar.mp3",
+        "hashes": 2725,
+        "id": "guitar",
+        "idx": 3,
+        "licence": "CC0 1.0",
+        "seconds": 15.0,
+        "sha256": "b50ea55e57835028",
+        "title": "PipingOfQueens"
+      },
+      {
+        "composer": "Frédéric Chopin, performed by Ivan Ilić",
+        "file": "piano.mp3",
+        "hashes": 2636,
+        "id": "piano",
+        "idx": 4,
+        "licence": "CC BY 3.0",
+        "seconds": 15.0,
+        "sha256": "deb820fc13a9a80b",
+        "title": "Prelude No. 14 in E-flat minor, Op. 28"
+      }
+    ]
+  },
+  "generated_by": "website/tools/demo_index.py",
+  "media": {
+    "audio": {
+      "dimension": 512,
+      "element_type": "float32",
+      "generated_by": "website/tools/build-audio-index.py",
+      "model": "clap",
+      "queries": [
+        {
+          "detected": 0,
+          "score": 0.535,
+          "text": "a brass band playing a fanfare",
+          "track": 0,
+          "verified": true
+        },
+        {
+          "detected": 1,
+          "score": 0.6121,
+          "text": "a solo bamboo flute",
+          "track": 1,
+          "verified": true
+        },
+        {
+          "detected": 2,
+          "score": 0.2928,
+          "text": "a lap steel guitar",
+          "track": 2,
+          "verified": true
+        },
+        {
+          "detected": 3,
+          "score": 0.4195,
+          "text": "a fast dance tune",
+          "track": 3,
+          "verified": true
+        },
+        {
+          "detected": 4,
+          "score": 0.4037,
+          "text": "a solo piano",
+          "track": 4,
+          "verified": true
+        }
+      ],
+      "table": "vec_clap",
+      "tracks": [
+        {
+          "artist": "Ceremonial Brass, U.S. Air Force Band",
+          "file": "brass.mp3",
+          "id": "brass",
+          "licence": "Public domain",
+          "rowid": 1,
+          "seconds": 14.3,
+          "sha256": "e347abe7551c13af",
+          "title": "Adjutant's Call"
+        },
+        {
+          "artist": "Gorgoroth6669",
+          "file": "flute.mp3",
+          "id": "flute",
+          "licence": "CC0 1.0",
+          "rowid": 2,
+          "seconds": 15.0,
+          "sha256": "6df666e3dd61eee4",
+          "title": "DiZi Chinese Flute Sample"
+        },
+        {
+          "artist": "Eagledj",
+          "file": "steel.mp3",
+          "id": "steel",
+          "licence": "CC0 1.0",
+          "rowid": 3,
+          "seconds": 15.0,
+          "sha256": "011bd0e916f9ec22",
+          "title": "Steel guitar playing Hawaiian music"
+        },
+        {
+          "artist": "U Can Unlearn Guitar",
+          "file": "guitar.mp3",
+          "id": "guitar",
+          "licence": "CC0 1.0",
+          "rowid": 4,
+          "seconds": 15.0,
+          "sha256": "b50ea55e57835028",
+          "title": "PipingOfQueens"
+        },
+        {
+          "artist": "Chopin, performed by Ivan Ilić",
+          "file": "piano.mp3",
+          "id": "piano",
+          "licence": "CC BY 3.0",
+          "rowid": 5,
+          "seconds": 15.0,
+          "sha256": "deb820fc13a9a80b",
+          "title": "Prelude No. 14 in E-flat minor, Op. 28"
+        }
+      ],
+      "vector_type": "vec_f32"
+    },
+    "video": {
+      "clips": [
+        {
+          "file": "volcano.mp4",
+          "frames": 8,
+          "id": "volcano",
+          "licence": "Public domain",
+          "rowid": 1,
+          "sha256": "17169a7d12df0e54",
+          "source": "NASA",
+          "title": "Sarychev Peak eruption from the ISS"
+        },
+        {
+          "file": "moon.mp4",
+          "frames": 8,
+          "id": "moon",
+          "licence": "Public domain",
+          "rowid": 2,
+          "sha256": "5f119ae572903948",
+          "source": "NASA",
+          "title": "Moon transit of the sun (STEREO-B)"
+        },
+        {
+          "file": "arecibo.mp4",
+          "frames": 8,
+          "id": "arecibo",
+          "licence": "Public domain",
+          "rowid": 3,
+          "sha256": "f1131e5d105f40f1",
+          "source": "NSF",
+          "title": "Collapse of the Arecibo Radio Telescope"
+        },
+        {
+          "file": "turtle.mp4",
+          "frames": 8,
+          "id": "turtle",
+          "licence": "Public domain",
+          "rowid": 4,
+          "sha256": "5f0a41685375eaea",
+          "source": "USFWS",
+          "title": "An olive ridley turtle close up"
+        },
+        {
+          "file": "launch.mp4",
+          "frames": 8,
+          "id": "launch",
+          "licence": "Public domain",
+          "rowid": 5,
+          "sha256": "ada69da637817172",
+          "source": "NASA",
+          "title": "STS-134 launch"
+        },
+        {
+          "file": "storm.mp4",
+          "frames": 8,
+          "id": "storm",
+          "licence": "Public domain",
+          "rowid": 6,
+          "sha256": "2fcfeb2823701735",
+          "source": "NOAA/NASA",
+          "title": "A February 2011 storm crossing the U.S."
+        }
+      ],
+      "dimension": 512,
+      "element_type": "float32",
+      "frames": 8,
+      "generated_by": "website/tools/build-video-index.py",
+      "model": "xclip",
+      "queries": [
+        {
+          "clip": 4,
+          "detected": 4,
+          "score": 0.2538,
+          "text": "a rocket launching into the sky",
+          "verified": true
+        },
+        {
+          "clip": 3,
+          "detected": 3,
+          "score": 0.216,
+          "text": "a sea turtle swimming underwater",
+          "verified": true
+        },
+        {
+          "clip": 0,
+          "detected": 0,
+          "score": 0.2172,
+          "text": "a volcanic eruption",
+          "verified": true
+        },
+        {
+          "clip": 5,
+          "detected": 5,
+          "score": 0.2571,
+          "text": "a storm system over land",
+          "verified": true
+        },
+        {
+          "clip": 1,
+          "detected": 1,
+          "score": 0.223,
+          "text": "the moon passing in front of the sun",
+          "verified": true
+        },
+        {
+          "clip": 2,
+          "detected": 2,
+          "score": 0.2619,
+          "text": "a giant telescope falling apart",
+          "verified": true
+        }
+      ],
+      "table": "vec_xclip",
+      "vector_type": "vec_f32"
+    }
+  },
   "models": [
     {
       "dimension": 384,
+      "element_type": "int8",
       "max_length": 512,
       "name": "minilm",
       "projection": "pca2",
@@ -154,10 +494,12 @@
           ]
         }
       ],
-      "table": "vec_minilm"
+      "table": "vec_minilm",
+      "vector_type": "vec_int8"
     },
     {
       "dimension": 384,
+      "element_type": "int8",
       "max_length": 512,
       "name": "bge-small",
       "projection": "pca2",
@@ -296,10 +638,27 @@
           ]
         }
       ],
-      "table": "vec_bge_small"
+      "table": "vec_bge_small",
+      "vector_type": "vec_int8"
+    },
+    {
+      "dimension": 512,
+      "element_type": "float32",
+      "name": "clap",
+      "quantization": "float32",
+      "table": "vec_clap",
+      "vector_type": "vec_f32"
+    },
+    {
+      "dimension": 512,
+      "element_type": "float32",
+      "name": "xclip",
+      "quantization": "float32",
+      "table": "vec_xclip",
+      "vector_type": "vec_f32"
     }
   ],
   "precision": "int8",
-  "sqlite_vec": "v0.1.9",
+  "sqlite_vec": "v0.1.6",
   "vector_type": "vec_int8"
 }

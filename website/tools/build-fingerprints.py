@@ -12,10 +12,13 @@ of thing*; the plate shows both, and this tool builds the first.
     nix develop .#website --command python3 website/tools/build-fingerprints.py
     # ffmpeg on PATH (or FFMPEG=/path/to/ffmpeg)
 
-Outputs:
+Writes the library into the gallery's shared index (`assets/demo/index.build.db`):
 
-    website/assets/demo/fingerprints.json   the library's hashes and metadata
-    website/demos/media/music/<id>.mp3      the shipped excerpts (input)
+    fingerprints(hash, track, offset)   the library's hashes
+    fingerprint_tracks                  its metadata (titles, credits, licences)
+    website/demos/media/music/<id>.mp3  the shipped excerpts (input)
+
+`python3 website/tools/demo_index.py finalize` then names the one shipped file.
 
 The library's own excerpts are prepared once with ffmpeg (trim, mono, mp3) and
 committed; this tool reads them, so the shipped audio and the shipped hashes are
@@ -28,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import shutil
 import subprocess
@@ -37,9 +39,10 @@ from pathlib import Path
 
 import numpy as np
 
+import demo_index
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MUSIC = REPO_ROOT / "website" / "demos" / "media" / "music"
-OUT = REPO_ROOT / "website" / "assets" / "demo" / "fingerprints.json"
 
 SR = 11025
 N_FFT = 1024
@@ -144,11 +147,11 @@ def hash_of(f1: int, f2: int, dt: int) -> int:
         | (dt & ((1 << TIME_BITS) - 1))
 
 
-def match(query: dict[int, int], db: dict) -> dict:
+def match(query: dict[int, int], library: dict[int, list[list[int]]]) -> dict:
     """Hash lookup, then the offset histogram: the winning (track, offset)."""
     votes: dict[tuple[int, int], int] = {}
     for h, qt in query.items():
-        for track, lt in db.get(str(h), ()):  # JSON keys are strings
+        for track, lt in library.get(h, ()):
             votes[(track, lt - qt)] = votes.get((track, lt - qt), 0) + 1
     if not votes:
         return {"track": None, "offset": 0, "votes": 0}
@@ -174,12 +177,12 @@ def self_test() -> int:
         return x + 0.05 * r.standard_normal(len(t))
 
     signals = [instrument(b, 10 + i) for i, b in enumerate([196, 261, 329, 392])]
-    db = {}
+    library: dict[int, list[list[int]]] = {}
     for i, sig in enumerate(signals):
         for h, lt in fingerprint(sig).items():
-            db.setdefault(str(h), []).append([i, lt])
+            library.setdefault(h, []).append([i, lt])
     seg = signals[2][int(SR * 4):int(SR * 8)] + 0.35 * rng.standard_normal(int(SR * 4))
-    got = match(fingerprint(seg), db)
+    got = match(fingerprint(seg), library)
     ok = got["track"] == 2 and got["votes"] > 10
     print(f"self-test: matched track {got['track']} (want 2) with {got['votes']} votes -> {'ok' if ok else 'FAIL'}")
     return 0 if ok else 1
@@ -188,14 +191,13 @@ def self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--out", default=str(OUT))
     args = parser.parse_args()
     if args.self_test:
         return self_test()
 
     if not MUSIC.exists():
         sys.exit(f"build-fingerprints: no {MUSIC}")
-    db: dict[str, list[list[int]]] = {}
+    library: dict[int, list[list[int]]] = {}
     tracks = []
     for index, track in enumerate(LIBRARY):
         path = MUSIC / track["file"]
@@ -204,8 +206,8 @@ def main() -> int:
         sig = decode(path)
         hashes = fingerprint(sig)
         for h, t in hashes.items():
-            db.setdefault(str(h), []).append([index, t])
-        tracks.append({**track, "seconds": round(len(sig) / SR, 2), "hashes": len(hashes),
+            library.setdefault(h, []).append([index, t])
+        tracks.append({**track, "idx": index, "seconds": round(len(sig) / SR, 2), "hashes": len(hashes),
                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest()[:16]})
         print(f"  {track['id']}: {len(hashes)} hashes over {len(sig) / SR:.1f}s")
 
@@ -216,7 +218,7 @@ def main() -> int:
         path = MUSIC / query["file"]
         if not path.exists():
             sys.exit(f"build-fingerprints: missing query {path}")
-        got = match(fingerprint(decode(path)), db)
+        got = match(fingerprint(decode(path)), library)
         ok = got["track"] == query["track"] and got["votes"] >= 20
         queries.append({**query, "detected": got["track"], "offset": got["offset"], "votes": got["votes"], "verified": ok})
         want = tracks[query["track"]]["id"] if query["track"] is not None else "?"
@@ -224,19 +226,31 @@ def main() -> int:
         if not ok:
             sys.exit(f"build-fingerprints: {query['id']} did not match {want}")
 
-    document = {
-        "generated_by": "website/tools/build-fingerprints.py",
+    db = demo_index.open_working()
+    db.execute("DROP TABLE IF EXISTS fingerprints")
+    db.execute("DROP TABLE IF EXISTS fingerprint_tracks")
+    db.execute("CREATE TABLE fingerprint_tracks (idx INTEGER PRIMARY KEY, id TEXT, title TEXT, composer TEXT, "
+               "licence TEXT, file TEXT, seconds REAL, hashes INTEGER, sha256 TEXT)")
+    db.execute("CREATE TABLE fingerprints (hash INTEGER NOT NULL, track INTEGER NOT NULL, offset INTEGER NOT NULL)")
+    db.execute("CREATE INDEX fingerprints_hash ON fingerprints(hash)")
+    for track in tracks:
+        db.execute("INSERT INTO fingerprint_tracks (idx, id, title, composer, licence, file, seconds, hashes, sha256) "
+                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   (track["idx"], track["id"], track["title"], track["composer"], track["licence"],
+                    track["file"], track["seconds"], track["hashes"], track["sha256"]))
+    for h, entries in library.items():
+        for track, offset in entries:
+            db.execute("INSERT INTO fingerprints (hash, track, offset) VALUES (?, ?, ?)", (h, track, offset))
+
+    demo_index.set_meta(db, "fingerprints", {
         "sample_rate": SR, "hop": HOP, "n_fft": N_FFT,
         "hash_bits": {"freq": FREQ_BITS, "time": TIME_BITS},
-        "tracks": tracks,
-        "queries": queries,
-        "hashes": db,
-    }
-    payload = json.dumps({"tracks": tracks, "queries": queries, "hashes": db}, sort_keys=True, separators=(",", ":"))
-    document["sha256"] = hashlib.sha256(payload.encode()).hexdigest()
-    out = Path(args.out)
-    out.write_text(json.dumps(document, separators=(",", ":")) + "\n", encoding="utf-8")
-    print(f"wrote {out} ({len(db)} distinct hashes, {len(tracks)} tracks, {out.stat().st_size // 1024} KiB)")
+        "table": "fingerprints", "buckets": len(library),
+        "tracks": tracks, "queries": queries,
+    })
+    db.commit()
+    db.close()
+    print(f"wrote {len(library)} hashes over {len(tracks)} tracks into {demo_index.WORK_DB.relative_to(REPO_ROOT)}")
     return 0
 
 

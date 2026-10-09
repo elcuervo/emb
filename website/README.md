@@ -46,9 +46,11 @@ website/
 │   │                       `just website-demos-vendor`; the directory carries
 │   │                       the release, which is why `_headers` may pin it
 │   ├── demo/               the gallery's index: `manifest.json` (stable name,
-│   │                       revalidated) naming a content-hashed `poe-<sha8>.db`
-│   │                       that the browser searches. Built offline by
-│   │                       `just website-demos`, never at request time
+│   │                       revalidated) naming a content-hashed `gallery-<sha8>.db`
+│   │                       that the browser searches — the text vectors, the
+│   │                       media vectors and the fingerprint library in one file.
+│   │                       Built offline by the `just website-*` targets, never
+│   │                       at request time
 │   ├── js/asciinema-player-3.17.0.min.js
 │   │                       the player, verbatim: the landing plate replays
 │   │                       the recorded take with it, from this origin — no

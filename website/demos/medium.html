@@ -205,11 +205,11 @@
 hash = (f1 &lt;&lt; 20) | (f2 &lt;&lt; 10) | dt            # 10 bits each
 votes[track, lib_t - query_t] += 1               # the winning offset
 
-# CLAP: a phrase -> the text tower -> a 512-d vector, scored against audio.json
+# CLAP: a phrase -> the text tower -> a 512-d vector, ranked over the shared index's vec_clap table
 EMB.EVSHA clap-text &lt;clap_text.lua sha1&gt; 1 "a solo piano"
 # -> { shape = {1,512}, bytes = &lt;float32&gt;, dtype = "f32" }
 
-# X-CLIP: a phrase -> the text tower -> a 512-d vector, scored against video.json
+# X-CLIP: a phrase -> the text tower -> a 512-d vector, ranked over vec_xclip
 EMB.EVSHA xclip-text &lt;xclip_text.lua sha1&gt; 1 "a rocket launching into the sky"
 
 # the indexed media were embedded offline by the other towers:
@@ -251,8 +251,7 @@ const mech = mechanism(document.querySelector('[data-mech]'), [
 mech.all();
 
 const LABELS = ['solo piano', 'solo guitar', 'a flute', 'brass band', 'string orchestra', 'percussion', 'electronic music', 'a human voice'];
-let fingerprints = null;
-let frames = null;
+let fingerprintMeta = null;
 let retry = null;
 
 function setState(next, message) {
@@ -260,13 +259,6 @@ function setState(next, message) {
 }
 
 /* ── the fingerprint rig ─────────────────────────────────────────────── */
-
-function decodeVector(b64) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
-  return new Float32Array(bytes.buffer);
-}
 
 /* The site's own ramp, so a spectrogram is drawn in the plate's palette. */
 const RAMP = [[0, [11, 11, 11]], [0.3, [107, 105, 99]], [0.62, [194, 61, 0]], [0.82, [255, 90, 31]], [1, [243, 240, 232]]];
@@ -320,28 +312,24 @@ async function identify(query) {
   mech.reset(); playStages(mech, 150, 60);
   setState('running');
   try {
-    if (!fingerprints) {
-      const response = await fetch(new URL('../assets/demo/fingerprints.json', import.meta.url));
-      if (!response.ok) { throw new Error('the fingerprint database is not on this origin'); }
-      fingerprints = await response.json();
-    }
+    const library = await g.fingerprints();
     const bytes = await (await fetch(new URL('media/music/' + query.file, import.meta.url))).arrayBuffer();
     const samples = await decodeAudio(bytes);
     const { db, bins, frames: count } = spectrogram(samples);
     const peaks = pickPeaks(db, bins, count);
     const hashes = fingerprint(peaks);
-    const { best, ranked } = match(hashes, fingerprints.hashes);
+    const { best, ranked } = match(hashes, library);
     renderSpectrogram(root.querySelector('[data-spectro]'), db, bins, count, peaks);
     root.querySelector('[data-spectro-cap]').textContent =
       'the query — ' + peaks.length + ' peaks, ' + hashes.size + ' hashes';
-    renderVotes(ranked, fingerprints.tracks);
+    renderVotes(ranked, fingerprintMeta.tracks);
     if (!best) {
       root.querySelector('[data-result]').textContent = 'no track in the library shares this excerpt';
       root.querySelector('[data-embed]').textContent = '';
       setState('ready');
       return;
     }
-    const track = fingerprints.tracks[best.track];
+    const track = fingerprintMeta.tracks[best.track];
     const seconds = best.offset * HOP / SR;
     root.querySelector('[data-result]').replaceChildren(
       el('b', { text: track.title }), document.createTextNode(' · ' + track.composer + ' · ' + track.licence),
@@ -375,28 +363,8 @@ async function identify(query) {
  * time. The audio vectors came from CLAP's audio tower over a log-mel; the
  * video vectors from X-CLIP's video tower over eight frames. */
 
-let audioIndex = null;
-let videoIndex = null;
-
-function cosine(a, b) {
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; }
-  return dot;
-}
-async function indexAt(path, slot) {
-  const response = await fetch(new URL(path, import.meta.url));
-  if (!response.ok) { throw new Error('the ' + slot + ' index is not on this origin'); }
-  return response.json();
-}
-async function loadAudio() {
-  if (!audioIndex) { audioIndex = await indexAt('../assets/demo/audio.json', 'audio'); }
-  return audioIndex;
-}
-async function loadVideo() {
-  if (!videoIndex) { videoIndex = await indexAt('../assets/demo/video.json', 'video'); }
-  return videoIndex;
-}
-/* One ranked row per medium: label, a bar, and the cosine. The winner takes the
+/* One ranked row per medium: label, a bar, and the cosine the shared search
+ * computed. The winner takes the
  * figure's single accent. */
 function showRank(node, rows, label, player) {
   const max = Math.max.apply(null, rows.map((r) => r.score).concat([1e-6]));
@@ -416,13 +384,15 @@ async function describeAudio() {
   g.begin();
   setState('running');
   try {
-    const doc = await loadAudio();
-    const reply = await g.preset('clap-text', root.getAttribute('data-emb-preset-clap-text'), [phrase]);
-    if (!reply || !reply.bytes) { throw new Error('the sandbox returned no embedding'); }
-    const query = decodeVector(reply.bytes);
-    const rows = doc.tracks.map((t) => ({ t: t, score: cosine(query, decodeVector(doc.vectors[t.id])),
-      audio: el('audio', { controls: '', preload: 'metadata', src: new URL('media/music/' + t.file, import.meta.url).href, 'aria-label': 'The nearest track' }) }));
-    rows.sort((a, b) => b.score - a.score);
+    const audio = await g.media('audio');
+    // The phrase goes to CLAP's text tower as a scripted call; the shared
+    // search ranks it against the vec_clap table the audio tower filled.
+    const hits = await g.searchPreset('clap', root.getAttribute('data-emb-preset-clap-text'),
+      phrase, audio.tracks.length);
+    const byRow = new Map(audio.tracks.map((t) => [t.rowid, t]));
+    const rows = hits.map((h) => ({ t: byRow.get(h.rowid), score: h.score,
+      audio: el('audio', { controls: '', preload: 'metadata', src: new URL('media/music/' + byRow.get(h.rowid).file, import.meta.url).href, 'aria-label': 'The nearest track' }) }))
+      .filter((r) => r.t);
     const win = showRank(root.querySelector('[data-audio-rank]'), rows, (r) => r.t.title, root.querySelector('[data-audio-player]'));
     root.querySelector('[data-audio-readout]').replaceChildren(
       el('b', { text: win.t.title }), document.createTextNode(' · ' + win.t.artist + ' · ' + win.t.licence + ' · cosine ' + win.score.toFixed(3)));
@@ -440,13 +410,15 @@ async function describeVideo() {
   g.begin();
   setState('running');
   try {
-    const doc = await loadVideo();
-    const reply = await g.preset('xclip-text', root.getAttribute('data-emb-preset-xclip-text'), [phrase]);
-    if (!reply || !reply.bytes) { throw new Error('the sandbox returned no embedding'); }
-    const query = decodeVector(reply.bytes);
-    const rows = doc.clips.map((c) => ({ c: c, score: cosine(query, decodeVector(doc.vectors[c.id])),
-      audio: el('video', { controls: '', playsinline: '', preload: 'metadata', src: new URL('media/video/' + c.file, import.meta.url).href, 'aria-label': 'The nearest clip' }) }));
-    rows.sort((a, b) => b.score - a.score);
+    const video = await g.media('video');
+    // Same shape as the audio rig: X-CLIP's text tower live, its video tower's
+    // table matched by the shared search.
+    const hits = await g.searchPreset('xclip', root.getAttribute('data-emb-preset-xclip-text'),
+      phrase, video.clips.length);
+    const byRow = new Map(video.clips.map((c) => [c.rowid, c]));
+    const rows = hits.map((h) => ({ c: byRow.get(h.rowid), score: h.score,
+      audio: el('video', { controls: '', playsinline: '', preload: 'metadata', src: new URL('media/video/' + byRow.get(h.rowid).file, import.meta.url).href, 'aria-label': 'The nearest clip' }) }))
+      .filter((r) => r.c);
     const win = showRank(root.querySelector('[data-video-rank]'), rows, (r) => r.c.title, root.querySelector('[data-video-player]'));
     root.querySelector('[data-video-readout]').replaceChildren(
       el('b', { text: win.c.title }), document.createTextNode(' · ' + win.c.source + ' · ' + win.c.licence + ' · cosine ' + win.score.toFixed(3)));
@@ -461,33 +433,34 @@ async function describeVideo() {
 /* ── wiring ──────────────────────────────────────────────────────────── */
 
 let current = 'q1';
-async function loadQueries() {
-  const doc = fingerprints || await (await fetch(new URL('../assets/demo/fingerprints.json', import.meta.url))).json();
-  fingerprints = doc;
-  root.querySelector('[data-queries]').replaceChildren(...doc.queries.map((q, i) => el('button', {
+function buildQueries(queries) {
+  root.querySelector('[data-queries]').replaceChildren(...queries.map((q, i) => el('button', {
     type: 'button', class: 'btn btn--sm', 'data-query': q.id, 'aria-pressed': String(i === 0),
     text: 'excerpt ' + (i + 1)
   })));
-  return doc.queries;
 }
 root.querySelector('[data-queries]').addEventListener('click', (e) => {
   const button = e.target.closest('[data-query]');
-  if (!button) { return; }
+  if (!button || !fingerprintMeta) { return; }
   current = button.getAttribute('data-query');
   root.querySelectorAll('[data-query]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
-  const query = (fingerprints.queries || []).find((q) => q.id === current);
+  const query = (fingerprintMeta.queries || []).find((q) => q.id === current);
   if (query) { identify(query); }
 });
 root.querySelector('[data-audio-form]').addEventListener('submit', (e) => { e.preventDefault(); describeAudio(); });
 root.querySelector('[data-video-form]').addEventListener('submit', (e) => { e.preventDefault(); describeVideo(); });
 
-Promise.all([loadQueries(), loadAudio(), loadVideo()]).then(([, audio, video]) => {
-  document.querySelector('[data-fig-tracks]').textContent = String(fingerprints.tracks.length);
-  document.querySelector('[data-fig-hashes]').textContent = String(Object.keys(fingerprints.hashes).length);
+// Every figure and control is read from the shared manifest, so a rebuild
+// moves them without an edit to this page.
+Promise.all([g.manifest(), g.media('audio'), g.media('video')]).then(([manifest, audio, video]) => {
+  fingerprintMeta = manifest.fingerprints;
+  buildQueries(fingerprintMeta.queries || []);
+  document.querySelector('[data-fig-tracks]').textContent = String(fingerprintMeta.tracks.length);
+  document.querySelector('[data-fig-hashes]').textContent = String(fingerprintMeta.buckets);
   document.querySelector('[data-fig-frames]').textContent = String(video.clips.length);
   document.querySelector('[data-fig-dim]').textContent = String(audio.dimension);
   document.querySelector('[data-fig-model]').textContent = audio.model + ' + ' + video.model;
-}).catch(() => {});
+}).catch((err) => { setState(err.state || 'error', err.message); });
 
 </script>
 <script src="../assets/js/tldr.js" defer></script>

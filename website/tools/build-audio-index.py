@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Embed the music library with CLAP and write the shipped audio index.
+"""Embed the music library with CLAP into the gallery's shared index.
 
 The audio half of the plate, the real way: each committed excerpt is decoded to
 48 kHz mono, turned into the CLAP log-mel by `clap_mel.py` (validated against
 Transformers' own feature extractor), and embedded by the CLAP **audio tower**
 through the build-time preset. The query is a phrase embedded by the CLAP **text
-tower** live in the sandbox. Both land in one 512-d space.
+tower** live in the sandbox. Both land in one 512-d space, and the audio vectors
+are appended as `vec_clap(embedding float[512])` in the gallery's one index.
 
     just website-media-models        # needs a local emb with clap-audio/clap-text
 
@@ -20,11 +21,10 @@ decision rather than a silent regression.
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
-import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -33,10 +33,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import clap_mel  # noqa: E402
+import demo_index  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MUSIC = REPO_ROOT / "website" / "demos" / "media" / "music"
-OUT = REPO_ROOT / "website" / "assets" / "demo" / "audio.json"
 AUDIO_PRESET = REPO_ROOT / "scripts" / "clap_audio.lua"
 TEXT_PRESET = REPO_ROOT / "scripts" / "clap_text.lua"
 DEFAULT_EMB = "127.0.0.1:16401"
@@ -81,7 +81,6 @@ def load_resp():
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--emb", default=os.environ.get("EMB_ADDR", DEFAULT_EMB))
-    parser.add_argument("--out", default=str(OUT))
     args = parser.parse_args()
 
     m = load_resp()
@@ -124,20 +123,38 @@ def main() -> int:
         conn.close()
 
     document = {
-        "generated_by": "website/tools/build-audio-index.py",
         "model": "clap",
         "dimension": int(matrix.shape[1]),
         "tracks": tracks,
         "queries": queries,
-        "vectors": {LIBRARY[i]["id"]: base64.b64encode(matrix[i].astype("<f4").tobytes()).decode()
-                    for i in range(len(LIBRARY))},
     }
-    payload = json.dumps({"tracks": tracks, "queries": queries, "vectors": document["vectors"]},
-                         sort_keys=True, separators=(",", ":"))
-    document["sha256"] = hashlib.sha256(payload.encode()).hexdigest()
-    out = Path(args.out)
-    out.write_text(json.dumps(document) + "\n", encoding="utf-8")
-    print(f"wrote {out} ({len(tracks)} tracks, {len(queries)} pinned queries)")
+    db = demo_index.open_working()
+    demo_index.load_extension(db)
+    db.execute("DROP TABLE IF EXISTS vec_clap")
+    db.execute("DROP TABLE IF EXISTS audio_tracks")
+    db.execute("CREATE VIRTUAL TABLE vec_clap USING vec0(embedding float[512])")
+    db.execute("CREATE TABLE audio_tracks (rowid INTEGER PRIMARY KEY, id TEXT, title TEXT, artist TEXT, "
+               "licence TEXT, file TEXT, seconds REAL, sha256 TEXT)")
+    for i, (track, vector) in enumerate(zip(tracks, matrix), start=1):
+        db.execute("INSERT INTO audio_tracks (rowid, id, title, artist, licence, file, seconds, sha256) "
+                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   (i, track["id"], track["title"], track["artist"], track["licence"],
+                    track["file"], track["seconds"], track["sha256"]))
+        db.execute("INSERT INTO vec_clap (rowid, embedding) VALUES (?, vec_f32(?))",
+                   (i, sqlite3.Binary(vector.astype("<f4").tobytes())))
+    demo_index.set_meta(db, "media.audio", {
+        "model": document["model"],
+        "table": "vec_clap",
+        "element_type": "float32",
+        "vector_type": "vec_f32",
+        "dimension": document["dimension"],
+        "tracks": [{**track, "rowid": i + 1} for i, track in enumerate(tracks)],
+        "queries": queries,
+        "generated_by": "website/tools/build-audio-index.py",
+    })
+    db.commit()
+    db.close()
+    print(f"wrote {len(tracks)} tracks into {demo_index.WORK_DB.relative_to(REPO_ROOT)}")
     return 0
 
 

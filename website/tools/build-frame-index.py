@@ -1,39 +1,40 @@
 #!/usr/bin/env python3
-"""Embed a clip frame by frame, so the plate can search it by a phrase.
+"""Embed a clip frame by frame into the gallery's shared index.
 
 This is the video half of the plate: a clip is sampled into a strip of stills,
 each still is embedded by the sandbox's own vision model (through the build-only
-`clip_embed.lua` preset, against a local `emb`), and the vectors ship with the
-frames. The page embeds a typed phrase live and ranks the shipped frames, so the
-picture it highlights is the picture that was measured.
+`clip_embed.lua` preset, against a local `emb`), and the vectors are appended as
+`vec_clip(embedding float[512])` in the gallery's one index. The page embeds a
+typed phrase live and ranks the shipped frames, so the picture it highlights is
+the picture that was measured.
 
     just website-media        # after: just download-model-quantized repo=Xenova/clip-vit-base-patch32 dir=./models/clip
 
-Outputs:
+Writes into the shared index (`assets/demo/index.build.db`):
 
     website/demos/media/frames/<clip>-<i>.jpg   the shipped stills
-    website/assets/demo/frames.json             timestamps, stills, 512-d vectors
+    vec_clip + clip_frames                      timestamps, stills, 512-d vectors
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
-import json
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 
+import demo_index
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SITE = REPO_ROOT / "website"
 FRAMES_DIR = SITE / "demos" / "media" / "frames"
-OUT = SITE / "assets" / "demo" / "frames.json"
 EMBED_PRESET = REPO_ROOT / "scripts" / "clip_embed.lua"
 DEFAULT_EMB = "127.0.0.1:16400"
 DEFAULT_CLIP = SITE / "demos" / "media" / "clips" / "mallard.mp4"
@@ -150,7 +151,6 @@ def main() -> int:
     parser.add_argument("--emb", default=os.environ.get("EMB_ADDR", DEFAULT_EMB))
     parser.add_argument("--clip", default=str(DEFAULT_CLIP))
     parser.add_argument("--count", type=int, default=COUNT)
-    parser.add_argument("--out", default=str(OUT))
     args = parser.parse_args()
 
     clip = Path(args.clip)
@@ -185,23 +185,34 @@ def main() -> int:
         conn.close()
 
     matrix = np.vstack(vectors)
-    document = {
-        "generated_by": "website/tools/build-frame-index.py",
+    db = demo_index.open_working()
+    demo_index.load_extension(db)
+    db.execute("DROP TABLE IF EXISTS vec_clip")
+    db.execute("DROP TABLE IF EXISTS clip_frames")
+    db.execute(f"CREATE VIRTUAL TABLE vec_clip USING vec0(embedding float[{matrix.shape[1]}])")
+    db.execute("CREATE TABLE clip_frames (rowid INTEGER PRIMARY KEY, clip TEXT, idx INTEGER, t REAL, picture TEXT)")
+    for i, (path, vector) in enumerate(zip(stills, matrix), start=1):
+        db.execute("INSERT INTO clip_frames (rowid, clip, idx, t, picture) VALUES (?, ?, ?, ?, ?)",
+                   (i, clip.name, i - 1, times[i - 1], f"media/frames/{path.name}"))
+        db.execute("INSERT INTO vec_clip (rowid, embedding) VALUES (?, vec_f32(?))",
+                   (i, sqlite3.Binary(vector.astype("<f4").tobytes())))
+    demo_index.set_meta(db, "media.frames", {
         "model": "clip",
+        "table": "vec_clip",
+        "element_type": "float32",
+        "vector_type": "vec_f32",
         "dimension": int(matrix.shape[1]),
         "clip": clip.name,
         "duration": round(duration, 3),
-        "frames": [
-            {"t": times[i], "picture": f"media/frames/{p.name}",
-             "vector": base64.b64encode(matrix[i].astype("<f4").tobytes()).decode()}
-            for i, p in enumerate(stills)
-        ],
-    }
-    payload = json.dumps({"clip": document["clip"], "frames": document["frames"]}, sort_keys=True, separators=(",", ":"))
-    document["sha256"] = hashlib.sha256(payload.encode()).hexdigest()
-    out = Path(args.out)
-    out.write_text(json.dumps(document) + "\n", encoding="utf-8")
-    print(f"wrote {out} ({len(stills)} frames, {document['dimension']}d)")
+        "count": len(stills),
+        "frames": [{"rowid": i + 1, "t": times[i], "picture": f"media/frames/{p.name}"}
+                   for i, p in enumerate(stills)],
+        "queries": [],
+        "generated_by": "website/tools/build-frame-index.py",
+    })
+    db.commit()
+    db.close()
+    print(f"wrote {len(stills)} frames into {demo_index.WORK_DB.relative_to(REPO_ROOT)}")
     return 0
 
 
