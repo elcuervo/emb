@@ -568,6 +568,64 @@ RSpec.describe Emb do
     end
   end
 
+  describe 'batch-mode per-model shares (lazy: :batch, unit)' do
+    # FakeEmbClient has no #parallel_batch?, so the BATCH_BLOCK specs above
+    # exercise the serial :multi path (EMB.MULTI for mixed models). These cover
+    # the :batch path: plain EMB per model, always fanned out.
+    it 'sends one plain EMB per model, never EMB.MULTI, overlapping' do
+      tracker = LatchTracker.new(2)
+      client = ParallelFakeEmbClient.new(
+        { %w[EMB minilm a] => [FakeEmbClient.vec(1.0)],
+          %w[EMB bge b] => [FakeEmbClient.vec(2.0)] },
+        tracker: tracker
+      )
+      items = [[client, :minilm, 'a'], [client, :bge, 'b']]
+      loaded = []
+
+      Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
+
+      expect(client.commands).to contain_exactly(%w[EMB minilm a], %w[EMB bge b])
+      expect(client.commands.flatten).not_to include('EMB.MULTI')
+      expect(tracker.max_overlap).to eq(2)
+      expect(loaded.map(&:last)).to eq([[1.0, 1.0], [2.0, 2.0]])
+    end
+
+    it 'forces a siglip2 + hyperclusters scope concurrently and caches the second value' do
+      tracker = LatchTracker.new(2)
+      client = ParallelFakeEmbClient.new(
+        { %w[EMB siglip2 q] => [FakeEmbClient.vec(1.0)],
+          %w[EMB hyperclusters q] => [FakeEmbClient.vec(2.0)] },
+        tracker: tracker
+      )
+      sig = described_class.build_batch_loader(client, :siglip2, 'q')
+      hyp = described_class.build_batch_loader(client, :hyperclusters, 'q')
+
+      expect(sig.first).to eq(1.0)
+      expect(tracker.max_overlap).to eq(2)
+      # Already resolved by the same flush: no further command.
+      expect(hyp.first).to eq(2.0)
+      expect(client.commands.size).to eq(2)
+    end
+
+    it 'fails the unknown-model share alone under batch mode' do
+      client = OneFailClient.new(
+        %w[EMB nope b],
+        { %w[EMB minilm a] => [FakeEmbClient.vec(1.0)] }
+      )
+      minilm = described_class.build_batch_loader(client, :minilm, 'a')
+      nope = described_class.build_batch_loader(client, :nope, 'b')
+
+      expect { minilm.first }.to raise_error(Emb::ServerError)
+
+      # The healthy share ran concurrently, materialized, and is not re-sent;
+      # the failed share resolves to the [] default with no further I/O.
+      expect(minilm.__send__(:__sync)).to eq([1.0, 1.0])
+      expect(nope.__send__(:__sync)).to eq([])
+      expect(client.commands).to contain_exactly(%w[EMB minilm a], %w[EMB nope b])
+      expect(client.commands.size).to eq(2)
+    end
+  end
+
   describe 'parallel batch execution (lazy: :batch, unit)' do
     it 'dispatches chunk shares concurrently and returns results in deferral order' do
       tracker = LatchTracker.new(2)
@@ -681,6 +739,141 @@ RSpec.describe Emb do
         expect(e.cause).to be_a(RedisClient::ProtocolError)
         expect(e.message).to include('expected 2 reply entries, got 1')
       end
+    end
+  end
+
+  describe 'deferred scripts (lazy modes, unit)' do
+    it 'does not send at call time under a deferred mode and resolves on use' do
+      client = Emb::Client.new(lazy: :multi)
+      log = []
+      client.define_singleton_method(:send_command) do |*args|
+        log << args
+        'x|PERSON'
+      end
+
+      loader = client.evalsha(:minilm, 'sha', ['x'], ['PERSON'])
+      expect(log).to be_empty
+      expect(loader).to eq('x|PERSON')
+      expect(log).to eq([['EMB.EVSHA', 'minilm', 'sha', 1, 'x', 'PERSON']])
+    end
+
+    it 'returns a lazy value for eval too' do
+      client = Emb::Client.new(lazy: :batch)
+      log = []
+      client.define_singleton_method(:send_command) do |*args|
+        log << args
+        'a|ORG'
+      end
+      loader = client.eval(:minilm, 'return KEYS[1]', ['a'], ['ORG'])
+      expect(log).to be_empty
+      expect(loader).to eq('a|ORG')
+    end
+
+    it 'honors the default client lazy mode at module level' do
+      previous = described_class.instance_variable_get(:@default_client)
+      described_class.setup(lazy: :batch)
+      log = []
+      described_class.instance_variable_get(:@default_client).define_singleton_method(:send_command) do |*args|
+        log << args
+        'x|PERSON'
+      end
+
+      loader = described_class.evalsha(:minilm, 'sha', ['x'], ['PERSON'])
+      expect(log).to be_empty
+      expect(loader).to eq('x|PERSON')
+    ensure
+      described_class.instance_variable_set(:@default_client, previous)
+    end
+
+    it 'dispatches a script share concurrently with an embed share under :batch' do
+      tracker = LatchTracker.new(2)
+      responses = {
+        %w[EMB siglip2 q] => [FakeEmbClient.vec(1.0)],
+        ['EMB.EVSHA', 'gliner', 'sha', 1, 'q', 'places'] => 'x|places'
+      }
+      log = []
+      client = Emb::Client.new(lazy: :batch, pool: 4)
+      client.define_singleton_method(:send_command) do |*args|
+        tracker.enter
+        log << args
+        responses.fetch(args)
+      ensure
+        tracker.leave
+      end
+
+      vec = client[:siglip2]['q']
+      script = client.evalsha(:gliner, 'sha', ['q'], ['places'])
+      expect(log).to be_empty
+
+      expect(vec.first).to eq(1.0)
+      expect(script).to eq('x|places')
+      expect(tracker.max_overlap).to eq(2)
+      expect(log).to contain_exactly(%w[EMB siglip2 q], ['EMB.EVSHA', 'gliner', 'sha', 1, 'q', 'places'])
+      expect(log.flatten).not_to include('EMB.MULTI')
+    end
+
+    it 'keeps two evalsha calls independent' do
+      responses = {
+        ['EMB.EVSHA', 'minilm', 'sha1', 1, 'a'] => 'A',
+        ['EMB.EVSHA', 'minilm', 'sha2', 1, 'b'] => 'B'
+      }
+      log = []
+      client = Emb::Client.new(lazy: :batch, pool: 4)
+      client.define_singleton_method(:send_command) do |*args|
+        log << args
+        responses.fetch(args)
+      end
+
+      l1 = client.evalsha(:minilm, 'sha1', ['a'])
+      l2 = client.evalsha(:minilm, 'sha2', ['b'])
+      expect(l1).to eq('A')
+      expect(l2).to eq('B')
+      expect(log).to contain_exactly(
+        ['EMB.EVSHA', 'minilm', 'sha1', 1, 'a'],
+        ['EMB.EVSHA', 'minilm', 'sha2', 1, 'b']
+      )
+    end
+
+    it 'sends embeds then scripts one after another under :multi' do
+      responses = {
+        %w[EMB minilm a] => [FakeEmbClient.vec(1.0)],
+        ['EMB.EVAL', 'minilm', 'return KEYS[1]', 1, 'a'] => 'a'
+      }
+      log = []
+      client = Emb::Client.new(lazy: :multi)
+      client.define_singleton_method(:send_command) do |*args|
+        log << args
+        responses.fetch(args)
+      end
+
+      vec = client[:minilm]['a']
+      script = client.eval(:minilm, 'return KEYS[1]', ['a'])
+      expect(vec.first).to eq(1.0)
+
+      expect(log).to eq([%w[EMB minilm a], ['EMB.EVAL', 'minilm', 'return KEYS[1]', 1, 'a']])
+      expect(script).to eq('a')
+    end
+
+    it 'applies decode at resolution, identical to the eager result' do
+      packed = [1.0, 2.0, 3.0, 4.0].pack('e*')
+      deferred = Emb::Client.new(lazy: :batch)
+      deferred.define_singleton_method(:send_command) { |*| packed }
+      eager = Emb::Client.new
+      eager.define_singleton_method(:send_command) { |*| packed }
+
+      loader = deferred.evalsha(:minilm, 'sha', ['x'], [], decode: :f32)
+      expect(loader).to eq([1.0, 2.0, 3.0, 4.0])
+      expect(loader).to eq(eager.evalsha(:minilm, 'sha', ['x'], [], decode: :f32))
+    end
+
+    it 'validates decode at call time before anything is sent' do
+      client = Emb::Client.new(lazy: :batch)
+      log = []
+      client.define_singleton_method(:send_command) { |*args| log << args }
+
+      expect { client.eval(:minilm, 'return 1', ['x'], [], decode: :bidirectional) }
+        .to raise_error(ArgumentError, /unsupported decode mode/)
+      expect(log).to be_empty
     end
   end
 

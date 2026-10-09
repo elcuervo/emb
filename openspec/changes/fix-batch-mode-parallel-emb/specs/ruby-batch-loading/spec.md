@@ -8,14 +8,14 @@ Under `lazy: :multi`, the scope SHALL be coalesced per client into chunks of at 
 
 Under `lazy: :batch`, `EMB.MULTI` SHALL NOT be used. The scope SHALL be grouped per client by model, each model group chunked into `EMB <model> <text>...` shares of at most `batch_size` texts, and the shares dispatched concurrently (per the "Batch mode parallel execution" requirement).
 
-#### Scenario: Same-model loaders coalesce into one EMB
+#### Scenario: Same-model loaders coalesce into one MULTI
 
 - **WHEN** `a = Emb[:minilm]["x"]`, `b = Emb[:minilm]["y"]`, and `c = Emb[:minilm]["z"]` are created in the same scope under a deferred mode and `a` is used
 - **THEN** a single command `EMB minilm "x" "y" "z"` SHALL be sent to the server
 - **AND** `EMB.MULTI` SHALL NOT be used for same-model coalescing
 - **AND** `b` and `c` SHALL return the correct embeddings without additional commands
 
-#### Scenario: Mixed-model loaders coalesce into one MULTI under multi mode
+#### Scenario: Mixed-model loaders coalesce into one MULTI
 
 - **WHEN** `Emb[:minilm]["a"]` and `Emb[:bge]["b"]` are created and used in the same scope under `lazy: :multi`
 - **THEN** a single command `EMB.MULTI minilm "a" bge "b"` SHALL be sent
@@ -122,7 +122,7 @@ In `lazy: :batch` mode, every share of a resolving scope — each per-model `EMB
 
 ### Requirement: Deferred script evaluation
 
-Under a deferred mode, `eval` and `evalsha` (client and module level) SHALL return a lazy value instead of sending immediately, and SHALL join the same execution scope as deferred embeddings: forcing any deferred value of the scope SHALL resolve the scripts too. Script calls SHALL NOT be coalesced with each other or with embeddings — each call is sent as its own `EMB.EVAL` / `EMB.EVSHA` command with its original model, script/SHA, texts, and args. Under `lazy: :multi` the scope's commands SHALL be sent one after another. Under `lazy: :batch` each script call SHALL be its own share, dispatched concurrently with the scope's `EMB` shares. `decode:` SHALL be applied when the value resolves, with the same results and errors as the eager path. Script error replies SHALL follow the same fail-closed rules as embed shares.
+`eval` and `evalsha` SHALL honor the client's `lazy` mode: eager under `false`, deferred under `:multi` and `:batch`. A deferred call SHALL join the same scope as deferred embeddings, send its own `EMB.EVAL`/`EMB.EVSHA` command (never coalesced), and apply `decode:` on resolution. Under `:multi` the scope's commands SHALL be sent serially; under `:batch` each call SHALL be its own share dispatched concurrently with the scope's `EMB` shares. Script errors SHALL fail closed like embed shares.
 
 #### Scenario: Eager mode unchanged
 
