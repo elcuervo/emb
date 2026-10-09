@@ -7,11 +7,11 @@ module Emb
   # shaping, per-slice result mapping, and the bounded concurrent fan-out used
   # by `lazy: :batch`. Extended into Emb by batch.rb.
   module BatchDispatch
-    # Script batch items are [client, :script, argv, decode]; embed items are
+    # Script batch items are [client, SCRIPT_ITEM, argv, decode]; embed items are
     # [client, model, text, format]. argv is the fully built EMB.EVAL/EMB.EVSHA
     # command and argv[3] its text count.
     def script_item?(item)
-      item[1] == SCRIPT_ITEM
+      item[1].equal?(SCRIPT_ITEM)
     end
 
     def item_model(item)

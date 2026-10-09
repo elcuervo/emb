@@ -10,9 +10,11 @@ module Emb
 
   BATCH_KEY = :emb
 
-  # Marker in slot 1 of a script batch item ([client, :script, argv, decode]);
-  # embed items are [client, model, text, format].
-  SCRIPT_ITEM = :script
+  # Identity sentinel in slot 1 of a script batch item
+  # ([client, SCRIPT_ITEM, argv, decode]); embed items are
+  # [client, model, text, format]. A unique object matched with #equal? cannot
+  # collide with a model name.
+  SCRIPT_ITEM = Object.new
 
   # Raised by resolve_slice when the server reply carries fewer entries than
   # the slice's texts. Subclasses RedisClient::ProtocolError so the existing

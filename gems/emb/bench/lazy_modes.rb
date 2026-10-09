@@ -125,7 +125,7 @@ def time_rounds(clients, sha, kind)
   ROUNDS.times do |round|
     MODES.each_key do |name|
       t0 = ms
-      run_scope(clients[name], sha, kind, "t#{round}")
+      run_scope(clients[name], sha, kind, "t#{round}-#{name}")
       samples[name] << (ms - t0)
     end
   end
