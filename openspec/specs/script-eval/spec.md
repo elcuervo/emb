@@ -175,25 +175,6 @@ The server SHALL serve GLiNER-style extraction end-to-end: with the `gliner2-mul
 - **WHEN** the same script and text are run with a different label set
 - **THEN** the reply is a hash whose fields are exactly the requested labels, with array values of extracted entity strings (matching the reference decoder's output for those labels)
 
-### Requirement: Script API version
-
-The server SHALL expose `emb.API_VERSION` as a string describing the host function surface available to scripts. The value SHALL change when host functions are added, removed, or change semantics, and SHALL remain stable for changes that only affect performance. Scripts SHALL be able to compare it (for example by major version prefix) and report a capability error themselves; the server SHALL NOT refuse to evaluate a script on version grounds.
-
-#### Scenario: Version is readable
-
-- **WHEN** a script returns `emb.API_VERSION`
-- **THEN** the reply is a non-empty string
-
-#### Scenario: Version reflects the extended surface
-
-- **WHEN** a script asserts that `emb.similarity` and packed-output `emb.run` are available and the server version predates them
-- **THEN** the script can detect the absence and reply with its own error instead of failing at the call site
-
-#### Scenario: Version is stable across performance work
-
-- **WHEN** only performance characteristics of existing host functions change
-- **THEN** `emb.API_VERSION` is unchanged
-
 ### Requirement: Image preprocessing host block
 
 For a model configured with an `image:` block, the server SHALL provide `emb.image.preprocess(bytes)` to scripts: it SHALL decode the raw image bytes and apply the model's configured image preprocessing (size, crop, resample, rescale, mean, std), returning a tensor spec `{shape = {1, 3, H, W}, bytes = <little-endian float32>, dtype = "f32", input = <configured input tensor name>}` that can be passed directly to `emb.run` or `emb.run_batch`. The server SHALL also provide `emb.image.info()` returning the model's configured preprocessing parameters. Preprocessing SHALL be deterministic (identical bytes and config produce identical output), SHALL be bounded by the same per-image byte and decoded-pixel caps as `EMB.IMG`, and SHALL be charged against the evaluation's tensor budget. Calling `emb.image.preprocess` for a model without an `image:` block, or on undecodable bytes, SHALL raise an error. This block SHALL add no network capability.
@@ -273,3 +254,43 @@ Script reply key derivation SHALL distinguish literal short inputs from digested
 - **WHEN** a current request performs its lookup
 - **THEN** it SHALL miss that legacy identity and compute a fresh reply
 - **AND** repeated current requests SHALL hit the new identity normally
+
+### Requirement: Script API version is the server version
+
+The server SHALL expose `emb.API_VERSION` as a string carrying the server's own
+version — the repository `VERSION` value injected into the binary — so `emb` has
+a single version and the scripted surface reports the server a script is talking
+to rather than a second numbering scheme. It SHALL fall back to `dev` when no
+build version was injected, matching `INFO`'s `emb_version`. The value SHALL be
+folded into reply-cache identity so an upgrade can never serve a reply computed
+under an older surface.
+
+#### Scenario: Version is readable
+
+- **WHEN** a script returns `emb.API_VERSION`
+- **THEN** the reply is a non-empty string
+
+#### Scenario: Version tracks the server
+
+- **WHEN** the server was built with a version injected from `VERSION`
+- **THEN** `emb.API_VERSION` equals that value and equals the `emb_version`
+  reported by `INFO`
+
+#### Scenario: Unset build version falls back
+
+- **WHEN** the server runs without an injected build version (`go test`,
+  `go run`, an unlabelled build)
+- **THEN** `emb.API_VERSION` is `dev`
+
+#### Scenario: A version change invalidates cached replies
+
+- **WHEN** a script reply is cached under one version and the server restarts on
+  a different version with the same cache snapshot
+- **THEN** the request misses and recomputes
+
+#### Scenario: The server never refuses on version grounds
+
+- **WHEN** a script asserts a capability against `emb.API_VERSION` and the
+  capability is absent
+- **THEN** the script can report its own error instead of the server refusing to
+  evaluate it
