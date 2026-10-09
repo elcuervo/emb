@@ -146,6 +146,27 @@ func TestRunOnceKeepsFirstSeenModelOrder(t *testing.T) {
 	}
 }
 
+func TestFleetAggregateCacheHitRateStaysBounded(t *testing.T) {
+	// Two nodes at 100% and 0% must aggregate to 50%, not 150%.
+	a := &onceNode{label: "a", sampler: NewSampler(4), res: &PollResult{CacheHits: 100}, sampled: true}
+	a.sampler.Push(&PollResult{CacheHits: 100})
+	b := &onceNode{label: "b", sampler: NewSampler(4), res: &PollResult{CacheMisses: 100}, sampled: true}
+	b.sampler.Push(&PollResult{CacheMisses: 100})
+
+	out := string(appendFleetAggregate(nil, []*onceNode{a, b}))
+	v, ok := parseKV(out, "cache_hit_rate")
+	if !ok {
+		t.Fatalf("no cache_hit_rate in %q", out)
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		t.Fatalf("cache_hit_rate %q: %v", v, err)
+	}
+	if f != 50 {
+		t.Fatalf("aggregate cache_hit_rate = %v, want 50 (ratio of summed counters)", f)
+	}
+}
+
 func modelSectionOrder(line string) []string {
 	var out []string
 	for _, f := range strings.Fields(line) {

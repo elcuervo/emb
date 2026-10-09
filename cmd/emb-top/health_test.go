@@ -19,6 +19,8 @@ func TestHealthVerdicts(t *testing.T) {
 		chip string
 	}{
 		{"no data", healthInput{connected: true, polls: 1}, healthNoData, ""},
+		{"disconnected before two polls", healthInput{connected: false, polls: 1}, healthCritical, "reconnecting"},
+		{"never polled is no data", healthInput{connected: false, polls: 0}, healthNoData, ""},
 		{"healthy", healthInput{connected: true, polls: 5}, healthHealthy, "err   0.0%"},
 		{"errors degrade", healthInput{connected: true, polls: 5, errRatio: 0.02}, healthDegraded, "err   2.0%"},
 		{"errors critical", healthInput{connected: true, polls: 5, errRatio: 0.10}, healthCritical, "err  10.0%"},
@@ -128,6 +130,11 @@ func TestFleetHealthVerdicts(t *testing.T) {
 			{label: "b", health: healthInput{connected: false, polls: 5}},
 		}, healthCritical, ""},
 		{"skew degrades", []fleetNodeInput{node("a", 90), node("b", 5), node("c", 5)}, healthDegraded, "skew"},
+		{"two-node skew degrades", []fleetNodeInput{node("a", 90), node("b", 10)}, healthDegraded, "skew"},
+		{"never-reached node is critical", []fleetNodeInput{
+			node("a", 10),
+			{label: "b", health: healthInput{connected: false, polls: 0}, unreachable: true},
+		}, healthCritical, ""},
 		{"cache spread is not a fault", []fleetNodeInput{
 			func() fleetNodeInput { n := node("a", 10); n.hasCache, n.cachePct = true, 5; return n }(),
 			func() fleetNodeInput { n := node("b", 10); n.hasCache, n.cachePct = true, 95; return n }(),
@@ -148,6 +155,10 @@ func TestFleetHealthVerdicts(t *testing.T) {
 			withP95(node("a", 10), 100),
 			withP95(node("b", 10), 100),
 			withP95(node("c", 10), 1000),
+		}, healthDegraded, "slow"},
+		{"two-node slow peer degrades", []fleetNodeInput{
+			withP95(node("a", 10), 100),
+			withP95(node("b", 10), 1000),
 		}, healthDegraded, "slow"},
 	}
 	for _, tc := range cases {

@@ -231,7 +231,7 @@ func appendAggregateFields(b []byte, p *Point, res *PollResult) []byte {
 func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 	var totalRequests, totalTokens, totalErrors, active, conns, mem, goroutines, models int64
 	var cacheHits, cacheMisses, cacheEvictions int64
-	var req, tok, errRate, cpu, cacheHit float64
+	var req, tok, errRate, cpu float64
 	for _, st := range states {
 		if !st.sampled {
 			continue
@@ -252,7 +252,6 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 		tok += p.TokRate
 		errRate += p.ErrRate
 		cpu += p.CPUPercent
-		cacheHit += p.CacheHitRate
 	}
 	b = appendF(b, "uptime_secs", states[0].sampler.Latest.UptimeSecs)
 	b = appendF(b, "total_requests", totalRequests)
@@ -270,7 +269,13 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 	b = appendF(b, "cache_hits", cacheHits)
 	b = appendF(b, "cache_misses", cacheMisses)
 	b = appendF(b, "cache_evictions", cacheEvictions)
-	b = appendRate(b, "cache_hit_rate", cacheHit)
+	// A ratio of summed counters, not a sum of per-node percentages, which
+	// could exceed 100 across nodes.
+	hitRate := 0.0
+	if t := cacheHits + cacheMisses; t > 0 {
+		hitRate = float64(cacheHits) / float64(t) * 100
+	}
+	b = appendRate(b, "cache_hit_rate", hitRate)
 	return b
 }
 

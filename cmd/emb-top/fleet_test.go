@@ -287,6 +287,46 @@ func TestReconnectRebasesRates(t *testing.T) {
 	}
 }
 
+func TestTLSServerNameOverrideWins(t *testing.T) {
+	if got := tlsServerName(&options{tlsServerName: "override"}, "emb.internal"); got != "override" {
+		t.Errorf("-tls-server-name ignored for a DNS-expanded node: got %q", got)
+	}
+	if got := tlsServerName(&options{}, "emb.internal"); got != "emb.internal" {
+		t.Errorf("node name fallback: got %q", got)
+	}
+	if got := tlsServerName(&options{}, ""); got != "" {
+		t.Errorf("no name: got %q", got)
+	}
+}
+
+func TestStalledNodeDoesNotBlockTheNextTick(t *testing.T) {
+	a, b := "slow:1", "fast:1"
+	f := fakeFleet(nil, map[string]dashboardClient{
+		a: &fakeNodeClient{addr: a},
+		b: &fakeNodeClient{addr: b},
+	}, rn(a), rn(b))
+
+	um, cmd := f.Update(tickMsg{})
+	f = um.(*fleet)
+	if cmd == nil {
+		t.Fatal("tick returned no command")
+	}
+	if !f.tickScheduled {
+		t.Fatal("the next tick was not scheduled while a poll is outstanding")
+	}
+	// Deliver the fast node's result; the slow node's poll stays outstanding.
+	um, _ = f.Update(nodePollMsg{key: b, res: fakePoll(10, 100, 0, 0)})
+	f = um.(*fleet)
+	um, _ = f.Update(tickMsg{})
+	f = um.(*fleet)
+	if !f.nodes[1].polling {
+		t.Fatal("the fast node was not re-polled while the slow node stalled")
+	}
+	if !f.nodes[0].polling {
+		t.Fatal("the stalled node's outstanding poll was duplicated")
+	}
+}
+
 // ---- 4.x: rendering ----
 
 func fleetOfThree(t *testing.T) *fleet {

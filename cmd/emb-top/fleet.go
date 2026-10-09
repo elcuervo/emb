@@ -45,7 +45,18 @@ type fleetNode struct {
 	resolved         bool
 	reachable        bool
 	unreachableSince time.Time
+	polling          bool // a poll is outstanding; the next tick skips this node
 	firstSeen        int
+}
+
+// tlsServerName is the name the TLS handshake verifies: the explicit
+// -tls-server-name override wins, and a DNS-expanded node's own name is the
+// fallback.
+func tlsServerName(opts *options, nodeName string) string {
+	if opts.tlsServerName != "" {
+		return opts.tlsServerName
+	}
+	return nodeName
 }
 
 // displayName is the row's identity: the name it follows when it has one,
@@ -78,7 +89,6 @@ type fleet struct {
 	aggHistory []float64
 
 	tickScheduled bool
-	inFlight      int
 	lastRefresh   time.Time
 	refreshNow    bool
 	refreshing    bool
@@ -119,11 +129,7 @@ func newFleetWith(resolved []resolvedNode, opts *options, r resolver, mk func(ad
 	} else {
 		f.newClient = func(addr, tlsName string) dashboardClient {
 			c := embtop.NewClient(addr, opts.password, opts.useTLS)
-			name := tlsName
-			if name == "" {
-				name = opts.tlsServerName
-			}
-			if name != "" {
+			if name := tlsServerName(opts, tlsName); name != "" {
 				c.SetTLSServerName(name)
 			}
 			return c
@@ -317,6 +323,7 @@ func (f *fleet) applyPoll(m nodePollMsg) {
 	if n == nil {
 		return
 	}
+	n.polling = false
 	if m.err != nil {
 		n.reachable = false
 		if n.unreachableSince.IsZero() {
@@ -361,28 +368,29 @@ func (f *fleet) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		f.pushAggregate()
 		f.prune()
+		// Always keep the poll cadence: the next tick is scheduled before this
+		// round's polls finish, so a stalled node cannot hold back the others.
+		next := f.schedule()
 		var cmds []tea.Cmd
 		if f.dueRefresh() && !f.refreshing {
 			f.refreshing = true
 			f.lastRefresh = f.now()
 			cmds = append(cmds, f.resolveCmd())
 		}
-		f.inFlight = 0
 		for _, n := range f.nodes {
-			f.inFlight++
+			if n.polling {
+				continue // its previous poll is still outstanding; don't overlap it
+			}
+			n.polling = true
 			cmds = append(cmds, f.pollCmd(n))
 		}
 		if len(cmds) == 0 {
-			return f, f.schedule()
+			return f, next
 		}
-		return f, tea.Batch(cmds...)
+		return f, tea.Batch(append(cmds, next)...)
 
 	case nodePollMsg:
-		f.inFlight--
 		f.applyPoll(msg)
-		if f.inFlight <= 0 {
-			return f, f.schedule()
-		}
 		return f, nil
 
 	case resolveMsg:
@@ -842,14 +850,15 @@ func (f *fleet) fleetInputs() []fleetNodeInput {
 			}
 		}
 		ins = append(ins, fleetNodeInput{
-			label:      n.displayName(),
-			health:     n.tui.healthState(),
-			reqRate:    p.ReqRate,
-			idle:       f.nodeIdle(n),
-			orphaned:   !n.resolved,
-			uptimeSecs: p.UptimeSecs,
-			hasCache:   hasCache,
-			cachePct:   p.CacheHitRate,
+			label:       n.displayName(),
+			health:      n.tui.healthState(),
+			reqRate:     p.ReqRate,
+			idle:        f.nodeIdle(n),
+			orphaned:    !n.resolved,
+			unreachable: !n.reachable && !n.unreachableSince.IsZero(),
+			uptimeSecs:  p.UptimeSecs,
+			hasCache:    hasCache,
+			cachePct:    p.CacheHitRate,
 		})
 	}
 	return ins

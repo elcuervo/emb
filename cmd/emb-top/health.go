@@ -65,7 +65,12 @@ func health(in healthInput) (healthStatus, []signal) {
 		conn = signal{text: "reconnecting", level: healthCritical, driving: true}
 	}
 	sigs := []signal{conn}
+	// No verdict until two polls of data, except that disconnection after any
+	// successful sample is its own verdict.
 	if in.polls < 2 {
+		if !in.connected && in.polls >= 1 {
+			return healthCritical, sigs
+		}
 		return healthNoData, sigs
 	}
 
@@ -127,20 +132,21 @@ func nodeParallelism(reported int) int {
 
 // fleetNodeInput is one node's contribution to the fleet verdict.
 type fleetNodeInput struct {
-	label      string
-	health     healthInput
-	reqRate    float64
-	idle       bool
-	orphaned   bool
-	uptimeSecs int64
-	hasCache   bool
-	cachePct   float64
+	label       string
+	health      healthInput
+	reqRate     float64
+	idle        bool
+	orphaned    bool
+	unreachable bool // a poll has actually failed (not merely not-yet-polled)
+	uptimeSecs  int64
+	hasCache    bool
+	cachePct    float64
 }
 
 // Fixed fleet thresholds, built-in defaults like the node ones: no new flags.
 const (
-	fleetSkewDegraded = 2.5 // share × the 1/N expectation
-	fleetPeerP95Rise  = 2.0 // node p95 vs the fleet median
+	fleetSkewDegraded = 2.5 // node rate × the mean of its peers' rates
+	fleetPeerP95Rise  = 2.0 // node p95 vs its peers' median
 	fleetColdCachePct = 0.5 // node hit rate vs the peers' median
 	fleetRestartSecs  = 120 // uptime under this reads as recently restarted
 )
@@ -159,6 +165,11 @@ func fleetHealth(nodes []fleetNodeInput) (healthStatus, []signal) {
 	worst := healthHealthy
 	for _, n := range nodes {
 		st, _ := health(n.health)
+		if n.unreachable {
+			// A poll has failed, so this node is down even if it never reached
+			// two polls; never let it hide behind another node's data.
+			st = healthCritical
+		}
 		if st != healthNoData {
 			anyData = true
 		}
@@ -191,10 +202,18 @@ func fleetHealth(nodes []fleetNodeInput) (healthStatus, []signal) {
 	}
 	if allSettled && total > 0 {
 		expected := 1 / float64(len(nodes))
-		for _, n := range nodes {
-			share := n.reqRate / total
-			if share > expected*fleetSkewDegraded {
-				raise(healthDegraded, fmt.Sprintf("skew %s %.0f%% vs %.0f%%", n.label, share*100, expected*100))
+		// Compare each node with the mean of its peers, so a two-node fleet
+		// can flag a split a 1/N-of-fleet share threshold never would.
+		for i, n := range nodes {
+			var peersSum float64
+			for j, o := range nodes {
+				if j != i {
+					peersSum += o.reqRate
+				}
+			}
+			peersMean := peersSum / float64(len(nodes)-1)
+			if peersMean > 0 && n.reqRate > peersMean*fleetSkewDegraded {
+				raise(healthDegraded, fmt.Sprintf("skew %s %.0f%% vs %.0f%%", n.label, n.reqRate/total*100, expected*100))
 			}
 		}
 	}
@@ -204,26 +223,25 @@ func fleetHealth(nodes []fleetNodeInput) (healthStatus, []signal) {
 	return worst, sigs
 }
 
-// raiseSlowPeer flags a node whose p95 is far above the fleet median.
+// raiseSlowPeer flags a node whose p95 is far above its peers' median. The
+// candidate is excluded from its own baseline, so a two-node fleet compares
+// one node against the other rather than a median that includes the straggler.
 func raiseSlowPeer(nodes []fleetNodeInput, raise func(healthStatus, string)) {
-	var p95s []int64
-	for _, n := range nodes {
-		if n.health.connected && n.health.p95Us > 0 {
-			p95s = append(p95s, n.health.p95Us)
-		}
-	}
-	if len(p95s) < 2 {
-		return
-	}
-	median := medianInt64(p95s)
-	if median <= 0 {
-		return
-	}
-	for _, n := range nodes {
+	for i, n := range nodes {
 		if !n.health.connected || n.health.p95Us <= 0 {
 			continue
 		}
-		if float64(n.health.p95Us) > float64(median)*fleetPeerP95Rise {
+		var peers []int64
+		for j, o := range nodes {
+			if j != i && o.health.connected && o.health.p95Us > 0 {
+				peers = append(peers, o.health.p95Us)
+			}
+		}
+		if len(peers) == 0 {
+			continue
+		}
+		median := medianInt64(peers)
+		if median > 0 && float64(n.health.p95Us) > float64(median)*fleetPeerP95Rise {
 			raise(healthDegraded, fmt.Sprintf("slow %s p95 %s vs median %s",
 				n.label, fmtLatency(n.health.p95Us), fmtLatency(median)))
 		}
