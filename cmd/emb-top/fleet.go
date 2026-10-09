@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NimbleMarkets/ntcharts/canvas/runes"
-	"github.com/NimbleMarkets/ntcharts/linechart/streamlinechart"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -25,11 +23,10 @@ const (
 	resolveTimeout  = 5 * time.Second
 	orphanGrace     = 5 * time.Minute
 
-	// fleetChrome is the fixed number of non-node rows the fleet view spends
-	// on the header, membership line, banner, aggregate band and footer.
-	fleetChrome = 12
-	// fleetAggH is the aggregate stream chart's canvas height.
-	fleetAggH = 4
+	// fleetChrome is the fixed number of non-node rows the fleet view spends on
+	// the header, banner, membership, traffic totals, load bar, ingress header,
+	// node legend, imbalance panel and footer.
+	fleetChrome = 13
 )
 
 // fleetNode is one monitored node: its identity, its independent poll state
@@ -59,6 +56,17 @@ func tlsServerName(opts *options, nodeName string) string {
 	return nodeName
 }
 
+// hasCache reports whether any model on the node runs a cache, so the row
+// only shows a cache column when a hit rate exists.
+func (n *fleetNode) hasCache() bool {
+	for _, ms := range n.tui.sampler.RawModels() {
+		if ms.CacheMaxBytes > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // displayName is the row's identity: the name it follows when it has one,
 // otherwise the address it dials.
 func (n *fleetNode) displayName() string {
@@ -85,7 +93,6 @@ type fleet struct {
 	sel           int
 	scroll        int
 
-	aggChart   streamlinechart.Model
 	aggHistory []float64
 
 	tickScheduled bool
@@ -135,7 +142,7 @@ func newFleetWith(resolved []resolvedNode, opts *options, r resolver, mk func(ad
 			return c
 		}
 	}
-	f.aggChart = newAggChart(60)
+	f.aggHistory = nil
 	for _, rn := range resolved {
 		f.addNode(rn)
 	}
@@ -167,14 +174,6 @@ func (f *fleet) close() {
 // model returns the fleet as a Bubble Tea model. The fleet drives polling and
 // refresh for every node, including a fleet of one.
 func (f *fleet) model() tea.Model { return f }
-
-// newAggChart builds the aggregate request-rate stream chart at the given
-// canvas width.
-func newAggChart(w int) streamlinechart.Model {
-	return streamlinechart.New(w, fleetAggH,
-		streamlinechart.WithStyles(runes.ArcLineStyle, reqLineStyle),
-		streamlinechart.WithLineChart(yFmtChart(w, fleetAggH, yFmtRate)))
-}
 
 // ---- resolution & membership ----
 
@@ -434,9 +433,6 @@ func (f *fleet) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		for _, n := range f.nodes {
 			n.tui.reset()
 		}
-		f.aggChart.ClearAllData()
-		f.aggChart.Clear()
-		f.aggChart.Draw()
 		f.aggHistory = nil
 		return f, nil
 	case "esc":
@@ -520,7 +516,6 @@ func (f *fleet) aggregate() (req, tok, errRate float64, active, conns int64) {
 
 func (f *fleet) pushAggregate() {
 	req, _, _, _, _ := f.aggregate()
-	pushStream(&f.aggChart, req)
 	f.aggHistory = append(f.aggHistory, req)
 	if len(f.aggHistory) > f.opts.window {
 		f.aggHistory = f.aggHistory[len(f.aggHistory)-f.opts.window:]
@@ -534,12 +529,6 @@ func (f *fleet) layout() {
 		n.tui.width, n.tui.height = f.width, f.height
 		n.tui.layoutCharts()
 	}
-	w := f.width/2 - 4
-	if w < 20 {
-		w = 20
-	}
-	f.aggChart.Resize(w, fleetAggH)
-	f.aggChart.Draw()
 }
 
 func (f *fleet) visibleNodes() int {
@@ -585,13 +574,19 @@ func (f *fleet) fleetView() string {
 	var b strings.Builder
 	b.WriteString(f.headerView())
 	b.WriteString("\n")
-	b.WriteString(f.membershipView())
-	b.WriteString("\n")
 	b.WriteString(f.fleetBannerView())
 	b.WriteString("\n")
-	b.WriteString(f.aggregateView())
+	b.WriteString(f.membershipView())
 	b.WriteString("\n")
-	for _, line := range f.nodeRows() {
+	b.WriteString(f.totalsView())
+	b.WriteString("\n")
+	b.WriteString(f.loadView())
+	b.WriteString("\n")
+	for _, line := range f.ingressRows() {
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	for _, line := range f.imbalanceView() {
 		b.WriteString(line)
 		b.WriteString("\n")
 	}
@@ -668,53 +663,224 @@ func (f *fleet) fleetBannerView() string {
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
 }
 
-func (f *fleet) aggregateView() string {
+// totalsView is the fleet's inbound/outbound totals with a sparkline of the
+// aggregate request rate over the window.
+func (f *fleet) totalsView() string {
 	req, tok, errRate, active, conns := f.aggregate()
-	line := labelStyle.Render("aggregate") + " " +
-		fmtRate(req) + " r/s · " + fmtRate(tok) + " t/s · " +
-		fmtRate(errRate) + " err/s · " + fmt.Sprintf("%d active · %d conns", active, conns)
-	return lipgloss.NewStyle().Width(widthOr(f.width, 120)).Render(line) + "\n" +
-		borderStyle.Render(f.aggChart.View())
+	errPct := 0.0
+	if req > 0 {
+		errPct = errRate / req * 100
+	}
+	var p95s []int64
+	for _, n := range f.nodes {
+		if !n.reachable {
+			continue
+		}
+		if _, _, p95, ok := n.tui.sampler.Latency(); ok {
+			p95s = append(p95s, p95)
+		}
+	}
+	line := labelStyle.Render("IN  ") + fmtRate(req) + " req/s" +
+		dimStyle.Render(" · ") + labelStyle.Render("OUT ") + fmtRate(tok) + " tok/s" +
+		dimStyle.Render(" · ") + fmt.Sprintf("%d active · %d conns", active, conns) +
+		dimStyle.Render(" · ") + fmt.Sprintf("err %.1f%%", errPct) +
+		dimStyle.Render(" · ") + "p95 " + fmtLatency(medianInt64(p95s)) +
+		dimStyle.Render("   trend ") + sparkline(f.aggHistory, 24, reqLineStyle)
+	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
 }
 
-// pointStrip renders a node's request-rate history as the same heat cells the
-// single-node model rows use, scaled to the busiest node in view.
-func pointStrip(hist []embtop.Point, w int, maxV float64) string {
+// loadView is the fleet's load distribution: one segment per node, its width
+// its share of inbound requests, coloured to match the node's row.
+func (f *fleet) loadView() string {
+	reqTotal, _, _, _, _ := f.aggregate()
+	rates := make([]float64, len(f.nodes))
+	for i, n := range f.nodes {
+		if n.reachable {
+			rates[i] = n.tui.sampler.Latest.ReqRate
+		}
+	}
+	detail := "no traffic yet"
+	if reqTotal > 0 {
+		busiest, top := 0, -1.0
+		for i, r := range rates {
+			if r > top {
+				top, busiest = r, i
+			}
+		}
+		detail = fmt.Sprintf("busiest %s %.0f%% · expected %.0f%% each",
+			f.nodes[busiest].displayName(), top/reqTotal*100, 100/float64(len(f.nodes)))
+	}
+	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(
+		labelStyle.Render("LOAD ") + stackedShareBar(rates, 36) + "  " + dimStyle.Render(detail))
+}
+
+// sparkRamp is the block-character ramp for trend sparklines (low → high).
+var sparkRamp = []rune("▁▂▃▄▅▆▇█")
+
+// sparkline resamples vals to w columns and draws them with the block ramp,
+// scaled between the series' own min and max so motion stays visible. An empty
+// series renders a low flat line.
+func sparkline(vals []float64, w int, style lipgloss.Style) string {
 	if w < 1 {
 		w = 1
 	}
-	if len(hist) == 0 || maxV <= 0 {
-		return dimStyle.Render(strings.Repeat(heatCellBlock, w))
+	if len(vals) == 0 {
+		return style.Render(strings.Repeat("▁", w))
 	}
+	lo, hi := vals[0], vals[0]
+	for _, v := range vals {
+		if v < lo {
+			lo = v
+		}
+		if v > hi {
+			hi = v
+		}
+	}
+	span := hi - lo
 	var b strings.Builder
 	for x := 0; x < w; x++ {
-		idx := x * len(hist) / w
-		if idx >= len(hist) {
-			idx = len(hist) - 1
+		idx := x * len(vals) / w
+		if idx >= len(vals) {
+			idx = len(vals) - 1
 		}
-		b.WriteString(heatCellStyle(hist[idx].ReqRate / maxV).Render(heatCellBlock))
+		level := 0
+		if span > 0 {
+			level = int((vals[idx]-lo)/span*float64(len(sparkRamp)-1) + 0.5)
+		}
+		if level < 0 {
+			level = 0
+		}
+		if level >= len(sparkRamp) {
+			level = len(sparkRamp) - 1
+		}
+		b.WriteRune(sparkRamp[level])
+	}
+	return style.Render(b.String())
+}
+
+// filledCells is the number of filled cells for frac in a w-cell bar.
+func filledCells(frac float64, w int) int {
+	if w < 1 {
+		w = 1
+	}
+	if frac < 0 {
+		frac = 0
+	}
+	if frac > 1 {
+		frac = 1
+	}
+	n := int(frac*float64(w) + 0.5)
+	if n > w {
+		n = w
+	}
+	return n
+}
+
+// inboundBar draws a proportional bar: the filled part in the node's colour,
+// the remainder dim, so every node's inbound rate is comparable at a glance.
+func inboundBar(frac float64, w int, fill lipgloss.Style) string {
+	n := filledCells(frac, w)
+	return fill.Render(strings.Repeat("█", n)) + dimStyle.Render(strings.Repeat("░", w-n))
+}
+
+// shareCells splits w cells across rates in proportion, assigning the rounding
+// remainder to the largest segment so an idle node never gains cells.
+func shareCells(rates []float64, w int) []int {
+	cells := make([]int, len(rates))
+	if w < 1 || len(rates) == 0 {
+		return cells
+	}
+	total, bi := 0.0, 0
+	for i, r := range rates {
+		if r > 0 {
+			total += r
+		}
+		if rates[i] > rates[bi] {
+			bi = i
+		}
+	}
+	if total <= 0 {
+		return cells
+	}
+	sum := 0
+	for i, r := range rates {
+		cells[i] = int(r/total*float64(w) + 0.5)
+		sum += cells[i]
+	}
+	cells[bi] += w - sum
+	if cells[bi] < 0 {
+		cells[bi] = 0
+	}
+	return cells
+}
+
+// stackedShareBar draws one segment per rate, its width its share of the total,
+// coloured by node identity, so the fleet's whole load is one bar.
+func stackedShareBar(rates []float64, w int) string {
+	if w < 1 {
+		w = 1
+	}
+	cells := shareCells(rates, w)
+	var b strings.Builder
+	used := 0
+	for i, n := range cells {
+		if n > 0 {
+			style := lipgloss.NewStyle().Foreground(lipgloss.Color(modelColors[i%len(modelColors)]))
+			b.WriteString(style.Render(strings.Repeat("█", n)))
+		}
+		used += n
+	}
+	if used < w {
+		b.WriteString(dimStyle.Render(strings.Repeat("░", w-used)))
 	}
 	return b.String()
 }
 
-func (f *fleet) nodeRows() []string {
+// ratesOf extracts the request-rate series from a node's window.
+func ratesOf(hist []embtop.Point) []float64 {
+	out := make([]float64, len(hist))
+	for i, p := range hist {
+		out[i] = p.ReqRate
+	}
+	return out
+}
+
+// padTo pads s on the right to w columns (or clips it), so a state label can
+// stand in for the activity zone without moving the columns after it.
+func padTo(s string, w int) string {
+	n := w - lipgloss.Width(s)
+	if n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	if n < 0 {
+		return trimModelLen(s, w)
+	}
+	return s
+}
+
+// ingressRows renders the per-node inbound-traffic table: one row per node
+// with its identity, inbound req/s, share of the fleet, a proportional bar
+// scaled to the busiest node and a trend sparkline. Optional signal columns
+// (p95, cpu, cache, err) fit when the terminal is wide enough.
+func (f *fleet) ingressRows() []string {
 	if len(f.nodes) == 0 {
 		return []string{dimStyle.Render("  no nodes to monitor")}
 	}
 	reqTotal, _, _, _, _ := f.aggregate()
 	maxV := 0.0
 	for _, n := range f.nodes {
-		_, window, _ := n.tui.sampler.Snapshot()
-		for _, p := range window {
-			if p.ReqRate > maxV {
-				maxV = p.ReqRate
-			}
+		if r := n.tui.sampler.Latest.ReqRate; n.reachable && r > maxV {
+			maxV = r
 		}
 	}
+	if maxV <= 0 {
+		maxV = 1
+	}
+	l := newFleetRowLayout(widthOr(f.width, 120))
+	out := []string{dimStyle.Render("INGRESS  req/s into each node · bar scaled to the busiest · trend = recent polls")}
 	vis := f.visibleNodes()
-	out := make([]string, 0, vis+1)
 	for i := f.scroll; i < f.scroll+vis && i < len(f.nodes); i++ {
-		out = append(out, f.nodeRow(f.nodes[i], reqTotal, maxV, i == f.sel))
+		out = append(out, f.ingressRow(f.nodes[i], reqTotal, maxV, i == f.sel, l))
 	}
 	out = append(out, f.nodeLegend(len(f.nodes)))
 	return out
@@ -751,72 +917,174 @@ func (f *fleet) nodeStateOf(n *fleetNode) nodeState {
 	}
 }
 
-func (f *fleet) nodeRow(n *fleetNode, reqTotal, maxV float64, selected bool) string {
+// nodeHealth is the per-node verdict the row's trend colour follows.
+func (f *fleet) nodeHealth(n *fleetNode) healthStatus {
+	switch f.nodeStateOf(n) {
+	case nodeUnreachable:
+		return healthCritical
+	case nodeOrphaned:
+		return healthDegraded
+	}
+	st, _ := health(n.tui.healthState())
+	return st
+}
+
+// ingressRow is one node's inbound-traffic line. Columns are fixed by the
+// layout so a value growing never shifts the ones after it; a node that is not
+// OK replaces the activity zone with its state, keeping the signal columns
+// aligned with the healthy rows.
+func (f *fleet) ingressRow(n *fleetNode, reqTotal, maxV float64, selected bool, l fleetRowLayout) string {
 	cursor := "  "
 	if selected {
 		cursor = labelStyle.Render("▶ ")
 	}
 	dot := okStyle.Render("●")
-	state := ""
-	chips := ""
+	state, stateStyle := "", okStyle
+	dim := false
 	switch f.nodeStateOf(n) {
 	case nodeUnreachable:
-		dot = errStyle.Render("✗")
-		age := ""
+		dot, dim = errStyle.Render("✗"), true
+		since := ""
 		if !n.unreachableSince.IsZero() {
-			age = fmtDuration(int64(f.now().Sub(n.unreachableSince).Seconds())) + " "
+			since = " " + fmtDuration(int64(f.now().Sub(n.unreachableSince).Seconds()))
 		}
-		state = errStyle.Render("unreachable " + age)
+		state, stateStyle = "unreachable"+since, errStyle
 	case nodeOrphaned:
-		dot = warnStyle.Render("◌")
-		state = warnStyle.Render("orphaned")
+		dot, state, stateStyle = warnStyle.Render("◌"), "orphaned", warnStyle
 	case nodeIdle:
-		dot = dimStyle.Render("○")
-		state = dimStyle.Render("idle")
-	}
-	if state != "" {
-		chips = state
-	} else {
-		st, sigs := health(n.tui.healthState())
-		parts := []string{styleFor(st).Render(healthLabel(st))}
-		for _, s := range sigs {
-			if s.text == "connected" {
-				continue
-			}
-			parts = append(parts, styleFor(s.level).Render(s.text))
-		}
-		chips = strings.Join(parts, dimStyle.Render(" · "))
+		dot, state, stateStyle = dimStyle.Render("○"), "idle", dimStyle
 	}
 
-	share := "—"
+	p := n.tui.sampler.Latest
+	rate := p.ReqRate
+	if !n.reachable {
+		dim = true
+	}
+	share := 0.0
 	if reqTotal > 0 {
-		p := n.tui.sampler.Latest
-		if n.reachable {
-			share = fmt.Sprintf("%.0f%% of %d (1/%d)", p.ReqRate/reqTotal*100, len(f.nodes), len(f.nodes))
-		}
+		share = rate / reqTotal
 	}
-
 	ident := n.displayName()
 	if ident != n.addr {
-		ident += " " + dimStyle.Render(n.addr)
+		ident += " " + n.addr
 	}
-	_, window, _ := n.tui.sampler.Snapshot()
-	row := cursor + dot + " " +
-		headerStyle.Width(28).Render(trimModelLen(ident, 28)) + " " +
-		labelStyle.Width(22).Render(trimModelLen(share, 22)) + " " +
-		chips + "  " +
-		pointStrip(window, f.nodeStripWidth(), maxV)
+	num := func(s string) string {
+		if dim {
+			return dimStyle.Render(s)
+		}
+		return labelStyle.Render(s)
+	}
+
+	row := cursor + dot + " " + headerStyle.Width(l.identW).Render(trimModelLen(ident, l.identW))
+	if l.showIn {
+		row += " " + num(colRight(fmtRate(rate)+" r/s", l.inW))
+	}
+	if l.showShare {
+		row += " " + num(colRight(fmt.Sprintf("%.0f%%", share*100), l.shareW))
+	}
+
+	zoneW := l.barW
+	if l.showSpark {
+		zoneW += 1 + l.sparkW
+	}
+	if state != "" {
+		row += " " + stateStyle.Render(padTo(state, zoneW))
+	} else {
+		fill := lipgloss.NewStyle().Foreground(lipgloss.Color(modelColors[n.firstSeen%len(modelColors)]))
+		row += " " + inboundBar(rate/maxV, l.barW, fill)
+		if l.showSpark {
+			_, window, _ := n.tui.sampler.Snapshot()
+			row += " " + sparkline(ratesOf(window), l.sparkW, styleFor(f.nodeHealth(n)))
+		}
+	}
+	if l.showP95 {
+		txt := "—"
+		if _, _, p95, ok := n.tui.sampler.Latency(); ok && n.reachable {
+			txt = fmtLatency(p95)
+		}
+		row += " " + dimStyle.Render(colRight("p95 "+txt, l.latW))
+	}
+	if l.showCPU {
+		cpu := p.CPUPercent / float64(nodeParallelism(p.GoMaxProcs))
+		row += " " + num(colRight(fmt.Sprintf("cpu %.0f%%", cpu), l.cpuW))
+	}
+	if l.showCache {
+		cache := "—"
+		if n.hasCache() {
+			cache = fmt.Sprintf("%.0f%%", p.CacheHitRate)
+		}
+		row += " " + num(colRight("cache "+cache, l.cacheW))
+	}
+	if l.showErr {
+		errPct := 0.0
+		if rate > 0 {
+			errPct = p.ErrRate / rate * 100
+		}
+		row += " " + num(colRight(fmt.Sprintf("err %.1f%%", errPct), l.errW))
+	}
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(row)
 }
 
-// nodeStripWidth gives the strip whatever room is left after the fixed
-// columns, with a floor so it always renders.
-func (f *fleet) nodeStripWidth() int {
-	w := widthOr(f.width, 120) - 2 - 2 - 29 - 23 - 40
-	if w < minStrip {
-		w = minStrip
+// colRight right-aligns s in a w-column field, clipping it first so a value
+// that outgrows its column cannot push the ones after it.
+func colRight(s string, w int) string {
+	if lipgloss.Width(s) > w {
+		s = trimModelLen(s, w)
 	}
-	return w
+	return fmt.Sprintf("%*s", w, s)
+}
+
+// fleetRowLayout is the per-node ingress row's column grid: identity, inbound
+// rate, share, the activity bar and trend, and the signal columns that fit.
+// It is a pure function of the terminal width, so a value changing never moves
+// a column.
+type fleetRowLayout struct {
+	identW, inW, shareW, barW, sparkW, latW, cpuW, cacheW, errW        int
+	showIn, showShare, showP95, showCPU, showCache, showErr, showSpark bool
+}
+
+func newFleetRowLayout(width int) fleetRowLayout {
+	if width <= 0 {
+		width = 120
+	}
+	l := fleetRowLayout{
+		identW: 24, inW: 10, shareW: 5, sparkW: 14, latW: 12,
+		cpuW: 8, cacheW: 10, errW: 8,
+		showIn: true, showShare: true, showP95: true, showCPU: true,
+		showCache: true, showErr: true, showSpark: true,
+	}
+	// Everything except the bar and its leading space.
+	fixed := func() int {
+		w := 4 + l.identW + 1 + l.inW + 1 + l.shareW
+		if l.showSpark {
+			w += 1 + l.sparkW
+		}
+		if l.showP95 {
+			w += 1 + l.latW
+		}
+		if l.showCPU {
+			w += 1 + l.cpuW
+		}
+		if l.showCache {
+			w += 1 + l.cacheW
+		}
+		if l.showErr {
+			w += 1 + l.errW
+		}
+		return w
+	}
+	const minBar = 10
+	for _, drop := range []*bool{&l.showErr, &l.showCache, &l.showCPU, &l.showP95, &l.showSpark} {
+		if fixed()+1+minBar <= width {
+			break
+		}
+		*drop = false
+	}
+	l.barW = width - fixed() - 1
+	if l.barW < minBar {
+		l.barW = minBar
+	}
+	return l
 }
 
 func (f *fleet) nodeLegend(n int) string {
@@ -837,18 +1105,162 @@ func (f *fleet) footerView() string {
 	return footerStyle.Render("q quit · p pause · r reset · j/k select · enter detail · esc back · ? help") + "\n"
 }
 
+// ---- cross-node imbalance panel ----
+
+// imbalanceCheck is one cross-node check for the panel: its name, whether it
+// passed, and a one-line detail naming the range or the offending node.
+type imbalanceCheck struct {
+	name   string
+	ok     bool
+	level  healthStatus
+	detail string
+}
+
+// imbalanceChecks runs the actionable cross-node checks: inbound spread,
+// latency, errors and CPU. Cache spread is informational and deliberately not
+// one of them.
+func imbalanceChecks(nodes []fleetNodeInput) []imbalanceCheck {
+	return []imbalanceCheck{
+		inboundSpreadCheck(nodes),
+		latencySpreadCheck(nodes),
+		errorCheck(nodes),
+		cpuCheck(nodes),
+	}
+}
+
+func inboundSpreadCheck(nodes []fleetNodeInput) imbalanceCheck {
+	type sample struct {
+		label string
+		rate  float64
+	}
+	var s []sample
+	for _, n := range nodes {
+		if n.health.connected && !n.unreachable && !n.idle {
+			s = append(s, sample{n.label, n.reqRate})
+		}
+	}
+	if len(s) < 2 {
+		return imbalanceCheck{name: "inbound", ok: true, detail: "fewer than two busy nodes"}
+	}
+	lo, hi, top, total := s[0].rate, s[0].rate, 0, 0.0
+	for i, x := range s {
+		total += x.rate
+		if x.rate < lo {
+			lo = x.rate
+		}
+		if x.rate > hi {
+			hi, top = x.rate, i
+		}
+	}
+	// Same peers-mean rule the verdict uses, so the panel and the banner agree.
+	peersMean := (total - hi) / float64(len(s)-1)
+	ok := peersMean <= 0 || hi <= peersMean*fleetSkewDegraded
+	detail := fmt.Sprintf("range %s–%s req/s", fmtRate(lo), fmtRate(hi))
+	if !ok {
+		detail = fmt.Sprintf("%s is %.1f× its peers' mean (%.1f req/s) — %s",
+			s[top].label, hi/peersMean, peersMean, detail)
+	}
+	return imbalanceCheck{name: "inbound", ok: ok, level: healthDegraded, detail: detail}
+}
+
+func latencySpreadCheck(nodes []fleetNodeInput) imbalanceCheck {
+	worst, worstRatio := fleetNodeInput{}, 0.0
+	found := false
+	for i, n := range nodes {
+		if !n.health.connected || n.health.p95Us <= 0 {
+			continue
+		}
+		var peers []int64
+		for j, o := range nodes {
+			if j != i && o.health.connected && o.health.p95Us > 0 {
+				peers = append(peers, o.health.p95Us)
+			}
+		}
+		if len(peers) == 0 {
+			continue
+		}
+		med := medianInt64(peers)
+		if med <= 0 {
+			continue
+		}
+		ratio := float64(n.health.p95Us) / float64(med)
+		if !found || ratio > worstRatio {
+			found, worst, worstRatio = true, n, ratio
+		}
+	}
+	if !found {
+		return imbalanceCheck{name: "latency", ok: true, detail: "no latency samples"}
+	}
+	return imbalanceCheck{
+		name:  "latency",
+		ok:    worstRatio <= fleetPeerP95Rise,
+		level: healthDegraded,
+		detail: fmt.Sprintf("worst %s p95 %s (%.1f× peers' median)",
+			worst.label, fmtLatency(worst.health.p95Us), worstRatio),
+	}
+}
+
+func errorCheck(nodes []fleetNodeInput) imbalanceCheck {
+	worst, label := 0.0, ""
+	for _, n := range nodes {
+		if n.health.connected && n.health.errRatio > worst {
+			worst, label = n.health.errRatio, n.label
+		}
+	}
+	ok := worst <= errRatioDegraded
+	detail := fmt.Sprintf("max %.1f%%", worst*100)
+	if !ok {
+		detail = fmt.Sprintf("%s %.1f%% — %s", label, worst*100, detail)
+	}
+	return imbalanceCheck{name: "errors", ok: ok, level: healthDegraded, detail: detail}
+}
+
+func cpuCheck(nodes []fleetNodeInput) imbalanceCheck {
+	worst, label := 0.0, ""
+	for _, n := range nodes {
+		if n.health.connected && n.health.cpuPct > worst {
+			worst, label = n.health.cpuPct, n.label
+		}
+	}
+	ok := worst <= cpuDegradedPct
+	detail := fmt.Sprintf("max %.0f%%", worst)
+	if !ok {
+		detail = fmt.Sprintf("%s %.0f%% — %s", label, worst, detail)
+	}
+	return imbalanceCheck{name: "cpu", ok: ok, level: healthDegraded, detail: detail}
+}
+
+// imbalanceView renders the cross-node checks as a compact pass/fail panel,
+// with the failing check naming the node to look at.
+func (f *fleet) imbalanceView() []string {
+	checks := imbalanceChecks(f.fleetInputs())
+	failed := 0
+	for _, c := range checks {
+		if !c.ok {
+			failed++
+		}
+	}
+	badge := okStyle.Render(fmt.Sprintf("✓ all %d pass", len(checks)))
+	if failed > 0 {
+		badge = warnStyle.Render(fmt.Sprintf("⚠ %d/%d failed", failed, len(checks)))
+	}
+	out := []string{labelStyle.Render("IMBALANCE") + "  " + badge}
+	for _, c := range checks {
+		mark, style := okStyle.Render("✓"), dimStyle
+		if !c.ok {
+			mark, style = warnStyle.Render("⚠"), warnStyle
+		}
+		out = append(out, lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(
+			"  "+mark+" "+headerStyle.Width(8).Render(c.name)+" "+style.Render(c.detail)))
+	}
+	return out
+}
+
 // fleetInputs builds the fleet verdict's per-node inputs from the live rows.
 func (f *fleet) fleetInputs() []fleetNodeInput {
 	ins := make([]fleetNodeInput, 0, len(f.nodes))
 	for _, n := range f.nodes {
 		p := n.tui.sampler.Latest
-		hasCache := false
-		for _, ms := range n.tui.sampler.RawModels() {
-			if ms.CacheMaxBytes > 0 {
-				hasCache = true
-				break
-			}
-		}
 		ins = append(ins, fleetNodeInput{
 			label:       n.displayName(),
 			health:      n.tui.healthState(),
@@ -857,7 +1269,7 @@ func (f *fleet) fleetInputs() []fleetNodeInput {
 			orphaned:    !n.resolved,
 			unreachable: !n.reachable && !n.unreachableSince.IsZero(),
 			uptimeSecs:  p.UptimeSecs,
-			hasCache:    hasCache,
+			hasCache:    n.hasCache(),
 			cachePct:    p.CacheHitRate,
 		})
 	}
@@ -887,6 +1299,11 @@ func (f *fleet) helpView() string {
 		"",
 		"A name is re-resolved every 30s and whenever a node goes unreachable;",
 		"a node that stops resolving is marked orphaned while it still answers.",
+		"",
+		"The cluster view shows the fleet banner, inbound/outbound totals with a",
+		"trend, a load-distribution bar, one ingress row per node (in req/s,",
+		"share, a proportional bar and its trend) and a cross-node imbalance",
+		"panel; enter a row for that node's per-model dashboard.",
 	}
 	return strings.Join(lines, "\n")
 }

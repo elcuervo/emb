@@ -216,17 +216,21 @@ emb-top -nodes emb.internal -tls -tls-server-name emb.internal
 
 ### Watching a fleet
 
-With more than one node monitored, `emb-top` renders a cluster view: an
-aggregate band above one row per node, each showing the node's share of fleet
-requests against its `1/N` expectation, its own verdict, and an activity strip.
-Select a row with `j`/`k` and press enter to open that node's per-model
-dashboard; escape returns to the fleet. The single-node dashboard is unchanged
-when exactly one node is monitored.
+With more than one node monitored, `emb-top` renders a cluster view: a fleet
+verdict, inbound/outbound totals with a rolling trend, a load-distribution bar,
+one **ingress row per node** (inbound req/s, its share of the fleet against the
+`1/N` expectation, a proportional bar and a trend sparkline), and a cross-node
+**imbalance panel** that names the node to look at. Select a row with `j`/`k`
+and press enter to open that node's per-model dashboard; escape returns to the
+fleet. The single-node dashboard is unchanged when exactly one node is
+monitored.
 
-![The emb-top fleet view: an aggregate band above one row per node, each node showing its share of fleet requests against 1/N, its own verdict and an activity strip](assets/emb-top-cluster-a1cddf33.gif)
+![The emb-top cluster view: a fleet banner and totals over a load-distribution bar and one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — with a cross-node imbalance panel below](assets/emb-top-cluster-833c4a60.gif)
 
 *Two nodes under load · emb-top watching `127.0.0.1:16379` and
-`127.0.0.1:16380`. Re-record with `just website-clusterviz`.*
+`127.0.0.1:16380`. The ingress rows and load bar split the fleet's inbound
+traffic; the imbalance panel checks it across nodes. Re-record with
+`just website-clusterviz`.*
 
 - `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a
   compatibility alias for a single node, and the `localhost:6379` default

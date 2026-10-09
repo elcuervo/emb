@@ -180,6 +180,24 @@ func TestFleetHealthVerdicts(t *testing.T) {
 	}
 }
 
+func TestFleetBannerNamesDegradedNode(t *testing.T) {
+	a, b := "10.0.0.1:6379", "10.0.0.2:6379"
+	f := fakeFleet(nil, map[string]dashboardClient{
+		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b},
+	}, rn(a), rn(b))
+	f.width = 200
+	for _, n := range f.nodes {
+		n.tui.connected = true
+		n.tui.polls = 5
+		n.tui.sampler.Latest.ReqRate = 100
+	}
+	f.nodes[1].tui.sampler.Latest.ErrRate = 5 // 5% error ratio: degraded
+	banner := f.fleetBannerView()
+	if !strings.Contains(banner, "10.0.0.2:6379") || !strings.Contains(banner, "err") {
+		t.Fatalf("banner does not name the degraded node: %q", banner)
+	}
+}
+
 func TestFleetBannerNamesOffendingNode(t *testing.T) {
 	a, b, c := "10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379"
 	f := fakeFleet(nil, map[string]dashboardClient{

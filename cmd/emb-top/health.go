@@ -151,6 +151,20 @@ const (
 	fleetRestartSecs  = 120 // uptime under this reads as recently restarted
 )
 
+// nodeReason is one node's banner chip: its worst driving signal, or the
+// disconnection/unreachable cause.
+func nodeReason(n fleetNodeInput, st healthStatus, sigs []signal) string {
+	if n.unreachable || !n.health.connected {
+		return n.label + " unreachable"
+	}
+	for _, s := range sigs {
+		if s.driving && s.level == st {
+			return n.label + " " + strings.TrimSpace(s.text)
+		}
+	}
+	return n.label + " " + strings.ToLower(healthLabel(st))
+}
+
 // fleetHealth synthesizes the fleet verdict. It reuses the per-node rules and
 // thresholds, then layers only actionable cross-node signals: a node carrying
 // far more than its 1/N share, a node whose tail latency is far above its
@@ -163,8 +177,10 @@ func fleetHealth(nodes []fleetNodeInput) (healthStatus, []signal) {
 	}
 	anyData := false
 	worst := healthHealthy
+	var sigs []signal
+	const maxNodeReasons = 3
 	for _, n := range nodes {
-		st, _ := health(n.health)
+		st, nsigs := health(n.health)
 		if n.unreachable {
 			// A poll has failed, so this node is down even if it never reached
 			// two polls; never let it hide behind another node's data.
@@ -176,12 +192,16 @@ func fleetHealth(nodes []fleetNodeInput) (healthStatus, []signal) {
 		if st > worst {
 			worst = st
 		}
+		// Name the node and its worst driving signal, so a fleet verdict driven
+		// by one node's health is never a bare colour.
+		if st >= healthDegraded && len(sigs) < maxNodeReasons {
+			sigs = append(sigs, signal{text: nodeReason(n, st, nsigs), level: st, driving: true})
+		}
 	}
 	if !anyData {
 		return healthNoData, nil
 	}
 
-	var sigs []signal
 	raise := func(st healthStatus, text string) {
 		if st > worst {
 			worst = st

@@ -329,6 +329,106 @@ func TestStalledNodeDoesNotBlockTheNextTick(t *testing.T) {
 
 // ---- 4.x: rendering ----
 
+func TestSparklineRampScales(t *testing.T) {
+	got := sparkline([]float64{0, 1, 2, 3, 4, 5, 6, 7}, 8, okStyle)
+	if got != "▁▂▃▄▅▆▇█" {
+		t.Fatalf("sparkline = %q, want the full ramp", got)
+	}
+	if w := lipgloss.Width(sparkline(nil, 5, okStyle)); w != 5 {
+		t.Fatalf("empty sparkline width = %d, want 5", w)
+	}
+}
+
+func TestInboundBarProportion(t *testing.T) {
+	if n := filledCells(0.5, 10); n != 5 {
+		t.Fatalf("filledCells(0.5, 10) = %d, want 5", n)
+	}
+	if n := filledCells(2, 10); n != 10 {
+		t.Fatalf("filledCells clamps high to %d, want 10", n)
+	}
+	if n := filledCells(-1, 10); n != 0 {
+		t.Fatalf("filledCells clamps low to %d, want 0", n)
+	}
+}
+
+func TestStackedShareBarWidthAndProportion(t *testing.T) {
+	cells := shareCells([]float64{3, 1}, 20)
+	if cells[0] != 15 || cells[1] != 5 {
+		t.Fatalf("shareCells(3:1, 20) = %v, want [15 5]", cells)
+	}
+	// An idle node must not absorb the rounding remainder.
+	cells = shareCells([]float64{3, 0}, 20)
+	if cells[0] != 20 || cells[1] != 0 {
+		t.Fatalf("shareCells(3:0, 20) = %v, want [20 0]", cells)
+	}
+	if w := lipgloss.Width(stackedShareBar([]float64{3, 1}, 20)); w != 20 {
+		t.Fatalf("stacked bar width = %d, want 20", w)
+	}
+}
+
+func TestImbalanceInboundNamesOffender(t *testing.T) {
+	checks := imbalanceChecks([]fleetNodeInput{
+		{label: "a", health: healthInput{connected: true, polls: 5}, reqRate: 90},
+		{label: "b", health: healthInput{connected: true, polls: 5}, reqRate: 10},
+	})
+	if checks[0].name != "inbound" || checks[0].ok {
+		t.Fatalf("inbound check = %+v, want a failure", checks[0])
+	}
+	if !strings.Contains(checks[0].detail, "a") {
+		t.Fatalf("inbound detail does not name the offender: %q", checks[0].detail)
+	}
+}
+
+func TestImbalanceSlowPeerNamesOffender(t *testing.T) {
+	checks := imbalanceChecks([]fleetNodeInput{
+		{label: "fast", health: healthInput{connected: true, polls: 5, p95Us: 100}, reqRate: 10},
+		{label: "slow", health: healthInput{connected: true, polls: 5, p95Us: 1000}, reqRate: 10},
+	})
+	if checks[1].name != "latency" || checks[1].ok {
+		t.Fatalf("latency check = %+v, want a failure", checks[1])
+	}
+	if !strings.Contains(checks[1].detail, "slow") {
+		t.Fatalf("latency detail does not name the offender: %q", checks[1].detail)
+	}
+}
+
+// TestFleetRowsFitWidth guards every fleet line against overflowing the
+// terminal, which would wrap mid-row and corrupt the layout.
+func TestFleetRowsFitWidth(t *testing.T) {
+	for _, w := range []int{80, 100, 120, 160} {
+		f := fleetOfThree(t)
+		f.width, f.height = w, 40
+		for _, line := range strings.Split(strings.TrimRight(f.fleetView(), "\n"), "\n") {
+			if got := lipgloss.Width(line); got > w {
+				t.Errorf("width %d: line is %d cols wide:\n%s", w, got, line)
+			}
+		}
+	}
+}
+
+// TestIngressColumnsDoNotShift guards the fixed columns: a rate growing by
+// orders of magnitude must not move the latency column after it.
+func TestIngressColumnsDoNotShift(t *testing.T) {
+	f := fleetOfThree(t)
+	f.width, f.height = 140, 40
+	col := func() int {
+		for _, line := range f.ingressRows() {
+			if strings.Contains(line, "10.0.0.1:6379") {
+				if i := strings.Index(line, "p95"); i >= 0 {
+					return lipgloss.Width(line[:i])
+				}
+			}
+		}
+		return -1
+	}
+	before := col()
+	seedNode(f.nodes[0], 10, 900000)
+	after := col()
+	if before < 0 || after < 0 || before != after {
+		t.Fatalf("p95 column shifted: %d -> %d", before, after)
+	}
+}
+
 func fleetOfThree(t *testing.T) *fleet {
 	t.Helper()
 	a, b, c := "10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379"
@@ -342,10 +442,13 @@ func fleetOfThree(t *testing.T) *fleet {
 	return f
 }
 
-func TestFleetViewRendersAggregateAndRows(t *testing.T) {
+func TestFleetViewRendersTrafficAndRows(t *testing.T) {
 	f := fleetOfThree(t)
 	view := f.View()
-	for _, want := range []string{"aggregate", "r/s", "10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379"} {
+	for _, want := range []string{
+		"INGRESS", "LOAD", "IMBALANCE", "req/s", "trend",
+		"10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379",
+	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("fleet view missing %q:\n%s", want, view)
 		}
@@ -409,15 +512,15 @@ func TestFleetScrollReachesEveryNode(t *testing.T) {
 	seen := map[string]bool{}
 	for s := 0; s <= len(f.nodes)-vis; s++ {
 		f.scroll = s
-		rows := f.nodeRows()
+		rows := f.ingressRows()
 		for _, n := range f.nodes[s : s+vis] {
 			seen[n.addr] = true
 		}
-		if !strings.Contains(strings.Join(rows, "\n"), "aggregate") {
-			// nodeRows doesn't contain aggregate; fleet view must still show it.
-			if !strings.Contains(f.fleetView(), "aggregate") {
-				t.Fatal("aggregate disappeared while scrolling")
-			}
+		if !strings.Contains(strings.Join(rows, "\n"), "INGRESS") {
+			t.Fatal("the ingress panel disappeared while scrolling")
+		}
+		if !strings.Contains(f.fleetView(), "IMBALANCE") {
+			t.Fatal("the imbalance panel disappeared while scrolling")
 		}
 	}
 	if len(seen) != len(f.nodes) {
