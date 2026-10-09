@@ -1,8 +1,8 @@
 {
   "asset": {
     "bytes": 11087872,
-    "db": "gallery-22c933ba.db",
-    "hash": "22c933ba"
+    "db": "gallery-604639a4.db",
+    "hash": "604639a4"
   },
   "attribution": "Texts: Edgar Allan Poe (1809–1849), public domain, via Project Gutenberg.",
   "corpus": {
@@ -181,6 +181,7 @@
           "verified": true
         }
       ],
+      "script_model": "clap-text",
       "table": "vec_clap",
       "tracks": [
         {
@@ -348,6 +349,7 @@
           "verified": true
         }
       ],
+      "script_model": "xclip-text",
       "table": "vec_xclip",
       "vector_type": "vec_f32"
     }
@@ -644,7 +646,7 @@
     {
       "dimension": 512,
       "element_type": "float32",
-      "name": "clap",
+      "name": "clap-text",
       "quantization": "float32",
       "table": "vec_clap",
       "vector_type": "vec_f32"
@@ -652,7 +654,7 @@
     {
       "dimension": 512,
       "element_type": "float32",
-      "name": "xclip",
+      "name": "xclip-text",
       "quantization": "float32",
       "table": "vec_xclip",
       "vector_type": "vec_f32"

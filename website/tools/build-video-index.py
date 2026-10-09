@@ -159,6 +159,9 @@ def main() -> int:
                    (i, sqlite3.Binary(vector.astype("<f4").tobytes())))
     demo_index.set_meta(db, "media.video", {
         "model": document["model"],
+        # The phrase is embedded by the text tower, so the preset the client runs
+        # lives on `xclip-text`; the table was filled by `xclip-video`.
+        "script_model": "xclip-text",
         "table": "vec_xclip",
         "element_type": "float32",
         "vector_type": "vec_f32",

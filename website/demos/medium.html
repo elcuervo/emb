@@ -386,9 +386,10 @@ async function describeAudio() {
   try {
     const audio = await g.media('audio');
     // The phrase goes to CLAP's text tower as a scripted call; the shared
-    // search ranks it against the vec_clap table the audio tower filled.
-    const hits = await g.searchPreset('clap', root.getAttribute('data-emb-preset-clap-text'),
-      phrase, audio.tracks.length);
+    // search ranks it against the vec_clap table the audio tower filled. The
+    // model the script runs on (`clap-text`) is named in the manifest, not here.
+    const hits = await g.searchPreset(audio.script_model,
+      root.getAttribute('data-emb-preset-clap-text'), phrase, audio.tracks.length);
     const byRow = new Map(audio.tracks.map((t) => [t.rowid, t]));
     const rows = hits.map((h) => ({ t: byRow.get(h.rowid), score: h.score,
       audio: el('audio', { controls: '', preload: 'metadata', src: new URL('media/music/' + byRow.get(h.rowid).file, import.meta.url).href, 'aria-label': 'The nearest track' }) }))
@@ -413,8 +414,8 @@ async function describeVideo() {
     const video = await g.media('video');
     // Same shape as the audio rig: X-CLIP's text tower live, its video tower's
     // table matched by the shared search.
-    const hits = await g.searchPreset('xclip', root.getAttribute('data-emb-preset-xclip-text'),
-      phrase, video.clips.length);
+    const hits = await g.searchPreset(video.script_model,
+      root.getAttribute('data-emb-preset-xclip-text'), phrase, video.clips.length);
     const byRow = new Map(video.clips.map((c) => [c.rowid, c]));
     const rows = hits.map((h) => ({ c: byRow.get(h.rowid), score: h.score,
       audio: el('video', { controls: '', playsinline: '', preload: 'metadata', src: new URL('media/video/' + byRow.get(h.rowid).file, import.meta.url).href, 'aria-label': 'The nearest clip' }) }))

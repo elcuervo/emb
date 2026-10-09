@@ -198,6 +198,7 @@ def main() -> int:
                    (i, sqlite3.Binary(vector.astype("<f4").tobytes())))
     demo_index.set_meta(db, "media.frames", {
         "model": "clip",
+        "script_model": "clip",
         "table": "vec_clip",
         "element_type": "float32",
         "vector_type": "vec_f32",

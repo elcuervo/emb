@@ -144,6 +144,9 @@ def main() -> int:
                    (i, sqlite3.Binary(vector.astype("<f4").tobytes())))
     demo_index.set_meta(db, "media.audio", {
         "model": document["model"],
+        # The phrase is embedded by the text tower, so the preset the client runs
+        # lives on `clap-text`; the table was filled by `clap-audio`.
+        "script_model": "clap-text",
         "table": "vec_clap",
         "element_type": "float32",
         "vector_type": "vec_f32",

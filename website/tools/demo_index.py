@@ -126,8 +126,12 @@ def build_manifest(final: Path, data: bytes, meta: dict) -> dict:
         if not section:
             continue
         media[kind] = section
+        # The client runs the section's script on `script_model` and searches its
+        # `table`; the two differ for the media pairs (the phrase is embedded by
+        # the text tower, the table was filled by the modality tower), so the
+        # models[] entry is named after the model the client actually calls.
         models.append({
-            "name": section["model"],
+            "name": section.get("script_model", section["model"]),
             "table": section["table"],
             "dimension": section["dimension"],
             "element_type": section["element_type"],
