@@ -607,7 +607,7 @@ RSpec.describe Emb do
       expect(client.commands.size).to eq(2)
     end
 
-    it 'fails the unknown-model share alone under batch mode' do
+    it 'isolates the unknown-model share under batch mode' do
       client = OneFailClient.new(
         %w[EMB nope b],
         { %w[EMB minilm a] => [FakeEmbClient.vec(1.0)] }
@@ -615,12 +615,15 @@ RSpec.describe Emb do
       minilm = described_class.build_batch_loader(client, :minilm, 'a')
       nope = described_class.build_batch_loader(client, :nope, 'b')
 
-      expect { minilm.first }.to raise_error(Emb::ServerError)
+      # The healthy share resolves normally: a sibling failure does not raise.
+      expect(minilm.first).to eq(1.0)
 
-      # The healthy share ran concurrently, materialized, and is not re-sent;
-      # the failed share resolves to the [] default with no further I/O.
-      expect(minilm.__send__(:__sync)).to eq([1.0, 1.0])
-      expect(nope.__send__(:__sync)).to eq([])
+      # Every failed item raises the share's error on use, with the original
+      # redis error as cause and no re-send.
+      expect { nope.first }.to raise_error(Emb::ServerError) do |e|
+        expect(e.cause).to be_a(READ_TIMEOUT)
+      end
+      expect { nope.first }.to raise_error(Emb::ServerError)
       expect(client.commands).to contain_exactly(%w[EMB minilm a], %w[EMB nope b])
       expect(client.commands.size).to eq(2)
     end
@@ -672,7 +675,7 @@ RSpec.describe Emb do
       expect(client.commands).to eq([%w[EMB minilm solo]])
     end
 
-    it 'fails closed on a terminal share failure: raises once, successful share consumed, failed items cleared' do
+    it 'isolates a terminal share failure: raises on every use, siblings resolve' do
       client = OneFailClient.new(
         %w[EMB minilm a],
         { %w[EMB minilm b] => [FakeEmbClient.vec(2.0)] }
@@ -684,11 +687,11 @@ RSpec.describe Emb do
       expect { a.first }.to raise_error(Emb::ServerError) do |e|
         expect(e.cause).to be_a(READ_TIMEOUT)
       end
+      # The failed item raises again on reuse, without re-sending.
+      expect { a.first }.to raise_error(Emb::ServerError)
 
       # The successful share resolved normally and its command is not re-sent.
       expect(b).to eq([2.0, 2.0])
-      # The failed item resolves to the [] default with no further I/O.
-      expect(a.__send__(:__sync)).to eq([])
       expect(client.commands.size).to eq(2)
       expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
     end
