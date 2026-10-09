@@ -20,6 +20,10 @@ All notable changes to the `emb` gem are documented here. The format follows
 
 ### Breaking
 
+- Under `lazy: :batch`, a share that fails terminally no longer fails the force for
+  its sibling shares, and its items raise that share's `Emb::ServerError` on every
+  use instead of resolving to `[]`. Healthy shares in the same scope resolve
+  normally. The serial (`:multi`, single-share) path is unchanged.
 - Under a deferred mode (`lazy: :multi` or `:batch`), `eval`/`evalsha` return a
   lazy value instead of sending immediately. Force the value (or use an eager
   client) to get the parsed reply. The explicit `Emb.multi { }` block API is

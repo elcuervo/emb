@@ -485,7 +485,7 @@ can never accumulate across requests (in eager mode there is nothing to clear).
 `:batch` mode a share failure after pre-send retries are exhausted — the batch raises
 **`Emb::ServerError`** to the code that first used it, and every deferred item of that
 batch is removed from the scope — retrying (or using other items of the failed batch)
-**does not re-send the batch** and resolves to `[]` instead. The error's `cause` is the
+**does not re-send the batch**. The error's `cause` is the
 underlying redis error (`RedisClient::ReadTimeoutError`, `RedisClient::CommandError`, ...)
 and its message includes the model(s), text count, and attempt count. Transient failures
 (timeout, connection error, protocol error) re-send up to `reconnect_attempts` extra
@@ -497,9 +497,22 @@ prevents a slow server from turning one failed batch into endless duplicate work
 (retries re-running the whole batch) or growth of the pending set across retries.
 Pair-level failures the server reports as `null` (MGET semantics) are unaffected.
 
+Under `lazy: :multi` — and a `:batch` scope that resolves to a single share — a failed
+batch's items resolve to `[]` afterward. Under `lazy: :batch` with multiple shares a
+failure is **isolated per share**: the healthy shares resolve normally and the force does
+**not** raise for a sibling's failure, while every item of the failed share raises that
+share's `Emb::ServerError` (same message and `cause`) on each use, without re-sending. So a
+two-model scope that defers `siglip2` and `hyperclusters` no longer loses the healthy
+model's value, and the failed model's value raises instead of silently reading as `[]`.
+
 > **Breaking change (gem ≥ next release):** a failed batch raises `Emb::ServerError`
 > instead of the raw `RedisClient::*` error. Rescue `Emb::ServerError` and read `cause`
 > for the original error. Eager `Emb.multi` and the `lazy: false` path are unchanged.
+
+> **Breaking change (gem ≥ next release):** under `lazy: :batch`, a share failure no
+> longer fails the force for its siblings and a failed share's items raise
+> `Emb::ServerError` on every use instead of resolving to `[]`. The serial (`:multi`,
+> single-share) path is unchanged.
 
 ```ruby
 vec   = Emb[:minilm]["hello"]            # use -> Array of Float

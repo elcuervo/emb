@@ -3,6 +3,25 @@
 require_relative 'script_reply_decode'
 
 module Emb
+  # Poison value for an item whose share failed terminally under parallel
+  # dispatch: any use raises the share's Emb::ServerError. BasicObject so only
+  # method_missing is reachable — batch-loader's __replace_with! calls
+  # `value.methods` on first use, and Array()/respond_to? raise too.
+  #
+  # No respond_to_missing?: BasicObject has no respond_to?, so it would never
+  # be called (dead code).
+  # rubocop:disable Style/MissingRespondToMissing
+  class FailedShare < BasicObject
+    def initialize(error)
+      @error = error
+    end
+
+    def method_missing(*)
+      ::Kernel.raise(@error)
+    end
+  end
+  # rubocop:enable Style/MissingRespondToMissing
+
   # Share-dispatch mechanics for the deferred batch path: EMB/MULTI wire
   # shaping, per-slice result mapping, and the bounded concurrent fan-out used
   # by `lazy: :batch`. Extended into Emb by batch.rb.
@@ -38,7 +57,8 @@ module Emb
       slices.each do |slice|
         resolve_slice(loader, slice, dispatch_slice(client, slice))
       rescue RedisClient::Error => e
-        fail_batch!(e, slice: slice, budget: retry_budget(client))
+        clear_batch_pending!
+        raise batch_error(e, slice: slice, budget: retry_budget(client))
       rescue StandardError
         clear_batch_pending!
         raise
@@ -139,7 +159,8 @@ module Emb
     end
 
     # Dispatches all shares concurrently over at most the client's connection
-    # capacity workers, then fails closed on the first terminal error.
+    # capacity workers, then resolves the outcomes (isolating a failed share's
+    # error to its own items).
     def dispatch_parallel(client, slices, loader)
       workers = slices.size.clamp(1, worker_capacity(client))
       queue = share_queue(slices, workers)
@@ -172,32 +193,48 @@ module Emb
       end.each(&:join)
     end
 
-    # Redis errors fail closed with context (Emb::ServerError, matching the
-    # serial path); non-redis errors are local bugs and re-raise unchanged.
+    # Redis errors are isolated to their own share: every item of the failed
+    # share resolves to a FailedShare that re-raises that share's
+    # Emb::ServerError on use (no re-send), while healthy shares resolve
+    # normally and the force never raises for a sibling. batch-loader then
+    # prunes the pending items itself once the block returns. Non-redis errors
+    # are local bugs: resolve the other shares, then clear the pending set and
+    # re-raise the first one.
     def resolve_outcomes(client, outcomes, loader)
-      first_error, failed_slice = collect_outcomes(outcomes, loader)
-      return unless first_error
-
-      raise first_error unless first_error.is_a?(RedisClient::Error)
-
-      fail_batch!(first_error, slice: failed_slice, budget: retry_budget(client))
-    rescue StandardError
-      clear_batch_pending!
-      raise
-    end
-
-    def collect_outcomes(outcomes, loader)
       first_error = nil
-      failed_slice = nil
       outcomes.each do |status, slice, result|
-        if status == :ok
-          resolve_slice(loader, slice, result)
+        error = outcome_error(loader, status, slice, result)
+        next unless error
+
+        if error.is_a?(RedisClient::Error)
+          fail_share(loader, slice, error, client)
         else
-          first_error ||= result
-          failed_slice ||= slice
+          first_error ||= error
         end
       end
-      [first_error, failed_slice]
+      return unless first_error
+
+      clear_batch_pending!
+      raise first_error
+    end
+
+    # The error an outcome carries: the worker's captured error, or a
+    # resolve_slice failure (e.g. ShortReplyError) against an :ok reply.
+    def outcome_error(loader, status, slice, result)
+      return result unless status == :ok
+
+      resolve_slice(loader, slice, result)
+      nil
+    rescue StandardError => e
+      e
+    end
+
+    # Resolves every item of a failed share to a poison value that raises the
+    # share's Emb::ServerError on use. Building the error once keeps its
+    # message/context and cause identical for all of the share's items.
+    def fail_share(loader, slice, error, client)
+      poison = batch_error(error, slice: slice, budget: retry_budget(client))
+      slice.each { |item| loader.call(item, FailedShare.new(poison)) }
     end
 
     # Packs items into shares by accumulated text count so one command stays

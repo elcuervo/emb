@@ -59,9 +59,11 @@ module Emb
         raise ArgumentError, "unknown format #{format.inspect} (expected :binary or :values)"
       end
 
-      # default_value []: an item whose batch failed (fail-closed) resolves to
-      # an empty vector collection instead of nil, so resolver methods like
-      # `loader.sum` do not blow up with NoMethodError-on-nil.
+      # default_value []: an item whose batch failed (serial path, or a local
+      # error) resolves to an empty vector collection instead of nil, so
+      # resolver methods like `loader.sum` do not blow up with
+      # NoMethodError-on-nil. Parallel redis failures get a FailedShare poison
+      # instead (raises on use).
       # Items carry [client, model, text, format] so the dispatch knows how to
       # shape and parse the reply.
       BatchLoader.for([client, model, text, format]).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
@@ -85,28 +87,36 @@ module Emb
       BatchLoader::Executor.current&.items_by_block&.delete(key)
     end
 
-    # Fail-closed tail for a failed batch: clear the pending set, then raise
-    # Emb::ServerError carrying the cause and the models/texts/attempts
-    # context. The raise happens inside a rescue of the original error so Ruby
-    # attaches it as `cause` regardless of whether this runs while a rescue is
-    # active (serial path) or from the forcing thread after parallel workers
-    # captured the error (parallel path). `attempts` counts the error's retry
-    # class: connection/protocol errors (the ones redis-client actually
-    # re-sends) report `budget + 1`; operation errors and read timeouts (never
-    # re-sent — a timeout may already have executed server work) report 1. A
-    # pre-send connection refusal is retried across instances by the
-    # connection router before it can reach here as a terminal error.
-    def fail_batch!(error, slice:, budget:)
-      clear_batch_pending!
+    # Builds the Emb::ServerError for a failed share, carrying the models/texts/
+    # attempts context and the original redis error as `cause`. Does not clear
+    # the pending set or raise: the serial path re-raises it immediately, while
+    # the parallel path hands it to a FailedShare so every item of the failed
+    # share raises it on use. `attempts` counts the error's retry class:
+    # connection/protocol errors (the ones redis-client actually re-sends)
+    # report `budget + 1`; operation errors and read timeouts (never re-sent — a
+    # timeout may already have executed server work) report 1. A pre-send
+    # connection refusal is retried across instances by the connection router
+    # before it can reach here as a terminal error.
+    def batch_error(error, slice:, budget:)
       attempts = transient_error?(error) ? budget + 1 : 1
       models = slice.map { |item| item_model(item) }.uniq.join(', ')
       texts = slice.sum { |item| item_text_count(item) }
       message = "batch failed after #{attempts} attempt(s) " \
                 "(models: #{models}, #{texts} text(s)) #{error.class}: #{error.message}"
+      with_cause(error, ServerError.new(message, attempts: attempts))
+    end
+
+    # Attaches `error` as the cause of `wrapped` from a non-rescue context (the
+    # parallel path resolves on the forcing thread after a worker captured the
+    # error): raise the original, build the wrapper inside that rescue so Ruby
+    # records it as cause, then rescue the wrapper to return it.
+    def with_cause(error, wrapped)
+      raise error
+    rescue StandardError
       begin
-        raise error
-      rescue StandardError
-        raise ServerError.new(message, attempts: attempts)
+        raise wrapped
+      rescue ServerError => e
+        e
       end
     end
 
@@ -134,6 +144,6 @@ module Emb
         (error.is_a?(RedisClient::ProtocolError) && !error.is_a?(ShortReplyError))
     end
 
-    private :clear_batch_pending!, :fail_batch!, :retry_budget, :transient_error?
+    private :clear_batch_pending!, :batch_error, :with_cause, :retry_budget, :transient_error?
   end
 end
