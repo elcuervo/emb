@@ -193,6 +193,13 @@ and renders:
 # watch a node
 emb-top -addr localhost:6379
 
+# watch a fleet: -node is repeatable, -nodes is comma-separated
+emb-top -node emb-0.internal -node emb-1.internal -interval 1s
+emb-top -nodes 127.0.0.1:16379,127.0.0.1:16380
+
+# a bare name is expanded to every A/AAAA record and re-resolved while watching
+emb-top -nodes emb.internal
+
 # headless: machine-readable lines (rates + latency percentiles from MONITOR)
 emb-top -addr localhost:6379 -once -samples 10 -interval 1s
 # t=... total_requests=6 req_rate=2.0 tok_rate=11.0 cpu_pct=14.5 lat_p50_us=1139 lat_p95_us=1801 …
@@ -202,10 +209,51 @@ emb-top -addr localhost:6379 -frames -interval 1s
 
 # secured node
 emb-top -addr localhost:6379 -password secret -tls
+
+# TLS against a resolved address: verify the certificate against the name
+emb-top -nodes emb.internal -tls -tls-server-name emb.internal
 ```
 
-Keys: `q` quit · `p`/space pause · `r` reset window · `j`/`k` scroll models ·
-`?` help. Flags: `-addr`, `-interval`, `-password`, `-tls`, `-window`,
+### Watching a fleet
+
+With more than one node monitored, `emb-top` renders a cluster view: an
+aggregate band above one row per node, each showing the node's share of fleet
+requests against its `1/N` expectation, its own verdict, and an activity strip.
+Select a row with `j`/`k` and press enter to open that node's per-model
+dashboard; escape returns to the fleet. The single-node dashboard is unchanged
+when exactly one node is monitored.
+
+- `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a
+  compatibility alias for a single node, and the `localhost:6379` default
+  applies only when no node flag is given. Each entry is `host:port`, a bare
+  `host` (default port 6379), or a DNS name. A bare name is expanded to one row
+  per address record and re-resolved every 30s and immediately after a node
+  goes unreachable, so an autoscaled node joins without restarting `emb-top`.
+- Each node is polled on its own connection with its own event cursor, so a
+  stalled node never delays another node's poll or the frame; its row keeps the
+  last known values and how long ago they were sampled.
+- Rows keep a stable first-seen order and never follow traffic. A node that
+  stops resolving is marked **orphaned** while it still answers, and leaves the
+  fleet only once it is both unresolved and unreachable for a grace period.
+- A node that answers but receives no traffic is **idle**, distinct from
+  **unreachable**. The header reports membership and traffic separately
+  (`discovered · receiving traffic · idle · orphaned`).
+- `emb-top` cannot see which nodes the *clients* were configured with — clients
+  round-robin their own `url` list without consulting DNS — so an idle node is
+  never called unbalanced, expected share is always `1/N`, and DNS weights are
+  ignored. The fleet verdict is driven only by actionable cross-node signals:
+  unreachable or auth-refusing nodes, a node far slower than the fleet median,
+  a cold cache after a restart, and load spread beyond what the node count
+  explains.
+- A fleet of one (including the default `localhost:6379`) renders the original
+  single-node dashboard, and `-once` / `-frames` keep their single-node output.
+  With several nodes, `-once` prints the fleet aggregate followed by one
+  `node:<label>` section per node, and `-frames` streams the fleet frame.
+
+Keys: `q` quit · `p`/space pause · `r` reset window · `j`/`k` scroll models,
+and select a node row in the fleet view · `enter` open the selected node ·
+`esc` back to the fleet · `?` help. Flags: `-addr`, `-node`, `-nodes`,
+`-interval`, `-password`, `-tls`, `-tls-server-name`, `-window`,
 `-once -samples N`, `-frames`. `-frames` is the headless streaming mode: it
 prints one complete, coloured frame per interval, so another process can render
 the dashboard live without a terminal (the sandbox's read-only `/stats` view is

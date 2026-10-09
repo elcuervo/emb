@@ -41,6 +41,8 @@ func TestRunOnceRates(t *testing.T) {
 			return encodeArray(
 				encodeArray(encodeInt(seq), encodeInt(1_700_000_000_000_000), encodeBulk("m"), encodeInt(1), encodeInt(int64(400)+int64(round)), encodeInt(0)),
 			)
+		case "INFO":
+			return encodeBulk("gomaxprocs:4\r\n")
 		default:
 			return encodeError("ERR unknown " + cmd[0])
 		}
@@ -120,6 +122,8 @@ func TestRunOnceKeepsFirstSeenModelOrder(t *testing.T) {
 			return statsReply(map[string]int64{"uptime_secs": int64(round)})
 		case "MONITOR":
 			return encodeArray()
+		case "INFO":
+			return encodeBulk("gomaxprocs:4\r\n")
 		default:
 			return encodeError("ERR unknown " + cmd[0])
 		}

@@ -2,6 +2,7 @@ package embtop_test
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -73,6 +74,62 @@ func TestPollRealServerEmpty(t *testing.T) {
 	}
 	if res.UptimeSecs < 0 || res.TotalRequests < 0 {
 		t.Fatalf("unexpected stats: %+v", res)
+	}
+}
+
+// TestRunOnceFleetAgainstRealServers prints one line per poll carrying the
+// fleet aggregate plus a section per monitored node.
+func TestRunOnceFleetAgainstRealServers(t *testing.T) {
+	a := serveEmbedded(t)
+	b := serveEmbedded(t)
+	clients := []*embtop.Client{embtop.NewClient(a, "", false), embtop.NewClient(b, "", false)}
+
+	var out bytes.Buffer
+	if err := embtop.RunOnceFleet(clients, []string{"a", "b"}, 20*time.Millisecond, 2, &out); err != nil {
+		t.Fatalf("RunOnceFleet: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines, got %d:\n%s", len(lines), out.String())
+	}
+	for i, line := range lines {
+		if !strings.HasPrefix(line, "t=") {
+			t.Fatalf("line %d missing t= prefix: %q", i, line)
+		}
+		for _, want := range []string{" req_rate=", " node:a", " node:b"} {
+			if !strings.Contains(line, want) {
+				t.Errorf("line %d missing %q: %q", i, want, line)
+			}
+		}
+	}
+}
+
+// TestRunOnceFleetNoSamplesFails verifies a dead fleet exits non-zero.
+func TestRunOnceFleetNoSamplesFails(t *testing.T) {
+	dead := freeAddr(t)
+	clients := []*embtop.Client{embtop.NewClient(dead, "", false)}
+	err := embtop.RunOnceFleet(clients, []string{"dead"}, 10*time.Millisecond, 1, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "no node produced a sample") {
+		t.Fatalf("err = %v, want a no-sample error", err)
+	}
+}
+
+// TestRunOnceFleetPartialFleetSamplesReachable verifies one unreachable node
+// does not stop the reachable nodes from being sampled.
+func TestRunOnceFleetPartialFleetSamplesReachable(t *testing.T) {
+	live := serveEmbedded(t)
+	dead := freeAddr(t)
+	clients := []*embtop.Client{embtop.NewClient(live, "", false), embtop.NewClient(dead, "", false)}
+
+	var out bytes.Buffer
+	if err := embtop.RunOnceFleet(clients, []string{"live", "dead"}, 10*time.Millisecond, 1, &out); err != nil {
+		t.Fatalf("partial fleet: %v", err)
+	}
+	if !strings.Contains(out.String(), " node:live") {
+		t.Errorf("reachable node missing from %q", out.String())
+	}
+	if strings.Contains(out.String(), " node:dead") {
+		t.Errorf("unreachable node rendered a section: %q", out.String())
 	}
 }
 

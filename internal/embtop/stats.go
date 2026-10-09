@@ -31,6 +31,7 @@ type Point struct {
 	TruncatedPairs   int64
 	TruncatedImages  int64
 	RegisteredModels int
+	GoMaxProcs       int // node's own parallelism; 0 when the node did not report it
 }
 
 // ModelPoint is the per-model rate view of one poll.
@@ -139,6 +140,7 @@ func (s *Sampler) Push(res *PollResult) Point {
 		TruncatedPairs:   res.TruncatedPairs,
 		TruncatedImages:  res.TruncatedImages,
 		RegisteredModels: res.ModelsLoaded,
+		GoMaxProcs:       res.GoMaxProcs,
 	}
 
 	totalHits := res.CacheHits

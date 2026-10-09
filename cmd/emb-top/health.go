@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -115,6 +116,167 @@ func health(in healthInput) (healthStatus, []signal) {
 	return worst, sigs
 }
 
+// nodeParallelism is the denominator for a node's CPU usage: the node's own
+// reported processor count when it has one, else the local machine's.
+func nodeParallelism(reported int) int {
+	if reported > 0 {
+		return reported
+	}
+	return runtime.NumCPU()
+}
+
+// fleetNodeInput is one node's contribution to the fleet verdict.
+type fleetNodeInput struct {
+	label      string
+	health     healthInput
+	reqRate    float64
+	idle       bool
+	orphaned   bool
+	uptimeSecs int64
+	hasCache   bool
+	cachePct   float64
+}
+
+// Fixed fleet thresholds, built-in defaults like the node ones: no new flags.
+const (
+	fleetSkewDegraded = 2.5 // share × the 1/N expectation
+	fleetPeerP95Rise  = 2.0 // node p95 vs the fleet median
+	fleetColdCachePct = 0.5 // node hit rate vs the peers' median
+	fleetRestartSecs  = 120 // uptime under this reads as recently restarted
+)
+
+// fleetHealth synthesizes the fleet verdict. It reuses the per-node rules and
+// thresholds, then layers only actionable cross-node signals: a node carrying
+// far more than its 1/N share, a node whose tail latency is far above its
+// peers', and a node whose cache is cold after a restart. An unreachable or
+// auth-refusing node is already critical through its own verdict; cache spread
+// alone never drives the fleet.
+func fleetHealth(nodes []fleetNodeInput) (healthStatus, []signal) {
+	if len(nodes) == 0 {
+		return healthNoData, nil
+	}
+	anyData := false
+	worst := healthHealthy
+	for _, n := range nodes {
+		st, _ := health(n.health)
+		if st != healthNoData {
+			anyData = true
+		}
+		if st > worst {
+			worst = st
+		}
+	}
+	if !anyData {
+		return healthNoData, nil
+	}
+
+	var sigs []signal
+	raise := func(st healthStatus, text string) {
+		if st > worst {
+			worst = st
+		}
+		sigs = append(sigs, signal{text: text, level: st, driving: true})
+	}
+
+	// Load skew is judged only when every node is reachable, has data, and
+	// none is idle or orphaned: an idle node means the clients may simply not
+	// know it, so 0% is not a fault to blame on anyone.
+	var total float64
+	allSettled := len(nodes) >= 2
+	for _, n := range nodes {
+		if n.idle || n.orphaned || n.health.polls < 2 || !n.health.connected {
+			allSettled = false
+		}
+		total += n.reqRate
+	}
+	if allSettled && total > 0 {
+		expected := 1 / float64(len(nodes))
+		for _, n := range nodes {
+			share := n.reqRate / total
+			if share > expected*fleetSkewDegraded {
+				raise(healthDegraded, fmt.Sprintf("skew %s %.0f%% vs %.0f%%", n.label, share*100, expected*100))
+			}
+		}
+	}
+
+	raiseSlowPeer(nodes, raise)
+	raiseColdCache(nodes, raise)
+	return worst, sigs
+}
+
+// raiseSlowPeer flags a node whose p95 is far above the fleet median.
+func raiseSlowPeer(nodes []fleetNodeInput, raise func(healthStatus, string)) {
+	var p95s []int64
+	for _, n := range nodes {
+		if n.health.connected && n.health.p95Us > 0 {
+			p95s = append(p95s, n.health.p95Us)
+		}
+	}
+	if len(p95s) < 2 {
+		return
+	}
+	median := medianInt64(p95s)
+	if median <= 0 {
+		return
+	}
+	for _, n := range nodes {
+		if !n.health.connected || n.health.p95Us <= 0 {
+			continue
+		}
+		if float64(n.health.p95Us) > float64(median)*fleetPeerP95Rise {
+			raise(healthDegraded, fmt.Sprintf("slow %s p95 %s vs median %s",
+				n.label, fmtLatency(n.health.p95Us), fmtLatency(median)))
+		}
+	}
+}
+
+// raiseColdCache flags a recently restarted node whose cache is far colder
+// than its established peers'.
+func raiseColdCache(nodes []fleetNodeInput, raise func(healthStatus, string)) {
+	var peers, restarted []fleetNodeInput
+	for _, n := range nodes {
+		if !n.health.connected || !n.hasCache {
+			continue
+		}
+		if n.uptimeSecs > 0 && n.uptimeSecs < fleetRestartSecs {
+			restarted = append(restarted, n)
+			continue
+		}
+		peers = append(peers, n)
+	}
+	if len(restarted) == 0 || len(peers) == 0 {
+		return
+	}
+	medians := make([]float64, 0, len(peers))
+	for _, p := range peers {
+		medians = append(medians, p.cachePct)
+	}
+	median := medianFloat64(medians)
+	for _, n := range restarted {
+		if n.cachePct < median*fleetColdCachePct {
+			raise(healthDegraded, fmt.Sprintf("cold cache %s %.0f%% vs %.0f%%", n.label, n.cachePct, median))
+		}
+	}
+}
+
+func medianInt64(vs []int64) int64 {
+	if len(vs) == 0 {
+		return 0
+	}
+	sorted := append([]int64(nil), vs...)
+	slices.Sort(sorted)
+	return sorted[len(sorted)/2]
+}
+
+func medianFloat64(vs []float64) float64 {
+	if len(vs) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), vs...)
+	slices.Sort(sorted)
+	return sorted[len(sorted)/2]
+}
+
 // healthState gathers the derived inputs the banner and verdict are computed
 // from.
 func (m tuiModel) healthState() healthInput {
@@ -122,7 +284,7 @@ func (m tuiModel) healthState() healthInput {
 	in := healthInput{
 		connected:  m.connected,
 		polls:      m.polls,
-		cpuPct:     p.CPUPercent / float64(runtime.NumCPU()),
+		cpuPct:     p.CPUPercent / float64(nodeParallelism(p.GoMaxProcs)),
 		baselineUs: m.p95Base,
 	}
 	if _, _, p95, ok := m.sampler.Latency(); ok {
