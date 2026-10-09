@@ -28,19 +28,18 @@ module Emb
     # replies (flat field/value pair arrays under RESP2) become Ruby Hashes,
     # nested values recurse. decode: opt-in float decoding — see
     # parse_script_reply (decode: :f32 or decode: {field => :f32}).
+    #
+    # Honors the client's lazy mode: eager under false, deferred under :multi
+    # and :batch (see Emb::Commands#run_script_command).
     def eval(model, script, texts, args = [], decode: nil)
       texts = Array(texts)
-      schema = normalize_decode(decode)
-      reply = send_command('EMB.EVAL', model.to_s, script, texts.size, *texts.map(&:to_s), *args.map(&:to_s))
-      parse_script_reply(reply, multi: texts.size > 1, decode: schema)
+      run_script_command(script_argv('EMB.EVAL', model, script, texts, args), decode)
     end
 
     # Evaluate a previously loaded script by SHA1 (EMB.EVSHA). See #eval.
     def evalsha(model, sha, texts, args = [], decode: nil)
       texts = Array(texts)
-      schema = normalize_decode(decode)
-      reply = send_command('EMB.EVSHA', model.to_s, sha, texts.size, *texts.map(&:to_s), *args.map(&:to_s))
-      parse_script_reply(reply, multi: texts.size > 1, decode: schema)
+      run_script_command(script_argv('EMB.EVSHA', model, sha, texts, args), decode)
     end
 
     # EMB.SCRIPT subcommands: a small command object so the surface reads
@@ -89,33 +88,20 @@ module Emb
 
     private
 
-    # Converts a scripted reply (single value, or an array of per-text values
-    # for multi-text calls) through the hash grammar: a flat field/value pair
-    # array becomes a Hash, recursively. Pure even-length string lists are
-    # indistinguishable from two-field hashes on the RESP2 wire, so scripts
-    # that must return them should nest them (wrap the list in a table).
-    #
-    # decode is the normalized (see normalize_decode) opt-in float decoding:
-    #   nil                        → no decoding, parsing exactly as before
-    #   :f32                       → each value position is unpack('e*')'d when
-    #                                it is a packed float bulk; numeric arrays
-    #                                pass through unchanged (element types kept)
-    #   {field => :f32, ...}       → after hash parsing, the named field(s) of
-    #                                each hash reply decode as :f32 (fields
-    #                                absent from a reply are left untouched)
-    def parse_script_reply(reply, multi:, decode: nil)
-      parsed = (multi ? reply : [reply]).map { |v| script_hash(v) }
-      decoded = apply_decode(parsed, decode)
-      multi ? decoded : decoded.first
+    # EMB.EVAL/EMB.EVSHA argv: command, model, script|SHA, numtexts, KEYS, ARGV.
+    def script_argv(cmd, model, target, texts, args)
+      [cmd, model.to_s, target, texts.size, *texts.map(&:to_s), *args.map(&:to_s)]
     end
 
-    def script_hash(value)
-      return value unless value.is_a?(Array) && value.size.even?
+    # Sends the built argv (eager) or defers it into the thread's batch scope
+    # (Emb.build_script_loader). decode: is normalized here so an invalid mode
+    # raises before anything is sent; the reply is parsed only on resolution
+    # (ScriptReplyDecode#parse_script_reply), with multi: from the argv count.
+    def run_script_command(argv, decode)
+      schema = normalize_decode(decode)
+      return Emb.build_script_loader(self, argv, schema) if lazy?
 
-      pairs = value.each_slice(2).to_a
-      return value unless pairs.all? { |field, _| field.is_a?(String) }
-
-      pairs.to_h { |field, val| [field, script_hash(val)] }
+      parse_script_reply(send_command(*argv), multi: argv[3].to_i > 1, decode: schema)
     end
 
     # Parse Redis INFO section text into a nested Hash:

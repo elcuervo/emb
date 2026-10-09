@@ -1,16 +1,60 @@
 # frozen_string_literal: true
 
+require_relative 'script_reply_decode'
+
 module Emb
   # Share-dispatch mechanics for the deferred batch path: EMB/MULTI wire
   # shaping, per-slice result mapping, and the bounded concurrent fan-out used
   # by `lazy: :batch`. Extended into Emb by batch.rb.
   module BatchDispatch
+    # Script batch items are [client, SCRIPT_ITEM, argv, decode]; embed items are
+    # [client, model, text, format]. argv is the fully built EMB.EVAL/EMB.EVSHA
+    # command and argv[3] its text count.
+    def script_item?(item)
+      item[1].equal?(SCRIPT_ITEM)
+    end
+
+    def item_model(item)
+      script_item?(item) ? item[2][1] : item[1]
+    end
+
+    def item_text_count(item)
+      script_item?(item) ? item[2][3].to_i : Array(item[2]).size
+    end
+
+    # :batch shares: per-model chunked EMB shares plus one share per script
+    # call. group_by preserves first-deferral order of the models.
+    def batch_shares(embeds, scripts, chunk)
+      slices = []
+      embeds.group_by { |item| item[1] }.each_value { |group| slices.concat(pack_slices(group, chunk)) }
+      scripts.each { |item| slices << [item] }
+      slices
+    end
+
+    # Serial dispatch: one share in flight at a time. Redis errors fail closed
+    # with context; anything else is a local bug and is re-raised unchanged
+    # after the pending set is dropped.
+    def dispatch_serial(client, slices, loader)
+      slices.each do |slice|
+        resolve_slice(loader, slice, dispatch_slice(client, slice))
+      rescue RedisClient::Error => e
+        fail_batch!(e, slice: slice, budget: retry_budget(client))
+      rescue StandardError
+        clear_batch_pending!
+        raise
+      end
+    end
+
     # Sends one chunk share and returns the raw reply entries. Single-model
     # shares use plain `EMB <model> <text>...` (one inference, model once);
     # mixed-model shares keep EMB.MULTI per-pair nil semantics. Errors after
     # the command may have been sent are terminal and propagate so the forcing
     # thread can fail closed.
     def dispatch_slice(client, slice)
+      # Scripts keep their prebuilt argv and their raw reply (a Hash reply must
+      # not be Array()-wrapped into pairs).
+      return client.send_command(*slice.first[2]) if script_item?(slice.first)
+
       models = slice.map { |_, model, _, _| model }.uniq
       args = models.size == 1 ? same_model_args(slice, models.first) : mixed_model_args(slice)
       Array(client.send_command(*args))
@@ -51,6 +95,8 @@ module Emb
     # from a client-raised ProtocolError so it is not counted as a transport
     # retry).
     def resolve_slice(loader, slice, results)
+      return resolve_script_slice(loader, slice.first, results) if script_item?(slice.first)
+
       if slice_format(slice) == :values
         return ValuesBatch.resolve(loader, slice, results)
       end
@@ -75,6 +121,13 @@ module Emb
     def entry_values(results, offset, texts)
       values = results[offset, texts.size].map { |entry| entry&.unpack('e*') }
       values.size == 1 ? values.first : values
+    end
+
+    # A script call is always a singleton slice; its reply is parsed on the
+    # forcing thread. multi: comes from the argv text count (argv[3]).
+    def resolve_script_slice(loader, item, results)
+      multi = item[2][3].to_i > 1
+      loader.call(item, ScriptReplyDecode.parse_script_reply(results, multi: multi, decode: item[3]))
     end
 
     # The worker captures failures as outcomes; only the forcing thread

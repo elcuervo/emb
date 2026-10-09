@@ -10,6 +10,12 @@ module Emb
 
   BATCH_KEY = :emb
 
+  # Identity sentinel in slot 1 of a script batch item
+  # ([client, SCRIPT_ITEM, argv, decode]); embed items are
+  # [client, model, text, format]. A unique object matched with #equal? cannot
+  # collide with a model name.
+  SCRIPT_ITEM = Object.new
+
   # Raised by resolve_slice when the server reply carries fewer entries than
   # the slice's texts. Subclasses RedisClient::ProtocolError so the existing
   # fail-closed rescue/wrap paths treat it as a client error, but stays
@@ -20,22 +26,24 @@ module Emb
   BATCH_BLOCK = lambda do |items, loader, _args|
     items.group_by(&:first).each do |client, client_items|
       chunk = client.respond_to?(:batch_size) && client.batch_size ? client.batch_size : Emb.configuration.batch_size
+      # Script items never coalesce (each call is its own share); split them out
+      # before packing embeds by model.
+      embeds, scripts = client_items.partition { |item| !script_item?(item) }
 
-      slices = pack_slices(client_items, chunk)
-      if client.respond_to?(:parallel_batch?) && client.parallel_batch? && slices.size > 1
-        dispatch_parallel(client, slices, loader)
-      else
-        # Serial dispatch: one share in flight at a time. Redis errors fail
-        # closed with context; anything else is a local bug and is re-raised
-        # unchanged after the pending set is dropped.
-        slices.each do |slice|
-          resolve_slice(loader, slice, dispatch_slice(client, slice))
-        rescue RedisClient::Error => e
-          fail_batch!(e, slice: slice, budget: retry_budget(client))
-        rescue StandardError
-          clear_batch_pending!
-          raise
+      if client.respond_to?(:parallel_batch?) && client.parallel_batch?
+        # :batch — one or more plain EMB shares per model plus one share per
+        # script call, all dispatched concurrently. A lone share stays on the
+        # forcing thread (no worker spawn).
+        slices = batch_shares(embeds, scripts, chunk)
+        if slices.size > 1
+          dispatch_parallel(client, slices, loader)
+        else
+          dispatch_serial(client, slices, loader)
         end
+      else
+        # :multi — embeds coalesce across models into EMB/EMB.MULTI chunks,
+        # then scripts are sent one after another.
+        dispatch_serial(client, pack_slices(embeds, chunk) + scripts.map { |item| [item] }, loader)
       end
     end
   end
@@ -57,6 +65,14 @@ module Emb
       # Items carry [client, model, text, format] so the dispatch knows how to
       # shape and parse the reply.
       BatchLoader.for([client, model, text, format]).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
+    end
+
+    # Scripts join the same batch scope as embeds (same BATCH_KEY) so forcing
+    # either resolves both. default_value nil (not []): a failed script resolves
+    # to nil. The item carries the prebuilt EMB.EVAL/EMB.EVSHA argv and the
+    # normalized decode for resolve_slice.
+    def build_script_loader(client, argv, decode)
+      BatchLoader.for([client, SCRIPT_ITEM, argv, decode]).batch(default_value: nil, key: BATCH_KEY, &BATCH_BLOCK)
     end
 
     # Removes every pending item of the batch scope. batch-loader prunes
@@ -83,8 +99,8 @@ module Emb
     def fail_batch!(error, slice:, budget:)
       clear_batch_pending!
       attempts = transient_error?(error) ? budget + 1 : 1
-      models = slice.map { |_, model, _| model }.uniq.join(', ')
-      texts = slice.sum { |_, _, text| Array(text).size }
+      models = slice.map { |item| item_model(item) }.uniq.join(', ')
+      texts = slice.sum { |item| item_text_count(item) }
       message = "batch failed after #{attempts} attempt(s) " \
                 "(models: #{models}, #{texts} text(s)) #{error.class}: #{error.message}"
       begin

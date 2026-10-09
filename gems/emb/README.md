@@ -427,10 +427,20 @@ actually a float vector / hash at the decodable position, raises
 
 ### Lazy batching
 
-In `:batch` mode the shares fan out across the configured instances (one share per
-instance when the share count allows) or across the instance's pool connections when a
-single url is configured — a batch whose pieces take 60ms and 10ms completes in roughly
-the slowest share (~60ms) instead of the sum (~70ms). Deferred work is powered by the
+`lazy` has three modes. `false` (the default) is eager: one `EMB` per call. `:multi`
+defers, coalesces a scope into one `EMB` (single-model) or one `EMB.MULTI`
+(mixed-model), and sends those chunks **serially**. `:batch` also defers but never
+sends `EMB.MULTI`: a resolving scope is split into one plain `EMB <model> <text>...`
+share per model (chunked by `batch_size`), and every share — including **each
+deferred `eval`/`evalsha` call** — is dispatched concurrently, so a batch whose
+pieces take 60ms and 10ms completes in roughly the slowest share (~60ms) instead of
+the sum (~70ms).
+
+Shares fan out across the configured instances (one share per instance when the
+share count allows) or across the instance's pool connections when a single url is
+configured. Either mode fans out as soon as a scope resolves into more than one
+share — a two-model scope runs concurrently even when it fits in one `batch_size`
+chunk. Deferred work is powered by the
 [batch-loader](https://github.com/exAspArk/batch-loader) gem:
 
 ```ruby
@@ -443,12 +453,24 @@ l1 = Emb[:minilm]["hello"]
 l2 = Emb[:minilm]["world"]
 l3 = Emb[:bge]["bonjour"]
 
-# ...then consume them. The first use sends ONE EMB (single-model scope)
-# or ONE EMB.MULTI (mixed-model scope) for all three.
+# ...then consume them. :multi sends ONE EMB (single-model scope) or ONE
+# EMB.MULTI (mixed-model scope) serially; :batch sends TWO concurrent plain EMB
+# commands (one per model) instead.
 l1.sum  # => 12.345
 l2.sum  # => -0.678
 l3.sum  # => 3.141
 ```
+
+`eval` and `evalsha` honor the same mode: eager under `false`, deferred under
+`:multi` (sent one after another after the coalesced embeds) and `:batch` (each
+call is its own share, dispatched alongside the `EMB` shares). `decode:` applies
+when the value resolves, with the same results and errors as the eager path.
+
+> **Breaking change (gem ≥ next release):** under a deferred mode `eval`/`evalsha`
+> return a lazy value instead of sending immediately, so callers that set
+> `lazy: :multi`/`:batch` and expect a plain Hash/Array/String back at call time
+> must force that value (or use an eager client). The explicit `Emb.multi { }`
+> block API is unaffected.
 
 Each lazy value materializes to the same shape as the eager API: a single text
 yields an `Array<Float>`, multiple texts yield `Array<Array<Float>>`. For explicit
@@ -517,9 +539,11 @@ Emb.new(url: "redis://localhost:6379", lazy: :batch)
 ```
 
 Under `lazy: :multi`, `Emb[:minilm]["hello"]` returns a lazy embedding that sends
-`EMB` on first use (serial chunks; `EMB.MULTI` only for mixed-model scopes). Under `lazy: :batch`, the chunk shares
-execute concurrently — with multiple `url`s they fan out across instances. The
-default is eager (`lazy: false`). `Emb.multi` remains the explicit, eager,
+`EMB` on first use (serial chunks; `EMB.MULTI` only for mixed-model scopes).
+Under `lazy: :batch`, a resolving scope is split into one plain `EMB` per model plus
+one share per deferred script call, and every share executes concurrently —
+`EMB.MULTI` is never sent; with multiple `url`s the shares fan out across instances.
+The default is eager (`lazy: false`). `Emb.multi` remains the explicit, eager,
 deterministic composition API in every mode.
 
 ### Clearing the cache per request

@@ -15,6 +15,7 @@ Gem::Specification.new do |spec|
     'lib/**/*',
     'LICENSE',
     'README.md',
+    'CHANGELOG.md',
     'Gemfile'
   ]
 

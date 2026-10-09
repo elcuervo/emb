@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
 module Emb
-  # Opt-in float decoding for scripted replies — the decode: keyword on
-  # Emb::Commands#eval / #evalsha. Kept out of the Commands module so the
-  # command surface stays small. decode: is validated (normalize_decode) before
-  # any command is sent, then applied after reply parsing.
+  # Script-reply parsing and opt-in float decoding — the decode: keyword on
+  # Emb::Commands#eval / #evalsha. Kept out of the Commands module so both the
+  # command surface and the deferred batch resolver can share it. module_function
+  # makes every method callable as Emb::ScriptReplyDecode.foo(...) and, when
+  # included, a private instance method (how Commands uses it).
   module ScriptReplyDecode
-    private
+    module_function
 
     # Validates an (un-normalized) decode option and canonicalizes it. Raises
     # ArgumentError for unknown modes so callers fail before any command is
@@ -27,6 +28,35 @@ module Emb
       else
         raise ArgumentError, "unsupported decode mode #{decode.inspect} (supported: :f32 or {field => :f32})"
       end
+    end
+
+    # Converts a scripted reply (single value, or an array of per-text values
+    # for multi-text calls) through the hash grammar: a flat field/value pair
+    # array becomes a Hash, recursively. Pure even-length string lists are
+    # indistinguishable from two-field hashes on the RESP2 wire, so scripts
+    # that must return them should nest them (wrap the list in a table).
+    #
+    # decode is the normalized (see normalize_decode) opt-in float decoding:
+    #   nil                        → no decoding, parsing exactly as before
+    #   :f32                       → each value position is unpack('e*')'d when
+    #                                it is a packed float bulk; numeric arrays
+    #                                pass through unchanged (element types kept)
+    #   {field => :f32, ...}       → after hash parsing, the named field(s) of
+    #                                each hash reply decode as :f32 (fields
+    #                                absent from a reply are left untouched)
+    def parse_script_reply(reply, multi:, decode: nil)
+      parsed = (multi ? reply : [reply]).map { |v| script_hash(v) }
+      decoded = apply_decode(parsed, decode)
+      multi ? decoded : decoded.first
+    end
+
+    def script_hash(value)
+      return value unless value.is_a?(Array) && value.size.even?
+
+      pairs = value.each_slice(2).to_a
+      return value unless pairs.all? { |field, _| field.is_a?(String) }
+
+      pairs.to_h { |field, val| [field, script_hash(val)] }
     end
 
     # Applies a normalized decode to the parsed (script_hash'ed) reply array.
