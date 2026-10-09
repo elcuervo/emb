@@ -217,7 +217,8 @@ emb-top -nodes emb.internal -tls -tls-server-name emb.internal
 ### Watching a fleet
 
 With more than one node monitored, `emb-top` renders a cluster view: a fleet
-verdict, inbound/outbound totals with a rolling trend, a load-distribution bar,
+verdict, inbound/outbound totals with a rolling trend, a live **traffic chart**
+(one stream line per node, coloured to match its row), a load-distribution bar,
 one **ingress row per node** (inbound req/s, its share of the fleet against the
 `1/N` expectation, a proportional bar and a trend sparkline), and a cross-node
 **imbalance panel** that names the node to look at. Select a row with `j`/`k`
@@ -225,11 +226,12 @@ and press enter to open that node's per-model dashboard; escape returns to the
 fleet. The single-node dashboard is unchanged when exactly one node is
 monitored.
 
-![The emb-top cluster view: a fleet banner and totals over a load-distribution bar and one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — with a cross-node imbalance panel below](assets/emb-top-cluster-833c4a60.gif)
+![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-04bf4380.gif)
 
 *Two nodes under load · emb-top watching `127.0.0.1:16379` and
-`127.0.0.1:16380`. The ingress rows and load bar split the fleet's inbound
-traffic; the imbalance panel checks it across nodes. Re-record with
+`127.0.0.1:16380`. The traffic chart streams each node's inbound rate in its
+row's colour; the load bar and ingress rows split the fleet's inbound traffic,
+and the imbalance panel checks it across nodes. Re-record with
 `just website-clusterviz`.*
 
 - `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a

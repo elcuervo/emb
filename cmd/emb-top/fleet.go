@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NimbleMarkets/ntcharts/canvas/runes"
+	"github.com/NimbleMarkets/ntcharts/linechart/streamlinechart"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -24,9 +26,12 @@ const (
 	orphanGrace     = 5 * time.Minute
 
 	// fleetChrome is the fixed number of non-node rows the fleet view spends on
-	// the header, banner, membership, traffic totals, load bar, ingress header,
-	// node legend, imbalance panel and footer.
-	fleetChrome = 13
+	// the header, banner, membership, traffic totals, the TRAFFIC chart, load
+	// bar, ingress header, node legend, imbalance panel and footer.
+	fleetChrome = 20
+	// trafficH is the traffic chart's canvas height (its border and caption add
+	// three more rows).
+	trafficH = 4
 )
 
 // fleetNode is one monitored node: its identity, its independent poll state
@@ -94,6 +99,7 @@ type fleet struct {
 	scroll        int
 
 	aggHistory []float64
+	traffic    streamlinechart.Model
 
 	tickScheduled bool
 	lastRefresh   time.Time
@@ -143,10 +149,19 @@ func newFleetWith(resolved []resolvedNode, opts *options, r resolver, mk func(ad
 		}
 	}
 	f.aggHistory = nil
+	f.traffic = newTrafficChart(60, trafficH)
 	for _, rn := range resolved {
 		f.addNode(rn)
 	}
 	return f
+}
+
+// newTrafficChart builds the fleet's inbound-traffic chart: one stream line
+// per node, coloured to match its ingress row.
+func newTrafficChart(w, h int) streamlinechart.Model {
+	return streamlinechart.New(w, h,
+		streamlinechart.WithStyles(runes.ArcLineStyle, reqLineStyle),
+		streamlinechart.WithLineChart(yFmtChart(w, h, yFmtRate)))
 }
 
 func (f *fleet) addNode(rn resolvedNode) *fleetNode {
@@ -434,6 +449,8 @@ func (f *fleet) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			n.tui.reset()
 		}
 		f.aggHistory = nil
+		f.traffic.ClearAllData()
+		f.traffic.Draw()
 		return f, nil
 	case "esc":
 		f.detail = false
@@ -520,6 +537,32 @@ func (f *fleet) pushAggregate() {
 	if len(f.aggHistory) > f.opts.window {
 		f.aggHistory = f.aggHistory[len(f.aggHistory)-f.opts.window:]
 	}
+	f.drawTraffic()
+}
+
+// drawTraffic rebuilds the traffic chart from each node's own window, so the
+// chart is a pure function of the samples already held (no separate history to
+// keep in step). One stream line per node, coloured to match its row.
+func (f *fleet) drawTraffic() {
+	ch := &f.traffic
+	ch.ClearAllData()
+	names := make([]string, 0, len(f.nodes))
+	for _, n := range f.nodes {
+		_, window, _ := n.tui.sampler.Snapshot()
+		if len(window) == 0 {
+			continue
+		}
+		name := fmt.Sprintf("%04d", n.firstSeen) // unique, stable draw order
+		ch.SetDataSetStyles(name, runes.ArcLineStyle, lipgloss.NewStyle().Foreground(nodeColor(n.firstSeen)))
+		for _, v := range resample(ratesOf(window), f.trafficWidth()) {
+			ch.PushDataSet(name, v)
+		}
+		names = append(names, name)
+	}
+	if ch.ViewMaxY() <= ch.ViewMinY() {
+		ch.SetViewYRange(0, 1)
+	}
+	ch.DrawDataSets(names)
 }
 
 // ---- layout ----
@@ -529,6 +572,12 @@ func (f *fleet) layout() {
 		n.tui.width, n.tui.height = f.width, f.height
 		n.tui.layoutCharts()
 	}
+	w := widthOr(f.width, 120) - 4 // the panel border and padding add four columns
+	if w < 20 {
+		w = 20
+	}
+	f.traffic.Resize(w, trafficH)
+	f.drawTraffic()
 }
 
 func (f *fleet) visibleNodes() int {
@@ -579,6 +628,8 @@ func (f *fleet) fleetView() string {
 	b.WriteString(f.membershipView())
 	b.WriteString("\n")
 	b.WriteString(f.totalsView())
+	b.WriteString("\n")
+	b.WriteString(f.trafficView())
 	b.WriteString("\n")
 	b.WriteString(f.loadView())
 	b.WriteString("\n")
@@ -663,6 +714,21 @@ func (f *fleet) fleetBannerView() string {
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
 }
 
+// trafficView is the fleet's inbound traffic over the window: one stream line
+// per node, coloured to match its ingress row and load segment.
+func (f *fleet) trafficView() string {
+	caption := labelStyle.Render("TRAFFIC ") +
+		dimStyle.Render("inbound req/s per node over the last polls · older ←  → newer")
+	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(caption) + "\n" +
+		borderStyle.Render(f.traffic.View())
+}
+
+// nodeColor is the identity colour shared by a node's chart line, load
+// segment and ingress bar, keyed to its stable first-seen index.
+func nodeColor(firstSeen int) lipgloss.Color {
+	return lipgloss.Color(modelColors[firstSeen%len(modelColors)])
+}
+
 // totalsView is the fleet's inbound/outbound totals with a sparkline of the
 // aggregate request rate over the window.
 func (f *fleet) totalsView() string {
@@ -694,10 +760,12 @@ func (f *fleet) totalsView() string {
 func (f *fleet) loadView() string {
 	reqTotal, _, _, _, _ := f.aggregate()
 	rates := make([]float64, len(f.nodes))
+	colors := make([]lipgloss.Color, len(f.nodes))
 	for i, n := range f.nodes {
 		if n.reachable {
 			rates[i] = n.tui.sampler.Latest.ReqRate
 		}
+		colors[i] = nodeColor(n.firstSeen)
 	}
 	detail := "no traffic yet"
 	if reqTotal > 0 {
@@ -711,7 +779,7 @@ func (f *fleet) loadView() string {
 			f.nodes[busiest].displayName(), top/reqTotal*100, 100/float64(len(f.nodes)))
 	}
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(
-		labelStyle.Render("LOAD ") + stackedShareBar(rates, 36) + "  " + dimStyle.Render(detail))
+		labelStyle.Render("LOAD ") + stackedShareBar(rates, colors, 36) + "  " + dimStyle.Render(detail))
 }
 
 // sparkRamp is the block-character ramp for trend sparklines (low → high).
@@ -815,8 +883,8 @@ func shareCells(rates []float64, w int) []int {
 }
 
 // stackedShareBar draws one segment per rate, its width its share of the total,
-// coloured by node identity, so the fleet's whole load is one bar.
-func stackedShareBar(rates []float64, w int) string {
+// coloured to match the node's row, so the fleet's whole load is one bar.
+func stackedShareBar(rates []float64, colors []lipgloss.Color, w int) string {
 	if w < 1 {
 		w = 1
 	}
@@ -825,7 +893,11 @@ func stackedShareBar(rates []float64, w int) string {
 	used := 0
 	for i, n := range cells {
 		if n > 0 {
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color(modelColors[i%len(modelColors)]))
+			c := nodeColor(i)
+			if i < len(colors) {
+				c = colors[i]
+			}
+			style := lipgloss.NewStyle().Foreground(c)
 			b.WriteString(style.Render(strings.Repeat("█", n)))
 		}
 		used += n
@@ -834,6 +906,42 @@ func stackedShareBar(rates []float64, w int) string {
 		b.WriteString(dimStyle.Render(strings.Repeat("░", w-used)))
 	}
 	return b.String()
+}
+
+// trafficWidth is the chart's graphing width (the canvas minus its Y axis),
+// the number of columns a series should fill.
+func (f *fleet) trafficWidth() int {
+	if w := f.traffic.GraphWidth(); w > 0 {
+		return w
+	}
+	return f.traffic.Width()
+}
+
+// resample linearly interpolates vals across w columns (oldest left, newest
+// right), so a short window still fills the chart smoothly instead of
+// clinging to its right edge or stepping in wide plateaus.
+func resample(vals []float64, w int) []float64 {
+	if len(vals) == 0 || w <= 0 {
+		return nil
+	}
+	out := make([]float64, w)
+	if len(vals) == 1 || w == 1 {
+		for i := range out {
+			out[i] = vals[len(vals)-1]
+		}
+		return out
+	}
+	for x := 0; x < w; x++ {
+		pos := float64(x) / float64(w-1) * float64(len(vals)-1)
+		i := int(pos)
+		if i >= len(vals)-1 {
+			out[x] = vals[len(vals)-1]
+			continue
+		}
+		frac := pos - float64(i)
+		out[x] = vals[i] + (vals[i+1]-vals[i])*frac
+	}
+	return out
 }
 
 // ratesOf extracts the request-rate series from a node's window.
@@ -975,7 +1083,7 @@ func (f *fleet) ingressRow(n *fleetNode, reqTotal, maxV float64, selected bool, 
 		return labelStyle.Render(s)
 	}
 
-	row := cursor + dot + " " + headerStyle.Width(l.identW).Render(trimModelLen(ident, l.identW))
+	row := cursor + dot + " " + lipgloss.NewStyle().Bold(true).Foreground(nodeColor(n.firstSeen)).Width(l.identW).Render(trimModelLen(ident, l.identW))
 	if l.showIn {
 		row += " " + num(colRight(fmtRate(rate)+" r/s", l.inW))
 	}
@@ -990,7 +1098,7 @@ func (f *fleet) ingressRow(n *fleetNode, reqTotal, maxV float64, selected bool, 
 	if state != "" {
 		row += " " + stateStyle.Render(padTo(state, zoneW))
 	} else {
-		fill := lipgloss.NewStyle().Foreground(lipgloss.Color(modelColors[n.firstSeen%len(modelColors)]))
+		fill := lipgloss.NewStyle().Foreground(nodeColor(n.firstSeen))
 		row += " " + inboundBar(rate/maxV, l.barW, fill)
 		if l.showSpark {
 			_, window, _ := n.tui.sampler.Snapshot()

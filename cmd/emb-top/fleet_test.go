@@ -329,6 +329,17 @@ func TestStalledNodeDoesNotBlockTheNextTick(t *testing.T) {
 
 // ---- 4.x: rendering ----
 
+func TestTrafficChartDrawsSeriesPerNode(t *testing.T) {
+	f := fleetOfThree(t)
+	if view := f.traffic.View(); !strings.ContainsAny(view, "─╭╮╰╯") {
+		t.Fatalf("traffic chart has no line runes:\n%s", view)
+	}
+	lines := strings.Split(strings.TrimRight(f.trafficView(), "\n"), "\n")
+	if want := trafficH + 3; len(lines) != want {
+		t.Fatalf("trafficView is %d lines, want %d (caption + bordered chart)", len(lines), want)
+	}
+}
+
 func TestSparklineRampScales(t *testing.T) {
 	got := sparkline([]float64{0, 1, 2, 3, 4, 5, 6, 7}, 8, okStyle)
 	if got != "▁▂▃▄▅▆▇█" {
@@ -361,7 +372,7 @@ func TestStackedShareBarWidthAndProportion(t *testing.T) {
 	if cells[0] != 20 || cells[1] != 0 {
 		t.Fatalf("shareCells(3:0, 20) = %v, want [20 0]", cells)
 	}
-	if w := lipgloss.Width(stackedShareBar([]float64{3, 1}, 20)); w != 20 {
+	if w := lipgloss.Width(stackedShareBar([]float64{3, 1}, nil, 20)); w != 20 {
 		t.Fatalf("stacked bar width = %d, want 20", w)
 	}
 }
@@ -398,6 +409,7 @@ func TestFleetRowsFitWidth(t *testing.T) {
 	for _, w := range []int{80, 100, 120, 160} {
 		f := fleetOfThree(t)
 		f.width, f.height = w, 40
+		f.layout()
 		for _, line := range strings.Split(strings.TrimRight(f.fleetView(), "\n"), "\n") {
 			if got := lipgloss.Width(line); got > w {
 				t.Errorf("width %d: line is %d cols wide:\n%s", w, got, line)
@@ -439,6 +451,7 @@ func fleetOfThree(t *testing.T) *fleet {
 	seedNode(f.nodes[0], 10, 20)
 	seedNode(f.nodes[1], 5, 10)
 	seedNode(f.nodes[2], 0, 0)
+	f.layout()
 	return f
 }
 
@@ -446,7 +459,7 @@ func TestFleetViewRendersTrafficAndRows(t *testing.T) {
 	f := fleetOfThree(t)
 	view := f.View()
 	for _, want := range []string{
-		"INGRESS", "LOAD", "IMBALANCE", "req/s", "trend",
+		"TRAFFIC", "INGRESS", "LOAD", "IMBALANCE", "req/s", "trend",
 		"10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379",
 	} {
 		if !strings.Contains(view, want) {
