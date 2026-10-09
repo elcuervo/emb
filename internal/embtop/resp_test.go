@@ -248,7 +248,7 @@ func TestClientPollPipelinesInOneWrite(t *testing.T) {
 		"cpu_sys_usec": 500, "goroutines": 17,
 		"cache_hits": 9, "cache_misses": 1, "cache_evictions": 0,
 	})
-	s, addr := startFake(t, models, info, stats, encodeArray())
+	s, addr := startFake(t, models, info, stats, encodeBulk("gomaxprocs:4\r\n"), encodeArray())
 
 	c := NewClient(addr, "", false)
 	if err := c.Dial(); err != nil {
@@ -268,7 +268,7 @@ func TestClientPollPipelinesInOneWrite(t *testing.T) {
 			got = append(got, strings.ToUpper(a))
 		}
 	}
-	want := []string{"EMB.MODELS", "EMB.INFO", "A", "EMB.STATS", "MONITOR", "0", "512"}
+	want := []string{"EMB.MODELS", "EMB.INFO", "A", "EMB.STATS", "INFO", "CPU", "MONITOR", "0", "512"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("pipeline mismatch: got %v want %v", got, want)
 	}
@@ -278,6 +278,9 @@ func TestClientPollPipelinesInOneWrite(t *testing.T) {
 	}
 	if res.ActiveRequests != 2 || res.Connections != 3 || res.MemMB != 512 {
 		t.Fatalf("bad gauges parse: %+v", res)
+	}
+	if res.GoMaxProcs != 4 {
+		t.Fatalf("bad gomaxprocs parse: %+v", res)
 	}
 	if res.CacheHits != 9 || res.CacheMisses != 1 {
 		t.Fatalf("bad cache parse: %+v", res)
@@ -300,7 +303,7 @@ func TestClientPollPipelinesInOneWrite(t *testing.T) {
 func TestClientPollEmptyModels(t *testing.T) {
 	models := modelsReply()
 	stats := statsReply(map[string]int64{"uptime_secs": 1, "total_requests": 0})
-	s, addr := startFake(t, models, stats, encodeArray())
+	s, addr := startFake(t, models, stats, encodeBulk("gomaxprocs:2\r\n"), encodeArray())
 	c := NewClient(addr, "", false)
 	if err := c.Dial(); err != nil {
 		t.Fatalf("dial: %v", err)
@@ -313,10 +316,11 @@ func TestClientPollEmptyModels(t *testing.T) {
 	if len(res.Models) != 0 || len(res.PerModel) != 0 {
 		t.Fatalf("expected no models, got %+v", res)
 	}
-	if cmds := s.commands(); len(cmds) != 3 ||
+	if cmds := s.commands(); len(cmds) != 4 ||
 		len(cmds[0]) != 1 || cmds[0][0] != "EMB.MODELS" ||
 		len(cmds[1]) != 1 || cmds[1][0] != "EMB.STATS" ||
-		len(cmds[2]) != 3 || cmds[2][0] != "MONITOR" {
+		len(cmds[2]) != 2 || cmds[2][0] != "INFO" || cmds[2][1] != "cpu" ||
+		len(cmds[3]) != 3 || cmds[3][0] != "MONITOR" {
 		t.Fatalf("unexpected pipeline: %v", cmds)
 	}
 }
@@ -348,7 +352,7 @@ func TestSanitizeStripsControlCharacters(t *testing.T) {
 func TestClientParsesSanitizedModelNames(t *testing.T) {
 	models := modelsReply([]string{"evil\x1b[2Jname", "384"})
 	stats := statsReply(map[string]int64{"uptime_secs": 1})
-	_, addr := startFake(t, models, stats, encodeArray())
+	_, addr := startFake(t, models, stats, encodeBulk("gomaxprocs:2\r\n"), encodeArray())
 	c := NewClient(addr, "", false)
 	if err := c.Dial(); err != nil {
 		t.Fatalf("dial: %v", err)

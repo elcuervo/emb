@@ -2,7 +2,12 @@ package resp
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"math/big"
 	"net"
 	"strings"
 	"testing"
@@ -324,5 +329,78 @@ func TestHelloRejectsUnknownVersion(t *testing.T) {
 	}
 	if err := c.Hello(3); err == nil || !strings.Contains(err.Error(), "not connected") {
 		t.Fatalf("Hello(3) while disconnected = %v, want not connected", err)
+	}
+}
+
+// generateDNSNameCert makes a server certificate that carries a DNS name but
+// no IP SAN, so verifying the dialed IP must fail while the name succeeds.
+func generateDNSNameCert(t *testing.T, dns string) tls.Certificate {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:              []string{dns},
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv, Leaf: cert}
+}
+
+func TestDialVerifiesTLSServerNameWhileDialingAddress(t *testing.T) {
+	cert := generateDNSNameCert(t, "emb.test")
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				// Read completes the server side of the handshake; hold the
+				// connection open until the client goes away.
+				buf := make([]byte, 1)
+				_, _ = c.Read(buf)
+			}(conn)
+		}
+	}()
+	addr := ln.Addr().String()
+
+	roots := x509.NewCertPool()
+	roots.AddCert(cert.Leaf)
+
+	// Verifying the name succeeds even though the client dials an IP address.
+	c := NewClient(addr, "", true)
+	c.SetTLSConfig(&tls.Config{RootCAs: roots})
+	c.SetTLSServerName("emb.test")
+	if err := c.Dial(); err != nil {
+		t.Fatalf("dial with -tls-server-name: %v", err)
+	}
+	_ = c.Close()
+
+	// Without the override the handshake verifies the IP, which the cert does
+	// not carry, so it must fail: proving the dial/server-name split.
+	bad := NewClient(addr, "", true)
+	bad.SetTLSConfig(&tls.Config{RootCAs: roots})
+	if err := bad.Dial(); err == nil {
+		t.Fatal("expected IP verification to fail against a DNS-only certificate")
 	}
 }

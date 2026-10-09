@@ -19,6 +19,8 @@ func TestHealthVerdicts(t *testing.T) {
 		chip string
 	}{
 		{"no data", healthInput{connected: true, polls: 1}, healthNoData, ""},
+		{"disconnected before two polls", healthInput{connected: false, polls: 1}, healthCritical, "reconnecting"},
+		{"never polled is no data", healthInput{connected: false, polls: 0}, healthNoData, ""},
 		{"healthy", healthInput{connected: true, polls: 5}, healthHealthy, "err   0.0%"},
 		{"errors degrade", healthInput{connected: true, polls: 5, errRatio: 0.02}, healthDegraded, "err   2.0%"},
 		{"errors critical", healthInput{connected: true, polls: 5, errRatio: 0.10}, healthCritical, "err  10.0%"},
@@ -91,6 +93,123 @@ func TestHealthStateNormalizesCPUByCores(t *testing.T) {
 	m.sampler.Latest.CPUPercent = 100 * float64(runtime.NumCPU())
 	if got := m.healthState().cpuPct; got != 100 {
 		t.Fatalf("cpuPct = %v, want 100", got)
+	}
+}
+
+func TestCPUUsageUsesNodeOwnParallelism(t *testing.T) {
+	// A node reports its own gomaxprocs through INFO cpu; CPU is measured
+	// against that, not against the machine running emb-top.
+	m := newTUI(nil, time.Second, 120)
+	m.sampler.Latest.CPUPercent = 400
+	m.sampler.Latest.GoMaxProcs = 4
+	if got := m.healthState().cpuPct; got != 100 {
+		t.Fatalf("cpuPct = %v, want 100 (400%% of 4 cores)", got)
+	}
+}
+
+func TestFleetHealthVerdicts(t *testing.T) {
+	node := func(label string, rate float64) fleetNodeInput {
+		return fleetNodeInput{
+			label:   label,
+			health:  healthInput{connected: true, polls: 5},
+			reqRate: rate,
+		}
+	}
+	withP95 := func(n fleetNodeInput, p95 int64) fleetNodeInput { n.health.p95Us = p95; return n }
+
+	cases := []struct {
+		name   string
+		nodes  []fleetNodeInput
+		want   healthStatus
+		reason string
+	}{
+		{"no data", []fleetNodeInput{{label: "a", health: healthInput{connected: true, polls: 1}}}, healthNoData, ""},
+		{"healthy", []fleetNodeInput{node("a", 10), node("b", 10)}, healthHealthy, ""},
+		{"unreachable is critical", []fleetNodeInput{
+			node("a", 10),
+			{label: "b", health: healthInput{connected: false, polls: 5}},
+		}, healthCritical, ""},
+		{"skew degrades", []fleetNodeInput{node("a", 90), node("b", 5), node("c", 5)}, healthDegraded, "skew"},
+		{"two-node skew degrades", []fleetNodeInput{node("a", 90), node("b", 10)}, healthDegraded, "skew"},
+		{"never-reached node is critical", []fleetNodeInput{
+			node("a", 10),
+			{label: "b", health: healthInput{connected: false, polls: 0}, unreachable: true},
+		}, healthCritical, ""},
+		{"cache spread is not a fault", []fleetNodeInput{
+			func() fleetNodeInput { n := node("a", 10); n.hasCache, n.cachePct = true, 5; return n }(),
+			func() fleetNodeInput { n := node("b", 10); n.hasCache, n.cachePct = true, 95; return n }(),
+		}, healthHealthy, ""},
+		{"cold cache after restart degrades", []fleetNodeInput{
+			func() fleetNodeInput {
+				n := node("a", 10)
+				n.hasCache, n.cachePct, n.uptimeSecs = true, 5, 10
+				return n
+			}(),
+			func() fleetNodeInput {
+				n := node("b", 10)
+				n.hasCache, n.cachePct, n.uptimeSecs = true, 80, 3600
+				return n
+			}(),
+		}, healthDegraded, "cold cache"},
+		{"slow peer degrades", []fleetNodeInput{
+			withP95(node("a", 10), 100),
+			withP95(node("b", 10), 100),
+			withP95(node("c", 10), 1000),
+		}, healthDegraded, "slow"},
+		{"two-node slow peer degrades", []fleetNodeInput{
+			withP95(node("a", 10), 100),
+			withP95(node("b", 10), 1000),
+		}, healthDegraded, "slow"},
+	}
+	for _, tc := range cases {
+		got, sigs := fleetHealth(tc.nodes)
+		if got != tc.want {
+			t.Errorf("%s: status = %v, want %v", tc.name, got, tc.want)
+		}
+		if tc.reason != "" {
+			found := false
+			for _, s := range sigs {
+				if strings.Contains(s.text, tc.reason) {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s: no chip containing %q in %+v", tc.name, tc.reason, sigs)
+			}
+		}
+	}
+}
+
+func TestFleetBannerNamesDegradedNode(t *testing.T) {
+	a, b := "10.0.0.1:6379", "10.0.0.2:6379"
+	f := fakeFleet(nil, map[string]dashboardClient{
+		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b},
+	}, rn(a), rn(b))
+	f.width = 200
+	for _, n := range f.nodes {
+		n.tui.connected = true
+		n.tui.polls = 5
+		n.tui.sampler.Latest.ReqRate = 100
+	}
+	f.nodes[1].tui.sampler.Latest.ErrRate = 5 // 5% error ratio: degraded
+	banner := f.fleetBannerView()
+	if !strings.Contains(banner, "10.0.0.2:6379") || !strings.Contains(banner, "err") {
+		t.Fatalf("banner does not name the degraded node: %q", banner)
+	}
+}
+
+func TestFleetBannerNamesOffendingNode(t *testing.T) {
+	a, b, c := "10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379"
+	f := fakeFleet(nil, map[string]dashboardClient{
+		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b}, c: &fakeNodeClient{addr: c},
+	}, rn(a), rn(b), rn(c))
+	f.width = 160
+	seedNode(f.nodes[0], 0, 900)
+	seedNode(f.nodes[1], 0, 50)
+	seedNode(f.nodes[2], 0, 50)
+	banner := f.fleetBannerView()
+	if !strings.Contains(banner, "skew") {
+		t.Fatalf("banner has no skew reason: %q", banner)
 	}
 }
 

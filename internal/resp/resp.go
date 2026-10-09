@@ -57,6 +57,14 @@ type Client struct {
 	useTLS    bool
 	ioTimeout time.Duration
 
+	// tlsServerName overrides the name verified by the TLS handshake, so a
+	// client can dial one address (an IP a name resolved to) while still
+	// verifying the certificate against the name. Empty falls back to the
+	// address's host. tlsConfig is an optional base configuration (custom
+	// roots, client certificates); the server name is applied on top.
+	tlsServerName string
+	tlsConfig     *tls.Config
+
 	conn net.Conn
 	r    *bufio.Reader
 	w    *bufio.Writer
@@ -74,6 +82,20 @@ func NewClient(addr, password string, useTLS bool) *Client {
 
 // Addr returns the configured address.
 func (c *Client) Addr() string { return c.addr }
+
+// SetAddr replaces the dial address, so a client can follow a name whose
+// records moved without being reconstructed. The current connection (if any)
+// is left alone; the next EnsureConn dials the new address.
+func (c *Client) SetAddr(addr string) { c.addr = addr }
+
+// SetTLSServerName overrides the name the TLS handshake verifies, so a client
+// can dial an address while verifying the certificate against a DNS name.
+func (c *Client) SetTLSServerName(name string) { c.tlsServerName = name }
+
+// SetTLSConfig installs a base TLS configuration (custom roots, client
+// certificates). The verified server name is applied on top of it, so this
+// never overrides SetTLSServerName.
+func (c *Client) SetTLSConfig(cfg *tls.Config) { c.tlsConfig = cfg }
 
 // Proto returns the version negotiated on the current connection (2 when none
 // has been negotiated, which is RESP2's default).
@@ -147,10 +169,19 @@ func (c *Client) Dial() error {
 		if h, _, err := net.SplitHostPort(c.addr); err == nil {
 			host = h
 		}
-		tc := tls.Client(nc, &tls.Config{
-			ServerName: host,
-			MinVersion: tls.VersionTLS12,
-		})
+		name := c.tlsServerName
+		if name == "" {
+			name = host
+		}
+		cfg := &tls.Config{MinVersion: tls.VersionTLS12}
+		if c.tlsConfig != nil {
+			cfg = c.tlsConfig.Clone()
+			if cfg.MinVersion == 0 {
+				cfg.MinVersion = tls.VersionTLS12
+			}
+		}
+		cfg.ServerName = name
+		tc := tls.Client(nc, cfg)
 		if err := tc.Handshake(); err != nil {
 			_ = nc.Close()
 			return fmt.Errorf("tls handshake %s: %w", c.addr, err)

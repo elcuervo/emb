@@ -41,6 +41,8 @@ func TestRunOnceRates(t *testing.T) {
 			return encodeArray(
 				encodeArray(encodeInt(seq), encodeInt(1_700_000_000_000_000), encodeBulk("m"), encodeInt(1), encodeInt(int64(400)+int64(round)), encodeInt(0)),
 			)
+		case "INFO":
+			return encodeBulk("gomaxprocs:4\r\n")
 		default:
 			return encodeError("ERR unknown " + cmd[0])
 		}
@@ -120,6 +122,8 @@ func TestRunOnceKeepsFirstSeenModelOrder(t *testing.T) {
 			return statsReply(map[string]int64{"uptime_secs": int64(round)})
 		case "MONITOR":
 			return encodeArray()
+		case "INFO":
+			return encodeBulk("gomaxprocs:4\r\n")
 		default:
 			return encodeError("ERR unknown " + cmd[0])
 		}
@@ -139,6 +143,27 @@ func TestRunOnceKeepsFirstSeenModelOrder(t *testing.T) {
 		if got := modelSectionOrder(line); !slices.Equal(got, want) {
 			t.Errorf("line %d model order = %v, want %v\n%s", i+2, got, want, line)
 		}
+	}
+}
+
+func TestFleetAggregateCacheHitRateStaysBounded(t *testing.T) {
+	// Two nodes at 100% and 0% must aggregate to 50%, not 150%.
+	a := &onceNode{label: "a", sampler: NewSampler(4), res: &PollResult{CacheHits: 100}, sampled: true}
+	a.sampler.Push(&PollResult{CacheHits: 100})
+	b := &onceNode{label: "b", sampler: NewSampler(4), res: &PollResult{CacheMisses: 100}, sampled: true}
+	b.sampler.Push(&PollResult{CacheMisses: 100})
+
+	out := string(appendFleetAggregate(nil, []*onceNode{a, b}))
+	v, ok := parseKV(out, "cache_hit_rate")
+	if !ok {
+		t.Fatalf("no cache_hit_rate in %q", out)
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		t.Fatalf("cache_hit_rate %q: %v", v, err)
+	}
+	if f != 50 {
+		t.Fatalf("aggregate cache_hit_rate = %v, want 50 (ratio of summed counters)", f)
 	}
 }
 

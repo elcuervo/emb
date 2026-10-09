@@ -68,6 +68,7 @@ type PollResult struct {
 	CacheHits       int64
 	CacheMisses     int64
 	CacheEvictions  int64
+	GoMaxProcs      int // node's own parallelism from INFO cpu (0 when absent)
 
 	Models   []ModelListEntry // EMB.MODELS reply
 	PerModel map[string]*ModelStats
@@ -158,6 +159,11 @@ func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
 		return nil, fmt.Errorf("EMB.STATS: %w", err)
 	}
 
+	cpuRep, err := c.ReadReply()
+	if err != nil {
+		return nil, err
+	}
+
 	monRep, err := c.ReadReply()
 	if err != nil {
 		return nil, err
@@ -167,6 +173,7 @@ func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
 	}
 
 	res := parseStats(statsRep)
+	res.GoMaxProcs = parseInfoCPU(cpuRep)
 	res.Models = parseModelList(modelsRep)
 	res.PerModel = perModel
 	res.Events = parseEvents(monRep)
@@ -216,6 +223,11 @@ func (c *Client) writePoll(known []string, afterSeq uint64) error {
 		}
 	}
 	if err := c.WriteArgv("EMB.STATS"); err != nil {
+		return err
+	}
+	// INFO cpu carries the node's own gomaxprocs, so CPU is measured against
+	// the node's parallelism rather than the machine running emb-top.
+	if err := c.WriteArgv("INFO", "cpu"); err != nil {
 		return err
 	}
 	return c.WriteArgv("MONITOR", strconv.FormatUint(afterSeq, 10), "512")
@@ -307,6 +319,24 @@ func parseStats(r Reply) *PollResult {
 		CacheEvictions:  intField(m, "cache_evictions"),
 	}
 	return res
+}
+
+// parseInfoCPU extracts the node's own gomaxprocs from an INFO cpu reply (a
+// bulk string of key:value lines). 0 when absent or unparseable, so callers
+// fall back to their local processor count.
+func parseInfoCPU(r Reply) int {
+	if r.Type != '$' && r.Type != '+' {
+		return 0
+	}
+	for _, line := range strings.Split(r.Str, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "gomaxprocs:"); ok {
+			n, _ := strconv.Atoi(strings.TrimSpace(v))
+			if n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 // parseModelStats decodes the EMB.INFO <model> reply.

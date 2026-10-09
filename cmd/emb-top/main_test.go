@@ -238,8 +238,9 @@ type fakePoller struct {
 	seqs  []uint64
 }
 
-func (f *fakePoller) Addr() string { return "fake:6379" }
-func (f *fakePoller) Close() error { return nil }
+func (f *fakePoller) Addr() string   { return "fake:6379" }
+func (f *fakePoller) SetAddr(string) {}
+func (f *fakePoller) Close() error   { return nil }
 
 func (f *fakePoller) EnsureConn() (bool, error) {
 	f.mu.Lock()

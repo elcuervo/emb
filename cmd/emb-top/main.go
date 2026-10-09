@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -73,62 +74,135 @@ var (
 	}
 )
 
-func main() {
-	addr := flag.String("addr", "localhost:6379", "emb node address (host:port)")
-	interval := flag.Duration("interval", time.Second, "poll interval")
-	password := flag.String("password", os.Getenv("EMB_TOP_PASSWORD"),
-		"AUTH password (prefer $EMB_TOP_PASSWORD: command-line values are visible in process listings)")
-	useTLS := flag.Bool("tls", false, "connect over TLS")
-	once := flag.Bool("once", false, "headless mode: print polling lines and exit")
-	samples := flag.Int("samples", 10, "number of polls in -once mode")
-	frames := flag.Bool("frames", false, "headless mode: stream the dashboard's rendered frames as JSON lines")
-	window := flag.Int("window", 120, "history window (number of polls)")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	flag.Parse()
+// options is the parsed command line.
+type options struct {
+	addr          string
+	nodes         nodeList
+	nodesCSV      string
+	interval      time.Duration
+	password      string
+	useTLS        bool
+	tlsServerName string
+	once          bool
+	samples       int
+	frames        bool
+	window        int
+	showVersion   bool
 
-	if *showVersion {
-		fmt.Println(version)
-		return
+	specs []nodeSpec // parsed from addr/nodes/nodesCSV
+}
+
+// parseFlags parses args into options. It is separate from main so the node
+// flags and their defaulting are covered by a plain test.
+func parseFlags(args []string, getenv func(string) string) (*options, error) {
+	o := &options{}
+	fs := flag.NewFlagSet("emb-top", flag.ContinueOnError)
+	fs.StringVar(&o.addr, "addr", "", "emb node address (host:port); compatibility alias for -node")
+	fs.Var(&o.nodes, "node", "emb node to monitor (host, host:port or DNS name); repeatable")
+	fs.StringVar(&o.nodesCSV, "nodes", "", "comma-separated emb nodes to monitor")
+	fs.DurationVar(&o.interval, "interval", time.Second, "poll interval")
+	fs.StringVar(&o.password, "password", getenv("EMB_TOP_PASSWORD"),
+		"AUTH password (prefer $EMB_TOP_PASSWORD: command-line values are visible in process listings)")
+	fs.BoolVar(&o.useTLS, "tls", false, "connect over TLS")
+	fs.StringVar(&o.tlsServerName, "tls-server-name", "",
+		"TLS name to verify when it differs from the dialed address")
+	fs.BoolVar(&o.once, "once", false, "headless mode: print polling lines and exit")
+	fs.IntVar(&o.samples, "samples", 10, "number of polls in -once mode")
+	fs.BoolVar(&o.frames, "frames", false, "headless mode: stream the dashboard's rendered frames as JSON lines")
+	fs.IntVar(&o.window, "window", 120, "history window (number of polls)")
+	fs.BoolVar(&o.showVersion, "version", false, "print version and exit")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	specs, err := buildSpecs(o.addr, o.nodes, o.nodesCSV)
+	if err != nil {
+		return nil, err
+	}
+	o.specs = specs
+	return o, nil
+}
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Getenv, os.Stdout, os.Stderr))
+}
+
+// run executes the command and returns its exit code. Keeping os.Exit out of
+// this function lets the fleet's deferred Close run on every path.
+func run(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
+	o, err := parseFlags(args, getenv)
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fprintln(stderr, "emb-top:", err)
+		return 2
+	}
+
+	if o.showVersion {
+		fprintln(stdout, version)
+		return 0
 	}
 
 	// time.NewTicker panics on a non-positive interval; fail clearly instead.
-	if *interval <= 0 {
-		fmt.Fprintln(os.Stderr, "emb-top: -interval must be positive")
-		os.Exit(2)
+	if o.interval <= 0 {
+		fprintln(stderr, "emb-top: -interval must be positive")
+		return 2
 	}
-	if *once && *samples < 1 {
-		fmt.Fprintln(os.Stderr, "emb-top: -samples must be at least 1")
-		os.Exit(2)
+	if o.once && o.samples < 1 {
+		fprintln(stderr, "emb-top: -samples must be at least 1")
+		return 2
 	}
-	if *password != "" && !*useTLS && !isLoopback(*addr) {
-		fmt.Fprintln(os.Stderr,
+	if o.password != "" && !o.useTLS && !allLoopback(o.specs) {
+		fprintln(stderr,
 			"emb-top: warning: sending an AUTH password to a non-loopback address without -tls")
 	}
 
-	client := embtop.NewClient(*addr, *password, *useTLS)
+	ctx := context.Background()
+	resolved, err := resolveSpecs(ctx, netResolver{}, o.specs)
+	if err != nil {
+		fprintln(stderr, "emb-top:", err)
+		return 1
+	}
+	fleet := newFleet(resolved, o)
+	defer fleet.close()
 
-	if *once {
-		if err := embtop.RunOnce(client, *interval, *samples, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "emb-top:", err)
-			os.Exit(1)
+	if o.once {
+		if err := fleet.runOnce(ctx, o.interval, o.samples, stdout); err != nil {
+			fprintln(stderr, "emb-top:", err)
+			return 1
 		}
-		return
+		return 0
 	}
 
-	if *frames {
-		if err := runFrames(context.Background(), client, *interval, *window, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "emb-top:", err)
-			os.Exit(1)
+	if o.frames {
+		if err := fleet.runFrames(ctx, o.interval, o.window, stdout); err != nil {
+			fprintln(stderr, "emb-top:", err)
+			return 1
 		}
-		return
+		return 0
 	}
 
-	m := newTUI(client, *interval, *window)
-	prog := tea.NewProgram(m, tea.WithAltScreen())
+	prog := tea.NewProgram(fleet.model(), tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "emb-top:", err)
-		os.Exit(1)
+		fprintln(stderr, "emb-top:", err)
+		return 1
 	}
+	return 0
+}
+
+// fprintln writes a line and ignores the error: diagnostics on a broken
+// stdout/stderr must not change the exit code.
+func fprintln(w io.Writer, a ...any) { _, _ = fmt.Fprintln(w, a...) }
+
+// allLoopback reports whether every specification is a loopback address, so a
+// plaintext AUTH is only silent for local fleets.
+func allLoopback(specs []nodeSpec) bool {
+	for _, s := range specs {
+		if !isLoopback(s.addr()) {
+			return false
+		}
+	}
+	return true
 }
 
 // dashboardClient is the slice of the emb-top client the dashboard uses: the
@@ -136,6 +210,7 @@ func main() {
 // headless frame mode can be driven by a fake in tests.
 type dashboardClient interface {
 	Addr() string
+	SetAddr(string)
 	EnsureConn() (bool, error)
 	Poll(known []string, afterSeq uint64) (*embtop.PollResult, error)
 	Close() error
@@ -970,10 +1045,14 @@ func (m tuiModel) helpView() string {
 		"",
 		"Flags:",
 		"  -addr host:port   node address (default localhost:6379)",
+		"  -node host        node to monitor; repeat (host, host:port or DNS name)",
+		"  -nodes a,b,c      comma-separated nodes",
+		"  -tls-server-name  TLS name to verify when it differs from the address",
 		"  -interval 1s      poll interval",
 		"  -password P       AUTH password",
 		"  -tls              connect over TLS",
 		"  -once -samples N  headless mode: print N machine-readable lines",
+		"  -frames           headless mode: stream rendered frames as JSON lines",
 		"  -window N         history window in polls (default 120)",
 		"",
 		"Metrics: EMB.MODELS / EMB.INFO / EMB.STATS polling plus MONITOR",

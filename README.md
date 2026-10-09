@@ -47,7 +47,8 @@ redis-cli -3 EMB minilm VALUES "hello world"
 - **Lua scripting** — pre/post-process around the model call: custom
   tokenization, pooling, argmax/softmax, similarity, and more.
 - **Ops-ready** — Redis-style `INFO` and `CONFIG`, `EMB.READY` health checks,
-  connection lifecycle knobs, full server stats, and the `emb-top` dashboard.
+  connection lifecycle knobs, full server stats, and the `emb-top` dashboard
+  (single node or a whole fleet, including DNS-resolved node sets).
 
 ## Contents
 
