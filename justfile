@@ -225,6 +225,31 @@ download-gliner-model:
 bench-gliner intra="4":
     @EMB_BENCH_INTRA={{intra}} go test ./internal/script/ -bench=BenchmarkGLiNERExtract -benchtime=5x -run=^$
 
+# Fetch the third-party int8 export of the site's typed-decisions checkpoint
+# (yehor-oleksiuk/laya-typed-decisions-onnx, 506MB) into ./models/laya-int8/.
+# The file keeps its published name, so `quantize: auto` resolves it beside a
+# configured model.onnx.
+download-laya-int8:
+    @mkdir -p ./models/laya-int8
+    @for f in model_int8.onnx tokenizer.json; do \
+        if [ -f "./models/laya-int8/$f" ] && [ "$(wc -c < "./models/laya-int8/$f")" -gt 1000 ]; then \
+            echo "✓ $f (exists)"; \
+        else \
+            curl -fsSL "https://huggingface.co/yehor-oleksiuk/laya-typed-decisions-onnx/resolve/main/$f" -o "./models/laya-int8/$f" && echo "✓ $f" || { rm -f "./models/laya-int8/$f"; echo "failed to download $f" >&2; exit 1; }; \
+        fi; \
+    done
+
+# Answer the site's own decision payloads with the int8 export and with the
+# checkpoint the site mounts, and assert the decisions survive the quantization:
+# same winning option, every probability within EMB_LAYA_INT8_TOL (default 0.05).
+# Requires the site's checkpoint at ./models/laya-typed/model.onnx (see
+# website/repl/sandbox.yaml, model `laya-real`) and `just download-laya-int8`.
+# Loads ~1.4GB of weights and answers 18 payloads: expect a couple of minutes.
+verify-laya-int8:
+    @if [ ! -f ./models/laya-typed/model.onnx ]; then echo "ERROR: ./models/laya-typed/model.onnx not found — it is the reference (the site's typed-decisions checkpoint)"; exit 1; fi
+    @if [ ! -f ./models/laya-int8/model_int8.onnx ]; then echo "ERROR: ./models/laya-int8/model_int8.onnx not found — run 'just download-laya-int8'"; exit 1; fi
+    @EMB_LAYA_INT8_PARITY=1 go test ./internal/server/ -run TestLayaInt8Parity -v -timeout 1800s
+
 # Scripted-inference benchmarks.
 #
 # No args: the Go BenchmarkScript suite (requires: just download-model).

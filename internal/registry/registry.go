@@ -507,10 +507,9 @@ func (e *ModelEntry) ensurePool() error {
 	if st, statErr := os.Stat(cfg.ONNX); statErr == nil {
 		e.ModelSize = st.Size()
 	}
-	// Quantization label from the weight file name (int8/quantized) — the prod
-	// siglip2 file is text_model_int8.onnx.
-	base := filepath.Base(cfg.ONNX)
-	if strings.Contains(base, "quantized") || strings.Contains(base, "int8") {
+	// Quantization label from the resolved weight path — the prod siglip2 file is
+	// text_model_int8.onnx, and the decision-model exports ship model_int8.onnx.
+	if isQuantizedWeights(cfg.ONNX) {
 		e.Quantization = "int8"
 	} else {
 		e.Quantization = "fp32"
@@ -791,12 +790,14 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 	if _, err := os.Stat(cfg.ONNX); err == nil {
 		return nil
 	}
-	// With quantize enabled the download writes `model_quantized.onnx` next to
+	// With quantize enabled the download writes the pre-quantized member next to
 	// the configured fp32 path, which is never created. Without this the model
 	// would re-download on every boot.
 	if cfg.Quantize != "off" {
-		if _, err := os.Stat(filepath.Join(dir, "model_quantized.onnx")); err == nil {
-			return nil
+		for _, q := range hfhub.QuantizedWeightNames {
+			if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(q))); err == nil {
+				return nil
+			}
 		}
 	}
 	log.Printf("  downloading %s from %s...", name, cfg.ModelRepo)
@@ -931,6 +932,17 @@ func resolveModelConfig(cfg *config.ModelConfig, name string) error {
 	return nil
 }
 
+// isQuantizedWeights reports whether a resolved weight path names pre-quantized
+// weights: a filename-marked export (text_model_int8.onnx, model_quantized.onnx)
+// or one resolved from the onnx/quantized/ layout. The load log and the EMB.INFO
+// label read this one predicate so they cannot disagree.
+func isQuantizedWeights(path string) bool {
+	if strings.Contains(filepath.ToSlash(path), "quantized") {
+		return true
+	}
+	return strings.Contains(filepath.Base(path), "int8")
+}
+
 // resolveQuantize normalizes the quantize setting and, when enabled, points
 // cfg.ONNX at pre-quantized weights next to the current path when present.
 func resolveQuantize(cfg *config.ModelConfig) error {
@@ -947,11 +959,8 @@ func resolveQuantize(cfg *config.ModelConfig) error {
 	}
 
 	dir := filepath.Dir(cfg.ONNX)
-	for _, cand := range []string{
-		filepath.Join(dir, "model_quantized.onnx"),
-		filepath.Join(dir, "onnx", "model_quantized.onnx"),
-		filepath.Join(dir, "onnx", "quantized", "model.onnx"),
-	} {
+	for _, name := range hfhub.QuantizedWeightNames {
+		cand := filepath.Join(dir, filepath.FromSlash(name))
 		if _, err := os.Stat(cand); err == nil {
 			if cand != cfg.ONNX {
 				log.Printf("  using int8 weights %s", cand)
@@ -982,9 +991,13 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 	}
 
 	if cfg.Quantize == "on" || cfg.Quantize == "auto" {
-		if strings.Contains(cfg.ONNX, "quantized") {
-			log.Printf("  %s: quantization=int8", name)
+		// Name the weights in use, so an int8 mount that fell back to fp32 is a log
+		// line rather than a mystery.
+		label := "fp32"
+		if isQuantizedWeights(cfg.ONNX) {
+			label = "int8"
 		}
+		log.Printf("  %s: quantization=%s weights=%s", name, label, filepath.Base(cfg.ONNX))
 	}
 
 	if err := cfg.Validate(); err != nil {

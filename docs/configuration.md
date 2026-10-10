@@ -108,6 +108,7 @@ models:
 | `max_length` | auto-detected (or 512) | Max token sequence length |
 | `pooling` | auto-detected | `mean` (3D output), `cls` (first token) or `none` (2D pre-pooled) |
 | `normalize` | `false` | L2-normalize the output |
+| `quantize` | `auto` | Weight precision. `auto` prefers a pre-quantized artifact beside `onnx` when the directory has one and falls back to fp32 otherwise; `on` requires one (load fails without it); `off` keeps fp32. Accepted names, in priority order: `onnx/model_quantized.onnx`, `model_quantized.onnx`, `onnx/quantized/model.onnx`, `model_int8.onnx`, `onnx/model_int8.onnx` — the same names a `model_repo` download resolves. Boot names the resolved file, so a fallback to fp32 is visible rather than silent, and `EMB.INFO` reports `quantization` and `model_bytes` |
 | `output_tensor` | auto-detected | ONNX output tensor name |
 | `preload` | `false` | Load model at startup instead of on first request |
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
@@ -122,6 +123,47 @@ models:
 | `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
 | `image_preload` | `false` | Warm the image named-session pool at startup instead of on first `EMB.IMG` |
 | `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies. Batching is batch-determinism gated automatically (no flag): dynamic-quantized int8 graphs degrade to the worker pool at load (see *Batch determinism*) |
+
+### Quantized weights
+
+`quantize` decides whether a pre-quantized sibling wins over the file `onnx` names. A
+checkpoint that publishes only an int8 file is mounted by naming that file; the graph's
+inputs and outputs are read from the file itself, so a reduced export (one that omits
+`last_hidden_state`) mounts the same way.
+
+```yaml
+models:
+  laya:
+    onnx: ./models/laya-typed/model.onnx       # or ./models/laya-typed/model_int8.onnx
+    tokenizer: ./models/laya-typed/tokenizer.json
+    quantize: auto                              # loads model_int8.onnx when it is beside it
+```
+
+With `auto`, drop `model_int8.onnx` beside the fp32 file and the next boot loads it and
+says which file it resolved. Prefer an explicit path when a directory holds several
+checkpoints.
+
+A scripted model's `dim` and `output_tensor` are auto-detected from its graph and then
+unused — the preset names its own inputs and outputs. A reduced export with no rank-3 output
+therefore reports `dim: -1` and may pick either of its rank-2 outputs (`logits` /
+`act_logits`), which does not change an `EMB.EVAL`/`EMB.EVSHA` answer.
+
+### Split exports (graph + external weights)
+
+Most exports keep their weights inside the graph file. Some publish a small graph and put
+the weights beside it, as `onnx-community` exports do:
+
+```
+onnx/model.onnx        4.4 MB    the graph
+onnx/model.onnx_data  1685 MB    the weights ONNX Runtime reads beside it
+```
+
+The downloader fetches both and writes them into the model directory under the same base
+names, so the graph finds its weights where it expects them; a repository whose graph holds
+its weights inline gains no extra transfer. A sidecar that exists but fails to transfer
+fails the download and removes the just-downloaded graph, so no half-published export sits
+in the cache — a cache left by an earlier version can be repaired by deleting the graph
+(the load error names the missing `_data` file), and the next boot re-fetches the pair.
 
 ## Thread budget
 
