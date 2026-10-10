@@ -1,9 +1,6 @@
-# int8-weight-quantization Specification
+# Spec Delta
 
-## Purpose
-Serves pre-quantized int8 weights: resolution picks the quantized artifact beside `onnx` (or in a downloaded repository), the choice is reported, and quantized output stays within tolerance of fp32.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Quantization selection
 The server SHALL select the inference weights per the model's `quantize` setting.
@@ -42,19 +39,7 @@ When downloading a model from HuggingFace with quantization enabled, the downloa
 - **WHEN** the resolved weight file's base name contains `int8`
 - **THEN** the model's reported quantization SHALL be `int8`
 
-### Requirement: Quantization observability
-The server SHALL expose the loaded quantization and model size through the stats interface.
-
-#### Scenario: EMB.INFO reports quantization
-- **WHEN** a client calls `EMB.INFO <model>`
-- **THEN** the response SHALL include `quantization: int8|fp32` and the on-disk model size
-
-### Requirement: Quantized output quality
-The server SHALL keep quantized-output quality within tolerance of fp32.
-
-#### Scenario: Cosine tolerance
-- **WHEN** the same corpus is embedded with int8 and fp32 weights
-- **THEN** per-pair cosine similarity SHALL be ≥ 0.99 over the validation corpus
+## ADDED Requirements
 
 ### Requirement: Decision-model answer parity under quantization
 
