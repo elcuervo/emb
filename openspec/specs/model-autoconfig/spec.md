@@ -1,5 +1,9 @@
-## ADDED Requirements
+# model-autoconfig Specification
 
+## Purpose
+Fills an `image:` block's unset fields from what the model itself says: the input tensor and target size from the ONNX graph and rescale, mean, std, crop and resample from `preprocessor_config.json`, failing loudly when a required value cannot be determined.
+
+## Requirements
 ### Requirement: Image preprocessing autodetection
 
 When a model declares an `image:` block but omits fields, the server SHALL auto-detect them where possible: the image input tensor name and target size from the ONNX graph's image-input dimensions, and the rescale, mean, std, crop, and resample settings from the model's `preprocessor_config.json` when that file is present. Explicit configuration SHALL always override auto-detected values. When a required value cannot be determined, the server SHALL fail model loading with a descriptive error naming the missing field rather than guessing.

@@ -1,7 +1,7 @@
 # fargate-benchmark-harness Specification
 
 ## Purpose
-TBD - created by archiving change fargate-benchmark-harness. Update Purpose after archive.
+Measures the server in the shape Fargate gives it - task-sized CPU and memory, structured baseline capture, padding efficiency and baseline diffing - so capacity decisions rest on that environment rather than on a laptop.
 ## Requirements
 ### Requirement: Fargate-shaped measurement environment
 The harness SHALL reproduce the Fargate CPU compute shape locally by running the server in a `linux/arm64` container with CPU and memory limits matching the Fargate vCPU tiers.

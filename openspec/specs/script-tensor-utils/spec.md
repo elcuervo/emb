@@ -1,5 +1,9 @@
-## ADDED Requirements
+# script-tensor-utils Specification
 
+## Purpose
+Hands a tensor to a scripted session as packed little-endian bytes instead of a per-element Lua table, charged against the same element budgets as a `data` tensor.
+
+## Requirements
 ### Requirement: Packed-byte tensor input (`bytes`)
 
 The server SHALL accept a `bytes` field on `emb.run` and `emb.run_batch` input specs as a third alternative to `data` and `fill`: `{shape = {...}, bytes = <string>, dtype = "f32"|"i64"}` SHALL interpret the string as the tensor's raw little-endian elements (4 bytes per element, `float32` for `f32`, 8 bytes per element, `int64` for `i64`). This is the inverse of `emb.math.float32_bytes` and lets host-produced tensors (for example `emb.image.preprocess` output) reach the session without a per-element Lua table round-trip. Exactly one of `data`, `fill`, or `bytes` SHALL be provided. The byte length SHALL exactly match `elementCount × elementWidth`; a mismatch SHALL be an error before inference. `dtype` SHALL be required for `bytes` (no inference from content). Packed tensors SHALL be charged against the per-tensor and request-wide element budgets exactly like `data` tensors.

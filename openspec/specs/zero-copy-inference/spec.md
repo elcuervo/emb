@@ -1,7 +1,7 @@
 # zero-copy-inference Specification
 
 ## Purpose
-TBD - created by archiving change zero-copy-inference. Update Purpose after archive.
+Reuses pooled buffers across inference instead of allocating per request, with a defined lifetime and release and byte-identical output.
 ## Requirements
 ### Requirement: Buffers are pooled and reused
 The inference path SHALL reuse input-tensor backing buffers across runs instead of allocating fresh arrays per request.
