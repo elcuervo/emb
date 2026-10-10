@@ -143,6 +143,23 @@ With `auto`, drop `model_int8.onnx` beside the fp32 file and the next boot loads
 says which file it resolved. Prefer an explicit path when a directory holds several
 checkpoints.
 
+### Weight memory on the CPU execution provider
+
+Resident memory is set by what the execution provider materializes, not by the file size,
+and it grows on the first inference rather than at load. Measured with the decision
+checkpoint (ModernBERT-large) on this machine, one worker, one request:
+
+| weights on disk | RSS after load | RSS after the first call |
+|---|---|---|
+| 807 MiB (fp16 export) | 2725 MB | 4897 MB |
+| 483 MiB (int8 export) | 1235 MB | 2280 MB |
+
+`intra_op_threads` 1 and 4 land within 40 MB of each other, so this is not arena
+spawning: the provider expands the weights to fp32 to compute with them (and the int8
+path keeps fp32 copies of what it dequantizes). Size a host from the *resident* figure —
+roughly 3-6x the weight file — and prefer an int8 export where memory binds rather than
+throughput: the table above is the same model answering the same request.
+
 A scripted model's `dim` and `output_tensor` are auto-detected from its graph and then
 unused — the preset names its own inputs and outputs. A reduced export with no rank-3 output
 therefore reports `dim: -1` and may pick either of its rank-2 outputs (`logits` /
