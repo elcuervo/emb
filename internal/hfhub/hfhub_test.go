@@ -290,7 +290,11 @@ func TestDownloadExternalDataRepairsCachedGraph(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dest, "model.onnx"), []byte("g"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	found, err := c.DownloadExternalData("test/model", "", "model.onnx", dest)
+	files, err := c.ListFiles("test/model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found, err := c.DownloadExternalData("test/model", "", files, "onnx/model.onnx", dest)
 	if err != nil {
 		t.Fatalf("external data: %v", err)
 	}
@@ -304,7 +308,11 @@ func TestDownloadExternalDataRepairsCachedGraph(t *testing.T) {
 
 func TestDownloadExternalDataReportsInlineWeights(t *testing.T) {
 	c := newTestClient(t, []string{"model.onnx"}, map[string]string{"model.onnx": "g"})
-	found, err := c.DownloadExternalData("test/model", "", "model.onnx", t.TempDir())
+	files, err := c.ListFiles("test/model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found, err := c.DownloadExternalData("test/model", "", files, "model.onnx", t.TempDir())
 	if err != nil {
 		t.Fatalf("external data: %v", err)
 	}

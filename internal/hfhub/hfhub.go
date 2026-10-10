@@ -125,33 +125,29 @@ func (c *Client) FindQuantizedONNX(files []FileInfo) *FileInfo {
 
 // DownloadExternalData fetches the external-data member of a graph — the
 // `<graph>_data` file ONNX Runtime reads beside it — and writes it into destDir
-// under the base name the graph expects. graphBase is the graph's own file name,
-// looked up at the subfolder root and under onnx/, which is where these
-// repositories place it. It reports whether the repository publishes such a
-// member: a graph that holds its weights inline has none, which is not an error,
-// while a failed transfer is.
-func (c *Client) DownloadExternalData(repo, subfolder, graphBase, destDir string) (bool, error) {
-	if graphBase == "" || strings.HasSuffix(graphBase, "_data") {
+// under the base name the graph expects. graphPath is the graph's path relative
+// to subfolder, so the sidecar is resolved beside that graph and not by a
+// same-named file elsewhere in the repository. files is the listing the caller
+// already fetched. It reports whether the repository publishes such a member: a
+// graph that holds its weights inline has none, which is not an error, while a
+// failed transfer is.
+func (c *Client) DownloadExternalData(repo, subfolder string, files []FileInfo, graphPath, destDir string) (bool, error) {
+	if graphPath == "" || strings.HasSuffix(graphPath, "_data") {
 		return false, nil
-	}
-	files, err := c.ListFiles(repo)
-	if err != nil {
-		return false, err
 	}
 	prefix := ""
 	if s := strings.Trim(subfolder, "/"); s != "" {
 		prefix = s + "/"
 	}
-	for _, name := range []string{prefix + graphBase + "_data", prefix + "onnx/" + graphBase + "_data"} {
-		for _, f := range files {
-			if f.Path != name {
-				continue
-			}
-			if _, err := c.Download(repo, name, destDir); err != nil {
-				return true, fmt.Errorf("downloading external data %s: %w", name, err)
-			}
-			return true, nil
+	name := prefix + graphPath + "_data"
+	for _, f := range files {
+		if f.Path != name {
+			continue
 		}
+		if _, err := c.Download(repo, name, destDir); err != nil {
+			return true, fmt.Errorf("downloading external data %s: %w", name, err)
+		}
+		return true, nil
 	}
 	return false, nil
 }
@@ -267,7 +263,7 @@ func (c *Client) DownloadModel(repo, subfolder, destDir string, preferQuantized 
 
 	// A split export keeps its weights in a `<graph>_data` member beside the
 	// graph, and ONNX Runtime reads that file: the graph alone cannot load.
-	if _, err := c.DownloadExternalData(repo, subfolder, filepath.Base(onnxFile.Path), destDir); err != nil {
+	if _, err := c.DownloadExternalData(repo, subfolder, files, onnxFile.Path, destDir); err != nil {
 		if !graphPreexisting {
 			// Leave no half-published export behind. A cached graph would
 			// short-circuit the next download and fail to load forever.
