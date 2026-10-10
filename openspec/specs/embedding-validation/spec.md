@@ -1,5 +1,9 @@
-## MODIFIED Requirements
+# embedding-validation Specification
 
+## Purpose
+Proves the server's auto-configured embeddings agree with the Python sentence-transformers reference, using a pinned artifact with provenance and a documented cosine threshold, and failing clearly when the server, the model or the reference is unavailable.
+
+## Requirements
 ### Requirement: Embedding output matches reference Python implementation
 
 The server SHALL validate that its auto-configured embeddings match Python sentence-transformers output within a documented cosine similarity threshold, using a reference artifact that is pinned, carries provenance, and is validated before it is trusted. The verification SHALL run against a running `emb` server and SHALL report a clear, non-zero failure when the model, the reference artifact, or the server is unavailable.

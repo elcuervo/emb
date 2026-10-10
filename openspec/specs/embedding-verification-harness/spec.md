@@ -5,8 +5,7 @@ served embeddings against an independent reference: one RESP client, a small
 set of verifier commands built on it, and the `just`/CI gates that keep the
 harness itself covered and free of unreachable code.
 
-## ADDED Requirements
-
+## Requirements
 ### Requirement: Single shared RESP verification client
 
 All embedding verifier commands SHALL use one shared RESP client implementation rather than each defining their own wire reader.

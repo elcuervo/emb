@@ -1214,6 +1214,11 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
+/* An inline `code` box is sized by its content, so a long line made the box
+   wider than the `pre` holding it (320px inside a 280px block at the narrowest
+   width). Making it a block bounded by the `pre` puts every line inside the wrap
+   rules above. */
+.code__body > code{ display: block; max-width: 100%; }
 .code__cap{
   margin-top: clamp(10px, 1.1vw, 16px);
   max-width: 62ch;
@@ -2470,7 +2475,9 @@ html.js.is-ready .hero__prose{
 .quote__text{
   display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
 }
-.cmds__body .code__body{ -webkit-line-clamp: 2; }
+.cmds__body .code__body{
+  -webkit-line-clamp: 2;
+}
 .quote__text{ -webkit-line-clamp: 3; }
 /* The fold opens rather than blinks: where the platform animates its own details
    content the height grows, and everywhere the commands still arrive on the
@@ -3434,7 +3441,10 @@ html.js.is-ready .hero__prose{
 /* SNAKE: the board and its readings, side by side. */
 .snakegrid, .pacgrid{
   display: grid;
-  grid-template-columns: minmax(0, 620px) minmax(150px, 1fr);
+  /* The readings column sizes to the table it holds (`max-content`): at the
+     widths where the board claimed its cap, a fixed 150px floor left the table
+     wider than its own box and the last column's ink crossed the sheet edge. */
+  grid-template-columns: minmax(0, 620px) minmax(max-content, 1fr);
   gap: clamp(14px, 1.6vw, 22px);
   align-items: start;
 }

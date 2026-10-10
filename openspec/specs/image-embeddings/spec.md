@@ -2,8 +2,7 @@
 
 Serves embedding vectors for images without the client decoding, resizing, normalizing, or serializing pixel data, by resolving raw image bytes to the model's expected `pixel_values` tensor server-side.
 
-## ADDED Requirements
-
+## Requirements
 ### Requirement: Per-model image input configuration
 
 The server SHALL support an optional `image:` block on a model config declaring the image input tensor name, target size, crop mode, resample mode, rescale factor, per-channel mean, and per-channel std, so both CLIP-family (center-crop, OpenAI mean/std) and SigLIP-family (no crop, mean/std 0.5) preprocessing are expressible without code changes. A model without an `image:` block SHALL NOT accept `EMB.IMG` and the server SHALL reply with an error naming the model.

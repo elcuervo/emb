@@ -104,12 +104,37 @@ func TestFindONNXPriority(t *testing.T) {
 
 func TestFindQuantizedONNXPriority(t *testing.T) {
 	c := New()
-	files := []FileInfo{{Path: "model_quantized.onnx"}, {Path: "onnx/model_quantized.onnx"}}
-	if got := c.FindQuantizedONNX(files); got == nil || got.Path != "onnx/model_quantized.onnx" {
-		t.Fatalf("FindQuantizedONNX = %+v, want onnx/model_quantized.onnx", got)
+	cases := []struct {
+		name  string
+		files []string
+		want  string // "" means nil
+	}{
+		{"model_quantized family beats int8", []string{"model_int8.onnx", "model_quantized.onnx"}, "model_quantized.onnx"},
+		{"nested quantized beats nested int8", []string{"model_quantized.onnx", "onnx/model_quantized.onnx", "onnx/model_int8.onnx"}, "onnx/model_quantized.onnx"},
+		{"quantized layout", []string{"onnx/quantized/model.onnx"}, "onnx/quantized/model.onnx"},
+		{"int8 named at root", []string{"model.onnx", "model_int8.onnx"}, "model_int8.onnx"},
+		{"int8 named nested", []string{"model.onnx", "onnx/model_int8.onnx"}, "onnx/model_int8.onnx"},
+		{"int8 named outranks sibling fp32", []string{"model_fp32.onnx", "model_int8.onnx"}, "model_int8.onnx"},
+		{"fp32 only is nil", []string{"model.onnx", "tokenizer.json"}, ""},
+		{"laya-onnx shaped repo is nil", []string{"typed-decisions/model.onnx", "typed-decisions/tokenizer/tokenizer.json"}, ""},
 	}
-	if got := c.FindQuantizedONNX([]FileInfo{{Path: "model.onnx"}}); got != nil {
-		t.Fatalf("FindQuantizedONNX = %+v, want nil", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := make([]FileInfo, 0, len(tc.files))
+			for _, p := range tc.files {
+				files = append(files, FileInfo{Path: p})
+			}
+			got := c.FindQuantizedONNX(files)
+			if tc.want == "" {
+				if got != nil {
+					t.Fatalf("FindQuantizedONNX = %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil || got.Path != tc.want {
+				t.Fatalf("FindQuantizedONNX = %+v, want %s", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -167,6 +192,189 @@ func TestDownloadModelFetchesWeightsAndExtras(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dest, f)); err != nil {
 			t.Fatalf("%s not written: %v", f, err)
 		}
+	}
+}
+
+func TestDownloadModelFetchesSplitExportWhole(t *testing.T) {
+	c := newTestClient(t,
+		[]string{"onnx/model.onnx", "onnx/model.onnx_data", "tokenizer.json"},
+		map[string]string{"model.onnx": "graph-bytes", "model.onnx_data": "weight-bytes", "tokenizer.json": "{}"},
+	)
+	dest := t.TempDir()
+	if err := c.DownloadModel("test/model", "", dest, false); err != nil {
+		t.Fatalf("download model: %v", err)
+	}
+	for name, want := range map[string]string{"model.onnx": "graph-bytes", "model.onnx_data": "weight-bytes"} {
+		b, err := os.ReadFile(filepath.Join(dest, name))
+		if err != nil {
+			t.Fatalf("%s not written: %v", name, err)
+		}
+		if string(b) != want {
+			t.Fatalf("%s = %q, want %q", name, b, want)
+		}
+	}
+}
+
+func TestDownloadModelFetchesSubfolderSidecar(t *testing.T) {
+	c := newTestClient(t,
+		[]string{"typed-decisions/model.onnx", "typed-decisions/model.onnx_data", "typed-decisions/tokenizer.json"},
+		map[string]string{"model.onnx": "g", "model.onnx_data": "w", "tokenizer.json": "{}"},
+	)
+	dest := t.TempDir()
+	if err := c.DownloadModel("test/model", "typed-decisions", dest, false); err != nil {
+		t.Fatalf("download model: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "model.onnx_data")); err != nil {
+		t.Fatalf("subfolder sidecar not written beside the graph: %v", err)
+	}
+}
+
+func TestDownloadModelSelfContainedGraphFetchesNoSidecar(t *testing.T) {
+	c := newTestClient(t,
+		[]string{"model.onnx", "tokenizer.json"},
+		map[string]string{"model.onnx": "g", "tokenizer.json": "{}"},
+	)
+	dest := t.TempDir()
+	if err := c.DownloadModel("test/model", "", dest, false); err != nil {
+		t.Fatalf("download model: %v", err)
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), "_data") {
+			t.Fatalf("unexpected sidecar %s for a self-contained graph", e.Name())
+		}
+	}
+}
+
+func TestDownloadModelSidecarFailureRemovesFreshGraph(t *testing.T) {
+	// The sidecar is listed in the repository but 404s: the export must not be
+	// left half-published, or the cached graph short-circuits every later
+	// download and fails to load.
+	c := newTestClient(t,
+		[]string{"onnx/model.onnx", "onnx/model.onnx_data", "tokenizer.json"},
+		map[string]string{"model.onnx": "graph-bytes", "tokenizer.json": "{}"},
+	)
+	dest := t.TempDir()
+	err := c.DownloadModel("test/model", "", dest, false)
+	if err == nil {
+		t.Fatal("expected a sidecar failure")
+	}
+	if !strings.Contains(err.Error(), "model.onnx_data") {
+		t.Fatalf("error should name the sidecar, got: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dest, "model.onnx")); statErr == nil {
+		t.Fatal("graph left behind after a sidecar failure")
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Name(), "download-") {
+			t.Fatalf("temp file left behind: %s", e.Name())
+		}
+	}
+}
+
+func TestDownloadExternalDataRepairsCachedGraph(t *testing.T) {
+	c := newTestClient(t,
+		[]string{"onnx/model.onnx", "onnx/model.onnx_data"},
+		map[string]string{"model.onnx": "g", "model.onnx_data": "w"},
+	)
+	dest := t.TempDir()
+	// A cache that holds the graph but not its weights, as an earlier version or
+	// an interrupted transfer would leave it.
+	if err := os.WriteFile(filepath.Join(dest, "model.onnx"), []byte("g"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found, err := c.DownloadExternalData("test/model", "", "model.onnx", dest)
+	if err != nil {
+		t.Fatalf("external data: %v", err)
+	}
+	if !found {
+		t.Fatal("expected the repository's sidecar to be found")
+	}
+	if b, err := os.ReadFile(filepath.Join(dest, "model.onnx_data")); err != nil || string(b) != "w" {
+		t.Fatalf("sidecar contents = %q err=%v", b, err)
+	}
+}
+
+func TestDownloadExternalDataReportsInlineWeights(t *testing.T) {
+	c := newTestClient(t, []string{"model.onnx"}, map[string]string{"model.onnx": "g"})
+	found, err := c.DownloadExternalData("test/model", "", "model.onnx", t.TempDir())
+	if err != nil {
+		t.Fatalf("external data: %v", err)
+	}
+	if found {
+		t.Fatal("a graph with inline weights must not report a sidecar")
+	}
+}
+
+// TestLayaOnnxShapeResolvesTheSiteCheckpoint pins the artifact the preview site's
+// `laya-real` mount resolves. codenamev/laya-onnx publishes one `model.onnx` per
+// subfolder — no quantized member and no external data — so `quantize: auto`
+// must not substitute another export, and the download must be
+// typed-decisions/model.onnx. The second run proves the pin bites: add an
+// int8 member and it is preferred, as it should be.
+func TestLayaOnnxShapeResolvesTheSiteCheckpoint(t *testing.T) {
+	siblings := []string{
+		"english/model.onnx", "english/onnx_config.json", "english/rl_agent_config.json",
+		"english/tokenizer/tokenizer.json", "english/tokenizer/tokenizer_config.json",
+		"multilingual/model.onnx", "multilingual/onnx_config.json", "multilingual/rl_agent_config.json",
+		"multilingual/tokenizer/tokenizer.json", "multilingual/tokenizer/tokenizer_config.json",
+		"typed-decisions/model.onnx", "typed-decisions/onnx_config.json", "typed-decisions/rl_agent_config.json",
+		"typed-decisions/tokenizer/tokenizer.json", "typed-decisions/tokenizer/tokenizer_config.json",
+	}
+
+	download := func(t *testing.T, files []string) []string {
+		t.Helper()
+		var requested []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/models/test/model" {
+				infos := make([]FileInfo, 0, len(files))
+				for _, f := range files {
+					infos = append(infos, FileInfo{Path: f})
+				}
+				_ = json.NewEncoder(w).Encode(modelAPIResponse{Siblings: infos})
+				return
+			}
+			requested = append(requested, r.URL.Path)
+			_, _ = w.Write([]byte("bytes"))
+		}))
+		t.Cleanup(srv.Close)
+		c := &Client{HTTPClient: srv.Client(), BaseURL: srv.URL}
+		if err := c.DownloadModel("test/model", "typed-decisions", t.TempDir(), true); err != nil {
+			t.Fatalf("download model: %v", err)
+		}
+		return requested
+	}
+	contains := func(paths []string, want string) bool {
+		for _, p := range paths {
+			if strings.Contains(p, want) {
+				return true
+			}
+		}
+		return false
+	}
+
+	got := download(t, siblings)
+	if !contains(got, "/test/model/resolve/main/typed-decisions/model.onnx") {
+		t.Fatalf("the site's checkpoint was not the resolved graph; requests were %v", got)
+	}
+	for _, p := range got {
+		if strings.Contains(p, "int8") || strings.Contains(p, "_data") || strings.Contains(p, "multilingual/") {
+			t.Errorf("unexpected request %q: nothing should be substituted for this shape", p)
+		}
+	}
+
+	// The pin is real: give the repository an int8 member and it wins.
+	withInt8 := append(append([]string{}, siblings...), "typed-decisions/model_int8.onnx")
+	got = download(t, withInt8)
+	if !contains(got, "/test/model/resolve/main/typed-decisions/model_int8.onnx") {
+		t.Fatalf("an int8 member was not preferred, so this test would not catch a substitution; requests were %v", got)
 	}
 }
 

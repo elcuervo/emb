@@ -1,7 +1,7 @@
 # scripting-reference Specification
 
 ## Purpose
-TBD - created by archiving change add-scripting-reference-surface. Update Purpose after archive.
+Documents the surface a preset is written against: the lifecycle and sandbox it runs in, the host functions and tensors it may touch, and the budgets and identity it carries.
 
 ## Requirements
 

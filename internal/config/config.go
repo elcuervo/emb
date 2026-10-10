@@ -248,8 +248,10 @@ type ModelConfig struct {
 	Workers        int    `yaml:"workers"`
 	OutputTensor   string `yaml:"output_tensor"`
 	PadOutput      bool   `yaml:"pad_output"`
-	// Quantize selects weight precision: auto (prefer pre-quantized ONNX when
-	// present), on (require quantized, fail otherwise), off (fp32 always).
+	// Quantize selects weight precision: auto (prefer a pre-quantized artifact
+	// beside ONNX when present), on (require quantized, fail otherwise), off
+	// (fp32 always). The accepted names are hfhub.QuantizedWeightNames; the
+	// resolved file is named on the boot line.
 	Quantize        string         `yaml:"quantize"`
 	TokenizeWorkers *int           `yaml:"tokenize_workers"`
 	Batching        BatchingConfig `yaml:"batching"`

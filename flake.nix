@@ -32,6 +32,14 @@
 
         ltInfo = builtins.getAttr system archMap;
 
+        # The browser CLI the agent harness drives. The main pin ships 0.27.0,
+        # which current harnesses reject (they require >= 0.35.0); the wrangler
+        # pin's copy is 0.36.0 and is substitutable here, so `agent-browser`
+        # comes from there the way `wrangler` itself does. It is the CLI only:
+        # run `just website-browser` once to fetch Chrome for Testing, or point
+        # it at a Chromium you have with AGENT_BROWSER_EXECUTABLE_PATH.
+        agentBrowser = pkgsWrangler.agent-browser;
+
         # The landing plate replays the take with the asciinema player, which
         # nixpkgs does not package: the release the site serves is pinned here
         # as its npm tarball and re-vendored into `website/assets/` by
@@ -103,11 +111,8 @@
 
         # The website: nothing to build, so this is verification and asset
         # tooling rather than a runtime.
-        #   agent-browser  the headless-browser CLI the agent harness drives.
-        #                  nixpkgs ships the CLI only, so run
-        #                  `just website-browser` once to fetch Chrome for
-        #                  Testing, or point it at a Chromium you already have
-        #                  with AGENT_BROWSER_EXECUTABLE_PATH.
+        #   agent-browser  the headless-browser CLI the agent harness drives,
+        #                  from the wrangler pin (see `agentBrowser` above).
         #   pillow/numpy   image measurement for the generated assets
         #   wrangler       the Cloudflare CLI for configuring and deploying
         #                  the site's Worker. It comes from the separate
@@ -137,7 +142,7 @@
           # extension and read in the browser with the vendored wasm build.
           sqlite-vec
           nodejs_22
-          agent-browser
+          agentBrowser
           imagemagick
           pngquant
           optipng
@@ -200,9 +205,10 @@
         };
 
         # The site's browser CLI, installable on its own for editors and agent
-        # harnesses that run outside `nix develop`:
+        # harnesses that run outside `nix develop`, at the version the harness
+        # requires (see `agentBrowser` above):
         #   nix profile install .#agent-browser
-        packages.agent-browser = pkgs.agent-browser;
+        packages.agent-browser = agentBrowser;
 
         # The Cloudflare CLI on its own, from the dedicated pin above:
         #   nix profile install .#wrangler

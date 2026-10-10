@@ -96,11 +96,24 @@ func (c *Client) FindONNX(files []FileInfo) *FileInfo {
 	return &onnxFiles[0]
 }
 
-// FindQuantizedONNX prefers pre-quantized weights in the order Xenova-style
-// repos ship them: onnx/model_quantized.onnx → model_quantized.onnx →
-// onnx/quantized/model.onnx.
+// QuantizedWeightNames are the pre-quantized artifact names, in resolution
+// priority order: the Xenova-style model_quantized family first, then the
+// int8-named exports the decision models publish. Both the Hub member selection
+// (FindQuantizedONNX) and local-directory resolution (registry.resolveQuantize)
+// read this list, so a repository's int8 member and a directory's int8 file
+// cannot disagree about which names count as pre-quantized.
+var QuantizedWeightNames = []string{
+	"onnx/model_quantized.onnx",
+	"model_quantized.onnx",
+	"onnx/quantized/model.onnx",
+	"model_int8.onnx",
+	"onnx/model_int8.onnx",
+}
+
+// FindQuantizedONNX prefers pre-quantized weights in the order repos ship them:
+// the model_quantized family first, then the int8-named decision-model exports.
 func (c *Client) FindQuantizedONNX(files []FileInfo) *FileInfo {
-	for _, name := range []string{"onnx/model_quantized.onnx", "model_quantized.onnx", "onnx/quantized/model.onnx"} {
+	for _, name := range QuantizedWeightNames {
 		for _, f := range files {
 			if f.Path == name {
 				return &f
@@ -108,6 +121,39 @@ func (c *Client) FindQuantizedONNX(files []FileInfo) *FileInfo {
 		}
 	}
 	return nil
+}
+
+// DownloadExternalData fetches the external-data member of a graph — the
+// `<graph>_data` file ONNX Runtime reads beside it — and writes it into destDir
+// under the base name the graph expects. graphBase is the graph's own file name,
+// looked up at the subfolder root and under onnx/, which is where these
+// repositories place it. It reports whether the repository publishes such a
+// member: a graph that holds its weights inline has none, which is not an error,
+// while a failed transfer is.
+func (c *Client) DownloadExternalData(repo, subfolder, graphBase, destDir string) (bool, error) {
+	if graphBase == "" || strings.HasSuffix(graphBase, "_data") {
+		return false, nil
+	}
+	files, err := c.ListFiles(repo)
+	if err != nil {
+		return false, err
+	}
+	prefix := ""
+	if s := strings.Trim(subfolder, "/"); s != "" {
+		prefix = s + "/"
+	}
+	for _, name := range []string{prefix + graphBase + "_data", prefix + "onnx/" + graphBase + "_data"} {
+		for _, f := range files {
+			if f.Path != name {
+				continue
+			}
+			if _, err := c.Download(repo, name, destDir); err != nil {
+				return true, fmt.Errorf("downloading external data %s: %w", name, err)
+			}
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *Client) Download(repo, filePath, destDir string) (string, error) {
@@ -211,8 +257,23 @@ func (c *Client) DownloadModel(repo, subfolder, destDir string, preferQuantized 
 		return fmt.Errorf("creating directory %s: %w", destDir, err)
 	}
 
+	graphDest := filepath.Join(destDir, filepath.Base(onnxFile.Path))
+	_, statErr := os.Stat(graphDest)
+	graphPreexisting := statErr == nil
+
 	if _, err := c.Download(repo, prefix+onnxFile.Path, destDir); err != nil {
 		return fmt.Errorf("downloading ONNX model: %w", err)
+	}
+
+	// A split export keeps its weights in a `<graph>_data` member beside the
+	// graph, and ONNX Runtime reads that file: the graph alone cannot load.
+	if _, err := c.DownloadExternalData(repo, subfolder, filepath.Base(onnxFile.Path), destDir); err != nil {
+		if !graphPreexisting {
+			// Leave no half-published export behind. A cached graph would
+			// short-circuit the next download and fail to load forever.
+			_ = os.Remove(graphDest)
+		}
+		return fmt.Errorf("downloading ONNX external data: %w", err)
 	}
 
 	// Download tokenizer, config, and image-preprocessor files (best-effort,

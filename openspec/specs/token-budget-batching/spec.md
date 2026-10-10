@@ -1,7 +1,7 @@
 # token-budget-batching Specification
 
 ## Purpose
-TBD - created by archiving change token-budget-batching. Update Purpose after archive.
+Bounds a batch by tokens rather than by request count, truncates an oversized command at admission, and reports the budget so queueing delay is observable.
 ## Requirements
 ### Requirement: Token-budget flush bound
 The batcher SHALL flush a batch when accumulated real tokens across queued requests reach the configured `max_batch_tokens` budget.
