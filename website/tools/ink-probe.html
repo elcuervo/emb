@@ -140,34 +140,48 @@
     let node;
     while ((node = walker.nextNode())) {
       if (!node.nodeValue || !node.nodeValue.trim()) continue;
-      const range = doc.createRange();
-      range.selectNodeContents(node);
-      const rects = range.getClientRects();
-      for (const r of rects) {
-        if (r.width < 0.5) continue;
+      // Measure the node's TRIMMED lines, not the whole node. A text node that
+      // follows an inline element (the specimen tokenizer wraps `true` in a
+      // span) begins with the previous line's newline and indentation, and
+      // `pre-wrap` hangs that trailing whitespace past the box edge: a rect, but
+      // no ink. Every line's first rect is measured, so trimming never skips a
+      // run a reader can see.
+      const text = node.nodeValue;
+      let offset = 0;
+      for (const line of text.split('\n')) {
+        const lineStart = offset + (line.length - line.trimStart().length);
+        const lineEnd = offset + line.trimEnd().length;
+        offset += line.length + 1;
+        if (lineEnd <= lineStart) continue;
+        const range = doc.createRange();
+        range.setStart(node, lineStart);
+        range.setEnd(node, lineEnd);
+        for (const r of range.getClientRects()) {
+          if (r.width < 0.5) continue;
 
-        // Only ink that STRADDLES the viewport edge is sliced by the frame.
-        // A run parked entirely off-screen (a focus-revealed skip link) or one
-        // clipped to an inner box (sr-only) is not this defect.
-        const overRight = r.right - vw;
-        const overLeft = -r.left;
-        const straddlesRight = r.left < vw - TOLERANCE && overRight > TOLERANCE;
-        const straddlesLeft = r.right > TOLERANCE && overLeft > TOLERANCE;
-        if (!straddlesRight && !straddlesLeft) continue;
-        if (clippedToInnerBox(node, r, vw, win)) continue;
-        const owner = node.parentElement;
-        const label = (owner.getAttribute && owner.getAttribute('class'))
-          ? owner.tagName.toLowerCase() + '.' + owner.getAttribute('class').split(' ')[0]
-          : owner.tagName.toLowerCase();
-        const row = {
-          where: label,
-          width: vw,
-          text: node.nodeValue.trim().slice(0, 48),
-          right: +r.right.toFixed(2),
-          over: +Math.max(overRight, overLeft).toFixed(2),
-        };
-        (inScrollContainer(node, win) ? scrollers : violations).push(row);
-        break;
+          // Only ink that STRADDLES the viewport edge is sliced by the frame.
+          // A run parked entirely off-screen (a focus-revealed skip link) or one
+          // clipped to an inner box (sr-only) is not this defect.
+          const overRight = r.right - vw;
+          const overLeft = -r.left;
+          const straddlesRight = r.left < vw - TOLERANCE && overRight > TOLERANCE;
+          const straddlesLeft = r.right > TOLERANCE && overLeft > TOLERANCE;
+          if (!straddlesRight && !straddlesLeft) continue;
+          if (clippedToInnerBox(node, r, vw, win)) continue;
+          const owner = node.parentElement;
+          const label = (owner.getAttribute && owner.getAttribute('class'))
+            ? owner.tagName.toLowerCase() + '.' + owner.getAttribute('class').split(' ')[0]
+            : owner.tagName.toLowerCase();
+          const row = {
+            where: label,
+            width: vw,
+            text: node.nodeValue.trim().slice(0, 48),
+            right: +r.right.toFixed(2),
+            over: +Math.max(overRight, overLeft).toFixed(2),
+          };
+          (inScrollContainer(node, win) ? scrollers : violations).push(row);
+          break;
+        }
       }
     }
     return { violations, scrollers };
