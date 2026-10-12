@@ -33,6 +33,30 @@ type metricDef struct {
 	num    NumberType
 	global func(Snapshot) float64
 	model  func(ModelSnapshot) float64
+	// needsPool marks a metric whose per-model source is only measured for
+	// models with a loaded embedding pool; models without one are omitted
+	// rather than exported as zero.
+	needsPool bool
+}
+
+// histogramDef is one exported explicit-bucket histogram. bounds is the
+// strictly ascending ladder the datapoints index, in the unit they report.
+type histogramDef struct {
+	name   string
+	unit   string
+	desc   string
+	bounds []float64
+}
+
+// histogramDefs is the exported histogram set. It is separate from metricDefs
+// so the bucket bounds live with the definition and the number-encoding path
+// stays untouched.
+var histogramDefs = []histogramDef{
+	{
+		name: "emb.request.duration", unit: "s",
+		desc:   "Completed inference request latency, by model",
+		bounds: latencyBoundsSeconds[:],
+	},
 }
 
 // metricDefs is the exported metric set. Every metric named in the
@@ -132,5 +156,56 @@ var metricDefs = []metricDef{
 		name: "emb.errors", kind: Sum, unit: "{error}", num: IntNumber,
 		desc:  "Failed inference requests, by model",
 		model: func(m ModelSnapshot) float64 { return float64(m.Errors) },
+	},
+	{
+		name: "emb.dispatch.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:      "Seconds requests spent waiting for an inference slot, by model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.DispatchWaitUs) / 1e6 },
+		needsPool: true,
+	},
+	{
+		name: "emb.inference.duration", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:      "Seconds of embedding inference work, by model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.RunUs) / 1e6 },
+		needsPool: true,
+	},
+	{
+		name: "emb.inference.runs", kind: Sum, unit: "{run}", num: IntNumber,
+		desc:      "Embedding inference runs, by model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.Runs) },
+		needsPool: true,
+	},
+	{
+		name: "emb.sessions.busy", kind: Gauge, unit: "{session}", num: IntNumber,
+		desc:      "Embedding sessions currently running work, by model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.SessionsBusy) },
+		needsPool: true,
+	},
+	{
+		name: "emb.sessions.total", kind: Gauge, unit: "{session}", num: IntNumber,
+		desc:      "Embedding sessions available to a model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.SessionsTotal) },
+		needsPool: true,
+	},
+	{
+		name: "emb.padding.efficiency", kind: Gauge, unit: "1", num: DoubleNumber,
+		desc:      "Embedding tokens consumed divided by token slots processed, by model",
+		model:     func(m ModelSnapshot) float64 { return m.PaddingEfficiency },
+		needsPool: true,
+	},
+	{
+		name: "emb.script.dispatch.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:  "Seconds scripted evaluations spent waiting for an inference slot, by model",
+		model: func(m ModelSnapshot) float64 { return float64(m.ScriptDispatchWaitUs) / 1e6 },
+	},
+	{
+		name: "emb.script.inference.duration", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:  "Seconds of scripted-evaluation inference work, by model",
+		model: func(m ModelSnapshot) float64 { return float64(m.ScriptRunUs) / 1e6 },
+	},
+	{
+		name: "emb.script.inference.runs", kind: Sum, unit: "{run}", num: IntNumber,
+		desc:  "Scripted-evaluation inference runs, by model",
+		model: func(m ModelSnapshot) float64 { return float64(m.ScriptRuns) },
 	},
 }

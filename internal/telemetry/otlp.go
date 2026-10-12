@@ -72,11 +72,12 @@ type scope struct {
 }
 
 type metric struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Unit        string `json:"unit,omitempty"`
-	Gauge       *gauge `json:"gauge,omitempty"`
-	Sum         *sum   `json:"sum,omitempty"`
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Unit        string     `json:"unit,omitempty"`
+	Gauge       *gauge     `json:"gauge,omitempty"`
+	Sum         *sum       `json:"sum,omitempty"`
+	Histogram   *histogram `json:"histogram,omitempty"`
 }
 
 type gauge struct {
@@ -87,6 +88,27 @@ type sum struct {
 	AggregationTemporality int               `json:"aggregationTemporality"`
 	IsMonotonic            bool              `json:"isMonotonic"`
 	DataPoints             []numberDataPoint `json:"dataPoints"`
+}
+
+// histogram is an OTLP explicit-bucket histogram with delta temporality, the
+// wire shape of the request-latency distribution.
+type histogram struct {
+	AggregationTemporality int                  `json:"aggregationTemporality"`
+	DataPoints             []histogramDataPoint `json:"dataPoints"`
+}
+
+// histogramDataPoint is one interval's distribution: the interval's count and
+// sum, one bucket count per declared boundary plus the overflow bucket, and the
+// strictly ascending bounds those counts index. count and bucketCounts are
+// uint64 on the wire, which proto3 JSON encodes as decimal strings.
+type histogramDataPoint struct {
+	Attributes        []attribute `json:"attributes,omitempty"`
+	StartTimeUnixNano string      `json:"startTimeUnixNano,omitempty"`
+	TimeUnixNano      string      `json:"timeUnixNano"`
+	Count             string      `json:"count"`
+	Sum               *float64    `json:"sum,omitempty"`
+	BucketCounts      []string    `json:"bucketCounts"`
+	ExplicitBounds    []float64   `json:"explicitBounds"`
 }
 
 type numberDataPoint struct {
@@ -149,9 +171,15 @@ func sortedKeys(m map[string]string) []string {
 // snapshot (nil on the first tick, when no sums are emitted). startNano is the
 // previous tick's time; nowNano is this tick's time.
 func encodeRequest(cur Snapshot, prev *Snapshot, startNano, nowNano uint64, res Resource) ([]byte, error) {
-	metrics := make([]metric, 0, len(metricDefs))
+	metrics := make([]metric, 0, len(metricDefs)+len(histogramDefs))
 	for _, def := range metricDefs {
 		m := encodeMetric(def, cur, prev, startNano, nowNano)
+		if m != nil {
+			metrics = append(metrics, *m)
+		}
+	}
+	for _, def := range histogramDefs {
+		m := encodeHistogram(def, cur, prev, startNano, nowNano)
 		if m != nil {
 			metrics = append(metrics, *m)
 		}
@@ -199,19 +227,31 @@ func encodeMetric(def metricDef, cur Snapshot, prev *Snapshot, startNano, nowNan
 	return &m
 }
 
-// encodeModelMetric renders a per-model sum with one datapoint per model that
-// was present in the previous snapshot too (a model seen for the first time
-// has no measured delta yet).
+// encodeModelMetric renders one datapoint per model: a sum is diffed against
+// the previous snapshot (a model seen for the first time has no measured delta
+// yet), a gauge reports its current value. Metrics whose source only exists for
+// models with a loaded embedding pool skip models without one entirely.
 func encodeModelMetric(def metricDef, cur Snapshot, prev *Snapshot, startNano, nowNano uint64) *metric {
-	if prev == nil {
+	if def.kind == Sum && prev == nil {
 		return nil
 	}
-	prevByName := make(map[string]ModelSnapshot, len(prev.Models))
-	for _, m := range prev.Models {
-		prevByName[m.Name] = m
+	var prevByName map[string]ModelSnapshot
+	if prev != nil {
+		prevByName = make(map[string]ModelSnapshot, len(prev.Models))
+		for _, m := range prev.Models {
+			prevByName[m.Name] = m
+		}
 	}
 	points := make([]numberDataPoint, 0, len(cur.Models))
 	for _, m := range cur.Models {
+		if def.needsPool && !m.HasPool {
+			continue
+		}
+		attrs := []attribute{strAttr("model", m.Name)}
+		if def.kind == Gauge {
+			points = append(points, numberDataPointFor(def, def.model(m), 0, nowNano, attrs))
+			continue
+		}
 		pm, ok := prevByName[m.Name]
 		if !ok {
 			continue
@@ -220,20 +260,94 @@ func encodeModelMetric(def metricDef, cur Snapshot, prev *Snapshot, startNano, n
 		if delta < 0 {
 			delta = 0
 		}
-		points = append(points, numberDataPointFor(def, delta, startNano, nowNano,
-			[]attribute{strAttr("model", m.Name)}))
+		points = append(points, numberDataPointFor(def, delta, startNano, nowNano, attrs))
+	}
+	if len(points) == 0 {
+		return nil
+	}
+	out := metric{Name: def.name, Description: def.desc, Unit: def.unit}
+	if def.kind == Gauge {
+		out.Gauge = &gauge{DataPoints: points}
+		return &out
+	}
+	out.Sum = &sum{
+		AggregationTemporality: aggregationTemporalityDelta,
+		IsMonotonic:            true,
+		DataPoints:             points,
+	}
+	return &out
+}
+
+// encodeHistogram renders one explicit-bucket histogram with delta
+// temporality: one datapoint per model present in the previous snapshot that
+// observed at least one request during the interval. The counts are diffed
+// exactly as sums are, so the first tick after startup and a model new to the
+// snapshot emit nothing.
+func encodeHistogram(def histogramDef, cur Snapshot, prev *Snapshot, startNano, nowNano uint64) *metric {
+	if prev == nil {
+		return nil
+	}
+	prevByName := make(map[string]ModelSnapshot, len(prev.Models))
+	for _, m := range prev.Models {
+		prevByName[m.Name] = m
+	}
+	want := len(def.bounds) + 1
+	points := make([]histogramDataPoint, 0, len(cur.Models))
+	for _, m := range cur.Models {
+		pm, ok := prevByName[m.Name]
+		if !ok || len(m.Latency.Buckets) != want || len(pm.Latency.Buckets) != want {
+			continue
+		}
+		dp, ok := histogramDeltaPoint(def.bounds, m, pm, startNano, nowNano)
+		if !ok {
+			continue
+		}
+		points = append(points, dp)
 	}
 	if len(points) == 0 {
 		return nil
 	}
 	return &metric{
 		Name: def.name, Description: def.desc, Unit: def.unit,
-		Sum: &sum{
+		Histogram: &histogram{
 			AggregationTemporality: aggregationTemporalityDelta,
-			IsMonotonic:            true,
 			DataPoints:             points,
 		},
 	}
+}
+
+// histogramDeltaPoint builds one interval datapoint from a model's cumulative
+// counts and the previous tick's. It reports ok=false when the interval holds
+// no observation. The count is the sum of the per-bucket deltas, so the bucket
+// counts always add up to the count even when a counter reset clamps one.
+func histogramDeltaPoint(bounds []float64, cur, prev ModelSnapshot, startNano, nowNano uint64) (histogramDataPoint, bool) {
+	counts := make([]string, len(cur.Latency.Buckets))
+	var count int64
+	for i, c := range cur.Latency.Buckets {
+		d := c - prev.Latency.Buckets[i]
+		if d < 0 {
+			d = 0
+		}
+		count += d
+		counts[i] = strconv.FormatInt(d, 10)
+	}
+	if count == 0 {
+		return histogramDataPoint{}, false
+	}
+	sumUs := cur.Latency.SumUs - prev.Latency.SumUs
+	if sumUs < 0 {
+		sumUs = 0
+	}
+	sum := float64(sumUs) / 1e6
+	return histogramDataPoint{
+		Attributes:        []attribute{strAttr("model", cur.Name)},
+		StartTimeUnixNano: strconv.FormatUint(startNano, 10),
+		TimeUnixNano:      strconv.FormatUint(nowNano, 10),
+		Count:             strconv.FormatInt(count, 10),
+		Sum:               &sum,
+		BucketCounts:      counts,
+		ExplicitBounds:    bounds,
+	}, true
 }
 
 func numberDataPointFor(def metricDef, v float64, startNano, nowNano uint64, attrs []attribute) numberDataPoint {

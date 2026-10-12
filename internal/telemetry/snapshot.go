@@ -46,4 +46,28 @@ type ModelSnapshot struct {
 	Requests int64
 	Tokens   int64
 	Errors   int64
+
+	// HasPool reports whether the model has a loaded embedding pool. The
+	// embedding timing and session fields below are only measured for such
+	// models, so series built from them are omitted when it is false.
+	HasPool bool
+
+	// Cumulative embedding-path timing and session counters, in the units
+	// EMB.INFO renders them (microseconds for the time counters).
+	DispatchWaitUs    int64
+	RunUs             int64
+	Runs              int64
+	SessionsBusy      int64
+	SessionsTotal     int64
+	PaddingEfficiency float64
+
+	// Cumulative scripted-evaluation counters, separate from the embedding
+	// path above.
+	ScriptDispatchWaitUs int64
+	ScriptRunUs          int64
+	ScriptRuns           int64
+
+	// Latency is the model's cumulative completed-request latency histogram;
+	// Buckets is nil when the model has no series.
+	Latency ModelLatency
 }

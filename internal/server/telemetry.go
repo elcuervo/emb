@@ -34,12 +34,30 @@ func (s *Server) telemetrySnapshot() telemetry.Snapshot {
 	}
 	out.Models = make([]telemetry.ModelSnapshot, 0, len(snap.byModel))
 	for _, m := range snap.byModel {
-		out.Models = append(out.Models, telemetry.ModelSnapshot{
+		ms := telemetry.ModelSnapshot{
 			Name:     m.name,
 			Requests: m.req,
 			Tokens:   m.tok,
 			Errors:   m.errs,
-		})
+
+			HasPool:           m.hasPool,
+			DispatchWaitUs:    m.dispatchWaitUs,
+			RunUs:             m.runUs,
+			Runs:              m.runs,
+			SessionsBusy:      m.sessionsBusy,
+			SessionsTotal:     m.sessionsTotal,
+			PaddingEfficiency: m.paddingEfficiency,
+
+			ScriptDispatchWaitUs: m.scriptDispatchWaitUs,
+			ScriptRunUs:          m.scriptRunUs,
+			ScriptRuns:           m.scriptRuns,
+		}
+		// The latency histogram is its own measured signal: the accumulator is
+		// read directly rather than derived from the command aggregation.
+		if lat, ok := s.latency.Read(m.name); ok {
+			ms.Latency = lat
+		}
+		out.Models = append(out.Models, ms)
 	}
 	return out
 }

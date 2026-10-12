@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"image/color"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/pipeline"
+	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/telemetry"
 )
 
@@ -107,6 +112,166 @@ func TestTelemetrySnapshotMatchesInfo(t *testing.T) {
 	}
 	if snap.Models[0].Requests != snap.TotalRequests {
 		t.Errorf("per-model requests %d != total %d", snap.Models[0].Requests, snap.TotalRequests)
+	}
+
+	// The per-model timing and session values the exporter carries must equal
+	// what EMB.INFO reports for the same model, read back to back so no traffic
+	// can advance the counters between them.
+	fields := statsFields(t, redisCmd(t, addr, "EMB.INFO", "test"))
+	ms := snap.Models[0]
+	if !ms.HasPool {
+		t.Error("a model with a loaded pool must be marked as having one")
+	}
+	for _, tc := range []struct {
+		name string
+		got  int64
+		want int64
+	}{
+		{"embed_dispatch_wait_us", ms.DispatchWaitUs, int64(intOf(t, fields["embed_dispatch_wait_us"]))},
+		{"embed_run_us", ms.RunUs, int64(intOf(t, fields["embed_run_us"]))},
+		{"embed_runs", ms.Runs, int64(intOf(t, fields["embed_runs"]))},
+		{"embed_sessions_busy", ms.SessionsBusy, int64(intOf(t, fields["embed_sessions_busy"]))},
+		{"embed_sessions_total", ms.SessionsTotal, int64(intOf(t, fields["embed_sessions_total"]))},
+		{"script_dispatch_wait_us", ms.ScriptDispatchWaitUs, int64(intOf(t, fields["script_dispatch_wait_us"]))},
+		{"script_run_us", ms.ScriptRunUs, int64(intOf(t, fields["script_run_us"]))},
+		{"script_runs", ms.ScriptRuns, int64(intOf(t, fields["script_runs"]))},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s: telemetry=%d EMB.INFO=%d", tc.name, tc.got, tc.want)
+		}
+	}
+	if got, want := fmt.Sprintf("%.4f", ms.PaddingEfficiency), bulkOf(t, fields["padding_efficiency"]); got != want {
+		t.Errorf("padding_efficiency: telemetry=%s EMB.INFO=%s", got, want)
+	}
+	if ms.Runs < 1 {
+		t.Errorf("embedding runs = %d, want the driven request to have run", ms.Runs)
+	}
+	if ms.Latency.Count != 1 {
+		t.Errorf("histogram observations = %d, want 1 for the driven EMB", ms.Latency.Count)
+	}
+}
+
+// ---- task 3.1: one recording helper feeds the ring and the histogram ----
+
+// serveTelemetryRecordTest starts a server whose model "test" can serve EMB
+// (embedding pool), EMB.IMG (image session) and EMB.EVAL (a constant script
+// needs no script resources), so the request-record path can be driven for
+// every inference command without a downloaded model.
+func serveTelemetryRecordTest(t *testing.T, opts ...Option) (string, *Server) {
+	t.Helper()
+	reg := registry.New()
+	pool, err := pipeline.NewPool(
+		func() (onnx.Session, error) { return &mockSession{}, nil },
+		mockTokenizer{},
+		2, 4, 128, true, "mean", 0, 32, 0, 0,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("test", &registry.ModelEntry{
+		Name: "test",
+		Dim:  4,
+		Pool: pool,
+		ImageRes: &registry.ImageResources{
+			Sessions:     []onnx.NamedSession{&fakeImageSession{dim: testImageDim}},
+			Plan:         testImagePlan(4),
+			OutputTensor: "image_embeds",
+			Pooling:      "none",
+			Dim:          testImageDim,
+		},
+	})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil, opts...)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr, srv
+}
+
+// settle waits until every command already answered on c has been fully
+// handled: redcon serves one connection's commands in order, so the reply to
+// this PING cannot arrive before the earlier handlers' deferred records ran.
+func settle(t *testing.T, c net.Conn) {
+	t.Helper()
+	if got := doCmd(t, c, "PING"); got != "+PONG\r\n" {
+		t.Fatalf("PING reply = %q", got)
+	}
+}
+
+func TestRecordRequestObservesEveryInferenceCommand(t *testing.T) {
+	addr, srv := serveTelemetryRecordTest(t)
+	c := dial(t, addr)
+	defer c.Close()
+
+	if got := doCmd(t, c, "EMB", "test", "hello"); !strings.HasPrefix(got, "$") {
+		t.Fatalf("EMB reply = %q", got)
+	}
+	if got := doCmd(t, c, "EMB.IMG", "test", solidImagePNG(t, color.White)); !strings.HasPrefix(got, "$") {
+		t.Fatalf("EMB.IMG reply = %q", got)
+	}
+	if got := doCmd(t, c, "EMB.EVAL", "test", "return 1", "1", "x"); got != ":1\r\n" {
+		t.Fatalf("EMB.EVAL reply = %q", got)
+	}
+	settle(t, c)
+
+	lat, ok := srv.latency.Read("test")
+	if !ok {
+		t.Fatal("no latency series after three recorded requests")
+	}
+	if lat.Count != 3 {
+		t.Errorf("observations = %d, want one per EMB, EMB.IMG and EMB.EVAL", lat.Count)
+	}
+	var sum int64
+	for _, b := range lat.Buckets {
+		sum += b
+	}
+	if sum != lat.Count {
+		t.Errorf("bucket counts sum to %d, want the observation count %d", sum, lat.Count)
+	}
+	if lat.SumUs <= 0 {
+		t.Errorf("observed total = %dus, want > 0", lat.SumUs)
+	}
+	if n := srv.monitor.LastSeq(); n != 3 {
+		t.Errorf("MONITOR recorded %d events, want 3", n)
+	}
+}
+
+func TestRecordRequestIncludesFailuresAndIgnoresUnconfiguredModels(t *testing.T) {
+	addr, srv := serveTelemetryRecordTest(t)
+	c := dial(t, addr)
+	defer c.Close()
+
+	// A configured model whose request fails (URL arguments are rejected before
+	// any inference) and a name the registry has no entry for.
+	if got := doCmd(t, c, "EMB.IMG", "test", "https://example.com/cat.jpg"); !strings.HasPrefix(got, "-") {
+		t.Fatalf("URL rejection = %q, want an error", got)
+	}
+	if got := doCmd(t, c, "EMB", "ghost", "hello"); !strings.HasPrefix(got, "-") {
+		t.Fatalf("unknown model = %q, want an error", got)
+	}
+	settle(t, c)
+
+	lat, ok := srv.latency.Read("test")
+	if !ok {
+		t.Fatal("a failed request for a configured model must still be observed")
+	}
+	if lat.Count != 1 {
+		t.Errorf("observations for the failed request = %d, want 1", lat.Count)
+	}
+	if _, ok := srv.latency.Read("ghost"); ok {
+		t.Error("an unconfigured model name must not create a latency series")
+	}
+
+	events := srv.monitor.Since(0, 10)
+	if len(events) != 2 {
+		t.Fatalf("MONITOR events = %d, want one per request: %+v", len(events), events)
+	}
+	if events[0].Model != "test" || !events[0].Err {
+		t.Errorf("failed request event = %+v, want model test with Err set", events[0])
+	}
+	if events[1].Model != "ghost" || !events[1].Err {
+		t.Errorf("unconfigured model event = %+v, want model ghost with Err set", events[1])
 	}
 }
 

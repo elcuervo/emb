@@ -264,7 +264,7 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 		if entry, err := s.reg.Resolve(model); err == nil {
 			entry.RecordScriptedEvaluation(failed)
 		}
-		s.monitor.Add(MonitorEvent{
+		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
 			Model:     model,
 			Texts:     len(texts),
