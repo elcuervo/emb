@@ -21,7 +21,7 @@ The server SHALL resolve a process-local CPU allowance from applicable container
 
 ### Requirement: Bounded automatic calibration
 
-Unset embedding session and thread dimensions SHALL be selected by local calibration after model metadata resolution and determinism probing. Calibration SHALL use representative short, typical, and long inputs, separate warmup from repeated trials, check correctness, and obey the process CPU share and conservative model-size memory estimate. It SHALL reject candidates whose p95 exceeds twice the single-worker baseline, choose the highest measured throughput among valid candidates, and prefer lower resource use on a tie. A slow in-flight model call may exceed the nominal deadline; temporary sessions SHALL close only after calls return.
+Unset embedding session and thread dimensions SHALL be selected by local calibration after model metadata resolution and determinism probing. Calibration SHALL use representative short, typical, and long inputs, separate warmup from repeated trials, check correctness, and obey the process CPU share and conservative model-size memory estimate. It SHALL reject candidates whose p95 exceeds twice the single-worker baseline, choose the highest measured throughput among valid candidates, and prefer wider threads on a tie when the model batches — the trial serves a smaller batch than the coalescing pool — and lower resource use otherwise. A slow in-flight model call may exceed the nominal deadline; temporary sessions SHALL close only after calls return.
 
 #### Scenario: Explicit settings
 
