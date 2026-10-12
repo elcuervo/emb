@@ -37,9 +37,9 @@
 
 ## 7. ARM64 reference tier
 
-- [ ] 7.1 Add a `workflow_dispatch` job on `ubuntu-24.04-arm` that runs `bench-host-check`, then the shape and A/B runs against the scripted model set cached by `actions/cache` (mirroring the `models/minilm` cache in `test-cgo`), and uploads the bundle as an artifact. Verify a dispatched run produces a qualified bundle and that the job is not a required check.
-- [ ] 7.2 If the runner reports unqualified, pin the reference tier to the documented qualified host (rentable dedicated vCPU or the Fargate ARM task, driver inside the task under a `taskset` partition) and record the verdict and the chosen host in `docs/performance-validation.md`. Verify the recorded verdict is the one `bench-host-check` printed.
-- [ ] 7.3 Record the first host-qualified baseline and diff it against itself through `just bench-fargate-diff` / the shape harness to establish the noise floor. Verify the same-host diff passes within tolerance and a cross-host diff is refused.
+- [x] 7.1 Add a `workflow_dispatch` job on `ubuntu-24.04-arm` that runs `bench-host-check`, then the shape and A/B runs against the scripted model set cached by `actions/cache` (mirroring the `models/minilm` cache in `test-cgo`), and uploads the bundle as an artifact. Verify a dispatched run produces a qualified bundle and that the job is not a required check.
+- [x] 7.2 If the runner reports unqualified, pin the reference tier to the documented qualified host (rentable dedicated vCPU or the Fargate ARM task, driver inside the task under a `taskset` partition) and record the verdict and the chosen host in `docs/performance-validation.md`. Verify the recorded verdict is the one `bench-host-check` printed.
+- [x] 7.3 Record the first host-qualified baseline and diff it against itself through `just bench-fargate-diff` / the shape harness to establish the noise floor. Verify the same-host diff passes within tolerance and a cross-host diff is refused.
 - [x] 7.4 Add the cross-host rule to `BENCHMARK.md` (absolute numbers are never comparable across hosts; gates compare a host against itself) and point at the host ladder. Verify the rule is stated where the existing benchmark tables are introduced.
 
 ## 8. Integration verification

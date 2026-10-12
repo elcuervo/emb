@@ -258,10 +258,58 @@ A dispatch runs, in order:
 The scripted model set (`models/gliner2`) is cached with `actions/cache`, the
 same way `test-cgo` caches `models/minilm`.
 
-Which rung the free `ubuntu-24.04-arm` runner actually is can only be answered
-by a real dispatch. If it reports qualified, the reference tier lives there; if
-it reports unqualified — steal on a shared runner is the likely property — the
-tier moves down the ladder to a rented dedicated-vCPU host or to the Fargate ARM
-task, and the recorded verdict below says which. The first qualified run's
-verdict, and that host's baseline diffed against itself, are recorded here once
-a dispatch has produced them.
+### The first qualified run
+
+Dispatched `reference-arm64` on the `perf-validation-smoke-gate` branch (run
+`38315084333`, 5m46s, every step green; the other jobs skipped). It answers the
+ladder's open question: the free runner is rung 1, and it qualifies.
+
+```json
+{
+  "os": "linux",
+  "arch": "arm64",
+  "presented_cpus": 4,
+  "allowance": { "cpus": 4, "source": "scheduler/affinity", "quota": false, "scheduler": 4, "affinity": 4 },
+  "memory": { "limit_bytes": 16722010112, "host_bytes": 16722010112, "source": "host" },
+  "server_budget": 4,
+  "steal": { "measurable": true, "percent": 0, "verdict": "ok" },
+  "throttle": { "measurable": true, "ratio": 0, "periods": 0, "throttled": 0, "verdict": "ok" },
+  "verdict": "qualified"
+}
+```
+
+The shape run reproduced the autotune contract on that host — including the
+`saturated` classification the smoke gate has to skip on a many-core machine:
+
+```text
+shape=serial concurrency=1 req/s=26.5 class=idle      inflight=0 conc=2/4 autotune=1
+shape=burst  concurrency=8 req/s=42.7 class=saturated inflight=0 conc=4/4 autotune=1
+shape=serial concurrency=1 req/s=26.2 class=latency   inflight=0 conc=2/4 autotune=1
+```
+
+The allowance halves under sustained latency, returns to the cap on the burst's
+first throughput window, and halves again when the burst ends — the same
+transitions the smoke gate asserts.
+
+The A/B run against itself (same binary in both arms, three interleaved samples,
+200 requests per level) is the host's noise floor: replies were identical across
+all three samples, and the arms stayed inside ±1% of each other at every
+concurrency level.
+
+| concurrency | base req/s | candidate req/s | base p50 | candidate p50 |
+|---|---|---|---|---|
+| 1 | 22.5 | 22.7 | 43.95 ms | 43.82 ms |
+| 4 | 35.0 | 34.9 | 111.73 ms | 107.82 ms |
+| 8 | 35.7 | 35.5 | 223.43 ms | 225.12 ms |
+| 16 | 35.1 | 35.7 | 449.40 ms | 437.42 ms |
+
+That is comfortably inside the ±5% req/s and ±10% p50 the diff enforces, so a
+same-host baseline is worth recording against; the cross-host refusal itself is
+covered by the tooling's tests (`TestDiffRefusesDifferingFingerprintsAndPrintsBoth`,
+and the legacy baselines refused by `TestDiffRefusesTheCommittedLegacyBaselines`).
+
+A `bench/fargate` bundle from this host is not part of the dispatched record: the
+job uploads the fingerprint plus the shape and A/B logs, so the bundle-schema
+clause of the end-to-end verification has no bundle to inspect. The rule it
+checks — an unmet precondition is recorded `invalid` and never a pass — is
+covered by the tooling's own tests.
