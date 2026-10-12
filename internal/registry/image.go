@@ -216,7 +216,14 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 
 	intraThreads := cfg.IntraOpThreads
 	if intraThreads <= 0 {
-		intraThreads = defaultIntraOpThreads()
+		if e.cpuPolicy {
+			intraThreads = e.cpuThreads
+		} else {
+			intraThreads = defaultIntraOpThreads()
+		}
+	}
+	if tuned := int(e.tunedThreads.Load()); e.cpuPolicy && cfg.IntraOpThreads <= 0 && tuned > 0 {
+		intraThreads = tuned
 	}
 	execMode := onnx.ExecModeSequential
 	if cfg.ExecutionMode == "parallel" {
@@ -224,19 +231,32 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 	}
 
 	numSessions := autoTuneWorkers(cfg.ONNX, 0)
+	if e.cpuPolicy {
+		numSessions = 1
+	}
+	if tuned := int(e.tunedWorkers.Load()); e.cpuPolicy && cfg.Workers <= 0 && tuned > 0 {
+		numSessions = tuned
+	}
 	if numSessions < 1 {
 		numSessions = 1
 	}
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
+		spinning := cfg.AllowsSpinning()
+		if e.cpuPolicy && cfg.AllowSpinning == nil {
+			spinning = false
+		}
 		sess, err := newNamedSession(
-			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, cfg.AllowsSpinning(),
+			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, spinning,
 		)
 		if err != nil {
 			for _, opened := range sessions {
 				_ = opened.Close()
 			}
 			return nil, fmt.Errorf("creating image session %d for %q: %w", i, e.Name, err)
+		}
+		if e.cpuGate != nil {
+			sess = budgetedNamedSession{NamedSession: sess, gate: e.cpuGate, width: intraThreads}
 		}
 		sessions = append(sessions, sess)
 	}

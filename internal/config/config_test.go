@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,9 @@ models:
 	if cfg.Listen != ":9999" {
 		t.Fatalf("expected :9999, got %s", cfg.Listen)
 	}
+	if !cfg.CalibrationEnabled() {
+		t.Fatal("expected CPU calibration enabled by default")
+	}
 	m, ok := cfg.Models["test-model"]
 	if !ok {
 		t.Fatal("expected test-model")
@@ -53,6 +57,14 @@ models:
 	}
 	if cfg.MaxConnections != 0 || cfg.MaxConcurrentRequests != 0 {
 		t.Fatalf("expected zero caps, got %d/%d", cfg.MaxConnections, cfg.MaxConcurrentRequests)
+	}
+}
+
+func TestCalibrationCanBeDisabled(t *testing.T) {
+	no := false
+	cfg := Config{Calibrate: &no}
+	if cfg.CalibrationEnabled() {
+		t.Fatal("expected explicit calibration=false to disable startup calibration")
 	}
 }
 
@@ -565,6 +577,30 @@ func TestPersistenceConfigDefaultsAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestCPUConfigValidationAndModelDefaults(t *testing.T) {
+	if got := (ModelConfig{}).AdmissionWeight(); got != 1 {
+		t.Fatalf("default admission weight = %v, want 1", got)
+	}
+	zero := 0
+	if err := (&Config{CPUReserve: &zero}).validate(); err != nil {
+		t.Fatalf("auto budget with zero reserve rejected: %v", err)
+	}
+	for _, cfg := range []Config{
+		{CPUBudget: "-1"}, {CPUBudget: "0"}, {CPUBudget: "many"},
+		{CPUBudget: "6", CPUReserve: &zero}, {CPUBudget: "off", CPUReserve: &zero}, {CPUReserve: intPtrTest(-1)},
+		{Models: map[string]ModelConfig{"m": {ModelRepo: "repo", Weight: floatPtrTest(0)}}},
+		{Models: map[string]ModelConfig{"m": {ModelRepo: "repo", Weight: floatPtrTest(-1)}}},
+		{Models: map[string]ModelConfig{"m": {ModelRepo: "repo", Weight: floatPtrTest(math.NaN())}}},
+	} {
+		if err := cfg.validate(); err == nil {
+			t.Errorf("invalid CPU config accepted: %+v", cfg)
+		}
+	}
+}
+
+func intPtrTest(n int) *int           { return &n }
+func floatPtrTest(n float64) *float64 { return &n }
 
 func TestParseFlagsPersistence(t *testing.T) {
 	fc, err := ParseFlags([]string{

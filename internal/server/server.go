@@ -1155,9 +1155,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 43)
+		writePairs(conn, 48)
 	} else {
-		writePairs(conn, 36)
+		writePairs(conn, 41)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1197,6 +1197,17 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteBulkString(entry.Quantization)
 	conn.WriteBulkString("model_bytes")
 	conn.WriteInt(int(entry.ModelSize))
+	cpuEnabled, cpuBudget, cpuShare, intraThreads, spinning := entry.CPUSettings()
+	conn.WriteBulkString("cpu_budget_enabled")
+	conn.WriteInt(boolInt(cpuEnabled))
+	conn.WriteBulkString("cpu_budget")
+	conn.WriteInt(cpuBudget)
+	conn.WriteBulkString("cpu_thread_share")
+	conn.WriteInt(cpuShare)
+	conn.WriteBulkString("intra_op_threads")
+	conn.WriteInt(intraThreads)
+	conn.WriteBulkString("allow_spinning")
+	conn.WriteInt(boolInt(spinning))
 	// Scripted-evaluation counters and resource footprint, distinct from the
 	// embedding pool's requests/errors above.
 	scriptReqs, scriptErrs := entry.ScriptStats()
@@ -1331,7 +1342,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 50)
+	writePairs(conn, 58)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1435,6 +1446,23 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(snapshotStatus.QuarantinedEntries))
 	conn.WriteBulkString("cache_restore_error")
 	conn.WriteBulkString(snapshotStatus.RestoreError)
+	cpu := s.reg.CPUStatus()
+	conn.WriteBulkString("cpu_budget_enabled")
+	conn.WriteInt(boolInt(cpu.Enabled))
+	conn.WriteBulkString("cpu_allowance")
+	conn.WriteBulkString(fmt.Sprintf("%.2f", cpu.Allowance.CPUs))
+	conn.WriteBulkString("cpu_allowance_source")
+	conn.WriteBulkString(cpu.Allowance.Source)
+	conn.WriteBulkString("cpu_capacity")
+	conn.WriteInt(cpu.Capacity)
+	conn.WriteBulkString("cpu_reserve")
+	conn.WriteInt(cpu.Reserve)
+	conn.WriteBulkString("cpu_budget")
+	conn.WriteInt(cpu.Budget)
+	conn.WriteBulkString("cpu_active_tokens")
+	conn.WriteInt(cpu.Active)
+	conn.WriteBulkString("cpu_peak_tokens")
+	conn.WriteInt(cpu.Peak)
 }
 
 func boolInt(v bool) int {

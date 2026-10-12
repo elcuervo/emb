@@ -20,6 +20,9 @@ import (
 
 type Config struct {
 	Listen              string `yaml:"listen"`
+	CPUBudget           string `yaml:"cpu_budget"`
+	CPUReserve          *int   `yaml:"cpu_reserve"`
+	Calibrate           *bool  `yaml:"calibrate"`
 	Password            string `yaml:"password"`
 	TLSCert             string `yaml:"tls_cert"`
 	TLSKey              string `yaml:"tls_key"`
@@ -65,6 +68,9 @@ type Config struct {
 	// Telemetry is the optional `telemetry:` block for OTLP/HTTP export.
 	Telemetry TelemetryConfig `yaml:"telemetry"`
 }
+
+// CalibrationEnabled reports whether automatic session calibration is on.
+func (c Config) CalibrationEnabled() bool { return c.Calibrate == nil || *c.Calibrate }
 
 // Default payload caps applied when the corresponding top-level key is unset.
 // They are generous enough for real images but bounded so a single command
@@ -223,9 +229,10 @@ func (e *ScriptEntry) UnmarshalYAML(node *yaml.Node) error {
 const MaxScriptConfigBytes = 64 << 10
 
 type ModelConfig struct {
-	ONNX      string `yaml:"onnx"`
-	Tokenizer string `yaml:"tokenizer"`
-	ModelRepo string `yaml:"model_repo"`
+	Weight    *float64 `yaml:"weight"`
+	ONNX      string   `yaml:"onnx"`
+	Tokenizer string   `yaml:"tokenizer"`
+	ModelRepo string   `yaml:"model_repo"`
 	// OnnxFile names the ONNX file *within* ModelRepo to fetch, when it is not
 	// the conventional `model.onnx`/`model_quantized.onnx`. CLAP ships
 	// `onnx/audio_model_quantized.onnx` and `onnx/text_model_quantized.onnx`, and
@@ -301,6 +308,15 @@ type ModelConfig struct {
 // and image sessions: true unless allow_spinning is explicitly false.
 func (m ModelConfig) AllowsSpinning() bool {
 	return m.AllowSpinning == nil || *m.AllowSpinning
+}
+
+// AdmissionWeight returns the model's configured admission weight, defaulting
+// an omitted value to one.
+func (m ModelConfig) AdmissionWeight() float64 {
+	if m.Weight == nil {
+		return 1
+	}
+	return *m.Weight
 }
 
 // DefaultScriptCallersPerSession is the out-of-the-box number of concurrent
@@ -480,10 +496,28 @@ func checkFiniteNumbers(v any) error {
 // mode, image config shape in Load; the has-config/has-model requirement in
 // ParseFlags) stay with their caller.
 func (c *Config) validate() error {
+	if c.CPUBudget == "off" && c.CPUReserve != nil {
+		return fmt.Errorf("cpu_reserve is only valid with cpu_budget: auto")
+	}
+	if c.CPUBudget != "" && c.CPUBudget != "auto" && c.CPUBudget != "off" {
+		budget, err := strconv.Atoi(c.CPUBudget)
+		if err != nil || budget < 1 {
+			return fmt.Errorf("cpu_budget must be auto|off|a positive integer, got %q", c.CPUBudget)
+		}
+		if c.CPUReserve != nil {
+			return fmt.Errorf("cpu_budget and cpu_reserve cannot both be set")
+		}
+	}
+	if c.CPUReserve != nil && *c.CPUReserve < 0 {
+		return fmt.Errorf("cpu_reserve must be non-negative, got %d", *c.CPUReserve)
+	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		return fmt.Errorf("both tls_cert and tls_key must be set together")
 	}
 	for name, m := range c.Models {
+		if m.Weight != nil && (math.IsNaN(*m.Weight) || math.IsInf(*m.Weight, 0) || *m.Weight <= 0) {
+			return fmt.Errorf("model %q: weight must be a positive finite number", name)
+		}
 		if m.ModelRepo == "" && m.ONNX == "" {
 			return fmt.Errorf("model %q: onnx path or model_repo is required", name)
 		}

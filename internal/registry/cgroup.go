@@ -35,6 +35,97 @@ func EffectiveNumCPU() int {
 	return runtime.GOMAXPROCS(0)
 }
 
+// CPUAllowance keeps fractional cgroup bandwidth separate from the integer
+// scheduler and admission limits.
+type CPUAllowance struct {
+	CPUs      float64
+	Source    string
+	Scheduler int
+	Affinity  int
+}
+
+// EffectiveCPUAllowance reads the tightest visible quota in the current
+// cgroup hierarchy and reports Go's scheduler and process affinity limits.
+func EffectiveCPUAllowance() CPUAllowance {
+	scheduler, affinity := runtime.GOMAXPROCS(0), runtime.NumCPU()
+	quota, source := readCurrentCPUQuota(cgroupRoot, "/proc/self/cgroup")
+	return resolveCPUAllowance(quota, source, scheduler, affinity)
+}
+
+func resolveCPUAllowance(quota float64, source string, scheduler, affinity int) CPUAllowance {
+	if quota > 0 {
+		return CPUAllowance{CPUs: quota, Source: source, Scheduler: scheduler, Affinity: affinity}
+	}
+	cpus := float64(affinity)
+	if scheduler < affinity {
+		cpus = float64(scheduler)
+	}
+	return CPUAllowance{CPUs: cpus, Source: "scheduler/affinity", Scheduler: scheduler, Affinity: affinity}
+}
+
+func readCurrentCPUQuota(root, membershipFile string) (float64, string) {
+	b, err := os.ReadFile(membershipFile)
+	if err != nil {
+		return 0, ""
+	}
+	var group, mount string
+	for _, line := range strings.Split(string(b), "\n") {
+		fields := strings.SplitN(line, ":", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		if fields[0] == "0" && fields[1] == "" {
+			group, mount = fields[2], root
+			break
+		}
+		for _, controller := range strings.Split(fields[1], ",") {
+			if controller == "cpu" {
+				group, mount = fields[2], filepath.Join(root, "cpu")
+				break
+			}
+		}
+	}
+	if group == "" || mount == "" {
+		return 0, ""
+	}
+	quota, source := 0.0, ""
+	for dir := filepath.Clean(filepath.Join(mount, group)); ; dir = filepath.Dir(dir) {
+		if data, err := os.ReadFile(filepath.Join(dir, "cpu.max")); err == nil {
+			if q, ok := parseCPUQuotaFloat(strings.Fields(string(data))); ok && (quota == 0 || q < quota) {
+				quota, source = q, filepath.Join(dir, "cpu.max")
+			}
+		}
+		if data, err := os.ReadFile(filepath.Join(dir, "cpu.cfs_quota_us")); err == nil {
+			period, err := os.ReadFile(filepath.Join(dir, "cpu.cfs_period_us"))
+			if err == nil {
+				if q, ok := parseCPUQuotaFloat([]string{strings.TrimSpace(string(data)), strings.TrimSpace(string(period))}); ok && (quota == 0 || q < quota) {
+					quota, source = q, filepath.Join(dir, "cpu.cfs_quota_us")
+				}
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir || (parent != filepath.Clean(mount) && !strings.HasPrefix(parent, filepath.Clean(mount)+string(filepath.Separator))) {
+			break
+		}
+	}
+	return quota, source
+}
+
+func parseCPUQuotaFloat(fields []string) (float64, bool) {
+	if len(fields) != 2 || fields[0] == "max" {
+		return 0, false
+	}
+	quota, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || quota <= 0 {
+		return 0, false
+	}
+	period, err := strconv.ParseFloat(fields[1], 64)
+	if err != nil || period <= 0 {
+		return 0, false
+	}
+	return quota / period, true
+}
+
 // readCgroupMemoryLimit reads a cgroup v2 memory.max or v1
 // memory/memory.limit_in_bytes. A missing or unlimited value returns 0.
 func readCgroupMemoryLimit(root string) uint64 {
