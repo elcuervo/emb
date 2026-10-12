@@ -46,7 +46,10 @@ func run() error {
 		}
 	}()
 
-	reg := registry.New()
+	reg, err := registry.NewWithConfig(&fc.Config)
+	if err != nil {
+		return fmt.Errorf("resolving CPU budget: %w", err)
+	}
 	closeRegistry := true
 	defer func() {
 		if closeRegistry {
@@ -57,15 +60,20 @@ func run() error {
 	var modelCount int
 	for name, modelCfg := range fc.Models {
 		log.Printf("registering model %q", name)
-		entry, err := registry.LoadModel(modelCfg, name)
+		entry, err := registry.LoadModelDeferred(modelCfg, name)
 		if err != nil {
 			return fmt.Errorf("loading model %q: %w", name, err)
 		}
 		reg.Add(name, entry)
+		if err := entry.Preload(); err != nil {
+			return fmt.Errorf("preloading model %q: %w", name, err)
+		}
 		modelCount++
 	}
 	reg.SetModelCount(modelCount)
-	registry.WarnThreadBudget(reg.List(), registry.EffectiveNumCPU())
+	if fc.CPUBudget == "off" {
+		registry.WarnThreadBudget(reg.List(), registry.EffectiveNumCPU())
+	}
 
 	var tlsConfig *tls.Config
 	if fc.TLSCert != "" && fc.TLSKey != "" {

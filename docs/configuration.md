@@ -14,6 +14,9 @@ Server settings live in a YAML file (`-config config.yaml`) or inline flags.
 
 ```yaml
 listen: ":6379"
+cpu_budget: auto              # process-local ORT budget; use off for legacy sizing
+# cpu_reserve: 1               # auto budget only; default reserve is 2/1/0 by CPU tier
+# calibrate: true              # briefly benchmark automatic model layouts at load
 
 # password: "hunter2"
 # tls_cert: /etc/emb/cert.pem
@@ -101,6 +104,7 @@ models:
 
 | Field | Default | Description |
 |-------|---------|-------------|
+| `weight` | `1` | Relative share used to split the process inference budget between configured models |
 | `onnx` | — | Path to ONNX model file |
 | `tokenizer` | `<model-dir>/tokenizer.json` | Path to HuggingFace tokenizer JSON |
 | `model_repo` | — | HuggingFace repo (auto-downloads ONNX + tokenizer) |
@@ -111,13 +115,13 @@ models:
 | `output_tensor` | auto-detected | ONNX output tensor name |
 | `preload` | `false` | Load model at startup instead of on first request |
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
-| `workers` | auto-tuned | Number of worker goroutines |
-| `script_workers` | auto-tuned | Named-tensor sessions for scripted models (`EMB.EVAL`/`EMB.EVSHA`). `0`/absent auto-tunes from RAM and model size (min 1). With `intra_op_threads` unset, each session gets `max(1, (cores−2)/script_workers)` threads so `sessions × threads ≈ cores` |
+| `workers` | calibrated when unset with `cpu_budget: auto`; legacy auto-tuning with `off` | Embedding sessions for the unbatched path; explicit values remain honored |
+| `script_workers` | `1` with `cpu_budget: auto`; legacy auto-tuning with `off` | Named-tensor sessions for scripted models (`EMB.EVAL`/`EMB.EVSHA`); explicit values remain honored |
 | `script_callers_per_session` | `4` | Concurrent evaluations allowed per scripted session (the analyzed sweet spot). ORT sessions are safe for concurrent `Run`, so a lone scripted model is not serialized behind one session. `0`/absent = 4; set `1` to serialize |
-| `allow_spinning` | follows sharing | Maps to ORT `session.intra_op.allow_spinning`. When unset, scripted sessions spin off while shared (`script_callers_per_session > 1`) so concurrent callers stop fighting for cores, and keep ORT's default otherwise. Embedding and image sessions keep ORT's default unless set explicitly |
+| `allow_spinning` | off for embedding/image under automatic budgeting | Maps to ORT `session.intra_op.allow_spinning`; explicit values remain honored |
 | `autotune` | `auto` | `auto`/`callers` enable the runtime concurrency controller; `off` fixes concurrency at the configured value. Applies to scripted sessions |
 | `capacity` | `auto` | Creation-time layout: `auto` (derived layout plus runtime adaptation), `latency` (spinning on, one caller per session), or `throughput` (spinning off, shared sessions) |
-| `intra_op_threads` | `cores−2` (shared) | ONNX intra-op threads per session. Embedding and image sessions use `cores−2`; scripted sessions divide that budget across `script_workers` (`max(1, (cores−2)/script_workers)`). An explicit value is honoured verbatim for every path. At boot the server logs a warning when the total budget (`sessions × threads` across all models) exceeds the core count |
+| `intra_op_threads` | calibrated when unset with `cpu_budget: auto`; legacy default with `off` | ONNX intra-op threads per session. An explicit value is honored; runs wider than the process budget are admitted alone |
 | `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
 | `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
 | `image_preload` | `false` | Warm the image named-session pool at startup instead of on first `EMB.IMG` |
@@ -125,30 +129,84 @@ models:
 
 ## Thread budget
 
-ONNX Runtime allocates `intra_op_threads` per session. Summed across every
-session of every model, that budget should stay near the core count, or the
-sessions contend for the CPU and throughput falls while tail latency rises.
-The rule is:
+`cpu_budget` is process-local and defaults to `auto`. The server keeps the
+fractional cgroup quota separate from integer capacity and Go scheduler
+parallelism. Automatic capacity floors the detected quota (minimum one), then
+reserves two CPUs at 8+, one at 4–7, and none below four. On an 8-CPU task the
+initial inference budget is six. `cpu_reserve` overrides that reserve when the
+budget is `auto`; it must be smaller than detected capacity. A numeric
+`cpu_budget` is an explicit final budget and cannot be combined with
+`cpu_reserve`. A budget above detected capacity starts with a warning.
 
-```
-workers × threads ≈ cores
-```
+Models split the initial budget deterministically by `weight` (default 1).
+One FIFO admission gate covers embedding, image, and script
+ONNX runs; explicit over-budget runs execute alone. Automatic embedding and
+image sessions disable ORT spinning. Set `cpu_budget: off` to restore legacy
+session sizing and spinning behavior; this does not roll back the binary.
 
-When `intra_op_threads` is unset, scripted sessions divide the `cores−2` budget
-across `script_workers`: `max(1, (cores−2)/script_workers)`. An explicit
-`intra_op_threads` is honoured verbatim for every path, and the server warns at
-boot when the total configured budget exceeds the core count, naming each
-contributing model with its session and thread counts. The warning never
-changes configuration.
+### Startup calibration
 
-The budget is sized from the process's **effective** limits, not the host's: in
-a container (Fargate, EKS, Docker) `workers` uses the cgroup memory limit and
-the derived thread count uses the cgroup CPU quota. A task that reports the
-host's 32 GB therefore cannot open a session pool sized for 32 GB and get OOM
-killed.
+`calibrate` defaults to `true` and applies only with `cpu_budget: auto`.
+Defaults require no model-specific tuning. Precedence, highest first:
 
-Measured on the reference host (10 cores, GLiNER2 int8, 36-text corpus, no
-reply cache) at concurrency 8:
+1. an explicit `workers` / `intra_op_threads` fixes that dimension and is never
+   replaced by calibration (the other dimension is still calibrated);
+2. an explicit numeric `cpu_budget` sets both the admission budget and the
+   candidate ceiling;
+3. `cpu_budget: auto` derives capacity and reserve;
+4. `calibrate: false` skips the trials and keeps conservative sizing — one
+   session at the model's share with the derived width — while admission stays
+   on;
+5. `cpu_budget: off` restores legacy sizing, spinning, and shared scripted
+   sessions, and bypasses calibration and admission entirely.
+
+After the batch-determinism probe, each embedding model builds representative
+short, typical, and long inputs from its own tokenizer (never user text),
+runs one warmup pass, then measures deduplicated width × session candidates
+that fit both the process CPU share and the model-size memory estimate. A
+batching model's trial serves tiled multi-row runs (a representative batch, not
+a single row), because width that barely helps one row is worth several threads
+for a coalesced batch; the batch shrinks with the fixture's length so one long
+run cannot spend the whole deadline. Each candidate is measured twice and keeps
+its best score. Candidates whose output differs from the baseline, that report
+no CPU accounting, or whose p95 exceeds twice the baseline p95 are rejected;
+the highest measured rows per wall-clock second wins, and inside a 5%
+run-to-run noise band the **wider** layout wins when the model batches (the
+trial understates wide threads) and the lower-resource layout wins otherwise.
+An explicit dimension, or a budget with only one candidate, skips the trials.
+
+**Startup cost.** Trials are bounded by a 4-second deadline per model and at
+most 12 candidates, and the deadline is predicted between candidates from the
+last one's measured cost, so a slow model keeps its best validated layout
+instead of overrunning. Calibration runs when the model loads: at startup for
+`preload: true`, otherwise on that model's **first request** — so a lazily
+loaded model's first request pays both the model load and up to four seconds of
+trials.
+
+**Fallback.** Invalid fixtures, a failed baseline, unavailable CPU accounting,
+an expired deadline, or an unusable tokenizer keep the best validated candidate,
+or select one session × one thread (or the explicit dimensions) and log a reason
+such as `baseline_failed`, `cpu_accounting_unavailable`, `calibration_deadline`,
+`candidate_failed`, `p95_regression`, `invalid_limits`, or `invalid_fixture`.
+A batch-determinism probe failure turns batching off *before* calibration, so a
+degraded model is calibrated for single-row inference and cannot keep
+batch-sized worker defaults.
+
+**What it cannot guarantee.** Calibration is a measured startup choice for this
+process on this host. It does not change a running layout (restart to re-tune),
+does not create CPU isolation, does not tune multiple models jointly, and does
+not account for inter-op threads, tokenization, Go code, or sidecars. The
+admission budget bounds admitted intra-op work, not physical CPU use. A busy or
+noisy host can select a suboptimal layout; `calibrate: false` or explicit
+values are the deterministic escape hatch.
+
+The budget bounds admitted intra-op work, not all process CPU use or physical
+cores. Tokenization, inter-op work, Go code, and sidecars remain outside that
+bound. A reserve is headroom, not CPU isolation. Session layouts are selected
+at startup; changing limits requires a restart.
+
+Legacy layout measurements on the reference host (10 cores, GLiNER2 int8,
+36-text corpus, no reply cache) at concurrency 8, before the process budget:
 
 | workers × threads | serial p50 | c=4 p50 | req/s | p99 |
 |---|---|---|---|---|
@@ -165,7 +223,7 @@ above.
 
 ## Shared scripted sessions and spinning
 
-Out of the box, each scripted session is shared by `script_callers_per_session`
+With `cpu_budget: off`, each scripted session is shared by `script_callers_per_session`
 (4) evaluations, and spinning is off while a session is shared. A lone scripted
 model therefore does not serialize behind one session: measured on the
 reference host, one session × 8 threads with 4 callers and spinning off gives
@@ -173,7 +231,7 @@ reference host, one session × 8 threads with 4 callers and spinning off gives
 `allow_spinning: true` or `script_callers_per_session: 1` to get ORT's spinning
 back (about 1 ms better serial latency for a single caller).
 
-The recommended layout, which the defaults produce for `script_workers: 2` on
+The legacy recommended layout for `script_workers: 2` on
 10 cores, is **2 sessions × 4 threads, 4 callers, spinning off**. Measured on
 the same host (10 cores, GLiNER2 int8, 36 texts) with 8 intra-op threads total:
 

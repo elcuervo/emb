@@ -184,9 +184,9 @@ and renders:
   headless `-once` mode for scripts and CI.
 
 <!-- topviz:begin -->
-![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-94b166cf.gif)
+![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-bb0d714c.gif)
 
-*Captured 2026-10-05 · emb-top v0.4.1 · 4 models · 127.0.0.1:16379.*
+*Captured 2026-10-12 · emb-top v0.4.3.pre4 · 8ace286 · 4 models · 127.0.0.1:16379.*
 <!-- topviz:end -->
 
 ```bash
@@ -213,6 +213,20 @@ emb-top -addr localhost:6379 -password secret -tls
 # TLS against a resolved address: verify the certificate against the name
 emb-top -nodes emb.internal -tls -tls-server-name emb.internal
 ```
+
+### Reading the process CPU plan
+
+`emb-top` renders the CPU plan the server resolved at startup: a
+`cpu budget <N> · tokens <in use>/<N> · peak <N> · <allowance> cores (<source>)`
+line under the gauges in the node dashboard, and a summed line in the cluster
+view. `tokens` is admitted intra-op work: a model running at its width holds the
+tokens it uses, an idle node shows `0/N`. Each node resolves its own budget and
+allowance, so the fleet number is the sum of independent plans, not one shared
+pool. In `-once` and `-frames` output every node section carries that node's own
+`cpu_budget`, `cpu_active_tokens`, `cpu_peak_tokens`, `cpu_allowance` and
+`cpu_budget_enabled`, plus each model's `workers`, `intra_op_threads` and
+`cpu_thread_share`. A server that predates these fields reports no plan and the
+line stays blank, rather than reading as `cpu_budget: off`.
 
 ### Watching a fleet
 

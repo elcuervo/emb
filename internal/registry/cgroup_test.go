@@ -60,6 +60,47 @@ func TestParseCPUQuota(t *testing.T) {
 	}
 }
 
+func TestParseCPUQuotaFloat(t *testing.T) {
+	for _, tc := range []struct {
+		fields []string
+		want   float64
+		ok     bool
+	}{{[]string{"50000", "100000"}, .5, true}, {[]string{"150000", "100000"}, 1.5, true}, {[]string{"max", "100000"}, 0, false}} {
+		got, ok := parseCPUQuotaFloat(tc.fields)
+		if got != tc.want || ok != tc.ok {
+			t.Fatalf("parseCPUQuotaFloat(%v) = (%v,%v), want (%v,%v)", tc.fields, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestResolveCPUAllowanceSeparatesQuotaAndScheduler(t *testing.T) {
+	quota := resolveCPUAllowance(1.5, "cgroup", 4, 8)
+	if quota.CPUs != 1.5 || quota.Scheduler != 4 || quota.Affinity != 8 {
+		t.Fatalf("quota allowance = %+v, want fractional quota and distinct limits", quota)
+	}
+	fallback := resolveCPUAllowance(0, "", 2, 8)
+	if fallback.CPUs != 2 || fallback.Source != "scheduler/affinity" || fallback.Scheduler != 2 {
+		t.Fatalf("scheduler-limited allowance = %+v, want 2 CPUs", fallback)
+	}
+}
+
+// A quota the process cannot use is not an allowance: affinity binds first, so
+// planning must not admit more work than the CPUs the process can run on.
+func TestResolveCPUAllowanceCapsByAffinity(t *testing.T) {
+	capped := resolveCPUAllowance(8, "cgroup", 8, 2)
+	if capped.CPUs != 2 {
+		t.Fatalf("quota above affinity = %v CPUs, want 2 (the affinity)", capped.CPUs)
+	}
+	keep := resolveCPUAllowance(4, "cgroup", 8, 8)
+	if keep.CPUs != 4 {
+		t.Fatalf("quota below affinity = %v CPUs, want the quota 4", keep.CPUs)
+	}
+	unknown := resolveCPUAllowance(4, "cgroup", 8, 0)
+	if unknown.CPUs != 4 {
+		t.Fatalf("unknown affinity = %v CPUs, want the quota 4", unknown.CPUs)
+	}
+}
+
 func TestReadCgroupCPUQuota(t *testing.T) {
 	v2 := t.TempDir()
 	os.WriteFile(filepath.Join(v2, "cpu.max"), []byte("400000 100000\n"), 0o644)
@@ -77,6 +118,56 @@ func TestReadCgroupCPUQuota(t *testing.T) {
 
 	if got := readCgroupCPUQuota(t.TempDir()); got != 0 {
 		t.Fatalf("absent quota = %d, want 0", got)
+	}
+}
+
+func TestReadCurrentCPUQuotaKeepsFractionAndParentLimit(t *testing.T) {
+	root := t.TempDir()
+	leaf := filepath.Join(root, "parent", "leaf")
+	if err := os.MkdirAll(leaf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "cpu.max"), []byte("200000 100000\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "parent", "cpu.max"), []byte("150000 100000\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(leaf, "cpu.max"), []byte("300000 100000\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	membership := filepath.Join(t.TempDir(), "cgroup")
+	if err := os.WriteFile(membership, []byte("0::/parent/leaf\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, source := readCurrentCPUQuota(root, membership)
+	if got != 1.5 || source != filepath.Join(root, "parent", "cpu.max") {
+		t.Fatalf("quota = %v, source = %q; want 1.5 from parent", got, source)
+	}
+}
+
+func TestReadCurrentCPUQuotaV1(t *testing.T) {
+	root := t.TempDir()
+	cpuRoot := filepath.Join(root, "cpu")
+	leaf := filepath.Join(cpuRoot, "parent", "leaf")
+	if err := os.MkdirAll(leaf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for dir, quota := range map[string]string{cpuRoot: "200000", filepath.Join(cpuRoot, "parent"): "150000", leaf: "300000"} {
+		if err := os.WriteFile(filepath.Join(dir, "cpu.cfs_quota_us"), []byte(quota), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "cpu.cfs_period_us"), []byte("100000"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	membership := filepath.Join(t.TempDir(), "cgroup")
+	if err := os.WriteFile(membership, []byte("5:cpu,cpuacct:/parent/leaf\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, source := readCurrentCPUQuota(root, membership)
+	if got != 1.5 || source != filepath.Join(cpuRoot, "parent", "cpu.cfs_quota_us") {
+		t.Fatalf("quota = %v, source = %q; want 1.5 from v1 parent", got, source)
 	}
 }
 

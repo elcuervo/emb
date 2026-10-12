@@ -10,8 +10,8 @@ Full reference for the `emb` command surface. See the
 | `EMB.IMG <model> [BLOB\|VALUES] <bytes> [<bytes>...]` | Embed one or more images from raw JPEG/PNG/GIF/WebP bytes (each a binary-safe bulk). `BLOB`: single image → bulk, multiple → array with nulls for failed/truncated slots; `VALUES`: one `[m, dim]` envelope over processed images. URLs are rejected |
 | `EMB.IMGMULTI [BLOB\|VALUES] <model> <bytes> [<model> <bytes>...]` | Embed images across different models in one call; MGET-style per-pair nulls, per-pair `VALUES` envelopes (with `model`) |
 | `EMB.MODELS` | List loaded models with dimensions and status |
-| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism verdict (`batch_determinism`, `batch_determinism_reason`), live cache stats |
-| `EMB.STATS` | Server statistics: uptime, total requests, live connections, active requests, per-model breakdown, mem (RSS MB), cpu user/sys usec, goroutines |
+| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, live cache stats |
+| `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown, CPU allowance/budget/active peak, cache/connection limits, mem (RSS MB), CPU user/sys usec, goroutines |
 | `MONITOR [seq] [limit]` | Recent completed-request events (`seq`, timestamp µs, model, texts, latency µs, error) from a bounded ring. Incremental (`seq`) fetch; no text payloads |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
 | `EMB.EVAL <model> <script> <numtexts> <text...> <arg...>` | Evaluate a Lua script once against a model (KEYS=texts, ARGV=args) |
@@ -27,6 +27,15 @@ Full reference for the `emb` command surface. See the
 | `AUTH <password>` | Authenticate the connection (required if `password` is set) |
 | `HELLO [2\|3]` | Negotiate the RESP protocol version for the connection (default 2); bare `HELLO` reports the current version |
 | `PING` | PONG |
+
+`EMB.INFO` and `EMB.STATS` report the process CPU plan chosen at startup.
+`EMB.STATS` carries `cpu_allowance`, `cpu_allowance_source`, `cpu_capacity`,
+`cpu_reserve`, `cpu_budget`, `cpu_active_tokens`, and `cpu_peak_tokens`.
+`EMB.INFO` carries each model's `workers`, `intra_op_threads`,
+`cpu_thread_share`, and `allow_spinning` — the calibrated layout when
+calibration selected it. See
+[Startup calibration](configuration.md#startup-calibration) for defaults,
+precedence, and fallbacks.
 
 ## EMB.MULTI
 

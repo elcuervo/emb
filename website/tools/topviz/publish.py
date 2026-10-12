@@ -64,6 +64,10 @@ DOC_PAGE = SITE / "docs" / "index.html"
 
 CAPTURE_PREFIX = "emb-top-"
 CAST_PREFIX = "emb-top-"
+# The fleet view's capture lives beside this take and starts with the same
+# prefix, but `website-clusterviz` owns it; deleting it here breaks the
+# operations page's image.
+CLUSTER_PREFIX = "emb-top-cluster-"
 BLOCK_BEGIN = "<!-- topviz:begin -->"
 BLOCK_END = "<!-- topviz:end -->"
 
@@ -225,6 +229,7 @@ def main() -> int:
     parser.add_argument("--models", required=True, help="model count of the node")
     parser.add_argument("--addr", required=True, help="node the take came from")
     parser.add_argument("--date", default=date.today().isoformat())
+    parser.add_argument("--commit", default="", help="commit the take was recorded at")
     args = parser.parse_args()
 
     for path in (args.frame, args.cast, args.gif, args.samples):
@@ -246,6 +251,8 @@ def main() -> int:
     cast_name = f"{CAST_PREFIX}{hashlib.sha256(args.cast.read_bytes()).hexdigest()[:8]}.cast"
 
     label = f"{args.date} · emb-top v{args.version} · {args.models} models · {args.addr}"
+    if args.commit:
+        label = f"{args.date} · emb-top v{args.version} · {args.commit} · {args.models} models · {args.addr}"
     figures = busiest(args.samples)
 
     # Both pages are stamped before anything is written, so a missing marker
@@ -269,7 +276,8 @@ def main() -> int:
 
     DOC_ASSETS.mkdir(parents=True, exist_ok=True)
     for previous in DOC_ASSETS.glob(f"{CAPTURE_PREFIX}*.gif"):
-        previous.unlink()
+        if not previous.name.startswith(CLUSTER_PREFIX):
+            previous.unlink()
     (DOC_ASSETS / capture_name).write_bytes(args.gif.read_bytes())
 
     CAST_DIR.mkdir(parents=True, exist_ok=True)
@@ -280,7 +288,8 @@ def main() -> int:
     # The plate's image revision shipped its take in the served tree. Nothing
     # references those files now, and leaving them would fail published-tree.py.
     for orphan in IMG_DIR.glob(f"{CAPTURE_PREFIX}*"):
-        orphan.unlink()
+        if not orphan.name.startswith(CLUSTER_PREFIX):
+            orphan.unlink()
 
     INDEX.write_text(landing, encoding="utf-8")
     DOC_PAGE.write_text(documentation, encoding="utf-8")

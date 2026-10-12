@@ -250,6 +250,20 @@ bench-script BASE="" CAND="":
 bench-shape:
     @DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" bash bench/script/shape.sh
 
+# Seeded local inference benchmark. Offers model-call pairs on a fixed open-loop
+# schedule (default 10 pairs/s, the reported production load shape) for single,
+# paired-serial, and paired-parallel layouts under warm and cold cache, then
+# writes a self-contained JSON report to bench-out/inference/inference.json with
+# offered/completed/dropped pairs, per-leg and pair latency, CPU seconds per
+# pair and per ORT row, RSS, cache hits/misses, errors, and the selected layout.
+# Requires both fixtures: just download-model && just download-model repo=Xenova/bge-small-en-v1.5 dir=./models/bge
+# Args are positional (rate pairs/s, seconds):
+#   just bench-inference          # 10 pairs/s for 2s per case
+#   just bench-inference 5 10     # 5 pairs/s for 10s per case
+bench-inference rate="10" duration="2":
+    @mkdir -p bench-out/inference
+    @EMB_BENCH_PAIR_RATE={{rate}} EMB_BENCH_DURATION={{duration}} DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" go test ./internal/server/ -run=^$ -bench="BenchmarkInferencePairs" -benchtime=1x -timeout 30m -v
+
 # Enforce the scripted-inference budgets (latency parity, metal parity,
 # materialization, memory, throughput scaling). Timing- and RSS-sensitive: run
 # on a quiet reference machine. Set EMB_BENCH_REFERENCE=1 to also assert the
@@ -261,51 +275,106 @@ bench-budgets:
 # Run redis-benchmark with a single-threaded server
 # Uses 1 client, 1 pipeline, 500 requests (~2s at 280 req/s)
 # Requires: redis-benchmark, downloaded model at ./models/minilm
-bench-redis-single: build
+bench-redis-single port="6379": build
     @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
-    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; echo "Starting server (app partition: $(aff) GOMAXPROCS=1)..."; DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=1 $(aff) ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    @owner=$(lsof -nP -iTCP:{{port}} -sTCP:LISTEN 2>/dev/null | tail -n +2); \
+        if [ -n "$owner" ]; then echo "ERROR: port {{port}} is already held; refusing to measure it:"; echo "$owner"; exit 1; fi
+    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; echo "Starting server (app partition: $(aff) GOMAXPROCS=1)..."; DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=1 $(aff) ./bin/emb -config config.yaml -listen 127.0.0.1:{{port}} & echo $! > /tmp/emb-srv.pid
     sleep 10
-    @bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; echo "Running: redis-benchmark (bench partition: $(bench)) -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"; $(bench) {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world
+    @bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; echo "Warming up..."; {{redis_benchmark}} -p {{port}} -q -c 1 -P 1 -n 1000 EMB minilm "hello world" > /dev/null 2>&1; echo "Running: redis-benchmark (bench partition: $(bench)) -p {{port}} -q -c 1 -P 1 -n 500 EMB minilm hello world"; $(bench) {{redis_benchmark}} -p {{port}} -q -c 1 -P 1 -n 500 EMB minilm hello world
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
 # Run redis-benchmark with a multi-threaded server
 # Uses 16 clients, 1 pipeline, 2000 requests (~5s at 400 req/s)
 # Requires: redis-benchmark, downloaded model at ./models/minilm
-bench-redis-multi: build
+bench-redis-multi port="6379": build
     @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
-    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; echo "Starting server (app partition: $(aff) GOMAXPROCS=0)..."; DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 $(aff) ./bin/emb -config config.yaml & echo $! > /tmp/emb-srv.pid
+    @owner=$(lsof -nP -iTCP:{{port}} -sTCP:LISTEN 2>/dev/null | tail -n +2); \
+        if [ -n "$owner" ]; then echo "ERROR: port {{port}} is already held; refusing to measure it:"; echo "$owner"; exit 1; fi
+    @aff() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c 0-$(( {{app_cpus}} - 1 ))"; }; echo "Starting server (app partition: $(aff) GOMAXPROCS=0)..."; DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 $(aff) ./bin/emb -config config.yaml -listen 127.0.0.1:{{port}} & echo $! > /tmp/emb-srv.pid
     sleep 10
-    @bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; echo "Running: redis-benchmark (bench partition: $(bench)) -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world"; $(bench) {{redis_benchmark}} -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world
+    @bench() { [ "$(uname -s)" = "Linux" ] && command -v taskset >/dev/null 2>&1 && echo "taskset -c {{app_cpus}}-$(( {{app_cpus}} + {{bench_cpus}} - 1 ))"; }; echo "Warming up..."; {{redis_benchmark}} -p {{port}} -q -c 16 -P 1 -n 1000 EMB minilm "hello world" > /dev/null 2>&1; echo "Running: redis-benchmark (bench partition: $(bench)) -p {{port}} -q -c 16 -P 1 -n 2000 EMB minilm hello world"; $(bench) {{redis_benchmark}} -p {{port}} -q -c 16 -P 1 -n 2000 EMB minilm hello world
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
 # Run redis-benchmark with cache enabled (cache hit benchmark)
 # Uses 1 client, 1 pipeline, 500 requests with same text (all cache hits after first)
-bench-cache: build
+bench-cache port="6379": build
     @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
+    @owner=$(lsof -nP -iTCP:{{port}} -sTCP:LISTEN 2>/dev/null | tail -n +2); \
+        if [ -n "$owner" ]; then echo "ERROR: port {{port}} is already held; refusing to measure it:"; echo "$owner"; exit 1; fi
     @echo "Starting server with cache (GOMAXPROCS=0)..."
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml -cache auto & echo $! > /tmp/emb-srv.pid
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml -listen 127.0.0.1:{{port}} -cache auto & echo $! > /tmp/emb-srv.pid
     sleep 10
     @echo "Warming cache with first request..."
-    @{{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 1 EMB minilm "hello world" > /dev/null 2>&1
-    @echo "Running: redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"
-    {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"
+    @{{redis_benchmark}} -p {{port}} -q -c 1 -P 1 -n 1 EMB minilm "hello world" > /dev/null 2>&1
+    @echo "Running: redis-benchmark -p {{port}} -q -c 1 -P 1 -n 500 EMB minilm hello world"
+    {{redis_benchmark}} -p {{port}} -q -c 1 -P 1 -n 500 EMB minilm "hello world"
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
 
 # Run redis-benchmark with cache enabled and specified cache size
 # Usage: just bench-cache-size size="256MB"
-bench-cache-size size="auto":
+bench-cache-size size="auto" port="6379":
     @if [ "{{redis_benchmark}}" = "" ]; then echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; fi
+    @owner=$(lsof -nP -iTCP:{{port}} -sTCP:LISTEN 2>/dev/null | tail -n +2); \
+        if [ -n "$owner" ]; then echo "ERROR: port {{port}} is already held; refusing to measure it:"; echo "$owner"; exit 1; fi
     @echo "Starting server with cache size {{size}} (GOMAXPROCS=0)..."
-    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml -cache {{size}} & echo $! > /tmp/emb-srv.pid
+    DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" GOMAXPROCS=0 ./bin/emb -config config.yaml -listen 127.0.0.1:{{port}} -cache {{size}} & echo $! > /tmp/emb-srv.pid
     sleep 10
-    @{{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 1 EMB minilm "hello world" > /dev/null 2>&1
-    @echo "Running: redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world"
-    {{redis_benchmark}} -p 6379 -q -c 1 -P 1 -n 500 EMB minilm "hello world"
+    @{{redis_benchmark}} -p {{port}} -q -c 1 -P 1 -n 1 EMB minilm "hello world" > /dev/null 2>&1
+    @echo "Running: redis-benchmark -p {{port}} -q -c 1 -P 1 -n 500 EMB minilm hello world"
+    {{redis_benchmark}} -p {{port}} -q -c 1 -P 1 -n 500 EMB minilm "hello world"
     -kill `cat /tmp/emb-srv.pid` 2>/dev/null
     rm -f /tmp/emb-srv.pid
+
+# A/B two server configs in one session, alternating arms so host drift hits both
+# equally. Prints every sample, the median and the spread per arm, plus the
+# policy and the CPU budget/plan lines each server logged.
+# Usage: just bench-ab a=config.yaml b=/tmp/cpu-budget-off.yaml reps=3
+# Positional: a b reps clients requests port model text gomaxprocs pipeline
+bench-ab a="config.yaml" b="config.yaml" reps="3" clients="16" requests="2000" port="6379" model="minilm" text="hello world" gomaxprocs="0" pipeline="1": build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ "{{redis_benchmark}}" != "" ] || { echo "ERROR: redis-benchmark not found. Install: brew install redis"; exit 1; }
+    owner=$(lsof -nP -iTCP:{{port}} -sTCP:LISTEN 2>/dev/null | tail -n +2 || true)
+    [ -z "$owner" ] || { echo "ERROR: port {{port}} is already held; refusing to measure it:"; echo "$owner"; exit 1; }
+    tmp=$(mktemp -d /tmp/emb-bench-ab.XXXXXX)
+    trap 'kill "$(cat "$tmp/pid" 2>/dev/null)" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+    : > "$tmp/a.samples"; : > "$tmp/b.samples"
+    : > "$tmp/a.plan";    : > "$tmp/b.plan"
+    for rep in $(seq 1 {{reps}}); do
+      for arm in a b; do
+        case "$arm" in a) cfg="{{a}}";; b) cfg="{{b}}";; esac
+        [ -f "$cfg" ] || { echo "ERROR: arm $arm config not found: $cfg"; exit 1; }
+        log="$tmp/$arm.$rep.log"
+        echo "[rep $rep] arm $arm: $cfg"
+        DYLD_LIBRARY_PATH="{{ort_lib}}:${DYLD_LIBRARY_PATH:-}" GOMAXPROCS={{gomaxprocs}} ./bin/emb -config "$cfg" -listen 127.0.0.1:{{port}} > "$log" 2>&1 &
+        echo $! > "$tmp/pid"
+        deadline=$(( $(date +%s) + 120 ))
+        until redis-cli -p {{port}} ping >/dev/null 2>&1; do
+          kill -0 "$(cat "$tmp/pid")" 2>/dev/null || { echo "ERROR: server exited during startup (arm $arm)"; cat "$log"; exit 1; }
+          [ "$(date +%s)" -lt "$deadline" ] || { echo "ERROR: server not ready within 120s (arm $arm)"; exit 1; }
+          sleep 1
+        done
+        grep -h "CPU inference budget\|CPU plan model" "$log" >> "$tmp/$arm.plan" || true
+        {{redis_benchmark}} -p {{port}} -q -c {{clients}} -P {{pipeline}} -n 1000 EMB {{model}} {{text}} >/dev/null 2>&1
+        {{redis_benchmark}} -p {{port}} -q -c {{clients}} -P {{pipeline}} -n {{requests}} EMB {{model}} {{text}} | tr '\r' '\n' | grep 'requests per second' | tail -1 >> "$tmp/$arm.samples"
+        kill "$(cat "$tmp/pid")" 2>/dev/null || true
+        wait "$(cat "$tmp/pid")" 2>/dev/null || true
+      done
+    done
+    for arm in a b; do
+      case "$arm" in a) cfg="{{a}}";; b) cfg="{{b}}";; esac
+      policy=$(grep -E '^[[:space:]]*cpu_budget:' "$cfg" | sed -n '1p' | sed 's/.*cpu_budget:[[:space:]]*//' | sed 's/[[:space:]]*$//' || true)
+      echo "== arm $arm ($cfg) — cpu_budget: ${policy:-auto (default)} =="
+      sort -u "$tmp/$arm.plan" | sed 's/^/  /'
+      cat "$tmp/$arm.samples" | sed 's/^/  sample: /'
+      vals=$(sed -n 's/.*: \([0-9.]*\) requests per second.*/\1/p' "$tmp/$arm.samples" | sort -n)
+      read -r median min max n < <(printf '%s\n' "$vals" | awk 'NR==1{min=$1} {v[NR]=$1; max=$1} END {n=NR; if (n%2) m=v[(n+1)/2]; else m=(v[n/2]+v[n/2+1])/2; printf "%.2f %.2f %.2f %d\n", m, min, max, n}')
+      echo "  median=$median min=$min max=$max over $n run(s)"
+    done
 
 # Run all redis-benchmark variants (single-threaded + multi-threaded + cache)
 bench-redis: bench-redis-single bench-redis-multi
@@ -684,7 +753,8 @@ website-topviz: build
       --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/take.cast $tmp/take.gif; \
     python3 website/tools/topviz/publish.py --frame $runs/frame.txt --cast $runs/take.cast --gif $tmp/take.gif \
       --samples $runs/samples.txt \
-      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port; \
+      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port \
+      --commit "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; \
     python3 website/tools/published-tree.py
 
 # Record the fleet view's capture from a real two-node run (see

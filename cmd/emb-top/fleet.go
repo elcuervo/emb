@@ -26,9 +26,10 @@ const (
 	orphanGrace     = 5 * time.Minute
 
 	// fleetChrome is the fixed number of non-node rows the fleet view spends on
-	// the header, banner, membership, traffic totals, the TRAFFIC chart, load
-	// bar, ingress header, node legend, imbalance panel and footer.
-	fleetChrome = 20
+	// the header, banner, membership, traffic totals, process CPU plan, the
+	// TRAFFIC chart, load bar, ingress header, node legend, imbalance panel and
+	// footer.
+	fleetChrome = 21
 	// trafficH is the traffic chart's canvas height (its border and caption add
 	// three more rows).
 	trafficH = 4
@@ -629,6 +630,8 @@ func (f *fleet) fleetView() string {
 	b.WriteString("\n")
 	b.WriteString(f.totalsView())
 	b.WriteString("\n")
+	b.WriteString(f.cpuPlanView())
+	b.WriteString("\n")
 	b.WriteString(f.trafficView())
 	b.WriteString("\n")
 	b.WriteString(f.loadView())
@@ -753,6 +756,41 @@ func (f *fleet) totalsView() string {
 		dimStyle.Render(" · ") + "p95 " + fmtLatency(medianInt64(p95s)) +
 		dimStyle.Render("   trend ") + sparkline(f.aggHistory, 24, reqLineStyle)
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
+}
+
+// cpuPlanView is the fleet's summed process CPU plan: each node resolves its
+// own budget and allowance, so the fleet total is the sum of independent
+// plans, not one shared pool. Admission tokens are an aggregate load gauge:
+// "tokens in use / admitted".
+func (f *fleet) cpuPlanView() string {
+	agg := embtop.Point{}
+	src := ""
+	for _, n := range f.nodes {
+		if !n.reachable {
+			continue
+		}
+		p := n.tui.sampler.Latest
+		if !p.CPUPlanKnown {
+			continue
+		}
+		agg.CPUPlanKnown = true
+		agg.CPUBudgetEnabled = agg.CPUBudgetEnabled || p.CPUBudgetEnabled
+		agg.CPUBudget += p.CPUBudget
+		agg.CPUActiveTokens += p.CPUActiveTokens
+		agg.CPUPeakTokens += p.CPUPeakTokens
+		agg.CPUAllowance += p.CPUAllowance
+		if src == "" {
+			src = p.CPUAllowanceSrc
+		} else if src != p.CPUAllowanceSrc {
+			src = "mixed sources"
+		}
+	}
+	agg.CPUAllowanceSrc = src
+	line := embtop.CPUPlanText(agg)
+	if line == "" {
+		return ""
+	}
+	return dimStyle.Render("  " + line)
 }
 
 // loadView is the fleet's load distribution: one segment per node, its width

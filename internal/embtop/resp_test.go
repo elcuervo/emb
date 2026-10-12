@@ -158,7 +158,9 @@ func encodeArray(parts ...[]byte) []byte {
 
 func encodeError(msg string) []byte { return []byte("-" + msg + "\r\n") }
 
-// statsReply builds a canned EMB.STATS reply from a map.
+// statsReply builds a canned EMB.STATS reply from a map. cpu_allowance is the
+// only bulk string in the reply and is derived from the int map as hundredths,
+// so callers can set it from an int.
 func statsReply(fields map[string]int64) []byte {
 	parts := make([][]byte, 0, len(fields)*2)
 	keys := []string{
@@ -167,9 +169,16 @@ func statsReply(fields map[string]int64) []byte {
 		"cpu_user_usec", "cpu_sys_usec", "goroutines",
 		"cache_hits", "cache_misses", "cache_evictions",
 		"truncated_texts", "truncated_pairs", "truncated_images",
+		"cpu_budget_enabled", "cpu_allowance_source",
+		"cpu_capacity", "cpu_reserve", "cpu_budget",
+		"cpu_active_tokens", "cpu_peak_tokens",
 	}
 	for _, k := range keys {
 		parts = append(parts, encodeBulk(k), encodeInt(fields[k]))
+	}
+	if _, ok := fields["cpu_allowance"]; ok {
+		parts = append(parts, encodeBulk("cpu_allowance"),
+			encodeBulk(strconv.FormatFloat(float64(fields["cpu_allowance"])/100, 'f', 2, 64)))
 	}
 	return encodeArray(parts...)
 }
@@ -298,6 +307,75 @@ func TestClientPollPipelinesInOneWrite(t *testing.T) {
 	if ms.Pooling != "mean" || !ms.Normalize || ms.Quantization != "none" {
 		t.Fatalf("bad per-model metadata: %+v", ms)
 	}
+}
+
+// The process CPU plan must survive the round trip in both the aggregate
+// (EMB.STATS) and per-model (EMB.INFO) forms, and an older server that omits
+// the fields must read as unknown rather than as a disabled budget.
+func TestClientPollParsesCPUPlan(t *testing.T) {
+	models := modelsReply([]string{"a", "384"})
+	info := infoReply(nil, map[string]int64{
+		"cpu_budget_enabled": 1, "cpu_budget": 8, "cpu_thread_share": 4,
+		"intra_op_threads": 3, "allow_spinning": 0,
+	})
+	stats := statsReply(map[string]int64{
+		"uptime_secs": 1, "models_loaded": 1,
+		"cpu_budget_enabled": 1, "cpu_allowance": 1000, "cpu_capacity": 10,
+		"cpu_reserve": 2, "cpu_budget": 8, "cpu_active_tokens": 3, "cpu_peak_tokens": 6,
+	})
+	_, addr := startFake(t, models, info, stats, encodeBulk("gomaxprocs:10\r\n"), encodeArray())
+	c := NewClient(addr, "", false)
+	if err := c.Dial(); err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+
+	res, err := c.Poll([]string{"a"}, 0)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if !res.CPUPlanKnown || !res.CPUBudgetEnabled {
+		t.Fatalf("plan not recognized: %+v", res)
+	}
+	if res.CPUBudget != 8 || res.CPUActiveTokens != 3 || res.CPUPeakTokens != 6 || res.CPUCapacity != 10 {
+		t.Fatalf("bad plan parse: %+v", res)
+	}
+	if !res.CPUAllowanceKnown || res.CPUAllowance != 10 {
+		t.Fatalf("allowance = %v (known=%v), want 10", res.CPUAllowance, res.CPUAllowanceKnown)
+	}
+	ms := res.PerModel["a"]
+	if ms == nil || !ms.CPUBudgetEnabled || ms.CPUBudget != 8 || ms.CPUThreadShare != 4 || ms.IntraOpThreads != 3 {
+		t.Fatalf("bad per-model plan: %+v", ms)
+	}
+	if ms.AllowSpinning {
+		t.Error("allow_spinning=0 parsed as true")
+	}
+}
+
+// A server that predates the plan fields must not look like cpu_budget: off,
+// which would claim the budget was deliberately disabled.
+func TestClientPollWithoutCPUPlanIsUnknown(t *testing.T) {
+	_, addr := startFake(t, modelsReply(), legacyStatsReply(), encodeBulk("gomaxprocs:4\r\n"), encodeArray())
+	c := NewClient(addr, "", false)
+	if err := c.Dial(); err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	res, err := c.Poll(nil, 0)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if res.CPUPlanKnown {
+		t.Fatalf("legacy stats reported a plan: %+v", res)
+	}
+}
+
+// legacyStatsReply is an EMB.STATS reply from before the CPU plan fields.
+func legacyStatsReply() []byte {
+	return encodeArray(
+		encodeBulk("uptime_secs"), encodeInt(1),
+		encodeBulk("total_requests"), encodeInt(0),
+	)
 }
 
 func TestClientPollEmptyModels(t *testing.T) {

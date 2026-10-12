@@ -4,7 +4,7 @@
 
 Benchmarks use the standard `redis-benchmark` tool which formats positional arguments as RESP commands via `redisFormatCommandArgv`. All results use `EMB minilm hello world` as the benchmark command with `Xenova/all-MiniLM-L6-v2` (dim=384) via ONNX Runtime.
 
-**Hardware:** Apple M4, 24 GB RAM, macOS Sequoia 26.6.2 (10 CPUs = 4 performance + 6 efficiency). All tables were re-measured on this machine on 2026-08-31; the earlier M1 Pro / 32 GB numbers they replace are preserved in git history.
+**Hardware:** Apple M4, 24 GB RAM, macOS Sequoia 26.6.2 (10 CPUs = 4 performance + 6 efficiency). All tables were re-measured on this machine on 2026-10-12; the earlier M1 Pro / 32 GB numbers they replace are preserved in git history.
 
 **CPU partition:** every result set below is measured under a fixed partition of the
 machine's CPUs. The **app partition** hosts the emb server (bounded by `GOMAXPROCS` +
@@ -15,6 +15,16 @@ server is bounded by `GOMAXPROCS`/`intra_op_threads` only and the tooling runs f
 partition is measurement methodology (a deployment-shaped CPU budget), not a throughput
 knob.
 
+**Methodology.** Every figure is the **median of repeated runs in one session**, with
+the observed spread in parentheses. The server is warmed with a discarded
+1,000-request run at the measured concurrency before each measurement: the first ONNX
+inference otherwise dominates a short run's cumulative average (the same c=16 cell
+measures 651 req/s cold and 2,069 req/s warm). Policy comparisons run their arms
+alternately in a single session so host drift hits both equally. This host flips
+between a fast (p50 7.6 ms) and a slow (p50 12.3 ms) regime, so absolute medians move
+between sessions and only the interleaved ratios are stable — the spread is stated
+rather than hidden.
+
 ## Prerequisites
 
 ```bash
@@ -23,48 +33,84 @@ nix develop                    # or: brew install redis && just build
 
 ## Single-threaded
 
-One ONNX Runtime worker, one Go scheduler thread.
+One ONNX Runtime session, one intra-op thread, one Go scheduler thread — the layout
+`cpu_budget: auto` selects under `GOMAXPROCS=1` (allowance 1, reserve 0, budget 1).
 
 ```
 $ GOMAXPROCS=1 ./bin/emb -config config.yaml
 ```
 
-| Clients | Pipeline | Requests | Req/s  | p50     |
-|---------|----------|----------|--------|---------|
-| 1       | 1        | 500      | 347.46 | 2.855ms |
-| 8       | 1        | 2000     | 734.48 | 10.839ms|
-| 16      | 1        | 2000     | 785.55 | 20.335ms|
-| 1       | 8        | 2000     | 355.43 | 22.415ms|
+| Clients | Pipeline | Requests | Req/s (median, min–max) | p50      |
+|---------|----------|----------|-------------------------|----------|
+| 1       | 1        | 500      | 618 (543–621)           | 1.607ms  |
+| 8       | 1        | 2000     | 754 (576–756)           | 10.559ms |
+| 16      | 1        | 2000     | 784 (735–785)           | 20.375ms |
+| 1       | 8        | 2000     | 628 (591–629)           | 12.659ms |
 
 ```
+$ redis-benchmark -p 6379 -q -c 1 -P 1 -n 1000 EMB minilm hello world > /dev/null  # warm
 $ redis-benchmark -p 6379 -q -c 1 -P 1 -n 500 EMB minilm hello world
-EMB minilm hello world: 347.46 requests per second, p50=2.855 msec
+EMB minilm hello world: 618 requests per second, p50=1.607 msec
 ```
 
 ```
+$ redis-benchmark -p 6379 -q -c 8 -P 1 -n 1000 EMB minilm hello world > /dev/null  # warm
 $ redis-benchmark -p 6379 -q -c 8 -P 1 -n 2000 EMB minilm hello world
-EMB minilm hello world: 734.48 requests per second, p50=10.839 msec
+EMB minilm hello world: 754 requests per second, p50=10.559 msec
 ```
 
 ## Multi-threaded
 
-Ten ONNX Runtime workers, all CPU cores.
+One ONNX Runtime session at 8 intra-op threads — the layout `cpu_budget: auto`
+selects on this 10-core machine (allowance 10, reserve 2, budget 8). This is the
+default `config.yaml`, which carries no tuning keys; the automatic budget, not a
+`workers` key, decides the width.
 
 ```
 $ GOMAXPROCS=0 ./bin/emb -config config.yaml
 ```
 
-| Clients | Pipeline | Requests | Req/s  | p50      |
-|---------|----------|----------|--------|----------|
-| 1       | 1        | 500      | 420.17 | 2.343ms  |
-| 8       | 1        | 2000     | 1655.63 | 4.807ms  |
-| 16      | 1        | 2000     | 2010.05 | 7.663ms  |
-| 64      | 1        | 2000     | 2541.30 | 24.207ms |
+| Clients | Pipeline | Requests | Req/s (median, min–max) | p50      |
+|---------|----------|----------|-------------------------|----------|
+| 1       | 1        | 500      | 730 (539–735)           | 1.363ms  |
+| 8       | 1        | 2000     | 1,607 (1,600–1,619)     | 4.951ms  |
+| 16      | 1        | 2000     | 1,915 (1,172–2,081)     | 7.747ms  |
+| 64      | 1        | 2000     | 2,721 (1,955–2,729)     | 23.295ms |
 
 ```
+$ redis-benchmark -p 6379 -q -c 16 -P 1 -n 1000 EMB minilm hello world > /dev/null  # warm
 $ redis-benchmark -p 6379 -q -c 16 -P 1 -n 2000 EMB minilm hello world
-EMB minilm hello world: 2010.05 requests per second, p50=7.663 msec
+EMB minilm hello world: 1,915 requests per second, p50=7.747 msec
 ```
+
+A second 16-sample session measured the c=16 cell at 2,069 (1,423–2,116); the
+1,172 minimum in the table above is a slow-regime sample, which is why the spread
+is stated.
+
+### Out of the box vs explicitly tuned (minilm)
+
+`config.yaml` runs under `cpu_budget: auto` with calibration; the two other arms
+are the kill switch and an explicit width. The arms are started, warmed and
+measured alternately in one session (`just bench-ab`), so host drift hits both
+equally. Cell: c=16, n=2000, `GOMAXPROCS=0`, `EMB minilm hello world`.
+
+| arm | config | layout | median req/s | spread | ratio |
+|-----|--------|--------|--------------|--------|-------|
+| `cpu_budget: auto` (default) | `config.yaml` | 1 session × 8 threads | 1,288 | 1,280–2,049 | — |
+| `cpu_budget: off` | `bench-cpu-budget-off.yaml` | legacy session sizing | 1,426 | 1,413–2,232 | **1.10× off/auto** (1.08–1.24) |
+| explicit `intra_op_threads: 4` | `bench-cpu-budget-width4.yaml` | 1 session × 4 threads | 2,026 | 2,020–2,030 | 0.98× width4/auto |
+
+```bash
+$ just bench-ab config.yaml bench-cpu-budget-off.yaml 5 16 2000 6379 minilm "hello world" 0 1
+$ just bench-ab config.yaml bench-cpu-budget-width4.yaml 5 16 2000 6379 minilm "hello world" 0 1
+```
+
+The absolute medians follow the host's regime (a separate 16-sample auto session
+measured 2,069), so the interleaved ratio is the publishable figure: `cpu_budget:
+off` is ~10% faster than the automatic budget at c=16, consistent with the
+automatic policy disabling ONNX Runtime spinning when the key is unset. At c=64 the
+ratio reverses (0.98×, auto ahead) and at c=1 the spread swamps the effect, so the
+budget's cost is workload-shaped rather than a flat win.
 
 ## Cache
 
@@ -78,7 +124,7 @@ $ ./bin/emb -config config.yaml -cache auto
 
 ### Cache hit (identical texts)
 
-All requests send the same text. The first inference populates the cache; subsequent requests return instantly without ONNX.
+All requests send the same text. The first inference populates the cache; subsequent requests return instantly without ONNX. These are cache-hit figures, so the process CPU budget's layout does not apply — no inference runs.
 
 | Clients | Pipeline | Requests | Req/s      | p50      |
 |---------|----------|----------|------------|----------|
@@ -128,7 +174,7 @@ When every text is unique, the cache provides no benefit: throughput matches the
 no-cache baseline (small lookup/insert overhead per request). Because
 `redis-benchmark` sends the same command every time, simulate unique texts by
 running without cache and treating the result as the miss baseline — see the
-multi-threaded c1/c16 cells above (420 → c1, 2010 → c16 req/s).
+multi-threaded c1/c16 cells above (730 → c1, 1,915 → c16 req/s).
 
 ### Cache hit rate
 
@@ -275,6 +321,8 @@ is idle, while bursts still coalesce (64 concurrent requests → 4 ONNX runs, me
 Baseline was measured from a clean worktree at `HEAD` (pre-change code, 1ms window
 behavior, parallel execution mode). The p50/p99 staying flat at 8× the throughput means
 more batches per second at the same latency, with the pathological 330 ms stall removed.
+Policy: the default `cpu_budget: auto` (the matrix below pins `intra_op_threads`
+explicitly, which the budget never replaces).
 
 ### Execution-mode × intra-thread matrix (post-change)
 
@@ -348,6 +396,9 @@ interleaved and fails on any reply difference.
 With `intra_op_threads` unset, `script_workers` sessions divide the cores−2
 budget, each session defaults to 4 concurrent callers, and spinning is off
 while a session is shared (see `script_callers_per_session` / `allow_spinning`).
+Policy: measured under the default `cpu_budget: auto`; a row that pins
+`intra_op_threads` keeps that width, because an explicit width is never replaced
+by the budget.
 
 | `script_workers` | binary | serial p50 | c=4 p50 | c=8 p50 | c=8 p99 | c=8 req/s |
 |---|---|---|---|---|---|---|
@@ -596,6 +647,64 @@ server, no emb model):
 
 The p90 now matches the 0.3.0 work-conserving baseline while keeping the
 connection-level load-balancer fan-out that motivated round-robin.
+
+## Startup calibration and process budget
+
+With the default `cpu_budget: auto` and `calibrate: true`, each embedding model
+selects its session count and intra-op width at load from a bounded local trial
+(see [configuration](docs/configuration.md#startup-calibration)). The seeded
+local harness measures the resulting layouts end to end:
+
+```bash
+just download-model
+just download-model repo=Xenova/bge-small-en-v1.5 dir=./models/bge
+just bench-inference            # 10 pairs/s for 2s per case
+just bench-inference 5 10       # positional: rate (pairs/s), seconds per case
+```
+
+It offers model-call pairs on a fixed open-loop schedule — independent of
+response completion, so a slower layout cannot look faster by doing less work —
+for single-model, paired-serial, and paired-parallel layouts under warm and cold
+cache (cold uses texts kept unique across passes), and writes a self-contained
+JSON report to `bench-out/inference/inference.json`. The report records the
+seeded configuration, Go/OS/CPU metadata, offered/completed/dropped pairs and ORT
+rows, per-leg and whole-pair p50/p95/p99, CPU seconds per pair and per ORT row,
+RSS, cache hits/misses, errors, and the selected per-model layout plus the
+resolved process allowance/capacity/budget.
+
+The harness reports measurements only; it does not assert optimality, change a
+baseline, or claim a production performance win. ARM64/Graviton and
+production-shaped routing runs remain optional deployment evidence.
+
+### Measured effect of the budget and the tuner
+
+Apple M4 (10 cores), two models (`minilm` fp32, `bge` fp32, both 384-dim),
+unique texts so every request is a cache miss, one run per cell. `legacy` is the
+same binary with `cpu_budget: off`, which is the pre-change sizing policy: every
+model derives its own pool from the machine's core count.
+
+| workload (steady request rate) | legacy | calibrated | change |
+|---|---|---|---|
+| 2 models, unbatched worker pools, c=4 each | 29.5 + 16.0 = 45.5 req/s, p99 531/1222 ms | 164 + 75 = 239 req/s, p99 51/148 ms | **5.3×** throughput, ~9× p99 |
+| 2 models, batching on (default), c=4 each | 20.8 + 15.9 = 36.7 req/s, p99 436/1012 ms | 100 + 45 = 145 req/s, p99 54/157 ms | **4.0×** throughput, ~8× p99 |
+| 1 model, unbatched pool, c=8 | 50.7 req/s, p99 545 ms | 238 req/s, p99 80 ms | **4.7×** throughput, ~7× p99 |
+| 1 model, batching on (default), c=8 | 152 req/s, p99 58 ms | 154 req/s, p99 59 ms | parity — the tuner selects the same width legacy derived |
+
+Selected layouts: batched models settle on one session at width 8 (`minilm`) and
+4 (`bge`) when they own the whole budget, and 4 each when two models share it;
+unbatched models settle on 4 sessions × 1 thread each. Every layout was stable
+across three consecutive start-ups; the paired cases were also measured against
+explicit widths to confirm the chosen pair is the best available (e.g. forcing
+`minilm` to 8 threads alongside `bge` drops the pair from ~145 to ~51 req/s).
+Two correctness-relevant details the measurements forced: the trial must serve a
+representative **batch** (scoring single rows picked 2 threads for `bge`, where
+4 serves 2.5× the requests), and within run-to-run noise the **wider** width
+must win for a batching pool, because the trial's batch is smaller than the
+coalesced one the pool serves.
+
+Reproduce with an explicit-width config (see the `intra_op_threads` rows in
+[docs/configuration.md](docs/configuration.md#thread-budget)) or with the seeded
+harness above.
 
 ## Fargate (linux/arm64, Graviton)
 

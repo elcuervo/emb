@@ -190,6 +190,7 @@ func writeFleetOnceLine(out io.Writer, states []*onceNode) error {
 		b = appendF(b, "cache_hits", st.res.CacheHits)
 		b = appendF(b, "cache_misses", st.res.CacheMisses)
 		b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
+		b = appendCPUPlanFields(b, &p)
 		if p50, p95, p99, ok := st.sampler.Latency(); ok {
 			b = appendF(b, "lat_p50_us", p50)
 			b = appendF(b, "lat_p95_us", p95)
@@ -222,6 +223,23 @@ func appendAggregateFields(b []byte, p *Point, res *PollResult) []byte {
 	b = appendF(b, "cache_misses", res.CacheMisses)
 	b = appendF(b, "cache_evictions", res.CacheEvictions)
 	b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
+	b = appendCPUPlanFields(b, p)
+	return b
+}
+
+// appendCPUPlanFields adds the process CPU plan, and nothing at all when the
+// node did not report one: an absent plan must not read as budget 0. Every
+// field is numeric because the headless line is parsed as key=float pairs;
+// the allowance source name lives in the TUI, not here.
+func appendCPUPlanFields(b []byte, p *Point) []byte {
+	if !p.CPUPlanKnown {
+		return b
+	}
+	b = appendF(b, "cpu_budget_enabled", boolToInt64(p.CPUBudgetEnabled))
+	b = appendF(b, "cpu_budget", p.CPUBudget)
+	b = appendF(b, "cpu_active_tokens", p.CPUActiveTokens)
+	b = appendF(b, "cpu_peak_tokens", p.CPUPeakTokens)
+	b = appendRate(b, "cpu_allowance", p.CPUAllowance)
 	return b
 }
 
@@ -232,6 +250,9 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 	var totalRequests, totalTokens, totalErrors, active, conns, mem, goroutines, models int64
 	var cacheHits, cacheMisses, cacheEvictions int64
 	var req, tok, errRate, cpu float64
+	var cpuBudget, cpuActive, cpuPeak int64
+	var cpuAllowance float64
+	planKnown := false
 	for _, st := range states {
 		if !st.sampled {
 			continue
@@ -252,6 +273,13 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 		tok += p.TokRate
 		errRate += p.ErrRate
 		cpu += p.CPUPercent
+		if p.CPUPlanKnown {
+			planKnown = true
+			cpuBudget += p.CPUBudget
+			cpuActive += p.CPUActiveTokens
+			cpuPeak += p.CPUPeakTokens
+			cpuAllowance += p.CPUAllowance
+		}
 	}
 	b = appendF(b, "uptime_secs", states[0].sampler.Latest.UptimeSecs)
 	b = appendF(b, "total_requests", totalRequests)
@@ -276,6 +304,14 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 		hitRate = float64(cacheHits) / float64(t) * 100
 	}
 	b = appendRate(b, "cache_hit_rate", hitRate)
+	// Each node plans its own process, so these are fleet sums of independent
+	// budgets, not one shared pool.
+	if planKnown {
+		b = appendF(b, "cpu_budget", cpuBudget)
+		b = appendF(b, "cpu_active_tokens", cpuActive)
+		b = appendF(b, "cpu_peak_tokens", cpuPeak)
+		b = appendRate(b, "cpu_allowance", cpuAllowance)
+	}
 	return b
 }
 
@@ -302,6 +338,12 @@ func appendModelSections(b []byte, order []string, res *PollResult, s *Sampler) 
 		b = append(b, ms.Pooling...)
 		b = append(b, " quant="...)
 		b = append(b, ms.Quantization...)
+		if ms.CPUBudgetEnabled {
+			// The calibrated layout this model actually runs.
+			b = appendF(b, "workers", int64(ms.Workers))
+			b = appendF(b, "intra_op_threads", int64(ms.IntraOpThreads))
+			b = appendF(b, "cpu_thread_share", int64(ms.CPUThreadShare))
+		}
 	}
 	return b
 }
@@ -318,4 +360,11 @@ func appendRate(b []byte, key string, v float64) []byte {
 	b = append(b, key...)
 	b = append(b, '=')
 	return strconv.AppendFloat(b, v, 'f', 1, 64)
+}
+
+func boolToInt64(v bool) int64 {
+	if v {
+		return 1
+	}
+	return 0
 }

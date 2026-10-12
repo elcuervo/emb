@@ -43,6 +43,14 @@ type ModelEntry struct {
 	Dim  int
 	Name string
 
+	cpuPolicy    bool
+	cpuThreads   int
+	cpuBudget    int
+	cpuGate      *permit.Budget
+	calibrate    bool
+	tunedWorkers atomic.Int64
+	tunedThreads atomic.Int64
+
 	// Quantization is "int8" when quantized weights were resolved, else "fp32".
 	Quantization string
 	// ModelSize is the on-disk size of the resolved weights file.
@@ -131,6 +139,28 @@ func (e *ModelEntry) ScriptStats() (requests, errors int64) {
 // cannot serve the request.
 func (e *ModelEntry) Embeddable() bool {
 	return e.cfg.Dim > 0 && e.cfg.Pooling != "" && e.cfg.Pooling != "none"
+}
+
+func (e *ModelEntry) CPUSettings() (enabled bool, budget, share, threads int, spinning bool) {
+	if !e.cpuPolicy {
+		threads = e.cfg.IntraOpThreads
+		if threads <= 0 {
+			threads = defaultIntraOpThreads()
+		}
+		return false, 0, 0, threads, e.cfg.AllowsSpinning()
+	}
+	threads = e.cpuThreads
+	if tuned := int(e.tunedThreads.Load()); tuned > 0 {
+		threads = tuned
+	}
+	if e.cfg.IntraOpThreads > 0 {
+		threads = e.cfg.IntraOpThreads
+	}
+	spinning = e.cfg.AllowsSpinning()
+	if e.cfg.AllowSpinning == nil {
+		spinning = false
+	}
+	return true, e.cpuBudget, e.cpuThreads, threads, spinning
 }
 
 // ScriptFootprint reports the model's scripted resource cost without creating
@@ -276,12 +306,40 @@ type Registry struct {
 	totalModels atomic.Int64
 	closeOnce   sync.Once
 	closeErr    error
+	cpuPlan     CPUPlan
+	cpuGate     *permit.Budget
+	threadShare map[string]int
+	calibrate   bool
 }
 
 func New() *Registry {
 	return &Registry{
 		models: make(map[string]*ModelEntry),
 	}
+}
+
+func NewWithConfig(cfg *config.Config) (*Registry, error) {
+	plan, err := ResolveCPUPlan(cfg, EffectiveCPUAllowance())
+	if err != nil {
+		return nil, err
+	}
+	r := New()
+	r.cpuPlan = plan
+	r.calibrate = cfg.CalibrationEnabled()
+	if plan.Enabled {
+		r.cpuGate = permit.NewBudget(plan.Budget)
+		r.threadShare = modelThreadShares(cfg.Models, plan.Budget)
+	}
+	logCPUPlan(plan)
+	return r, nil
+}
+
+func (r *Registry) CPUStatus() CPUPlan {
+	plan := r.cpuPlan
+	if r.cpuGate != nil {
+		plan.Active, plan.Peak = r.cpuGate.Stats()
+	}
+	return plan
 }
 
 // defaultIntraOpThreads returns the default ONNX intra-op thread count when a model
@@ -326,7 +384,11 @@ func (e *ModelEntry) configuredScriptSessions() int {
 	}
 	n := e.cfg.ScriptWorkers
 	if n <= 0 {
-		n = effectiveEmbeddingSessions(&e.cfg)
+		if e.cpuPolicy {
+			n = 1
+		} else {
+			n = effectiveEmbeddingSessions(&e.cfg)
+		}
 	}
 	if n < 1 {
 		n = 1
@@ -497,7 +559,11 @@ func (e *ModelEntry) ensurePool() error {
 
 	numWorkers := cfg.Workers
 	if numWorkers <= 0 {
-		numWorkers = autoTuneWorkers(cfg.ONNX, 0)
+		if e.cpuPolicy {
+			numWorkers = 1
+		} else {
+			numWorkers = autoTuneWorkers(cfg.ONNX, 0)
+		}
 	}
 
 	outInfo, err := onnx.GetOutputInfo(cfg.ONNX)
@@ -544,7 +610,15 @@ func (e *ModelEntry) ensurePool() error {
 	// an explicit config value always wins.
 	intraThreads := cfg.IntraOpThreads
 	if intraThreads <= 0 {
-		intraThreads = defaultIntraOpThreads()
+		if e.cpuPolicy {
+			intraThreads = e.cpuThreads
+		} else {
+			intraThreads = defaultIntraOpThreads()
+		}
+	}
+	spinning := cfg.AllowsSpinning()
+	if e.cpuPolicy && cfg.AllowSpinning == nil {
+		spinning = false
 	}
 
 	execMode := onnx.ExecModeSequential
@@ -552,19 +626,20 @@ func (e *ModelEntry) ensurePool() error {
 		execMode = onnx.ExecModeParallel
 	}
 
-	sessionFactory := func() (onnx.Session, error) {
+	sessionFactoryFor := func(threads int) (onnx.Session, error) {
 		return newRuntimeSession(
 			modelData,
 			inputNames,
 			[]string{cfg.OutputTensor},
 			cfg.Dim,
 			out.Rank,
-			intraThreads,
+			threads,
 			cfg.InterOpThreads,
 			execMode,
-			cfg.AllowsSpinning(),
+			spinning,
 		)
 	}
+	sessionFactory := func() (onnx.Session, error) { return sessionFactoryFor(intraThreads) }
 
 	maxBatchTokens := 0
 	if cfg.Batching.MaxBatchTokens != nil {
@@ -602,7 +677,43 @@ func (e *ModelEntry) ensurePool() error {
 		e.BatchDeterminism, e.BatchDeterminismReason = "passed", "passed"
 	}
 
-	pool, err := pipeline.NewPool(sessionFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, timeoutMS, cfg.Batching.MaxBatch, maxBatchTokens, tokenizeWorkers)
+	if e.cpuPolicy && e.calibrate && (cfg.IntraOpThreads <= 0 || cfg.Workers <= 0) {
+		budget := max(1, e.cpuThreads)
+		// Trial the batch shape the pool actually serves: a batcher coalesces
+		// concurrent requests, so single-row scoring under-provisions width.
+		batch := 1
+		if timeoutMS > 0 {
+			batch = calibrationBatchRows
+			if cfg.Batching.MaxBatch > 0 && cfg.Batching.MaxBatch < batch {
+				batch = cfg.Batching.MaxBatch
+			}
+		}
+		layout := calibrateLayout(func(threads int) (onnx.Session, error) {
+			sess, err := sessionFactoryFor(threads)
+			if err != nil {
+				return nil, err
+			}
+			if e.cpuGate != nil {
+				return budgetedSession{Session: sess, gate: e.cpuGate, width: threads}, nil
+			}
+			return sess, nil
+		}, tok, cfg.Dim, cfg.MaxLength, budget, autoTuneWorkers(cfg.ONNX, budget), cfg.IntraOpThreads, cfg.Workers, timeoutMS > 0, batch)
+		intraThreads, numWorkers = layout.Threads, layout.Workers
+		e.tunedThreads.Store(int64(intraThreads))
+		e.tunedWorkers.Store(int64(numWorkers))
+		log.Printf("  %s: CPU calibration workers=%d intra_op_threads=%d source=%s reason=%s elapsed=%s", e.Name, numWorkers, intraThreads, layout.Source, layout.Reason, layout.Elapsed.Round(time.Millisecond))
+	}
+	poolFactory := func() (onnx.Session, error) {
+		sess, err := sessionFactoryFor(intraThreads)
+		if err != nil {
+			return nil, err
+		}
+		if e.cpuGate != nil {
+			return budgetedSession{Session: sess, gate: e.cpuGate, width: intraThreads}, nil
+		}
+		return sess, nil
+	}
+	pool, err := pipeline.NewPool(poolFactory, tok, numWorkers, cfg.Dim, cfg.MaxLength, cfg.Normalize, cfg.Pooling, timeoutMS, cfg.Batching.MaxBatch, maxBatchTokens, tokenizeWorkers)
 	if err != nil {
 		return fmt.Errorf("creating pool for %q: %w", e.Name, err)
 	}
@@ -728,16 +839,29 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	// verbatim as an operator override (memory for parallelism), never clamped.
 	numSessions := cfg.ScriptWorkers
 	if numSessions <= 0 {
-		numSessions = effectiveEmbeddingSessions(&cfg)
+		if e.cpuPolicy {
+			numSessions = 1
+		} else {
+			numSessions = effectiveEmbeddingSessions(&cfg)
+		}
 	}
 	if numSessions < 1 {
 		numSessions = 1
+	}
+	if tuned := int(e.tunedWorkers.Load()); e.cpuPolicy && cfg.ScriptWorkers <= 0 && tuned > 0 {
+		numSessions = tuned
 	}
 
 	// Unset intra_op_threads divides the cores−2 budget across the sessions,
 	// so workers × threads stays near the core count instead of multiplying it.
 	// An explicit value is honoured verbatim.
 	intraThreads := scriptIntraOpThreads(cfg.IntraOpThreads, numSessions, EffectiveNumCPU())
+	if e.cpuPolicy && cfg.IntraOpThreads <= 0 {
+		intraThreads = e.cpuThreads
+		if tuned := int(e.tunedThreads.Load()); tuned > 0 {
+			intraThreads = tuned
+		}
+	}
 
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
@@ -749,6 +873,15 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 				_ = opened.Close()
 			}
 			return nil, fmt.Errorf("creating scripted session %d for %q: %w", i, e.Name, err)
+		}
+		if e.cpuGate != nil {
+			// The pool leases one session to at most ScriptCallers() concurrent
+			// callers, so dividing the width charges the session's threads once
+			// in total while they share its pool. Charging the full width per
+			// caller would let the first run take the whole budget and serialise
+			// the callers that script_callers_per_session exists to run together.
+			charge := max(1, (intraThreads+cfg.ScriptCallers()-1)/cfg.ScriptCallers())
+			sess = budgetedNamedSession{NamedSession: sess, gate: e.cpuGate, width: charge}
 		}
 		sessions = append(sessions, sess)
 	}
@@ -967,6 +1100,16 @@ func resolveQuantize(cfg *config.ModelConfig) error {
 }
 
 func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
+	return loadModel(cfg, name, true)
+}
+
+// LoadModelDeferred resolves model metadata and resources without preloading;
+// callers can apply process policy before constructing sessions.
+func LoadModelDeferred(cfg config.ModelConfig, name string) (*ModelEntry, error) {
+	return loadModel(cfg, name, false)
+}
+
+func loadModel(cfg config.ModelConfig, name string, preload bool) (*ModelEntry, error) {
 	if cfg.ModelRepo != "" {
 		if err := downloadModel(&cfg, name); err != nil {
 			return nil, err
@@ -997,31 +1140,39 @@ func LoadModel(cfg config.ModelConfig, name string) (*ModelEntry, error) {
 		cfg:  cfg,
 	}
 
-	if cfg.Preload {
-		log.Printf("  preloading model %q...", name)
-		if err := entry.ensurePool(); err != nil {
+	if preload {
+		if err := entry.Preload(); err != nil {
 			_ = entry.closeResources()
 			return nil, err
 		}
 	}
+
+	return entry, nil
+}
+
+func (e *ModelEntry) Preload() error {
+	cfg, name := e.cfg, e.Name
+	if cfg.Preload {
+		log.Printf("  preloading model %q...", name)
+		if err := e.ensurePool(); err != nil {
+			return err
+		}
+	}
 	if cfg.ScriptPreload {
-		res, err := entry.ScriptResources()
+		res, err := e.ScriptResources()
 		if err != nil {
-			_ = entry.closeResources()
-			return nil, err
+			return err
 		}
 		log.Printf("  preloaded scripted sessions for %q (workers=%d)", name, len(res.Sessions()))
 	}
 	if cfg.ImagePreload && cfg.Image != nil {
-		res, err := entry.ImageResources()
+		res, err := e.ImageResources()
 		if err != nil {
-			_ = entry.closeResources()
-			return nil, err
+			return err
 		}
 		logImagePlan(name, res)
 	}
-
-	return entry, nil
+	return nil
 }
 
 func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
@@ -1061,6 +1212,44 @@ func (r *Registry) Resolve(name string) (*ModelEntry, error) {
 func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.cpuGate != nil {
+		if entry.Pool != nil {
+			// LoadModel preloads, so a caller that adds afterwards left this pool
+			// with legacy sizing and no admission gate. Say so instead of running
+			// one model outside the process budget silently.
+			log.Printf("WARNING: model %q already built its pool before the CPU budget was applied; its sessions keep legacy sizing — use LoadModelDeferred then Add", name)
+		}
+		entry.cpuPolicy = true
+		entry.cpuGate = r.cpuGate
+		entry.cpuBudget = r.cpuPlan.Budget
+		entry.cpuThreads = r.threadShare[name]
+		entry.calibrate = r.calibrate
+		if entry.cpuThreads < 1 {
+			entry.cpuThreads = 1
+		}
+		threads := entry.cpuThreads
+		if entry.cfg.IntraOpThreads > 0 {
+			threads = entry.cfg.IntraOpThreads
+		}
+		embedSessions := 0
+		if entry.Embeddable() {
+			embedSessions = 1
+			if entry.cfg.Batching.Timeout != nil && *entry.cfg.Batching.Timeout == 0 && entry.cfg.Workers > 0 {
+				embedSessions = entry.cfg.Workers
+			}
+		}
+		imageSessions := 0
+		if entry.cfg.Image != nil {
+			imageSessions = 1
+		}
+		log.Printf("CPU plan model=%q weight=%.3g intra_op_threads=%d resident_sessions=embed:%d,script:%d,image:%d", name, entry.cfg.AdmissionWeight(), threads, embedSessions, entry.configuredScriptSessions(), imageSessions)
+		if threads > r.cpuPlan.Budget {
+			log.Printf("WARNING: model %q intra_op_threads=%d exceeds cpu_budget=%d; its runs will be admitted alone", name, threads, r.cpuPlan.Budget)
+		}
+		if entry.cfg.AllowSpinning != nil && *entry.cfg.AllowSpinning {
+			log.Printf("WARNING: model %q explicitly enables ORT spinning outside active CPU admission", name)
+		}
+	}
 	// Tests and embedders may register an already-constructed pool. Publish its
 	// initialized state before the entry becomes visible and consume Once so a
 	// later GetOrInit does not try to rebuild it from absent config paths.

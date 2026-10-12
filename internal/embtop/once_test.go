@@ -176,3 +176,107 @@ func modelSectionOrder(line string) []string {
 	}
 	return out
 }
+
+// planResponder answers a full poll for one node with a process CPU plan.
+func planResponder(budget, active, peak, allowanceCenti int64) func([]string, int) []byte {
+	return func(cmd []string, _ int) []byte {
+		switch strings.ToUpper(cmd[0]) {
+		case "EMB.MODELS":
+			return modelsReply([]string{"m", "384"})
+		case "EMB.INFO":
+			return infoReply(nil, map[string]int64{
+				"cpu_budget_enabled": 1, "cpu_budget": budget, "cpu_thread_share": budget,
+				"intra_op_threads": budget, "workers": 1, "requests": 4,
+			})
+		case "EMB.STATS":
+			return statsReply(map[string]int64{
+				"uptime_secs": 1, "models_loaded": 1, "total_requests": 4,
+				"cpu_budget_enabled": 1, "cpu_allowance": allowanceCenti, "cpu_capacity": 10,
+				"cpu_budget": budget, "cpu_active_tokens": active, "cpu_peak_tokens": peak,
+			})
+		case "INFO":
+			return encodeBulk("gomaxprocs:10\r\n")
+		case "MONITOR":
+			return encodeArray()
+		default:
+			return encodeError("ERR unknown " + cmd[0])
+		}
+	}
+}
+
+func numKV(t *testing.T, line, key string) float64 {
+	t.Helper()
+	raw, ok := parseKV(line, key)
+	if !ok {
+		t.Fatalf("field %q missing from %q", key, line)
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		t.Fatalf("field %q = %q is not numeric: %v", key, raw, err)
+	}
+	return v
+}
+
+// The headless single-node line must carry the process CPU plan and the
+// calibrated per-model layout, so a script sees the same numbers the dashboard
+// renders.
+func TestRunOnceSingleNodeReportsCPUPlan(t *testing.T) {
+	_, addr := startScripted(t, planResponder(8, 2, 5, 1000))
+	c := NewClient(addr, "", false)
+	var out bytes.Buffer
+	if err := RunOnce(c, time.Second, 2, &out); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	line := lines[len(lines)-1]
+	for key, want := range map[string]float64{
+		"cpu_budget": 8, "cpu_active_tokens": 2, "cpu_peak_tokens": 5,
+		"cpu_allowance": 10, "cpu_budget_enabled": 1,
+	} {
+		if got := numKV(t, line, key); got != want {
+			t.Errorf("%s = %v, want %v", key, got, want)
+		}
+	}
+	if got := numKV(t, line, "intra_op_threads"); got != 8 {
+		t.Errorf("per-model intra_op_threads = %v, want 8", got)
+	}
+}
+
+// Fleet mode sums independent per-node plans for the aggregate and reports each
+// node's own budget in its section.
+func TestRunOnceFleetReportsCPUPlan(t *testing.T) {
+	_, addrA := startScripted(t, planResponder(8, 2, 5, 1000))
+	_, addrB := startScripted(t, planResponder(4, 1, 3, 400))
+	ca, cb := NewClient(addrA, "", false), NewClient(addrB, "", false)
+	var out bytes.Buffer
+	if err := RunOnceFleet([]*Client{ca, cb}, []string{"a", "b"}, time.Second, 2, &out); err != nil {
+		t.Fatalf("RunOnceFleet: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	line := lines[len(lines)-1]
+	if got := numKV(t, line, "cpu_budget"); got != 12 {
+		t.Errorf("fleet cpu_budget = %v, want 12 (independent plans summed)", got)
+	}
+	if got := numKV(t, line, "cpu_active_tokens"); got != 3 {
+		t.Errorf("fleet cpu_active_tokens = %v, want 3", got)
+	}
+	if got := numKV(t, line, "cpu_allowance"); got != 14 {
+		t.Errorf("fleet cpu_allowance = %v, want 14 cores", got)
+	}
+	if !strings.Contains(line, "node:a") || !strings.Contains(line, "node:b") {
+		t.Fatalf("fleet line missing node sections: %q", line)
+	}
+	// Each node section keeps its own budget, so a single node's plan is not
+	// mistaken for the fleet total.
+	start := strings.Index(line, "node:a")
+	end := strings.Index(line, "node:b")
+	if start < 0 || end < start {
+		t.Fatalf("node sections not in expected order: %q", line)
+	}
+	if got := numKV(t, line[start:end], "cpu_budget"); got != 8 {
+		t.Errorf("node:a cpu_budget = %v, want 8", got)
+	}
+	if got := numKV(t, line[end:], "cpu_budget"); got != 4 {
+		t.Errorf("node:b cpu_budget = %v, want 4", got)
+	}
+}

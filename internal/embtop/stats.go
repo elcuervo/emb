@@ -1,6 +1,7 @@
 package embtop
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -32,6 +33,39 @@ type Point struct {
 	TruncatedImages  int64
 	RegisteredModels int
 	GoMaxProcs       int // node's own parallelism; 0 when the node did not report it
+
+	// Process CPU plan snapshot: admission tokens in use versus the budget, and
+	// the detected (possibly fractional) CPU allowance behind it.
+	CPUBudgetEnabled bool
+	CPUBudget        int64
+	CPUActiveTokens  int64
+	CPUPeakTokens    int64
+	CPUAllowance     float64
+	CPUAllowanceSrc  string
+	CPUPlanKnown     bool // the node reported the EMB.STATS CPU plan fields
+}
+
+// CPUPlanText renders one node's (or an aggregate's) process CPU plan, or ""
+// when the node did not report one — an older server, or one started with a
+// config that predates the field.
+func CPUPlanText(p Point) string {
+	if !p.CPUPlanKnown {
+		return ""
+	}
+	if !p.CPUBudgetEnabled && p.CPUBudget == 0 {
+		return "cpu budget off (legacy sizing)"
+	}
+	line := fmt.Sprintf("cpu budget %d \u00b7 tokens %d/%d", p.CPUBudget, p.CPUActiveTokens, p.CPUBudget)
+	if p.CPUPeakTokens > 0 {
+		line += fmt.Sprintf(" \u00b7 peak %d", p.CPUPeakTokens)
+	}
+	if p.CPUAllowance > 0 {
+		line += fmt.Sprintf(" \u00b7 %.2f cores", p.CPUAllowance)
+		if p.CPUAllowanceSrc != "" {
+			line += " (" + p.CPUAllowanceSrc + ")"
+		}
+	}
+	return line
 }
 
 // ModelPoint is the per-model rate view of one poll.
@@ -141,6 +175,14 @@ func (s *Sampler) Push(res *PollResult) Point {
 		TruncatedImages:  res.TruncatedImages,
 		RegisteredModels: res.ModelsLoaded,
 		GoMaxProcs:       res.GoMaxProcs,
+
+		CPUBudgetEnabled: res.CPUBudgetEnabled,
+		CPUBudget:        res.CPUBudget,
+		CPUActiveTokens:  res.CPUActiveTokens,
+		CPUPeakTokens:    res.CPUPeakTokens,
+		CPUAllowance:     res.CPUAllowance,
+		CPUAllowanceSrc:  res.CPUAllowanceSrc,
+		CPUPlanKnown:     res.CPUPlanKnown,
 	}
 
 	totalHits := res.CacheHits

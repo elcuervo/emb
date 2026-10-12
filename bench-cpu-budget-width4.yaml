@@ -1,0 +1,9 @@
+# CPU-budget benchmark arm: an explicit intra-op width instead of the budget.
+# Reproduce with `just bench-ab config.yaml bench-cpu-budget-width4.yaml ...` —
+# see BENCHMARK.md's process-budget section.
+listen: ":6379"
+
+models:
+  minilm:
+    onnx: ./models/minilm/model.onnx
+    intra_op_threads: 4

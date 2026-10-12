@@ -27,6 +27,13 @@ func TestClassify(t *testing.T) {
 			want: ClassLatency,
 		},
 		{
+			name: "missing CPU signals never saturate",
+			// Both CPU readings are unchanged (accounting unavailable): the
+			// classifier must fall back to traffic shape, not report saturation.
+			cur:  Sample{Runs: 101, DispatchWaitUs: 1010, RunUs: 10100, InFlight: 2, Sessions: 2, CPUUserUsec: 100},
+			want: ClassLatency,
+		},
+		{
 			name: "throughput when in-flight exceeds sessions",
 			cur:  Sample{Runs: 101, DispatchWaitUs: 1010, RunUs: 10100, InFlight: 4, Sessions: 2, CPUUserUsec: 200},
 			want: ClassThroughput,
