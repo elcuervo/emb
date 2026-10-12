@@ -1,9 +1,12 @@
 package registry
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -134,6 +137,54 @@ func TestResolveQuantize(t *testing.T) {
 		}
 	})
 
+	t.Run("auto picks int8-named weights over sibling fp32", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, f := range []string{"model_fp32.onnx", "model_int8.onnx"} {
+			if err := os.WriteFile(filepath.Join(dir, f), []byte("w"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// The configured path is the fp32 file, which sorts before the int8 one.
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model_fp32.onnx")}
+		if err := resolveQuantize(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Base(cfg.ONNX) != "model_int8.onnx" {
+			t.Fatalf("expected int8 pick, got %s", cfg.ONNX)
+		}
+	})
+
+	t.Run("auto picks nested int8-named weights", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "onnx"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "onnx", "model_int8.onnx"), []byte("q"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model.onnx")}
+		if err := resolveQuantize(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if got := filepath.ToSlash(cfg.ONNX); !strings.HasSuffix(got, "onnx/model_int8.onnx") {
+			t.Fatalf("expected nested int8 pick, got %s", cfg.ONNX)
+		}
+	})
+
+	t.Run("on accepts int8-named weights", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "model_int8.onnx"), []byte("q"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg := &config.ModelConfig{ONNX: filepath.Join(dir, "model.onnx"), Quantize: "on"}
+		if err := resolveQuantize(cfg); err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Base(cfg.ONNX) != "model_int8.onnx" {
+			t.Fatalf("expected int8 pick, got %s", cfg.ONNX)
+		}
+	})
+
 	t.Run("off never switches", func(t *testing.T) {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "model_quantized.onnx"), []byte("q"), 0o600); err != nil {
@@ -154,6 +205,92 @@ func TestResolveQuantize(t *testing.T) {
 			t.Fatal("expected error for invalid quantize value")
 		}
 	})
+}
+
+func TestIsQuantizedWeights(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/m/model_int8.onnx", true},
+		{"/m/onnx/model_int8.onnx", true},
+		{"/m/text_model_int8.onnx", true},
+		{"/m/model_quantized.onnx", true},
+		{"/m/onnx/quantized/model.onnx", true},
+		{"/m/model.onnx", false},
+		{"/m/model_fp32.onnx", false},
+	}
+	for _, tc := range cases {
+		if got := isQuantizedWeights(tc.path); got != tc.want {
+			t.Errorf("isQuantizedWeights(%q) = %t, want %t", tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestInt8NamedWeightsLoadAndLabel guards the intake contract an int8 decision
+// export depends on: a weight file named model_int8.onnx is resolved as
+// pre-quantized, labelled int8 on the entry, and named on the boot line — so an
+// int8 mount that silently fell back to fp32 is visible in the log.
+func TestInt8NamedWeightsLoadAndLabel(t *testing.T) {
+	initORT(t)
+	src, err := os.ReadFile("../../testdata/laya/model.onnx")
+	if err != nil {
+		t.Skipf("vendored laya fixture missing: %v", err)
+	}
+	dir := t.TempDir()
+	onnxPath := filepath.Join(dir, "model_int8.onnx")
+	if err := os.WriteFile(onnxPath, src, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var logged bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	entry, err := LoadModel(config.ModelConfig{
+		ONNX:      onnxPath,
+		Tokenizer: "../../testdata/laya/tokenizer/tokenizer.json",
+		Dim:       32,
+		MaxLength: 64,
+		Pooling:   "mean",
+		Workers:   1,
+		Preload:   true,
+	}, "int8fixture")
+	if err != nil {
+		t.Fatalf("loading int8-named weights: %v", err)
+	}
+	t.Cleanup(func() { _ = entry.closeResources() })
+
+	if entry.Quantization != "int8" {
+		t.Errorf("Quantization = %q, want int8", entry.Quantization)
+	}
+	if entry.ModelSize != int64(len(src)) {
+		t.Errorf("ModelSize = %d, want %d", entry.ModelSize, len(src))
+	}
+	if got := logged.String(); !strings.Contains(got, "quantization=int8 weights=model_int8.onnx") {
+		t.Errorf("boot log missing the int8 weight line, got:\n%s", got)
+	}
+}
+
+// TestDownloadModelEarlyReturnAcceptsInt8Name guards the boot path of an int8
+// mount served from a volume: the configured fp32 path does not exist, the
+// cached pre-quantized member is named model_int8.onnx, and the model must load
+// from disk instead of re-downloading.
+func TestDownloadModelEarlyReturnAcceptsInt8Name(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "model_int8.onnx"), []byte("q"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.ModelConfig{
+		ModelRepo: "test/model",
+		ONNX:      filepath.Join(dir, "model.onnx"),
+		Tokenizer: filepath.Join(dir, "tokenizer.json"),
+	}
+	// No network is available here: an early return is the only way this passes.
+	if err := downloadModel(cfg, "int8cached"); err != nil {
+		t.Fatalf("downloadModel: %v", err)
+	}
 }
 
 func TestResolveQuantizeDefaultsAuto(t *testing.T) {

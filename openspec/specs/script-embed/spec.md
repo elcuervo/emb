@@ -1,7 +1,9 @@
-# script-embed delta
+# script-embed Specification
 
-## ADDED Requirements
+## Purpose
+Lets a scripted evaluation reuse the image-embedding work the native path already does, rather than running the same model a second time.
 
+## Requirements
 ### Requirement: Image embedding work is shared with the native path
 
 `emb.image.embed` SHALL execute through the same image resources and the same content-addressed image cache as the `EMB.IMG` command, mirroring the sharing that `emb.embed` already provides for text:

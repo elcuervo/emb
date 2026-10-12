@@ -1,5 +1,9 @@
-## ADDED Requirements
+# emb-multi Specification
 
+## Purpose
+Answers many models in one command: `EMB.MULTI` and `EMB.IMGMULTI` take alternating model/payload pairs and return one result per pair in request order, with a null in the position of a pair that fails.
+
+## Requirements
 ### Requirement: EMB.IMGMULTI cross-model image embedding
 
 The server SHALL respond to `EMB.IMGMULTI [BLOB|VALUES] <model> <bytes> [<model> <bytes>...]` by accepting alternating `model image-bytes` pairs, where each `<bytes>` is the raw encoded content of an image sent as a binary-safe RESP bulk, and returning an array with one element per pair. An optional leading `BLOB|VALUES` keyword SHALL be recognized only at position 1, case-insensitively, and only when at least one pair follows. A failing pair SHALL return a null in its position (MGET semantics) without failing the command, and results SHALL preserve request order. The server SHALL NOT fetch remote URLs. Each pair SHALL be counted as one request in `EMB.STATS`, and `max_images` truncation SHALL bound the number of pairs processed (each pair carries exactly one image), counting overflow pairs in `truncated_images`.

@@ -1,5 +1,9 @@
-## MODIFIED Requirements
+# onnx-bytes-session Specification
 
+## Purpose
+Creates ONNX Runtime sessions from bytes already read into memory, the only session constructor the module uses, so a session is built from the same options everywhere and no path-based constructor is left to reach for.
+
+## Requirements
 ### Requirement: ONNX sessions load from pre-read bytes
 
 The system SHALL provide `NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim, outputRank, intraOpThreads, interOpThreads, execMode int)` in `internal/onnx` that creates an ORT session from an in-memory byte slice using `ort.NewDynamicAdvancedSessionWithONNXData`, built with the same session options (`newSessionOptions(intraOpThreads, interOpThreads, execMode)`) as every other runtime session. The earlier path-based `NewRuntimeSession` constructor is removed; nothing in the module reached it, so the bytes constructor is the only way sessions are created.

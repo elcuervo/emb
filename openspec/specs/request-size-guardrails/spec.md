@@ -1,5 +1,9 @@
-## ADDED Requirements
+# request-size-guardrails Specification
 
+## Purpose
+Bounds what one command and one image payload may cost, so an oversized request is rejected before it is decoded rather than allocated, and a rejected command is not counted as processed work.
+
+## Requirements
 ### Requirement: Maximum command byte size
 
 The server SHALL enforce a configurable maximum byte size for a single command and SHALL reject a command that exceeds it without decoding or inferring any of it. The bound SHALL apply to the bytes buffered for one command, so a client cannot make the server allocate unbounded memory by sending an oversized bulk value. The server SHALL report the rejection as an error and SHALL NOT count a rejected command as processed work.

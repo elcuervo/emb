@@ -1,7 +1,7 @@
 # async-tokenization Specification
 
 ## Purpose
-TBD - created by archiving change async-tokenization. Update Purpose after archive.
+Keeps tokenization off the request's critical path: a configurable pool tokenizes ahead of the batcher while error, ordering and lifecycle semantics stay as they were.
 ## Requirements
 ### Requirement: Tokenization off the critical path
 The server SHALL tokenize texts on dedicated workers concurrent with inference, so tokenization of a later request can overlap the run of an earlier batch.

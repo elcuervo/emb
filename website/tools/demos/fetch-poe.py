@@ -246,7 +246,10 @@ def fetch(pid: int, cache_dir: Path, refresh: bool) -> str:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / f"pg{pid}.txt"
     if cached.exists() and not refresh:
-        return cached.read_text(encoding="utf-8")
+        # A cache written before the newline normalization (or by a Gutenberg
+        # re-release) is normalized on the way out too, so a stale cache cannot
+        # reintroduce the CRLF the marker patterns reject.
+        return cached.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
     url = SOURCE_URL.format(id=pid)
     request = urllib.request.Request(url, headers={"User-Agent": "emb-demos-corpus/1.0"})
     for attempt in range(3):
@@ -260,6 +263,12 @@ def fetch(pid: int, cache_dir: Path, refresh: bool) -> str:
             time.sleep(2 * (attempt + 1))
     if len(text) < 10_000:
         sys.exit(f"fetch-poe: {url} answered {len(text)} bytes; refusing a truncated source")
+    # Gutenberg has shipped these volumes with CRLF since the 2026 re-release, and
+    # one `\r` before the newline is enough to stop the `*** START/END ***` markers
+    # from matching their anchored patterns (and would ride into the corpus).
+    # Normalize once, here, so everything downstream sees one convention and the
+    # cached copy is the normalized text.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     cached.write_text(text, encoding="utf-8")
     return text
 

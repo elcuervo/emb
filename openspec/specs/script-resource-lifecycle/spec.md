@@ -2,8 +2,7 @@
 
 Owns the lifetime of everything a scripted evaluation allocates — named-tensor sessions, the tokenizer shared with the embedding pool, cached output tensors, and the script source/bytecode caches — so scripting is memory-bounded and provably leak-free under sustained load and repeated model lifecycles.
 
-## ADDED Requirements
-
+## Requirements
 ### Requirement: Scripted resources are acquired lazily
 
 Every resource the scripted path needs SHALL be created only when a host function that actually requires it first runs, never when a scripted evaluation begins:
