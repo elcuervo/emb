@@ -8,16 +8,43 @@ All project benchmarks in `BENCHMARK.md` were measured on Apple M1 Pro (macOS).
 Production targets `linux/arm64` Fargate tasks. This harness replays the server
 inside a `linux/arm64` Docker container bounded by `--cpus`/`--memory` matching the
 Fargate vCPU tiers (1/2/4/8), drives it with `redis-benchmark` and a pure-Ruby
-mixed-length RESP driver, and emits a versioned golden baseline so every
-performance proposal can be validated pre/post.
+mixed-length RESP driver, and emits one evidence bundle per run: the host
+fingerprint, the revision, the model digests, the configuration, the per-cell
+metrics, and the outcome of every assertion it ran. A baseline recorded on a
+qualified host is the reference a candidate bundle is diffed against — same host
+only.
 
-## Hosts and "gold reference"
+## Host fingerprint and "gold reference"
 
-- **Gold reference**: an ARM64 Linux host (real Graviton instance or an ARM64 CI runner).
-- **Approximation**: Apple Silicon (darwin/arm64) runs the `linux/arm64` image natively
-  (no emulation) — good for iteration, not for absolute numbers.
-- The harness prints a warning when the host is not the gold reference and tags
-  emitted results with `"host": {"gold": false}`.
+A run records the validation host contract's verdict (`just bench-host-check`)
+in its bundle. The **gold reference** is a host that passes that contract: the
+deployment platform (`linux/arm64`), an effective CPU allowance within 10% of
+the presented CPUs, measurable steal under 1%, and reported throttling under
+10%. Apple Silicon runs the `linux/arm64` image natively (no emulation) — good
+for iteration, but not the deployment platform and steal is unmeasurable there,
+so it is **not** gold.
+
+The bundle's `host` block *is* the fingerprint: `os`, `arch`, `presented_cpus`,
+`allowance{cpus,source,quota,scheduler,affinity}`, `memory_limit_bytes`,
+`server_budget`, `steal_verdict`, `throttle_verdict`, plus the contract's
+`identity` digest, `gold`, and `failed_property`/`failed_properties`. `identity`
+hashes the stable host shape only; the sampled steal and throttle verdicts are
+recorded beside it but deliberately excluded, because they follow the load on
+the host rather than identify it.
+
+**Refusal rules** (both exit non-zero and write nothing):
+
+- `-mode baseline` refuses an unqualified host, printing the verdict and the
+  failed property. Only a run that passes the contract may become a reference.
+- `-mode diff` refuses two bundles whose `host.identity` differs, printing both
+  fingerprints field by field. A bundle with **no** fingerprint (the two
+  committed `baseline.<sha>.json` files predate the fingerprint) is also
+  refused, never silently compared: re-record it with `just
+  bench-fargate-baseline` on a qualified host.
+
+`-mode run` still records on an unqualified host, marked `"gold": false`; such a
+bundle is usable as a `-after` candidate as long as the fingerprint identity
+matches.
 
 ## CPU quota emulation
 
@@ -46,6 +73,27 @@ explicitly (≤ 2 for small models) in production configs.
 | `mixed-length` | `bench/fargate/load.rb` | 80% short / 20% long texts, interleaved — padding-waste probe |
 | `cache-hit`    | `redis-benchmark`  | server launched with `-cache auto`, warmed once               |
 
+## The bundle
+
+One JSON bundle per recorded run:
+
+| Field | Contents |
+|---|---|
+| `revision` | git sha of the measured tree |
+| `created` | UTC RFC3339 timestamp |
+| `host` | the fingerprint (above): the shape, `identity`, `gold`, failed properties |
+| `model` | `name`, and `onnx`/`tokenizer` `{path,bytes,sha256}` of the files actually measured |
+| `config` | `platform`, `model`, `max_length`, `cpus`, `clients`, `pipelines`, `count_per_cell`, `req_gate`, `p50_gate` |
+| `cells` | `{tier,workload,clients,pipeline,req_s,p50_ms,p90_ms,p99_ms,padding_efficiency}` per measurement |
+| `assertions` | `{name,outcome,detail}` with outcome `pass`/`fail`/`invalid`/`skipped` |
+
+Assertions recorded: `host-contract` (passes when the host is qualified, fails
+naming the property otherwise) and `cells-complete` (passes when every requested
+cell produced a measurement, `invalid` when the run could not finish the
+matrix). `invalid` is only ever an unmet precondition and `skipped` only ever an
+assertion the run could not exercise — neither is a pass. A bundle that fails
+the contract stays valid evidence of a `run`, but is not a reference.
+
 ## Metrics per cell
 
 `{vCPU tier} × {clients} × {pipeline} × {workload}` → req/s, p50/p90/p99 ms, plus
@@ -56,31 +104,40 @@ median of 3 runs.
 **Diff gates:** inference-bound cells (<5000 req/s) require req/s ≥ −5% and
 p50 ≤ +10%. Saturated cells (≥5000 req/s, e.g. cache-hit) finish in
 sub-millisecond windows where timer quantization dominates, so they gate on
-p50 ≤ +10% only.
+p50 ≤ +10% only. The diff refuses to run at all unless both bundles carry the
+same host fingerprint.
 
 ## Usage
 
 ```
 nix develop
-just bench-fargate-baseline          # writes bench/fargate/baseline.<sha>.json
-just bench-fargate                   # writes bench/fargate/out/run.<sha>.<ts>.json
-just bench-fargate-diff <a.json> <b.json>   # per-cell PASS/FAIL vs tolerances
+just bench-fargate-baseline          # qualified host only: bench/fargate/baseline.<sha>.json
+just bench-fargate                   # any host: bench/fargate/out/run.<sha>.<ts>.json
+just bench-fargate-diff <baseline.json> <candidate.json>   # same-host per-cell PASS/FAIL vs tolerances
 ```
+
+`bench-fargate-diff` passes its first argument as `-before` (the recorded
+baseline) and its second as `-after` (the candidate); the diff exits non-zero
+when a cell regresses past the tolerances, or when the two fingerprints differ.
 
 `docker` (and `git`) are not part of the `nix develop` profile, so the harness
 resolves them with absolute-path fallbacks (`/usr/local/bin`, `/opt/homebrew/bin`,
 `/usr/bin`, `~/.local/bin`). Set `PATH` or add `/usr/local/bin/docker` (etc.)
 yourself if Docker lives somewhere else.
 
-Flags for `go run ./bench/fargate`: `-platform -cpus -clients -pipeline -count
--model-dir -mode (run|baseline|diff) -before -after -req-gate -p50-gate
--short-len -long-len -short-ratio -skip-build -keep`.
+Flags for `go run ./bench/fargate` (see `go run ./bench/fargate -h`):
+`-cpus -clients -pipeline -platform -count -model-dir -model -max-length -image
+-out -mode (run|baseline|diff) -before -after -req-gate -p50-gate -mixed-count
+-short-len -long-len -short-ratio -max-batch -batching-timeout -max-batch-tokens
+-skip-build -keep`.
 
 ## Layout
 
 ```
 bench/fargate/
-  main.go          # orchestrator: build image, run tiers, workloads, emit/diff JSON
+  main.go          # orchestrator: host contract, build image, run tiers, workloads, bundle/diff
+  main_test.go     # bundle schema, refusal rules, tolerance math (no Docker/model/network)
   load.rb          # pure-stdlib Ruby mixed-length RESP driver (latencies)
   README.md        # this file
+  baseline.*.json  # recorded baselines (pre-fingerprint files are refused by the diff)
 ```

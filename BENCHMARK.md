@@ -15,6 +15,15 @@ server is bounded by `GOMAXPROCS`/`intra_op_threads` only and the tooling runs f
 partition is measurement methodology (a deployment-shaped CPU budget), not a throughput
 knob.
 
+**Comparability.** Absolute numbers are never comparable across hosts: the same binary
+measures differently on a different CPU, kernel, cgroup quota, or neighbour load, so a
+figure captured on one machine is not a gate on another. Performance gates therefore
+compare a host with itself — a build against that host's own recorded baseline
+(`bench/fargate`, refused across differing host fingerprints) or an adaptive arm against
+a fixed-concurrency control arm measured in the same run (`just bench-smoke`). Which
+hosts may produce evidence at all, and the ladder of hosts that qualify, is
+[docs/performance-validation.md](docs/performance-validation.md).
+
 **Methodology.** Every figure is the **median of repeated runs in one session**, with
 the observed spread in parentheses. The server is warmed with a discarded
 1,000-request run at the measured concurrency before each measurement: the first ONNX

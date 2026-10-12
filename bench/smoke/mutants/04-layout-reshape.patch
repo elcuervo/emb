@@ -1,0 +1,15 @@
+# assertion: layout-immutable
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+diff --git a/internal/registry/registry.go b/internal/registry/registry.go
+--- a/internal/registry/registry.go
++++ b/internal/registry/registry.go
+@@ -167,6 +167,9 @@
+ // anything: the number of named-tensor sessions opened and whether the script
+ // tokenizer has been loaded.
+ func (e *ModelEntry) ScriptFootprint() (sessions int64, tokenizer bool) {
++	if res := e.scriptResPtr.Load(); res != nil {
++		return int64(res.Allowance()), e.scriptTokenizer.Load()
++	}
+ 	return e.scriptSessions.Load(), e.scriptTokenizer.Load()
+ }
+ 

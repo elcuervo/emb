@@ -1,0 +1,31 @@
+# assertion: cache-idle
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+diff --git a/internal/registry/sampler.go b/internal/registry/sampler.go
+--- a/internal/registry/sampler.go
++++ b/internal/registry/sampler.go
+@@ -70,6 +70,12 @@
+ 	}
+ }
+ 
++// NoteCacheHit counts a reply-cache hit as script traffic, so a window served
++// entirely from the reply cache classifies as a running workload.
++func (r *ScriptResources) NoteCacheHit() {
++	r.runs.Add(1)
++}
++
+ // sample reads the script path's counters and the process CPU times.
+ func (r *ScriptResources) sample() permit.Sample {
+ 	wait, run, runs, _ := r.DispatchCounters()
+diff --git a/internal/server/script.go b/internal/server/script.go
+--- a/internal/server/script.go
++++ b/internal/server/script.go
+@@ -462,6 +462,9 @@
+ 			}
+ 		}
+ 		if allHit {
++			if res, err := entry.ScriptResources(); err == nil && res != nil {
++				res.NoteCacheHit()
++			}
+ 			return replies, nil
+ 		}
+ 	}

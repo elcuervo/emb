@@ -1,0 +1,14 @@
+# assertion: saturation-enforced
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+diff --git a/internal/registry/sampler.go b/internal/registry/sampler.go
+--- a/internal/registry/sampler.go
++++ b/internal/registry/sampler.go
+@@ -12,7 +12,7 @@
+ // tuning matrix.
+ const (
+ 	autotuneWindow    = time.Second
+-	autotuneCPUHigh   = 0.90
++	autotuneCPUHigh   = 8.0
+ 	autotuneWaitRatio = 0.25
+ 	// Expand to the cap after one throughput window; contract only after
+ 	// sustained (10 s) latency so a short serial lull never starves a burst.
