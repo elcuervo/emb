@@ -365,8 +365,11 @@ func readCPUTimes(path string) (cpuTimes, error) {
 }
 
 // parseCPUTimes parses the aggregate "cpu" line: user nice system idle iowait
-// irq softirq steal guest guest_nice. A steal field the kernel does not report
-// counts as zero, which is what a host that never loses CPU time reports.
+// irq softirq steal guest guest_nice. The guest columns are not summed: the
+// kernel already counts guest time inside user and guest_nice inside nice, so
+// adding them again would inflate the denominator and understate steal. A steal
+// field the kernel does not report counts as zero, which is what a host that
+// never loses CPU time reports.
 func parseCPUTimes(r io.Reader) (cpuTimes, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -379,6 +382,9 @@ func parseCPUTimes(r io.Reader) (cpuTimes, error) {
 		}
 		var t cpuTimes
 		for i, raw := range fields[1:] {
+			if i > 7 {
+				break
+			}
 			v, err := strconv.ParseUint(raw, 10, 64)
 			if err != nil {
 				return cpuTimes{}, fmt.Errorf("cpu field %d: %w", i, err)

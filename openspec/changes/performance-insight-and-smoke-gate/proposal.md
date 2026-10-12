@@ -56,11 +56,15 @@ The change proves itself with the artifacts it adds, and it is only done when th
 ```
 $ nix develop
 $ just bench-host-check          # qualified / unqualified, with the failing property named
-$ just bench-smoke               # gate: behavioural + relative, ~1 min, no download
-$ just bench-smoke MUTANT=dwell  # gate must FAIL on each planted regression
-$ just bench-shape && just bench-script BASE=... CAND=...   # qualified ARM64 host → bundle
+$ just bench-smoke               # gate: behavioural + relative, ~70 s, no download
+$ bash bench/smoke/verify-gate.sh  # the gate must FAIL on each planted regression
+$ just bench-shape && just bench-script BASE=./bin/emb CAND=./bin/emb   # the reference host's shape and A/B runs
 $ just bench-fargate-diff <before> <after>                  # same-host diff, cross-host refused
 ```
+
+The dispatched reference job (`reference-arm64`) runs the same three steps on
+`ubuntu-24.04-arm` and uploads the host contract's JSON report beside the shape
+and A/B logs as its record.
 
 - Each planted regression must turn the gate red and name the assertion it broke; the unmodified tree must pass.
 - `just bench-host-check` must report the Fly `shared-cpu-*` quota collapse and the Apple M4 laptop as unqualified, and a contract-passing ARM64 host as qualified.

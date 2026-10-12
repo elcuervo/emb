@@ -831,9 +831,13 @@ func runBenchmark(o *options, report hostcheck.Report) error {
 		// A run that could not finish the matrix is evidence of the attempt,
 		// so a `run` records it with cells-complete invalid. A baseline never
 		// lands here (refused up front), and a partial one would poison every
-		// later diff anyway.
+		// later diff anyway. A write that fails is reported alongside the
+		// matrix failure rather than swallowed: the record of the attempt is
+		// the point of writing it at all.
 		if o.mode != "baseline" {
-			_ = writeBundle(o, res)
+			if werr := writeBundle(o, res); werr != nil {
+				return fmt.Errorf("%w (the partial bundle could not be written: %v)", err, werr)
+			}
 		}
 		return err
 	}

@@ -141,6 +141,15 @@ func TestCPUTimesParsingAndStealPercent(t *testing.T) {
 	if prev.total != 1000 || prev.steal != 0 {
 		t.Fatalf("parsed %+v, want total 1000 steal 0", prev)
 	}
+	// guest and guest_nice are already counted inside user and nice, so the
+	// denominator must not add them again: that would understate steal.
+	guest, err := parseCPUTimes(strings.NewReader("cpu  100 0 100 800 0 0 0 0 50 60\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if guest.total != 1000 {
+		t.Fatalf("total = %d with guest time, want 1000", guest.total)
+	}
 	cur, err := parseCPUTimes(strings.NewReader("cpu  300 0 300 1390 0 0 0 10 0 0\n"))
 	if err != nil {
 		t.Fatal(err)
