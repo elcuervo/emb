@@ -167,7 +167,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           <dl class="facts hero__facts">
             <dt>RELEASE</dt><dd>v<span data-emb-version>0.4.3.pre4</span> · MIT</dd>
             <dt>BUILDS</dt><dd>macOS arm64 · Linux amd64/arm64</dd>
-            <dt>MEASURED</dt><dd><span class="t-num">2010.05 req/s</span> · minilm, 16 clients, Apple M4 · <a class="hero__link" href="https://github.com/elcuervo/emb/blob/main/BENCHMARK.md#multi-threaded">reproduce</a></dd>
+            <dt>MEASURED</dt><dd><span class="t-num">1,915 req/s</span> median (1,172–2,081) · minilm, 16 clients, Apple M4 · <span class="t-cmd">cpu_budget: auto</span> · <a class="hero__link" href="https://github.com/elcuervo/emb/blob/main/BENCHMARK.md#multi-threaded">reproduce</a></dd>
           </dl>
         </div>
 
@@ -810,6 +810,22 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               <p class="cap__claim">
                 RSS, CPU, goroutines, connections and per-model latency, in the
                 same <span class="t-cmd">EMB.STATS</span> reply.
+              </p>
+            </article>
+
+            <article class="cap" data-reveal>
+              <h3 class="cap__label">SIZES ITSELF TO THE MACHINE</h3>
+              <p class="cap__claim">
+                Detects the CPU allowance it may use (here from the scheduler's
+                CPU affinity), holds back a reserve, and calibrates each model's
+                sessions × intra-op width inside what is left — on a 10-core M4
+                that is allowance <span class="t-num">10</span>, budget
+                <span class="t-num">8</span>, one embedding session at
+                <span class="t-num">8</span> threads. An explicit
+                <span class="t-cmd">intra_op_threads</span> is never replaced, and
+                when no calibrated candidate validates the server keeps that
+                width and logs why. <span class="t-cmd">cpu_budget: off</span>
+                restores the legacy width rule.
               </p>
             </article>
 

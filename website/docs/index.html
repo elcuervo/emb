@@ -407,7 +407,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <dt>workers</dt>
         <dd>Auto-tuned. Number of worker goroutines.</dd>
         <dt>intra_op_threads</dt>
-        <dd>Defaults to <code>cores−2</code>, reserving cores for request parsing and dispatch. Set it explicitly to override.</dd>
+        <dd>Defaults to <code>cores−2</code> under <code>cpu_budget: off</code>; with the default <code>cpu_budget: auto</code> the process budget and calibration choose it. Set it explicitly to override — an explicit value is never replaced.</dd>
         <dt>scripts</dt>
         <dd>Default <code>[]</code>. Lua scripts to preload at boot; relative paths resolve against the config file's directory. An invalid script — bad syntax, missing file, oversized — fails startup.</dd>
         <dt>batching</dt>
@@ -446,6 +446,34 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <code>saturated</code> is CPU-bound — more concurrency cannot help — so
         the controller holds the allowance and logs one recommendation to raise
         <code>script_workers</code> or <code>intra_op_threads</code> instead.
+      </p>
+
+      <h3 class="doc-h3">Process CPU budget</h3>
+      <p class="doc-prose">
+        Embedding and image models are budgeted as one process. Out of the box
+        the server detects the CPU allowance it may use, holds back
+        <code>cpu_reserve</code>, and calibrates each model's session count and
+        intra-op width inside what is left — so a default deployment sizes
+        itself to the machine instead of to a hard-coded thread count.
+      </p>
+      <dl class="doc-cmds">
+        <dt>cpu_budget</dt>
+        <dd>Default <code>auto</code>. <code>auto</code> derives the admitted budget from the detected allowance minus <code>cpu_reserve</code>; <code>off</code> disables the budget and restores the legacy width rule (<code>intra_op_threads</code> defaults to <code>cores−2</code>); a positive integer pins the budget directly.</dd>
+        <dt>cpu_reserve</dt>
+        <dd>Default <code>2</code>. CPUs held back from the budget for tokenization, request parsing and dispatch. Only valid with <code>cpu_budget: auto</code>.</dd>
+        <dt>calibrate</dt>
+        <dd>Default <code>true</code>. Runs startup trials to pick each model's session count and width within the admitted budget.</dd>
+        <dt>weight <span class="t-dim">(per model)</span></dt>
+        <dd>Default <code>1</code>. A model's relative share of the budget when several are loaded, so a heavier model gets more of the admitted tokens.</dd>
+      </dl>
+      <p class="doc-prose">
+        Precedence: an explicit <code>workers</code> or
+        <code>intra_op_threads</code> is never replaced — the plan reports the
+        width you asked for. <code>cpu_budget: off</code> is the kill switch and
+        restores the legacy width rule exactly. The budget bounds <em>admitted
+        intra-op work</em>, not physical CPU: tokenization and Go work sit
+        outside it, and shared embedding and image sessions do not spin under
+        the automatic policy.
       </p>
 
       <h3 class="doc-h3">Batching</h3>
@@ -749,6 +777,34 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         value for the process lifetime.
       </p>
 
+      <h3 class="doc-h3">Process CPU plan</h3>
+      <p class="doc-prose">
+        The startup log and <code>EMB.STATS</code> report the plan the server
+        settled on, so the layout is observable rather than implied:
+      </p>
+      <dl class="doc-cmds">
+        <dt>cpu_allowance</dt>
+        <dd>The CPU allowance the process detected, in CPUs.</dd>
+        <dt>cpu_allowance_source</dt>
+        <dd>Where it came from — <code>scheduler/affinity</code>, a cgroup quota, or a fallback.</dd>
+        <dt>cpu_budget</dt>
+        <dd>The admitted budget after <code>cpu_reserve</code>, in intra-op tokens.</dd>
+        <dt>cpu_active_tokens</dt>
+        <dd>Tokens currently admitted to resident sessions.</dd>
+        <dt>cpu_peak_tokens</dt>
+        <dd>The high-water mark since startup.</dd>
+        <dt>per-model width</dt>
+        <dd>Each model's selected session count and intra-op width, as logged in the startup <code>CPU plan model=…</code> line.</dd>
+      </dl>
+      <p class="doc-prose">
+        Calibration runs trials at startup, which costs a short burst of CPU
+        before the server accepts requests. A calibrated layout falls back —
+        keeping the explicit width and logging the reason — when the model's
+        demand exceeds the admitted budget, when an explicit
+        <code>intra_op_threads</code> is set, or when the trial cannot validate
+        a candidate.
+      </p>
+
       <h3 class="doc-h3">emb-top</h3>
       <!-- The recorded take, played on request. The same run the landing
            page's plate shows, and the same publishing step writes both
@@ -833,7 +889,9 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
         <dt>hardware</dt>
         <dd>Apple M4, 24 GB RAM, macOS Sequoia 26.6.2, 10 CPUs (4 performance, 6 efficiency).</dd>
         <dt>measured</dt>
-        <dd>2026-08-31, re-measured in full on that machine.</dd>
+        <dd>2026-10-12, re-measured in full on that machine.</dd>
+        <dt>methodology</dt>
+        <dd>Median of repeated runs in one session, spread in parentheses. The server is warmed with a discarded 1,000-request run at the measured concurrency, because the first inference otherwise dominates a short run's average (the same c=16 cell reads 651 req/s cold and 2,069 warm). Policy arms alternate in one session. This host flips between a fast (p50 7.6 ms) and a slow (p50 12.3 ms) regime, so absolute medians move between sessions and only interleaved ratios are stable.</dd>
         <dt>cpu partition</dt>
         <dd>6 CPUs for the server, 4 for the tooling. The server is bounded by <code>GOMAXPROCS</code> and <code>intra_op_threads</code>, hard-pinned with <code>taskset -c</code> on Linux. The partition is measurement methodology, not a throughput knob.</dd>
       </dl>
@@ -1010,17 +1068,48 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
         recorded in <code>BENCHMARK.md</code> with its reproduction command.
       </p>
 
-      <h3 class="doc-h3">Multi-threaded — ten ONNX Runtime workers</h3>
+      <h3 class="doc-h3">Multi-threaded — one session at 8 intra-op threads</h3>
+      <p class="doc-prose">
+        The default <code>config.yaml</code> carries no tuning keys, so
+        <code>cpu_budget: auto</code> decides the layout: on this 10-core
+        machine it detects an allowance of 10, holds back 2, admits a budget of
+        8, and selects one embedding session at 8 intra-op threads.
+      </p>
       <dl class="doc-cmds">
         <dt>1 client, 500 requests</dt>
-        <dd><strong>420.17 req/s</strong>, p50 2.343 ms.</dd>
+        <dd><strong>730 req/s</strong> (539–735), p50 1.363 ms.</dd>
         <dt>8 clients, 2000 requests</dt>
-        <dd><strong>1655.63 req/s</strong>, p50 4.807 ms.</dd>
+        <dd><strong>1,607 req/s</strong> (1,600–1,619), p50 4.951 ms.</dd>
         <dt>16 clients, 2000 requests</dt>
-        <dd><strong>2010.05 req/s</strong>, p50 7.663 ms.</dd>
+        <dd><strong>1,915 req/s</strong> (1,172–2,081), p50 7.747 ms. A second 16-sample session measured 2,069 (1,423–2,116).</dd>
         <dt>64 clients, 2000 requests</dt>
-        <dd><strong>2541.30 req/s</strong>, p50 24.207 ms.</dd>
+        <dd><strong>2,721 req/s</strong> (1,955–2,729), p50 23.295 ms.</dd>
       </dl>
+
+      <h3 class="doc-h3">Process CPU budget — out of the box vs tuned</h3>
+      <p class="doc-prose">
+        Two arms compare the automatic budget against its kill switch and
+        against an explicit width. Each arm is started, warmed and measured
+        alternately in one session, so host drift hits both equally: c=16, 2000
+        requests, <code>EMB minilm hello world</code>.
+      </p>
+      <dl class="doc-cmds">
+        <dt>cpu_budget: auto <span class="t-dim">(default)</span></dt>
+        <dd>1 session × 8 threads — <strong>1,288 req/s</strong> (1,280–2,049).</dd>
+        <dt>cpu_budget: off</dt>
+        <dd>legacy session sizing — <strong>1,426 req/s</strong> (1,413–2,232), <strong>1.10× auto</strong> (1.08–1.24) interleaved.</dd>
+        <dt>intra_op_threads: 4 <span class="t-dim">(explicit)</span></dt>
+        <dd>1 session × 4 threads — <strong>2,026 req/s</strong> (2,020–2,030), 0.98× auto.</dd>
+      </dl>
+      <p class="doc-prose">
+        Absolute medians follow the host's regime, so the interleaved ratio is
+        the figure to quote: <code>cpu_budget: off</code> is about
+        <strong>10% faster</strong> than the automatic budget at c=16, because
+        the automatic policy disables ONNX Runtime spinning when the key is
+        unset. At c=64 the ratio reverses (auto ahead) and at c=1 the spread
+        swamps the effect, so the budget's cost is workload-shaped rather than
+        a flat win. The budget bounds admitted intra-op work, not physical CPU.
+      </p>
 
       <h3 class="doc-h3">Cache hit — identical texts</h3>
       <p class="doc-prose">
@@ -1038,12 +1127,13 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
       </dl>
 
       <figure class="code">
-<pre class="code__body"><span class="t-dim"># multi-threaded, 16 clients — the 2,010 req/s figure above</span>
+<pre class="code__body"><span class="t-dim"># multi-threaded, 16 clients — the 1,915 req/s figure above (warm first)</span>
+<span class="t-cmd">redis-benchmark</span> -p 6379 -q -c <span class="t-num">16</span> -P <span class="t-num">1</span> -n <span class="t-num">1000</span> <span class="t-cmd">EMB</span> minilm hello world &gt; /dev/null
 <span class="t-cmd">redis-benchmark</span> -p 6379 -q -c <span class="t-num">16</span> -P <span class="t-num">1</span> -n <span class="t-num">2000</span> <span class="t-cmd">EMB</span> minilm hello world
 
-<span class="t-dim"># or the harness targets</span>
+<span class="t-dim"># or the harness targets (port preflight + warm-up included)</span>
 <span class="t-cmd">just</span> bench-redis-multi
-<span class="t-cmd">just</span> bench-cache-size size=<span class="t-str">"auto"</span></pre>
+<span class="t-cmd">just</span> bench-ab config.yaml bench-cpu-budget-off.yaml <span class="t-num">5</span> <span class="t-num">16</span> <span class="t-num">2000</span> <span class="t-num">6379</span> minilm <span class="t-str">"hello world"</span> <span class="t-num">0</span> <span class="t-num">1</span></pre>
         <figcaption class="code__cap">
           Every figure above is reproducible from
           <code>BENCHMARK.md</code>, which also carries the client-side Ruby

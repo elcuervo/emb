@@ -1,0 +1,10 @@
+# CPU-budget benchmark arm: the automatic process budget turned off.
+# Reproduce with `just bench-ab config.yaml bench-cpu-budget-off.yaml ...` —
+# see BENCHMARK.md's process-budget section.
+listen: ":6379"
+
+cpu_budget: off
+
+models:
+  minilm:
+    onnx: ./models/minilm/model.onnx
