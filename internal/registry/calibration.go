@@ -49,14 +49,15 @@ func calibrationInputs(tok tokenizer.Tokenizer, maxLen int) ([]calibrationInput,
 }
 
 // calibrationNow and calibrationCPUTimes are seams so model-free tests can
-// drive the deadline and CPU accounting deterministically. calibrationDeadline
-// bounds the whole trial; a slow in-flight Run may exceed it (temporary
-// sessions close only after calls return).
+// drive the clock and CPU accounting deterministically.
 var (
 	calibrationNow      = time.Now
 	calibrationCPUTimes = ProcessCPUTimes
-	calibrationDeadline = 4 * time.Second
 )
+
+// calibrationDeadline bounds the whole trial; a slow in-flight Run may exceed
+// it (temporary sessions close only after calls return).
+const calibrationDeadline = 4 * time.Second
 
 // calibrationTieTolerance is the relative run-to-run noise band: a candidate
 // must beat the incumbent by more than this fraction to displace it, and a
