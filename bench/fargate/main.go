@@ -5,7 +5,11 @@ package main
 // Builds the server image for --platform, runs it in a Docker container bounded
 // by --cpus/--memory at the Fargate vCPU tiers, drives fixed-length / unique-text
 // / mixed-length / cache-hit workloads with redis-benchmark and a pure-Ruby RESP
-// driver, and emits a versioned baseline JSON for pre/post diffing.
+// driver, and emits one evidence bundle: the host fingerprint (the validation
+// host contract's verdict), revision, model digests, configuration, per-cell
+// metrics, and the outcome of every assertion the run made. Only `-mode
+// baseline` insists on a qualified host; the diff refuses any pair whose
+// fingerprint identities differ.
 //
 // Run from the repo root inside `nix develop`:
 //
@@ -14,20 +18,23 @@ package main
 //	go run ./bench/fargate -mode diff -before <a.json> -after <b.json>
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/elcuervo/emb/bench/hostcheck"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
@@ -123,12 +130,73 @@ func parseInts(s string) ([]int, error) {
 	return out, nil
 }
 
-// ---- result model ----
+// ---- bundle model ----
 
-type hostInfo struct {
-	OS   string `json:"os"`
-	Arch string `json:"arch"`
-	Gold bool   `json:"gold"`
+// hostBundle is the fingerprint a bundle records: the shape two runs must share
+// before their numbers may be compared (architecture, effective CPU allowance
+// and its source, memory limit, server budget), the digest of that shape, the
+// validation host contract's verdict, and the properties the contract failed.
+// The embedded fingerprint keeps os/arch/gold where readers of the
+// pre-fingerprint bundles found them.
+type hostBundle struct {
+	hostcheck.Fingerprint
+	Identity         string   `json:"identity"`
+	Gold             bool     `json:"gold"`
+	FailedProperty   string   `json:"failed_property,omitempty"`
+	FailedProperties []string `json:"failed_properties,omitempty"`
+}
+
+// Assertion outcomes. The list is closed: invalid is an unmet precondition (the
+// run could not reach what the assertion needs) and skipped is a run that could
+// not exercise the assertion; neither is ever a pass.
+const (
+	outcomePass    = "pass"
+	outcomeFail    = "fail"
+	outcomeInvalid = "invalid"
+	outcomeSkipped = "skipped"
+)
+
+// Assertion names the harness records.
+const (
+	assertHostContract  = "host-contract"
+	assertCellsComplete = "cells-complete"
+)
+
+// assertion is one claim the run made about itself, with its outcome.
+type assertion struct {
+	Name    string `json:"name"`
+	Outcome string `json:"outcome"`
+	Detail  string `json:"detail,omitempty"`
+}
+
+// fileDigest names one measured model input, its size and its content hash: a
+// model or tokenizer that changed under a baseline must be visible as a digest
+// change, not as mysterious drift.
+type fileDigest struct {
+	Path   string `json:"path"`
+	Bytes  int64  `json:"bytes"`
+	SHA256 string `json:"sha256"`
+}
+
+// modelInputs are the model files this run actually measured.
+type modelInputs struct {
+	Name      string     `json:"name"`
+	ONNX      fileDigest `json:"onnx"`
+	Tokenizer fileDigest `json:"tokenizer"`
+}
+
+// harnessConfig is the run's own configuration, recorded so any cell can be
+// reproduced from the bundle alone.
+type harnessConfig struct {
+	Platform     string  `json:"platform"`
+	Model        string  `json:"model"`
+	MaxLength    int     `json:"max_length"`
+	CPUs         []int   `json:"cpus"`
+	Clients      []int   `json:"clients"`
+	Pipelines    []int   `json:"pipelines"`
+	CountPerCell int     `json:"count_per_cell"`
+	ReqGate      float64 `json:"req_gate"`
+	P50Gate      float64 `json:"p50_gate"`
 }
 
 type benchCell struct {
@@ -143,13 +211,17 @@ type benchCell struct {
 	PadEff   *float64 `json:"padding_efficiency,omitempty"`
 }
 
+// result is the recorded evidence bundle: who measured it (revision), on what
+// (host fingerprint), with what (model digests), how (config), what came out
+// (cells), and what the run asserts about itself (assertions).
 type result struct {
-	SHA        string      `json:"sha"`
-	Created    string      `json:"created"`
-	Platform   string      `json:"platform"`
-	Host       hostInfo    `json:"host"`
-	CountPerCl int         `json:"count_per_cell"`
-	Cells      []benchCell `json:"cells"`
+	Revision   string        `json:"revision"`
+	Created    string        `json:"created"`
+	Host       hostBundle    `json:"host"`
+	Model      modelInputs   `json:"model"`
+	Config     harnessConfig `json:"config"`
+	Cells      []benchCell   `json:"cells"`
+	Assertions []assertion   `json:"assertions"`
 }
 
 func tierMemory(tier int) string {
@@ -170,22 +242,17 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
-	announceHost()
 
 	switch o.mode {
 	case "diff":
 		if o.before == "" || o.after == "" {
 			fatal("diff mode requires -before and -after")
 		}
-		b, err := loadResult(o.before)
+		ok, err := diffBundles(o.before, o.after, o.reqGate, o.p50Gate)
 		if err != nil {
 			fatal("%v", err)
 		}
-		a, err := loadResult(o.after)
-		if err != nil {
-			fatal("%v", err)
-		}
-		if !diffRun(b, a, o.reqGate, o.p50Gate) {
+		if !ok {
 			os.Exit(1)
 		}
 		return
@@ -194,9 +261,176 @@ func main() {
 		fatal("unknown mode %q (want run|baseline|diff)", o.mode)
 	}
 
-	if err := runBenchmark(o); err != nil {
+	report := hostcheck.Probe(hostcheck.DefaultThresholds())
+	if err := runMain(o, report); err != nil {
 		fatal("%v", err)
 	}
+}
+
+// runMain prints the host report, refuses a baseline capture off an unqualified
+// host before any path is created, and records the run. A run on an unqualified
+// host is still recorded (marked non-gold): only a baseline is refused, because
+// a baseline is the reference every later diff is measured against.
+func runMain(o *options, report hostcheck.Report) error {
+	fmt.Print(report.String())
+	if err := baselineRefusal(o.mode, report); err != nil {
+		return err
+	}
+	return runBenchmark(o, report)
+}
+
+// baselineRefusal returns nil when mode may persist a baseline on this host.
+// Every baseline capture passes through it before a path is created or a byte
+// written, so a refusal cannot leave a partial baseline behind.
+func baselineRefusal(mode string, report hostcheck.Report) error {
+	if mode != "baseline" || report.Qualified() {
+		return nil
+	}
+	return fmt.Errorf("refusing to capture a baseline on an unqualified host: %s", report.FailedProperty)
+}
+
+// newBundle starts a bundle: revision, host fingerprint, model digests, the
+// run's configuration, and the host-contract assertion. Cells and the
+// cells-complete assertion are appended by the run itself.
+func newBundle(o *options, report hostcheck.Report) (*result, error) {
+	model, err := modelDigests(o)
+	if err != nil {
+		return nil, err
+	}
+	return &result{
+		Revision:   gitSha(),
+		Created:    time.Now().UTC().Format(time.RFC3339),
+		Host:       hostBundleFrom(report),
+		Model:      model,
+		Config:     configFrom(o),
+		Assertions: []assertion{hostContractAssertion(report)},
+	}, nil
+}
+
+// finish records whether the requested matrix completed.
+func (r *result) finish(expected int, runErr error) {
+	r.Assertions = append(r.Assertions, cellsCompleteAssertion(expected, len(r.Cells), runErr))
+}
+
+// hostBundleFrom is the recorded fingerprint plus the contract's verdict. An
+// empty failure list is recorded as absent: the bundle must be exactly what a
+// JSON round trip yields, and "no properties failed" is one record, not two.
+func hostBundleFrom(report hostcheck.Report) hostBundle {
+	fp := report.Fingerprint()
+	failed := report.FailedProperties
+	if len(failed) == 0 {
+		failed = nil
+	}
+	return hostBundle{
+		Fingerprint:      fp,
+		Identity:         fp.Identity(),
+		Gold:             report.Qualified(),
+		FailedProperty:   report.FailedProperty,
+		FailedProperties: failed,
+	}
+}
+
+// hostContractAssertion records the validation host contract's verdict. An
+// unqualified host fails the assertion and names the property that failed.
+func hostContractAssertion(report hostcheck.Report) assertion {
+	if report.Qualified() {
+		return assertion{
+			Name:    assertHostContract,
+			Outcome: outcomePass,
+			Detail: fmt.Sprintf("qualified %s/%s: %.2f CPUs from %s, server budget %d",
+				report.OS, report.Arch, report.Allowance.CPUs, report.Allowance.Source, report.ServerBudget),
+		}
+	}
+	return assertion{
+		Name:    assertHostContract,
+		Outcome: outcomeFail,
+		Detail:  report.FailedProperty,
+	}
+}
+
+// cellsCompleteAssertion records whether the matrix produced every cell. A run
+// that could not finish never reached the precondition a pass needs, so it is
+// invalid.
+func cellsCompleteAssertion(expected, produced int, runErr error) assertion {
+	detail := fmt.Sprintf("%d of %d cells measured", produced, expected)
+	switch {
+	case runErr != nil:
+		return assertion{
+			Name:    assertCellsComplete,
+			Outcome: outcomeInvalid,
+			Detail:  fmt.Sprintf("the run could not finish the matrix: %v (%s)", runErr, detail),
+		}
+	case produced < expected:
+		return assertion{Name: assertCellsComplete, Outcome: outcomeInvalid, Detail: detail}
+	default:
+		return assertion{Name: assertCellsComplete, Outcome: outcomePass, Detail: detail}
+	}
+}
+
+// checkAssertions rejects an outcome outside the four the schema defines, so a
+// typo cannot record an unmet precondition or an unexercised assertion as a
+// pass.
+func checkAssertions(as []assertion) error {
+	for _, a := range as {
+		switch a.Outcome {
+		case outcomePass, outcomeFail, outcomeInvalid, outcomeSkipped:
+		default:
+			return fmt.Errorf("assertion %q has outcome %q (want pass|fail|invalid|skipped)", a.Name, a.Outcome)
+		}
+	}
+	return nil
+}
+
+// expectedCells is the matrix the flags request: per tier, every pipeline ×
+// client pair yields the two redis-benchmark workloads and a cache-hit cell, and
+// every client count yields one mixed-length cell.
+func expectedCells(o *options) int {
+	perTier := 3*len(o.pipelines)*len(o.clients) + len(o.clients)
+	return perTier * len(o.cpus)
+}
+
+// configFrom records the run's own knobs.
+func configFrom(o *options) harnessConfig {
+	return harnessConfig{
+		Platform:     o.platform,
+		Model:        o.model,
+		MaxLength:    o.maxLen,
+		CPUs:         o.cpus,
+		Clients:      o.clients,
+		Pipelines:    o.pipelines,
+		CountPerCell: o.count,
+		ReqGate:      o.reqGate,
+		P50Gate:      o.p50Gate,
+	}
+}
+
+// modelDigests hashes the model inputs this run measures.
+func modelDigests(o *options) (modelInputs, error) {
+	onnx, err := digestFile(filepath.Join(o.modelDir, "model.onnx"))
+	if err != nil {
+		return modelInputs{}, err
+	}
+	tok, err := digestFile(filepath.Join(o.modelDir, "tokenizer.json"))
+	if err != nil {
+		return modelInputs{}, err
+	}
+	return modelInputs{Name: o.model, ONNX: onnx, Tokenizer: tok}, nil
+}
+
+// digestFile returns the size and SHA-256 of one model input.
+func digestFile(path string) (fileDigest, error) {
+	// #nosec G304 -- path comes from flags; the harness control plane is trusted.
+	f, err := os.Open(path)
+	if err != nil {
+		return fileDigest{}, err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return fileDigest{}, err
+	}
+	return fileDigest{Path: path, Bytes: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
 }
 
 func fatal(format string, args ...any) {
@@ -228,17 +462,6 @@ var (
 	dockerBin = findBin([]string{"docker"})
 	gitBin    = findBin([]string{"git"})
 )
-
-// announceHost prints the host architecture and warns when it is not the gold
-// reference (an ARM64 Linux host). Apple Silicon runs linux/arm64 natively but
-// results are approximations, not gold.
-func announceHost() {
-	gold := runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
-	fmt.Printf("host: %s/%s gold_reference=%t\n", runtime.GOOS, runtime.GOARCH, gold)
-	if !gold {
-		fmt.Println("WARNING: host is not the gold reference (linux/arm64). Results are an approximation.")
-	}
-}
 
 // ---- repo / docker plumbing ----
 
@@ -590,22 +813,58 @@ func paddingEfficiency(o *options, texts []string) *float64 {
 
 // ---- orchestration ----
 
-func runBenchmark(o *options) error {
+func runBenchmark(o *options, report hostcheck.Report) error {
 	if err := os.MkdirAll(o.outDir, 0o755); err != nil {
 		return err
 	}
 	if err := buildImage(o); err != nil {
 		return err
 	}
-
-	res := &result{
-		SHA:        gitSha(),
-		Created:    time.Now().UTC().Format(time.RFC3339),
-		Platform:   o.platform,
-		Host:       hostInfo{OS: runtime.GOOS, Arch: runtime.GOARCH, Gold: runtime.GOOS == "linux" && runtime.GOARCH == "arm64"},
-		CountPerCl: o.count,
+	res, err := newBundle(o, report)
+	if err != nil {
+		return err
 	}
 
+	expected := expectedCells(o)
+	if err := runMatrix(o, res); err != nil {
+		res.finish(expected, err)
+		// A run that could not finish the matrix is evidence of the attempt,
+		// so a `run` records it with cells-complete invalid. A baseline never
+		// lands here (refused up front), and a partial one would poison every
+		// later diff anyway. A write that fails is reported alongside the
+		// matrix failure rather than swallowed: the record of the attempt is
+		// the point of writing it at all.
+		if o.mode != "baseline" {
+			if werr := writeBundle(o, res); werr != nil {
+				return fmt.Errorf("%w (the partial bundle could not be written: %v)", err, werr)
+			}
+		}
+		return err
+	}
+	res.finish(expected, nil)
+	return writeBundle(o, res)
+}
+
+// writeBundle persists the bundle, refusing to record an outcome outside the
+// schema first: a bundle that got its own assertions wrong is not evidence.
+func writeBundle(o *options, res *result) error {
+	if err := checkAssertions(res.Assertions); err != nil {
+		return err
+	}
+	path := resultPath(o)
+	out, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("bundle: %s (%d cells)\n", path, len(res.Cells))
+	return nil
+}
+
+// runMatrix drives the workload matrix and appends a cell per measurement.
+func runMatrix(o *options, res *result) error {
 	for _, tier := range o.cpus {
 		port, name, err := startServer(o, tier, false)
 		if err != nil {
@@ -658,13 +917,6 @@ func runBenchmark(o *options) error {
 		}
 		stopServer(cname, o.keep)
 	}
-
-	path := resultPath(o)
-	out, _ := json.MarshalIndent(res, "", "  ")
-	if err := os.WriteFile(path, out, 0o600); err != nil {
-		return err
-	}
-	fmt.Printf("results: %s (%d cells)\n", path, len(res.Cells))
 	return nil
 }
 
@@ -803,6 +1055,67 @@ func delta(b, a float64) float64 {
 		return 0
 	}
 	return (a - b) / b * 100
+}
+
+// diffBundles is -mode diff minus flags and exit codes: it loads both bundles,
+// refuses an incomparable pair (printing both fingerprints), and applies the
+// per-cell tolerances. The bool is the cell verdict.
+func diffBundles(beforePath, afterPath string, reqGate, p50Gate float64) (bool, error) {
+	before, err := loadResult(beforePath)
+	if err != nil {
+		return false, err
+	}
+	after, err := loadResult(afterPath)
+	if err != nil {
+		return false, err
+	}
+	detail, err := compareHosts(beforePath, before, afterPath, after)
+	if err != nil {
+		fmt.Print(detail)
+		return false, err
+	}
+	return diffRun(before, after, reqGate, p50Gate), nil
+}
+
+// compareHosts decides whether two bundles may be compared. It refuses a pair
+// whose fingerprint identities differ, and a legacy bundle that carries no
+// fingerprint at all. Both refusals return the text to print, which names both
+// fingerprints field by field: comparing numbers across two hosts is a
+// convention until the tooling refuses to do it.
+func compareHosts(beforePath string, before *result, afterPath string, after *result) (string, error) {
+	detail := fingerprintText(beforePath, before.Host) + fingerprintText(afterPath, after.Host)
+	switch {
+	case before.Host.Identity == "" && after.Host.Identity == "":
+		return detail, fmt.Errorf("refusing to compare %s and %s: neither carries a host fingerprint (legacy schema); re-record both on a qualified host", beforePath, afterPath)
+	case before.Host.Identity == "":
+		return detail, fmt.Errorf("refusing to compare: %s carries no host fingerprint (legacy schema recorded before fingerprints); re-record it on a qualified host", beforePath)
+	case after.Host.Identity == "":
+		return detail, fmt.Errorf("refusing to compare: %s carries no host fingerprint (legacy schema recorded before fingerprints); re-record it on a qualified host", afterPath)
+	case before.Host.Identity != after.Host.Identity:
+		return detail, fmt.Errorf("refusing to compare %s and %s: host fingerprints differ (%s vs %s)", beforePath, afterPath, before.Host.Identity, after.Host.Identity)
+	default:
+		return detail, nil
+	}
+}
+
+// fingerprintText renders one bundle's fingerprint field by field, so a refusal
+// shows what actually differed instead of only two opaque digests.
+func fingerprintText(label string, h hostBundle) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", label)
+	fmt.Fprintf(&b, "  os/arch         %s/%s\n", h.OS, h.Arch)
+	fmt.Fprintf(&b, "  presented CPUs  %d\n", h.PresentedCPUs)
+	fmt.Fprintf(&b, "  allowance       %.2f CPUs from %s (quota=%t, scheduler=%d, affinity=%d)\n",
+		h.Allowance.CPUs, h.Allowance.Source, h.Allowance.Quota, h.Allowance.Scheduler, h.Allowance.Affinity)
+	fmt.Fprintf(&b, "  memory limit    %d bytes\n", h.MemoryLimit)
+	fmt.Fprintf(&b, "  server budget   %d\n", h.ServerBudget)
+	fmt.Fprintf(&b, "  steal/throttle  %s / %s\n", h.StealVerdict, h.ThrottleVerdict)
+	fmt.Fprintf(&b, "  gold            %t\n", h.Gold)
+	if h.FailedProperty != "" {
+		fmt.Fprintf(&b, "  failed property %s\n", h.FailedProperty)
+	}
+	fmt.Fprintf(&b, "  identity        %q\n", h.Identity)
+	return b.String()
 }
 
 func diffRun(before, after *result, reqGate, p50Gate float64) bool {

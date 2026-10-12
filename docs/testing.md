@@ -71,3 +71,13 @@ rest (`./internal/...` and `./website/repl/`) with the ONNX runtime and the
 minilm fixture present, so the measured coverage is enforced rather than
 local-only. The CGo job reports the skipped-test count so a green run is
 distinguishable from one where the model-dependent tests did not run.
+
+The CGo job also sets `EMB_BENCH_SMOKE=1`, so the autotune smoke gate
+(`just bench-smoke`) runs on every code change: it drives the production sampler
+against the committed `testdata/laya` fixture with no model download, prints one
+assertion outcome per line and a final
+`emb-smoke: assertions=N pass=N fail=0 skipped=N` summary, and the job fails
+when that summary is absent — a green run has to mean the gate ran rather than
+skipped. What it asserts, the host-dependent skips, and the gate's own
+self-verification are documented in
+[docs/performance-validation.md](performance-validation.md).

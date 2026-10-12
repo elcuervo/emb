@@ -1,7 +1,11 @@
 default:
     @just --list
 
-ort_lib := `echo "${DYLD_LIBRARY_PATH:-}" | grep -o '/nix/store/[^:]*onnxruntime[^:]*/lib' | head -1`
+ort_lib := `for d in "${DYLD_LIBRARY_PATH:-}" "${LD_LIBRARY_PATH:-}"; do echo "$d" | tr ':' '\n'; done | grep -o '/nix/store/[^:]*onnxruntime[^:]*/lib' | head -1`
+# The runtime linker variable of the platform at hand. nix develop exports
+# DYLD_LIBRARY_PATH on macOS and LD_LIBRARY_PATH on Linux, so a recipe that
+# launches a Go binary linked against ONNX Runtime has to prefix the right one.
+ort_var := if os() == "macos" { "DYLD_LIBRARY_PATH" } else { "LD_LIBRARY_PATH" }
 libtokenizers_dir := "./lib/libtokenizers"
 redis_benchmark := `which redis-benchmark 2>/dev/null || echo ""`
 image_tag := `cat VERSION 2>/dev/null || echo "dev"`
@@ -441,19 +445,36 @@ bench-pool-gate:
 # Run all benchmarks
 bench-all: bench-redis bench-cache
 
+# Validate the host before any performance number is recorded. Prints the
+# architecture, the effective CPU allowance and its source, the memory limit,
+# the server's own detected budget, and sampled steal and throttle deltas, then
+# the qualified/unqualified verdict and the property that failed. Exits
+# non-zero when unqualified: a run on an unqualified host is not evidence.
+#   just bench-host-check
+#   just bench-host-check -- -json      # the recordable form
+bench-host-check *args="":
+    @{{ort_var}}="{{ort_lib}}:${{ort_var}}" go run ./bench/hostcheck/cmd/host-check {{args}}
+
+# The per-change autotune smoke gate: behavioural assertions on the real
+# sampler and session pool against the committed testdata/laya miniature, with
+# no model download and no Docker. Prints every assertion's outcome, including
+# the host-dependent skips, and fails when one regresses. ~1 minute.
+bench-smoke:
+    @EMB_BENCH_SMOKE=1 {{ort_var}}="{{ort_lib}}:${{ort_var}}" go test ./internal/server/ -run Smoke -v -count=1 -timeout 600s
+
 # Fargate-shaped benchmark harness (linux/arm64, Graviton CPU). Requires Docker
 # and a model at ./models; redis-benchmark/redis-cli/ruby run from `nix develop`.
 # Emits bench/fargate/out/run.<sha>.<ts>.json
 bench-fargate:
-    go run ./bench/fargate -mode run
+    @{{ort_var}}="{{ort_lib}}:${{ort_var}}" go run ./bench/fargate -mode run
 
 # Capture the golden Fargate baseline JSON (bench/fargate/baseline.<sha>.json)
 bench-fargate-baseline:
-    go run ./bench/fargate -mode baseline
+    @{{ort_var}}="{{ort_lib}}:${{ort_var}}" go run ./bench/fargate -mode baseline
 
 # Diff two result/baseline JSON files per-cell with PASS/FAIL tolerances
 bench-fargate-diff before after:
-    go run ./bench/fargate -mode diff -before {{before}} -after {{after}}
+    @{{ort_var}}="{{ort_lib}}:${{ort_var}}" go run ./bench/fargate -mode diff -before {{before}} -after {{after}}
 
 # Verify embeddings match Python reference (requires downloaded model)
 verify-embeddings: build

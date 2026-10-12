@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # The performance reference tier is recorded on demand: its numbers only mean
+  # something on a host that passes the validation host contract
+  # (docs/performance-validation.md), so it is never a required check and never
+  # runs on a pull request. A dispatch runs only that job: every other job is
+  # guarded against this event below.
+  workflow_dispatch:
 
 # No job needs more than to read the tree, and `pull_request` runs the fork's
 # own Go tests. Least privilege keeps a persisted credential worthless to code
@@ -28,6 +34,7 @@ jobs:
   # that requires them, while a job skipped by a condition reports success.
   # https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks
   changes:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}
@@ -108,7 +115,7 @@ jobs:
 
   lint:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -125,7 +132,7 @@ jobs:
 
   test:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -178,7 +185,7 @@ jobs:
   # run cannot mean "the model-dependent tests did not run".
   test-cgo:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -228,6 +235,10 @@ jobs:
           CGO_ENABLED: "1"
           CGO_LDFLAGS: "-L/opt/libtokenizers"
           LD_LIBRARY_PATH: /opt/onnxruntime/lib
+          # The autotune smoke gate (`just bench-smoke`) rides along in this job:
+          # it needs the ONNX runtime and no model download, and the budget
+          # below is what keeps its cost honest.
+          EMB_BENCH_SMOKE: "1"
         run: |
           set -o pipefail
           budget=1200
@@ -241,6 +252,17 @@ jobs:
             jq -r 'select(.Action == "skip") | "  \(.Package) \(.Test // "")"' /tmp/emb-test.json | sort -u
             echo "::warning::$skips test(s) skipped; this run is not fully executed"
           fi
+
+          # The gate printed its per-assertion outcomes into the same stream.
+          # A green run must mean it ran: without the summary the gate skipped
+          # (no runtime) or never started, and this job is the only place it is
+          # exercised per change.
+          if ! grep -q 'emb-smoke: assertions=' /tmp/emb-test.json; then
+            echo "::error::EMB_BENCH_SMOKE=1 but the smoke gate produced no assertion summary"
+            exit 1
+          fi
+          jq -r 'select(.Action == "output") | .Output' /tmp/emb-test.json \
+            | grep 'emb-smoke' | sed 's/^/  /'
 
           echo "suite wall-clock: ${elapsed}s (budget ${budget}s)"
           if [ "$elapsed" -gt "$budget" ]; then
@@ -262,7 +284,7 @@ jobs:
   # it runs in seconds.
   sandbox:
     needs: changes
-    if: needs.changes.outputs.sandbox == 'true'
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.sandbox == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -308,6 +330,7 @@ jobs:
   # `VERSION` reaches the pages as well as the binary, so the stamp check is
   # worth doing for a server change too.
   site:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -341,7 +364,7 @@ jobs:
   # toolchain. One job per supported Rails line on the dev-shell Ruby.
   gem-rails:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -364,3 +387,102 @@ jobs:
       - name: Run Rails boot suite
         working-directory: gems/emb
         run: bundle exec rake spec:rails
+
+  # The performance reference tier: a host-qualified ARM64 Linux run recorded
+  # as evidence. Dispatched by hand because its numbers only mean something on a
+  # qualified host, and never a required check: it does not run on a pull
+  # request, so it cannot block a merge while the host ladder's first rung is
+  # still being established (docs/performance-validation.md).
+  #
+  # `just bench-host-check`'s criteria decide whether this runner may be the
+  # reference at all. A free `ubuntu-24.04-arm` runner advertises four vCPUs
+  # with no quota, so it is expected to qualify; if it reports unqualified the
+  # tier moves down the ladder (a rented dedicated-vCPU host, or the Fargate ARM
+  # task with the driver inside it under a `taskset` partition) and this job
+  # keeps the record of why. Artifacts are uploaded even when the contract
+  # refuses the host, so the verdict is always inspectable.
+  reference-arm64:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
+    env:
+      CGO_ENABLED: "1"
+      CGO_LDFLAGS: "-L/opt/libtokenizers"
+      # Go builds link against the ORT headers (CGO_CFLAGS) and the binary needs
+      # the shared library at run time (LD_LIBRARY_PATH). The archive directory
+      # carries the version, so it is exported once by the install step below.
+      ORT_DIR: ${{ github.workspace }}/ort
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Source versions
+        run: cat .github/versions.env >> $GITHUB_ENV
+
+      - name: Install libtokenizers (arm64)
+        run: |
+          sudo mkdir -p /opt/libtokenizers
+          curl -fsSL "https://github.com/daulet/tokenizers/releases/download/${TOKENIZERS_VERSION}/libtokenizers.linux-aarch64.tar.gz" \
+            -o /tmp/libtokenizers.tgz
+          sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
+          rm /tmp/libtokenizers.tgz
+
+      - name: Install ONNX Runtime (arm64)
+        run: |
+          ORT_VER="${ORT_VERSION#v}"
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-aarch64-${ORT_VER}.tgz" \
+            -o /tmp/onnx.tgz
+          mkdir -p "${ORT_DIR}"
+          tar xzf /tmp/onnx.tgz -C "${ORT_DIR}" --strip-components=1
+          rm /tmp/onnx.tgz
+          echo "CGO_CFLAGS=-I${ORT_DIR}/include" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=${CGO_LDFLAGS} -L${ORT_DIR}/lib -lonnxruntime" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${ORT_DIR}/lib" >> "$GITHUB_ENV"
+
+      # The shape and A/B harnesses wait on `redis-cli -p <port> ping`.
+      - name: Install redis-cli
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+
+      - name: Cache the scripted model set
+        uses: actions/cache@v4
+        with:
+          path: models/gliner2
+          key: gliner2-v1
+
+      - name: Download the scripted model set
+        run: |
+          mkdir -p models/gliner2
+          for f in model_int8.onnx tokenizer.json config.json; do
+            if [ -s "models/gliner2/$f" ]; then
+              echo "✓ $f (cached)"
+            else
+              curl -fsSL "https://huggingface.co/cuerbot/gliner2-multi-v1/resolve/main/$f" -o "models/gliner2/$f"
+              echo "✓ $f (downloaded)"
+            fi
+          done
+
+      # The contract first: a run on an unqualified host is not evidence, and
+      # this step is what refuses to call it one.
+      - name: Host contract
+        run: |
+          mkdir -p bench-out/reference
+          go run ./bench/hostcheck/cmd/host-check -json | tee bench-out/reference/host.json
+
+      - name: Shape run (autotune transitions)
+        run: bash bench/script/shape.sh 2>&1 | tee bench-out/reference/shape.log
+
+      - name: A/B run (same host, against itself)
+        run: |
+          go build -ldflags "-X main.version=$(cat VERSION)" -o bin/emb ./cmd/emb
+          BASE=./bin/emb CAND=./bin/emb SAMPLES=3 bash bench/script/run.sh 2>&1 | tee bench-out/reference/ab.log
+
+      - name: Upload the reference record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emb-reference-arm64
+          path: bench-out/reference
+          if-no-files-found: warn

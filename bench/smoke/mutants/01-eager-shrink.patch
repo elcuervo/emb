@@ -1,0 +1,14 @@
+# assertion: allowance-halved
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+diff --git a/internal/registry/sampler.go b/internal/registry/sampler.go
+--- a/internal/registry/sampler.go
++++ b/internal/registry/sampler.go
+@@ -17,7 +17,7 @@
+ 	// Expand to the cap after one throughput window; contract only after
+ 	// sustained (10 s) latency so a short serial lull never starves a burst.
+ 	autotuneGrowAfter   = 1
+-	autotuneShrinkAfter = 10
++	autotuneShrinkAfter = 1
+ )
+ 
+ // startSampler starts the traffic sampler for a scripted model. It is a no-op

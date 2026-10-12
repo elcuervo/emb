@@ -71,6 +71,8 @@ steps in `just all` may fail to find the ORT library).
 | `just bench` / `baseline` | Go benchmarks over every package / the same, tee'd to `benchmark-baseline.txt` |
 | `just bench-script` | the scripted-inference benchmarks (`BenchmarkScript*`); needs `just download-model` |
 | `just bench-budgets` | enforces the scripted-inference budgets (latency parity, metal parity, memory, throughput scaling) — the benchmark regression gate; needs a model |
+| `just bench-host-check` | the validation host contract: architecture, effective CPU allowance and its source, memory limit, sampled steal and throttle, and the qualified/unqualified verdict with the failed property (exits non-zero when unqualified) |
+| `just bench-smoke` | the per-change autotune smoke gate (`EMB_BENCH_SMOKE=1`): behavioural assertions on the real sampler and session pool against `testdata/laya`, no download, no Docker, ~70 s |
 | `just bench-cache-size size="auto"` | server with `-cache <size>` + `redis-benchmark` hit path |
 | `just website-presets` / `website-presets-check` | rewrite / verify the sandbox preset SHA1s stamped into the site (CI runs `--check`) |
 | `just bench-ruby config="bench-cpu-partition.yaml"` | CPU-partitioned client harness (`app_cpus`/`bench_cpus` vars, taskset on Linux) |
@@ -91,6 +93,11 @@ go test ./internal/server/ ./internal/script/ ./internal/onnx/ ./internal/bounde
 
 ## Benchmarks and preset edits
 
+- **Performance validation.** `docs/performance-validation.md` is the contract: which hosts may
+  produce reference evidence (`just bench-host-check`), what a recorded bundle is
+  (`bench/fargate`), and what the per-change smoke gate asserts (`just bench-smoke`, plus
+  `bash bench/smoke/verify-gate.sh`, which proves the gate fails on the four planted
+  regressions). Absolute numbers are never comparable across hosts.
 - **Benchmark / regression gate.** `just bench-script` prints the `BenchmarkScript*` numbers; `just bench-budgets` enforces the budget tests (`EMB_BENCH_BUDGETS=1`) — the regression gate for scripted-inference latency, metal parity, memory, and throughput scaling. Both need a downloaded model (`just download-model`). On a shared/busy host the recorded baseline ratio is the gate; only set `EMB_BENCH_REFERENCE=1` on a quiet reference machine. To compare against the base, run the same target in a detached worktree at `HEAD` (`git worktree add --detach /tmp/emb-base HEAD`, symlink `models/`) so uncommitted work is never stashed.
 - **Preset Lua edits.** Any byte change to a preset (`scripts/{laya,snake,pacman}.lua`, `website/repl/presets/*.lua`) changes its SHA1, and the site calls presets by that SHA1. Re-stamp with `just website-presets`, verify with `just website-presets-check`; CI runs `--check` and fails on drift. `website/repl/presets/*.lua` are symlinks into `scripts/`.
 
