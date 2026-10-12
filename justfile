@@ -753,7 +753,8 @@ website-topviz: build
       --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/take.cast $tmp/take.gif; \
     python3 website/tools/topviz/publish.py --frame $runs/frame.txt --cast $runs/take.cast --gif $tmp/take.gif \
       --samples $runs/samples.txt \
-      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port; \
+      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" --addr 127.0.0.1:$port \
+      --commit "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; \
     python3 website/tools/published-tree.py
 
 # Record the fleet view's capture from a real two-node run (see

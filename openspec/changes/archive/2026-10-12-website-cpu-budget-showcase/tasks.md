@@ -28,13 +28,13 @@
 
 ## 5. Re-record the emb-top plate and capture
 
-- [ ] 5.1 Re-run the take with `just website-topviz` against a node running the default CPU policy so the replayed frames show the plan line, and verify the committed plate and the documentation capture both show it and their names changed with their bytes.
-- [ ] 5.2 Verify the plate's figures still come from that run's own sample log, and that the recorded run's date, commit and node configuration are recorded with it.
+- [x] 5.1 Re-run the take with `just website-topviz` against a node running the default CPU policy so the replayed frames show the plan line, and verify the committed plate and the documentation capture both show it and their names changed with their bytes. (`emb-top-4fdc7a85.cast` → `emb-top-550b5150.cast`; both 22-line frames carry `cpu budget 8 · tokens 0/8 · peak 6 · 10.00 cores (scheduler/affinity)`; gif → `emb-top-27528bdb.gif`.)
+- [x] 5.2 Verify the plate's figures still come from that run's own sample log, and that the recorded run's date, commit and node configuration are recorded with it. (Figures derive from `runs/samples.txt` — e.g. the stamped busiest poll 192 req/s vs the log's max `req_rate=192.3`; the run stamp now reads `2026-10-12 · emb-top v0.4.3.pre4 · 8ace286 · 4 models · 127.0.0.1:16379`, with `--commit` added to `publish.py`.)
 
 ## 6. Live sandbox
 
-- [ ] 6.1 Redeploy the sandbox by hand (`just sandbox-deploy`) and verify the live view relays frames containing the plan line, and that its standalone terminal still links to it.
-- [ ] 6.2 Verify the sandbox's own reported plan is what the panel shows (a small VM allowance is expected) and that no surrounding copy promises a larger budget than the live panel reports.
+- [x] 6.1 Redeploy the sandbox by hand (`just sandbox-deploy`) and verify the live view relays frames containing the plan line, and that its standalone terminal still links to it. (Machine `784567db5de028` updated and healthy; `https://cli.emb.is/api/stats` relays `cpu budget 3 · tokens 1/3 · peak 1 · 4.00 cores (scheduler/affinity)`; `https://cli.emb.is/` still carries `href="/stats"`.)
+- [x] 6.2 Verify the sandbox's own reported plan is what the panel shows (a small VM allowance is expected) and that no surrounding copy promises a larger budget than the live panel reports. (The panel's 4.00 cores matches the `shared-cpu-4x` VM; `website/repl/stats.html` carries no budget/cores/allowance copy.)
 
 ## 7. Integration checks
 

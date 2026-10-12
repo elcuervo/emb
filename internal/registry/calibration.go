@@ -152,6 +152,13 @@ func calibrateLayout(factory func(int) (onnx.Session, error), tok tokenizer.Toke
 	}
 
 	candidates := calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWorkers, batched)
+	if len(candidates) == 0 {
+		// Every candidate costs more than this model's share of the budget —
+		// reachable with an explicit width when several models split the
+		// process budget. Keep the explicit width; there is nothing to try.
+		fallback.Reason = "over_budget"
+		return fallback
+	}
 	if len(candidates) == 1 {
 		// Nothing to choose between (an explicit dimension, or a one-slot
 		// budget): skip the trials entirely.

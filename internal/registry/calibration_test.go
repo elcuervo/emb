@@ -247,6 +247,24 @@ func TestCalibrationKeepsExplicitDimensions(t *testing.T) {
 	}
 }
 
+// An explicit width larger than the model's share of the budget leaves no
+// candidate to trial. It must fall back to that width and report why, rather
+// than panic on the empty candidate list (four preloaded models split the
+// process budget, so each model's share can be smaller than its explicit width).
+func TestCalibrationFallsBackWhenEveryCandidateIsOverBudget(t *testing.T) {
+	withCalibrationSeams(t, liveCPU(), nil)
+	probe := &calBatchProbe{}
+	layout := runCalibration(t, func(threads int) calFakeSession {
+		return calFakeSession{dur: time.Millisecond, probe: probe}
+	}, 2, 2, 3, 0, true, 1)
+	if layout.Source != "fallback" || layout.Reason != "over_budget" || layout.Threads != 3 || layout.Workers != 1 {
+		t.Fatalf("layout = %+v, want the explicit width kept with an over_budget fallback", layout)
+	}
+	if got := probe.seen(); len(got) != 0 {
+		t.Fatalf("over-budget calibration ran %d model runs, want none", len(got))
+	}
+}
+
 // A single candidate (an explicit dimension, or a one-slot budget) needs no
 // trial: the answer is the only option, so no real model run is spent on it.
 func TestCalibrationSkipsTrialForASingleCandidate(t *testing.T) {
