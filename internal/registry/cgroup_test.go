@@ -84,6 +84,23 @@ func TestResolveCPUAllowanceSeparatesQuotaAndScheduler(t *testing.T) {
 	}
 }
 
+// A quota the process cannot use is not an allowance: affinity binds first, so
+// planning must not admit more work than the CPUs the process can run on.
+func TestResolveCPUAllowanceCapsByAffinity(t *testing.T) {
+	capped := resolveCPUAllowance(8, "cgroup", 8, 2)
+	if capped.CPUs != 2 {
+		t.Fatalf("quota above affinity = %v CPUs, want 2 (the affinity)", capped.CPUs)
+	}
+	keep := resolveCPUAllowance(4, "cgroup", 8, 8)
+	if keep.CPUs != 4 {
+		t.Fatalf("quota below affinity = %v CPUs, want the quota 4", keep.CPUs)
+	}
+	unknown := resolveCPUAllowance(4, "cgroup", 8, 0)
+	if unknown.CPUs != 4 {
+		t.Fatalf("unknown affinity = %v CPUs, want the quota 4", unknown.CPUs)
+	}
+}
+
 func TestReadCgroupCPUQuota(t *testing.T) {
 	v2 := t.TempDir()
 	os.WriteFile(filepath.Join(v2, "cpu.max"), []byte("400000 100000\n"), 0o644)

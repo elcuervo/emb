@@ -54,6 +54,11 @@ func EffectiveCPUAllowance() CPUAllowance {
 
 func resolveCPUAllowance(quota float64, source string, scheduler, affinity int) CPUAllowance {
 	if quota > 0 {
+		// A quota above the process's affinity cannot be used: the process can
+		// only run on the CPUs it is pinned to, so plan from the smaller number.
+		if affinity > 0 && float64(affinity) < quota {
+			quota = float64(affinity)
+		}
 		return CPUAllowance{CPUs: quota, Source: source, Scheduler: scheduler, Affinity: affinity}
 	}
 	cpus := float64(affinity)

@@ -221,6 +221,19 @@ search:
 	if truncated {
 		reason = "calibration_deadline"
 	}
+	best, bestScore = chooseCalibratedLayout(scores, candidates, batched, fallback)
+	return finishCalibration(best, bestScore, fallback, reason, started)
+}
+
+// chooseCalibratedLayout picks a measured layout from its scores: the highest
+// score outside the noise band, and inside the band the wider layout for a
+// batching pool (its trial serves a smaller batch than the coalescing pool, so
+// the measurement understates threads) or the lower-resource layout otherwise.
+// It returns the fallback and a negative score when nothing was measured. The
+// incumbent's score moves with it, so a later candidate is compared against the
+// layout it would replace rather than against the serial baseline.
+func chooseCalibratedLayout(scores map[[2]int]float64, candidates [][2]int, batched bool, fallback calibratedLayout) (calibratedLayout, float64) {
+	bestScore, best := -1.0, fallback
 	for _, candidate := range candidates {
 		score, measured := scores[[2]int{candidate[0], candidate[1]}]
 		if !measured {
@@ -231,18 +244,16 @@ search:
 			bestScore = score
 			best = calibratedLayout{Workers: candidate[0], Threads: candidate[1], Source: "calibrated"}
 		case score > bestScore*(1-calibrationTieTolerance):
-			// Within the run-to-run noise band. A batching pool coalesces rows
-			// while the trial serves a smaller batch, so it understates wide
-			// threads: prefer the wider layout. An unbatched pool is measured at
-			// its real shape, so keep the lower-resource layout.
 			if batched && candidate[1] > best.Threads {
-				best.Threads, best.Source = candidate[1], "calibrated"
+				bestScore = score
+				best = calibratedLayout{Workers: candidate[0], Threads: candidate[1], Source: "calibrated"}
 			} else if !batched && candidate[0]*candidate[1] < best.Workers*best.Threads {
+				bestScore = score
 				best.Workers, best.Threads, best.Source = candidate[0], candidate[1], "calibrated"
 			}
 		}
 	}
-	return finishCalibration(best, bestScore, fallback, reason, started)
+	return best, bestScore
 }
 
 // finishCalibration returns the best validated candidate, or the safe

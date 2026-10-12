@@ -875,6 +875,11 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 			return nil, fmt.Errorf("creating scripted session %d for %q: %w", i, e.Name, err)
 		}
 		if e.cpuGate != nil {
+			// The pool leases one session to at most ScriptCallers() concurrent
+			// callers, so dividing the width charges the session's threads once
+			// in total while they share its pool. Charging the full width per
+			// caller would let the first run take the whole budget and serialise
+			// the callers that script_callers_per_session exists to run together.
 			charge := max(1, (intraThreads+cfg.ScriptCallers()-1)/cfg.ScriptCallers())
 			sess = budgetedNamedSession{NamedSession: sess, gate: e.cpuGate, width: charge}
 		}

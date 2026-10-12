@@ -150,7 +150,7 @@ func BenchmarkInferencePairs(b *testing.B) {
 		for _, cache := range []string{"warm", "cold"} {
 			b.Run(tc.name+"/"+cache, func(b *testing.B) {
 				for b.Loop() {
-					res := runInferenceBenchPass(b, addr, srv, tc.dispatch, tc.legs, cache, rate, duration)
+					res := runInferenceBenchPass(b, addr, srv, tc.name, tc.dispatch, tc.legs, cache, rate, duration)
 					report.Results = append(report.Results, res)
 					b.ReportMetric(float64(res.Completed)/res.Seconds, "completed_pairs/s")
 					b.ReportMetric(res.CPUSecondsPair, "cpu_s/pair")
@@ -205,7 +205,8 @@ type inferencePairConns struct{ legs []inferenceLegConn }
 
 // runInferenceBenchPass offers pairs at the fixed rate for the duration and
 // waits for every launched pair, so offered = completed + dropped + errors.
-func runInferenceBenchPass(b *testing.B, addr string, srv *Server, dispatch string, legs []string, cache string, rate float64, duration time.Duration) inferenceBenchResult {
+// name is the case name from the table, which the report keeps verbatim.
+func runInferenceBenchPass(b *testing.B, addr string, srv *Server, name, dispatch string, legs []string, cache string, rate float64, duration time.Duration) inferenceBenchResult {
 	b.Helper()
 	pool := make(chan *inferencePairConns, inferenceBenchMaxInFlight)
 	for i := 0; i < inferenceBenchMaxInFlight; i++ {
@@ -306,7 +307,7 @@ func runInferenceBenchPass(b *testing.B, addr string, srv *Server, dispatch stri
 	cpuSeconds := float64((cpuAfterUser-cpuBeforeUser)+(cpuAfterSys-cpuBeforeSys)) / 1e6
 
 	res := inferenceBenchResult{
-		Name:      dispatch + "/" + cache,
+		Name:      name + "/" + cache,
 		Dispatch:  dispatch,
 		Cache:     cache,
 		Rate:      rate,

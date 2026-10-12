@@ -140,10 +140,12 @@ func TestCalibrationScoresThroughput(t *testing.T) {
 
 // Equal measured throughput on a batched pool keeps the wider width: the trial
 // serves a smaller batch than the coalescing pool, so the measurement
-// understates the benefit of threads.
+// understates the benefit of threads. The duration is long enough that the
+// scores are genuinely equal (a 1ms sleep is equal only on average, and the tie
+// rule must not be decided by sleep jitter).
 func TestCalibrationPrefersWiderOnBatchedTie(t *testing.T) {
 	withCalibrationSeams(t, liveCPU(), nil)
-	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: time.Millisecond} }, 4, 4, 0, 0, true, 1)
+	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: 20 * time.Millisecond} }, 4, 4, 0, 0, true, 1)
 	if layout.Threads != 4 || layout.Workers != 1 || layout.Source != "calibrated" {
 		t.Fatalf("layout = %+v, want the widest layout inside the noise band", layout)
 	}
@@ -154,7 +156,7 @@ func TestCalibrationPrefersWiderOnBatchedTie(t *testing.T) {
 // the widths actually compete.
 func TestCalibrationPrefersLowerResourceOnUnbatchedTie(t *testing.T) {
 	withCalibrationSeams(t, liveCPU(), nil)
-	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: time.Millisecond} }, 8, 8, 0, 2, false, 1)
+	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: 20 * time.Millisecond} }, 8, 8, 0, 2, false, 1)
 	if layout.Workers != 2 || layout.Threads != 1 || layout.Source != "calibrated" {
 		t.Fatalf("layout = %+v, want the narrowest width at the measured session count", layout)
 	}
@@ -342,6 +344,50 @@ func TestCalibrationCandidateCountsRowsPerBatch(t *testing.T) {
 	}
 	if res.Rows != want {
 		t.Fatalf("Rows = %d, want %d (repeats × tiled rows)", res.Rows, want)
+	}
+}
+
+// The selection rule is pure, so it is tested with exact scores instead of
+// slept-through trials: the branch that matters is narrow enough that sleep
+// jitter could decide it.
+func TestChooseCalibratedLayoutRule(t *testing.T) {
+	// Candidates are ordered as calibrateLayout orders them: the serial baseline
+	// first, then the largest layout down.
+	batchedCandidates := [][2]int{{1, 1}, {1, 4}, {1, 2}}
+	fallback := calibratedLayout{Workers: 1, Threads: 1, Source: "fallback", Reason: "no_valid_candidate"}
+
+	// width 4 is 3.1% above the baseline and width 2 is 3.2% above width 4, both
+	// inside the 5% band, while width 2 is 6.4% above the baseline: the wider
+	// incumbent must keep the pick rather than be displaced by the narrower
+	// candidate's comparison against the baseline.
+	got, score := chooseCalibratedLayout(map[[2]int]float64{
+		{1, 1}: 100, {1, 4}: 103.1, {1, 2}: 106.4,
+	}, batchedCandidates, true, fallback)
+	if got.Threads != 4 || got.Workers != 1 || got.Source != "calibrated" {
+		t.Fatalf("layout = %+v, want the wider width 4 kept inside the band", got)
+	}
+	if score != 103.1 {
+		t.Fatalf("score = %v, want the kept layout's own score 103.1", score)
+	}
+
+	// Outside the band the higher score wins, whichever layout it belongs to.
+	if got, _ := chooseCalibratedLayout(map[[2]int]float64{
+		{1, 1}: 100, {1, 4}: 103.1, {1, 2}: 120,
+	}, batchedCandidates, true, fallback); got.Threads != 2 {
+		t.Fatalf("layout = %+v, want width 2 to win outside the band", got)
+	}
+
+	// An unbatched pool keeps the lower-resource layout inside the band.
+	unbatched := [][2]int{{2, 1}, {2, 4}, {2, 2}}
+	if got, _ := chooseCalibratedLayout(map[[2]int]float64{
+		{2, 1}: 100, {2, 4}: 103, {2, 2}: 103,
+	}, unbatched, false, fallback); got.Threads != 1 || got.Workers != 2 {
+		t.Fatalf("layout = %+v, want the narrowest width at the measured session count", got)
+	}
+
+	// Nothing measured keeps the fallback and reports no score.
+	if got, score := chooseCalibratedLayout(map[[2]int]float64{}, batchedCandidates, true, fallback); got != fallback || score >= 0 {
+		t.Fatalf("empty scores = %+v/%v, want the fallback and a negative score", got, score)
 	}
 }
 
