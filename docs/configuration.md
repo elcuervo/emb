@@ -520,14 +520,38 @@ collector or a vendor backend (Datadog, for example) can pick them up without a
 bespoke RESP poller. Export is **off** unless an endpoint is configured; with no
 endpoint the server makes no outbound connection.
 
-Exported values come from the same aggregation that feeds `INFO` and
-`EMB.STATS`, so they cannot drift from the commands. Counters are exported with
-**delta** temporality (the increase since the previous export); gauges report
-their current value. Process metrics use OpenTelemetry semantic-convention names
-(`process.memory.usage`, `process.cpu.time`, `process.uptime`); server metrics
-use an `emb.` prefix (`emb.requests`, `emb.tokens`, `emb.errors`,
+Exported counters and gauges come from the same aggregation that feeds `INFO`
+and `EMB.STATS`, so they cannot drift from the commands. Counters are exported
+with **delta** temporality (the increase since the previous export); gauges
+report their current value. Process metrics use OpenTelemetry semantic-convention
+names (`process.memory.usage`, `process.cpu.time`, `process.uptime`); server
+metrics use an `emb.` prefix (`emb.requests`, `emb.tokens`, `emb.errors`,
 `emb.active_requests`, `emb.connections`, `emb.cache.*`, `emb.models.loaded`,
 `emb.truncated.*`, `emb.net.*`). Per-model series carry a `model` attribute.
+
+Per-model inference timing is exported as cumulative sums, never pre-averaged:
+`emb.dispatch.wait` and `emb.inference.duration` (seconds spent waiting for an
+inference slot and doing inference work), `emb.inference.runs`, and the separate
+scripted-evaluation series `emb.script.dispatch.wait`,
+`emb.script.inference.duration` and `emb.script.inference.runs`. Consumers
+derive mean queue and inference times by dividing those sums by
+`emb.inference.runs` (or the matching `emb.script.inference.runs`).
+`emb.sessions.busy` and `emb.sessions.total` report the model's current session
+occupancy, and `emb.padding.efficiency` its embedding tokens consumed divided by
+token slots processed. A model with no embedding pool exports none of the
+embedding timing or session series.
+
+`emb.request.duration` is an explicit-bucket **histogram** of completed-request
+latency in seconds, carrying the `model` attribute and delta temporality: each
+datapoint's count, sum and per-bucket counts describe one export interval alone,
+and the first export after startup emits none. The boundaries step roughly
+2-2.5x from 50µs to 10s and the final bucket is the `+Inf` overflow, so p50/p95/
+p99 are available to any backend without reading the bounded `MONITOR` ring. It
+is measured directly as each request completes, so its population spans every
+inference command (`EMB`, `EMB.MULTI`, `EMB.IMG`, `EMB.IMGMULTI`, `EMB.EVAL`,
+`EMB.EVSHA`) and includes failed requests. It therefore does not cover the same
+population as `emb.requests`, which counts the text pool only — do not expect
+the histogram's count to equal a model's `emb.requests` delta.
 
 | Setting / CLI flag | Default | Live update | Meaning |
 |---|---:|---:|---|

@@ -80,13 +80,27 @@ func (s *Server) resourceStats() resourceStats {
 // modelInfoLine is one row of the Keyspace section (per-loaded-model cache
 // activity). Cache activity absent for a model renders as zeros. req/tok/errs
 // carry the per-model inference counters so the telemetry exporter can reuse
-// this aggregation instead of re-gathering them.
+// this aggregation instead of re-gathering them; the timing/session fields do
+// the same for the embedding and scripted paths.
 type modelInfoLine struct {
 	name               string
 	dim                int
 	hits, misses       int64
 	evictions, entries int64
 	req, tok, errs     int64
+	// hasPool is false for models with no loaded embedding pool, whose timing
+	// and session counters are not measured at all.
+	hasPool           bool
+	dispatchWaitUs    int64
+	runUs             int64
+	runs              int64
+	sessionsBusy      int64
+	sessionsTotal     int64
+	paddingEfficiency float64
+	// scripted-evaluation counters, separate from the embedding path.
+	scriptDispatchWaitUs int64
+	scriptRunUs          int64
+	scriptRuns           int64
 }
 
 // infoSnapshot gathers the server's current statistics under one consistent
@@ -102,7 +116,15 @@ func (s *Server) infoSnapshot() infoSnapshot {
 		if pool := m.LoadedPool(); pool != nil {
 			st := pool.Stats()
 			res.req, res.tok, res.err = st.Requests, st.Tokens, st.Errors
+			res.hasPool = true
+			res.dispatchWaitUs = st.DispatchWaitUs
+			res.runUs = st.RunUs
+			res.runs = st.Runs
+			res.sessionsBusy = st.SessionsBusy
+			res.sessionsTotal = st.SessionsTotal
+			res.paddingEfficiency = st.PaddingEfficiency
 		}
+		res.scriptDispatchWaitUs, res.scriptRunUs, res.scriptRuns, _ = m.ScriptDispatch()
 		byName[m.Name] = res
 	}
 	sort.Strings(names)
@@ -148,6 +170,18 @@ func (s *Server) infoSnapshot() infoSnapshot {
 			req:       res.req,
 			tok:       res.tok,
 			errs:      res.err,
+
+			hasPool:           res.hasPool,
+			dispatchWaitUs:    res.dispatchWaitUs,
+			runUs:             res.runUs,
+			runs:              res.runs,
+			sessionsBusy:      res.sessionsBusy,
+			sessionsTotal:     res.sessionsTotal,
+			paddingEfficiency: res.paddingEfficiency,
+
+			scriptDispatchWaitUs: res.scriptDispatchWaitUs,
+			scriptRunUs:          res.scriptRunUs,
+			scriptRuns:           res.scriptRuns,
 		})
 	}
 
@@ -180,6 +214,19 @@ type registryEntrySnapshot struct {
 	dim      int
 	req, tok int64
 	err      int64
+	// Embedding-pool timing and session counters; hasPool is false when the
+	// model has no loaded pool, in which case the rest stay zero.
+	hasPool           bool
+	dispatchWaitUs    int64
+	runUs             int64
+	runs              int64
+	sessionsBusy      int64
+	sessionsTotal     int64
+	paddingEfficiency float64
+	// Scripted-evaluation counters, measured independently of the pool.
+	scriptDispatchWaitUs int64
+	scriptRunUs          int64
+	scriptRuns           int64
 }
 
 // buildInfoSections renders Redis-format INFO sections. An empty `which`

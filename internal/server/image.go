@@ -71,7 +71,7 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 
 	failed := false
 	defer func() {
-		s.monitor.Add(MonitorEvent{
+		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
 			Model:     modelName,
 			Texts:     total,
@@ -331,7 +331,7 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, results [][]byte, idx int) 
 	s.imageRequests.Add(1)
 	failed := false
 	defer func() {
-		s.monitor.Add(MonitorEvent{
+		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
 			Model:     model,
 			Texts:     1,

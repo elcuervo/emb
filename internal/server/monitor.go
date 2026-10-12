@@ -1,6 +1,9 @@
 package server
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // MonitorEvent is one completed EMB / EMB.MULTI request record. Text
 // payloads are deliberately excluded (privacy + weight); latency and error
@@ -86,4 +89,19 @@ func (m *Monitor) Since(after uint64, limit int) []MonitorEvent {
 		}
 	}
 	return out
+}
+
+// recordRequest records one completed inference request: the bounded MONITOR
+// ring event plus the per-model request-latency histogram observation. Every
+// inference command (EMB, EMB.MULTI, EMB.IMG, EMB.IMGMULTI, EMB.EVAL,
+// EMB.EVSHA) goes through this helper, so the ring's population and the
+// histogram's are identical by construction — failed requests included.
+//
+// The histogram itself only tracks the models the registry is configured with
+// (s.latency was built with Registry.HasModel as its gate), so a
+// client-supplied model name can neither allocate a series nor evict a
+// legitimate one; such a request still produces its MONITOR event.
+func (s *Server) recordRequest(e MonitorEvent) {
+	s.monitor.Add(e)
+	s.latency.Observe(e.Model, time.Duration(e.LatencyUs)*time.Microsecond)
 }

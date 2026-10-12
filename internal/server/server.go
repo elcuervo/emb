@@ -130,6 +130,11 @@ type Server struct {
 	netOut atomic.Uint64
 	// monitor records completed-request events for MONITOR (bounded ring).
 	monitor *Monitor
+	// latency accumulates the per-model request-latency histogram the
+	// telemetry exporter reports. It is fed by recordRequest, the same helper
+	// that writes the ring, and its series are gated to the models the registry
+	// is configured with.
+	latency *telemetry.LatencyHistogram
 	// scripted-evaluation counters (EMB.EVAL/EMB.EVSHA), reported by EMB.STATS
 	// as script_requests/script_errors/script_avg_latency_us. Latency is
 	// cumulative microseconds over completed evaluations.
@@ -304,6 +309,9 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		version:             "dev",
 		idleTimeout:         config.DefaultIdleTimeout,
 		monitor:             NewMonitor(8192),
+		// Series are gated to the configured model set, so the histogram's
+		// memory is bounded by configuration rather than by client traffic.
+		latency: telemetry.NewLatencyHistogram(reg.HasModel),
 	}
 	s.cacheConfig.Store(cacheConfig)
 	s.maxTexts.Store(4096)
@@ -939,7 +947,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	// payloads). Latency spans argument parsing through reply writing.
 	failed := false
 	defer func() {
-		s.monitor.Add(MonitorEvent{
+		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
 			Model:     modelName,
 			Texts:     total,
@@ -1602,7 +1610,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 	started := time.Now()
 	failed := false
 	defer func() {
-		s.monitor.Add(MonitorEvent{
+		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
 			Model:     model,
 			Texts:     1,
