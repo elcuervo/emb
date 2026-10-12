@@ -597,6 +597,64 @@ server, no emb model):
 The p90 now matches the 0.3.0 work-conserving baseline while keeping the
 connection-level load-balancer fan-out that motivated round-robin.
 
+## Startup calibration and process budget
+
+With the default `cpu_budget: auto` and `calibrate: true`, each embedding model
+selects its session count and intra-op width at load from a bounded local trial
+(see [configuration](docs/configuration.md#startup-calibration)). The seeded
+local harness measures the resulting layouts end to end:
+
+```bash
+just download-model
+just download-model repo=Xenova/bge-small-en-v1.5 dir=./models/bge
+just bench-inference            # 10 pairs/s for 2s per case
+just bench-inference 5 10       # positional: rate (pairs/s), seconds per case
+```
+
+It offers model-call pairs on a fixed open-loop schedule — independent of
+response completion, so a slower layout cannot look faster by doing less work —
+for single-model, paired-serial, and paired-parallel layouts under warm and cold
+cache (cold uses texts kept unique across passes), and writes a self-contained
+JSON report to `bench-out/inference/inference.json`. The report records the
+seeded configuration, Go/OS/CPU metadata, offered/completed/dropped pairs and ORT
+rows, per-leg and whole-pair p50/p95/p99, CPU seconds per pair and per ORT row,
+RSS, cache hits/misses, errors, and the selected per-model layout plus the
+resolved process allowance/capacity/budget.
+
+The harness reports measurements only; it does not assert optimality, change a
+baseline, or claim a production performance win. ARM64/Graviton and
+production-shaped routing runs remain optional deployment evidence.
+
+### Measured effect of the budget and the tuner
+
+Apple M4 (10 cores), two models (`minilm` fp32, `bge` fp32, both 384-dim),
+unique texts so every request is a cache miss, one run per cell. `legacy` is the
+same binary with `cpu_budget: off`, which is the pre-change sizing policy: every
+model derives its own pool from the machine's core count.
+
+| workload (steady request rate) | legacy | calibrated | change |
+|---|---|---|---|
+| 2 models, unbatched worker pools, c=4 each | 29.5 + 16.0 = 45.5 req/s, p99 531/1222 ms | 164 + 75 = 239 req/s, p99 51/148 ms | **5.3×** throughput, ~9× p99 |
+| 2 models, batching on (default), c=4 each | 20.8 + 15.9 = 36.7 req/s, p99 436/1012 ms | 100 + 45 = 145 req/s, p99 54/157 ms | **4.0×** throughput, ~8× p99 |
+| 1 model, unbatched pool, c=8 | 50.7 req/s, p99 545 ms | 238 req/s, p99 80 ms | **4.7×** throughput, ~7× p99 |
+| 1 model, batching on (default), c=8 | 152 req/s, p99 58 ms | 154 req/s, p99 59 ms | parity — the tuner selects the same width legacy derived |
+
+Selected layouts: batched models settle on one session at width 8 (`minilm`) and
+4 (`bge`) when they own the whole budget, and 4 each when two models share it;
+unbatched models settle on 4 sessions × 1 thread each. Every layout was stable
+across three consecutive start-ups; the paired cases were also measured against
+explicit widths to confirm the chosen pair is the best available (e.g. forcing
+`minilm` to 8 threads alongside `bge` drops the pair from ~145 to ~51 req/s).
+Two correctness-relevant details the measurements forced: the trial must serve a
+representative **batch** (scoring single rows picked 2 threads for `bge`, where
+4 serves 2.5× the requests), and within run-to-run noise the **wider** width
+must win for a batching pool, because the trial's batch is smaller than the
+coalesced one the pool serves.
+
+Reproduce with an explicit-width config (see the `intra_op_threads` rows in
+[docs/configuration.md](docs/configuration.md#thread-budget)) or with the seeded
+harness above.
+
 ## Fargate (linux/arm64, Graviton)
 
 The sections above are measured on Apple M1 Pro (macOS). The deployment target is

@@ -139,14 +139,66 @@ budget is `auto`; it must be smaller than detected capacity. A numeric
 `cpu_reserve`. A budget above detected capacity starts with a warning.
 
 Models split the initial budget deterministically by `weight` (default 1).
-With `calibrate: true` (the default), each embedding model briefly tests safe
-worker/thread layouts on representative local inputs after the batch
-determinism probe; explicit dimensions remain fixed. Calibration is skipped
-when `calibrate: false`, falling back to one session at the model's share.
 One FIFO admission gate covers embedding, image, and script
 ONNX runs; explicit over-budget runs execute alone. Automatic embedding and
 image sessions disable ORT spinning. Set `cpu_budget: off` to restore legacy
 session sizing and spinning behavior; this does not roll back the binary.
+
+### Startup calibration
+
+`calibrate` defaults to `true` and applies only with `cpu_budget: auto`.
+Defaults require no model-specific tuning. Precedence, highest first:
+
+1. an explicit `workers` / `intra_op_threads` fixes that dimension and is never
+   replaced by calibration (the other dimension is still calibrated);
+2. an explicit numeric `cpu_budget` sets both the admission budget and the
+   candidate ceiling;
+3. `cpu_budget: auto` derives capacity and reserve;
+4. `calibrate: false` skips the trials and keeps conservative sizing — one
+   session at the model's share with the derived width — while admission stays
+   on;
+5. `cpu_budget: off` restores legacy sizing, spinning, and shared scripted
+   sessions, and bypasses calibration and admission entirely.
+
+After the batch-determinism probe, each embedding model builds representative
+short, typical, and long inputs from its own tokenizer (never user text),
+runs one warmup pass, then measures deduplicated width × session candidates
+that fit both the process CPU share and the model-size memory estimate. A
+batching model's trial serves tiled multi-row runs (a representative batch, not
+a single row), because width that barely helps one row is worth several threads
+for a coalesced batch; the batch shrinks with the fixture's length so one long
+run cannot spend the whole deadline. Each candidate is measured twice and keeps
+its best score. Candidates whose output differs from the baseline, that report
+no CPU accounting, or whose p95 exceeds twice the baseline p95 are rejected;
+the highest measured rows per wall-clock second wins, and inside a 5%
+run-to-run noise band the **wider** layout wins when the model batches (the
+trial understates wide threads) and the lower-resource layout wins otherwise.
+An explicit dimension, or a budget with only one candidate, skips the trials.
+
+**Startup cost.** Trials are bounded by a 4-second deadline per model and at
+most 12 candidates, and the deadline is predicted between candidates from the
+last one's measured cost, so a slow model keeps its best validated layout
+instead of overrunning. Calibration runs when the model loads: at startup for
+`preload: true`, otherwise on that model's **first request** — so a lazily
+loaded model's first request pays both the model load and up to four seconds of
+trials.
+
+**Fallback.** Invalid fixtures, a failed baseline, unavailable CPU accounting,
+an expired deadline, or an unusable tokenizer keep the best validated candidate,
+or select one session × one thread (or the explicit dimensions) and log a reason
+such as `baseline_failed`, `cpu_accounting_unavailable`, `calibration_deadline`,
+`candidate_failed`, `p95_regression`, `invalid_limits`, or `invalid_fixture`.
+A batch-determinism probe failure turns batching off *before* calibration, so a
+degraded model is calibrated for single-row inference and cannot keep
+batch-sized worker defaults.
+
+**What it cannot guarantee.** Calibration is a measured startup choice for this
+process on this host. It does not change a running layout (restart to re-tune),
+does not create CPU isolation, does not tune multiple models jointly, and does
+not account for inter-op threads, tokenization, Go code, or sidecars. The
+admission budget bounds admitted intra-op work, not physical CPU use. A busy or
+noisy host can select a suboptimal layout; `calibrate: false` or explicit
+values are the deterministic escape hatch.
 
 The budget bounds admitted intra-op work, not all process CPU use or physical
 cores. Tokenization, inter-op work, Go code, and sidecars remain outside that

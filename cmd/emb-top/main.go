@@ -416,7 +416,9 @@ const minStrip = 8
 // modelChrome is the number of non-model rows the dashboard always spends:
 // header, banner, the two stream charts, gauges, ticker, footer and the
 // model-list range line.
-const modelChrome = 17
+// modelChrome is the number of non-model rows the dashboard always spends,
+// including the process CPU plan line above the model rows.
+const modelChrome = 18
 
 // visibleRows is how many single-line model rows fit below the chrome.
 func (m tuiModel) visibleRows() int {
@@ -986,7 +988,11 @@ func (m tuiModel) gaugesView() []string {
 	)
 	texts := fmt.Sprintf("conns %2d · active %2d · goroutines %3d · truncated texts/pairs/images %3d/%3d/%3d",
 		p.Conns, p.Active, p.Goroutines, p.TruncatedTexts, p.TruncatedPairs, p.TruncatedImages)
-	return []string{barLine, dimStyle.Render("  " + texts)}
+	lines := []string{barLine, dimStyle.Render("  " + texts)}
+	// Always present, so the fixed chrome budget stays exact: an older server
+	// reports no plan and this line is blank.
+	lines = append(lines, dimStyle.Render("  "+embtop.CPUPlanText(p)))
+	return lines
 }
 
 func caption(title, barView string, val float64, unit string, width int) string {

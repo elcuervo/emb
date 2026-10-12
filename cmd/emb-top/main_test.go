@@ -52,6 +52,47 @@ func newSizedTUI(w, h int) tuiModel {
 	return um.(tuiModel)
 }
 
+func TestViewShowsCPUPlan(t *testing.T) {
+	m := newSizedTUI(120, 30)
+	res := multiPoll([]string{"alpha"}, map[string]int64{"alpha": 10})
+	res.CPUPlanKnown = true
+	res.CPUBudgetEnabled = true
+	res.CPUBudget = 8
+	res.CPUActiveTokens = 3
+	res.CPUPeakTokens = 6
+	res.CPUAllowance = 10
+	res.CPUAllowanceKnown = true
+	res.CPUAllowanceSrc = "scheduler/affinity"
+	m.applyResult(res)
+
+	view := m.View()
+	for _, want := range []string{"cpu budget 8", "tokens 3/8", "peak 6", "10.00 cores", "scheduler/affinity"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("node view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+// A node with a server that predates the plan fields must not claim the budget
+// is off; the plan line simply stays empty.
+func TestViewOmitsUnknownCPUPlan(t *testing.T) {
+	m := newSizedTUI(120, 30)
+	m.applyResult(multiPoll([]string{"alpha"}, map[string]int64{"alpha": 10}))
+	if view := m.View(); strings.Contains(view, "cpu budget") {
+		t.Errorf("node view invented a CPU plan:\n%s", view)
+	}
+}
+
+func TestViewShowsDisabledCPUPlan(t *testing.T) {
+	m := newSizedTUI(120, 30)
+	res := multiPoll([]string{"alpha"}, map[string]int64{"alpha": 10})
+	res.CPUPlanKnown = true // reported, and off
+	m.applyResult(res)
+	if view := m.View(); !strings.Contains(view, "cpu budget off") {
+		t.Errorf("node view missing the legacy-policy note:\n%s", view)
+	}
+}
+
 func TestViewRendersWithTraffic(t *testing.T) {
 	m := newSizedTUI(100, 30)
 	for i := 1; i <= 30; i++ {

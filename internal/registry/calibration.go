@@ -24,11 +24,15 @@ type calibrationInput struct {
 	ids, mask []int64
 }
 
+// calibrationInputs builds the short/typical/long fixtures. Sizes track real
+// embedding traffic (a phrase, a sentence, a paragraph) rather than saturating
+// max_length: a max-length fixture costs several times a typical request and
+// spends the whole deadline before a second candidate can be measured.
 func calibrationInputs(tok tokenizer.Tokenizer, maxLen int) ([]calibrationInput, error) {
 	texts := []string{
 		"a short calibration request",
-		strings.Repeat("representative embedding calibration text ", 24),
-		strings.Repeat("longer calibration text with varied words and punctuation, ", 96),
+		strings.Repeat("representative embedding calibration text ", 8),
+		strings.Repeat("longer calibration text with varied words and punctuation, ", 16),
 	}
 	inputs := make([]calibrationInput, 0, len(texts))
 	for _, text := range texts {
@@ -44,6 +48,41 @@ func calibrationInputs(tok tokenizer.Tokenizer, maxLen int) ([]calibrationInput,
 	return inputs, nil
 }
 
+// calibrationNow and calibrationCPUTimes are seams so model-free tests can
+// drive the deadline and CPU accounting deterministically. calibrationDeadline
+// bounds the whole trial; a slow in-flight Run may exceed it (temporary
+// sessions close only after calls return).
+var (
+	calibrationNow      = time.Now
+	calibrationCPUTimes = ProcessCPUTimes
+	calibrationDeadline = 4 * time.Second
+)
+
+// calibrationTieTolerance is the relative run-to-run noise band: a candidate
+// must beat the incumbent by more than this fraction to displace it, and a
+// candidate inside the band only wins when it uses fewer resources.
+const calibrationTieTolerance = 0.05
+
+// calibrationBatchRows and calibrationBatchTokens bound a batching pool's
+// trial runs. A batcher coalesces concurrent requests, and intra-op width that
+// barely helps one row is worth several threads for a coalesced batch, so
+// scoring candidates on single rows under-provisions a batched model. Each
+// fixture is tiled to as many identical rows as fit calibrationBatchTokens, up
+// to calibrationBatchRows, so the long fixture does not multiply trial cost.
+const (
+	calibrationBatchRows   = 4
+	calibrationBatchTokens = 256
+)
+
+// calibrationCandidates screens the thread-width/session-count pairs a model
+// may be calibrated at: deduplicated, inside the process CPU share (the width ×
+// session product may not exceed budget), and capped by maxWorkers, which is
+// the model-size memory estimate (see autoTuneWorkers). A dimension the
+// operator set explicitly is fixed to that value so calibration never replaces
+// it. When the batcher owns embedding inference (batched) only one session can
+// run batches, so session counts stay at 1 and only the width is screened.
+// Joint multi-model trials are deliberately not attempted here (future
+// benchmark work); the shared admission budget bounds the concurrent product.
 func calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWorkers int, batched bool) [][2]int {
 	widths := []int{1}
 	if configuredThreads > 0 {
@@ -84,11 +123,20 @@ func calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWork
 	return out
 }
 
-func calibrateLayout(factory func(int) (onnx.Session, error), tok tokenizer.Tokenizer, dim, maxLen, budget, maxWorkers, configuredThreads, configuredWorkers int, batched bool) calibratedLayout {
+// calibrationRounds measures every candidate this many times and keeps each
+// candidate's best score. A candidate's run-to-run spread on a shared host is
+// larger than the difference between neighbouring layouts, so one round alone
+// decides as much by luck as by measurement.
+const calibrationRounds = 2
+
+func calibrateLayout(factory func(int) (onnx.Session, error), tok tokenizer.Tokenizer, dim, maxLen, budget, maxWorkers, configuredThreads, configuredWorkers int, batched bool, batch int) calibratedLayout {
 	fallback := calibratedLayout{Workers: 1, Threads: max(1, configuredThreads), Source: "fallback", Reason: "no_valid_candidate"}
 	if budget < 1 || maxLen < 1 {
 		fallback.Reason = "invalid_limits"
 		return fallback
+	}
+	if batch < 1 {
+		batch = 1
 	}
 	inputs, err := calibrationInputs(tok, maxLen)
 	if err != nil {
@@ -103,46 +151,114 @@ func calibrateLayout(factory func(int) (onnx.Session, error), tok tokenizer.Toke
 	}
 
 	candidates := calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWorkers, batched)
+	if len(candidates) == 1 {
+		// Nothing to choose between (an explicit dimension, or a one-slot
+		// budget): skip the trials entirely.
+		return calibratedLayout{Workers: candidates[0][0], Threads: candidates[0][1], Source: "calibrated", Reason: "single_candidate"}
+	}
 	if len(candidates) > 12 {
 		candidates = candidates[:12]
 	}
-	started := time.Now()
-	deadline := started.Add(4 * time.Second)
+	// Keep the serial baseline first, then spend the remaining deadline from the
+	// largest layout down: if the deadline truncates the search, the layout with
+	// the most resources has still been measured rather than only the cheapest.
+	candidates = calibrationOrder(candidates)
+	started := calibrationNow()
+	deadline := started.Add(calibrationDeadline)
 	var reference [][]float32
 	var referenceP95 time.Duration
 	bestScore := -1.0
 	best := fallback
+	scores := make(map[[2]int]float64, len(candidates))
+	truncated := false
+	var candidateCost time.Duration
+search:
+	for round := 0; round < calibrationRounds; round++ {
+		for i, candidate := range candidates {
+			now := calibrationNow()
+			// Predict, do not just react: a candidate started with less than the
+			// last one's cost left would run past the deadline and burn the whole
+			// budget on a single layout.
+			if now.After(deadline) || (candidateCost > 0 && now.Add(candidateCost).After(deadline)) {
+				truncated = true
+				break search
+			}
+			result, candidateRef, ok := runCalibrationCandidate(factory, inputs, dim, candidate[0], candidate[1], batch)
+			candidateCost = result.Elapsed
+			if i == 0 && round == 0 {
+				if !ok {
+					return finishCalibration(best, bestScore, fallback, "baseline_failed", started)
+				}
+				// The lowest-resource candidate is the serial baseline every other
+				// candidate is judged against (correctness and the p95 guard).
+				reference, referenceP95 = candidateRef, result.P95
+			} else if !ok {
+				fallback.Reason = "candidate_failed"
+				continue
+			}
+			if result.CPUUsec == 0 {
+				fallback.Reason = "cpu_accounting_unavailable"
+				continue
+			}
+			if referenceP95 > 0 && result.P95 > 2*referenceP95 {
+				// A slow tail also rejects noisy trials: a candidate several times
+				// more variable than the baseline is not selected even if it looks
+				// faster on average.
+				fallback.Reason = "p95_regression"
+				continue
+			}
+			if !calibrationOutputsMatch(reference, candidateRef) {
+				continue
+			}
+			key := [2]int{candidate[0], candidate[1]}
+			if score := float64(result.Rows) / float64(result.Elapsed); score > scores[key] {
+				scores[key] = score
+			}
+		}
+	}
+
+	reason := "no_valid_candidate"
+	if truncated {
+		reason = "calibration_deadline"
+	}
 	for _, candidate := range candidates {
-		if time.Now().After(deadline) {
-			fallback.Reason = "calibration_deadline"
-			break
-		}
-		result, candidateRef, ok := runCalibrationCandidate(factory, inputs, dim, candidate[0], candidate[1])
-		if candidate[0] == 1 && candidate[1] == 1 && ok {
-			reference, referenceP95 = candidateRef, result.P95
-		}
-		if !ok || len(reference) != len(inputs) || result.P95 > 2*referenceP95 {
+		score, measured := scores[[2]int{candidate[0], candidate[1]}]
+		if !measured {
 			continue
 		}
-		if !calibrationOutputsMatch(reference, candidateRef) {
-			continue
-		}
-		if result.CPUUsec == 0 {
-			fallback.Reason = "cpu_accounting_unavailable"
-			continue
-		}
-		score := float64(result.Rows) / float64(result.Elapsed)
-		if score > bestScore || (math.Abs(score-bestScore) < 1e-9 && candidate[0]*candidate[1] < best.Workers*best.Threads) {
+		switch {
+		case bestScore < 0, score > bestScore*(1+calibrationTieTolerance):
 			bestScore = score
 			best = calibratedLayout{Workers: candidate[0], Threads: candidate[1], Source: "calibrated"}
+		case score > bestScore*(1-calibrationTieTolerance):
+			// Within the run-to-run noise band. A batching pool coalesces rows
+			// while the trial serves a smaller batch, so it understates wide
+			// threads: prefer the wider layout. An unbatched pool is measured at
+			// its real shape, so keep the lower-resource layout.
+			if batched && candidate[1] > best.Threads {
+				best.Threads, best.Source = candidate[1], "calibrated"
+			} else if !batched && candidate[0]*candidate[1] < best.Workers*best.Threads {
+				best.Workers, best.Threads, best.Source = candidate[0], candidate[1], "calibrated"
+			}
 		}
 	}
-	best.Elapsed = time.Since(started)
-	if bestScore < 0 {
-		fallback.Elapsed = best.Elapsed
-		return fallback
+	return finishCalibration(best, bestScore, fallback, reason, started)
+}
+
+// finishCalibration returns the best validated candidate, or the safe
+// fallback carrying the most specific recorded reason when nothing was
+// validated in time.
+func finishCalibration(best calibratedLayout, bestScore float64, fallback calibratedLayout, reason string, started time.Time) calibratedLayout {
+	elapsed := calibrationNow().Sub(started)
+	if bestScore >= 0 {
+		best.Elapsed = elapsed
+		return best
 	}
-	return best
+	if fallback.Reason == "" || fallback.Reason == "no_valid_candidate" {
+		fallback.Reason = reason
+	}
+	fallback.Elapsed = elapsed
+	return fallback
 }
 
 type calibrationResult struct {
@@ -152,7 +268,63 @@ type calibrationResult struct {
 	Elapsed time.Duration
 }
 
-func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []calibrationInput, dim, workers, threads int) (calibrationResult, [][]float32, bool) {
+// calibrationOrder keeps the serial baseline (candidates[0]) first and sorts
+// the rest by total resource descending.
+func calibrationOrder(candidates [][2]int) [][2]int {
+	ordered := make([][2]int, len(candidates))
+	copy(ordered, candidates)
+	sort.SliceStable(ordered[1:], func(i, j int) bool {
+		a, b := ordered[1+i], ordered[1+j]
+		return a[0]*a[1] > b[0]*b[1]
+	})
+	return ordered
+}
+
+// calibrationPrepared is one fixture tiled to the candidate's batch width.
+type calibrationPrepared struct {
+	ids, mask []int64
+	seqLen    int
+	batch     int
+}
+
+// fixtureBatch sizes a fixture's trial batch: as many identical rows as fit the
+// token budget, capped at maxRows. A long fixture stays close to one row.
+func fixtureBatch(seqLen, maxRows int) int {
+	if seqLen <= 0 || maxRows <= 1 {
+		return 1
+	}
+	rows := calibrationBatchTokens / seqLen
+	if rows < 1 {
+		rows = 1
+	}
+	if rows > maxRows {
+		rows = maxRows
+	}
+	return rows
+}
+
+// prepareInputs tiles each fixture to its per-length batch. The same fixture
+// always yields the same batch, so candidate outputs stay comparable.
+func prepareInputs(inputs []calibrationInput, maxRows int) []calibrationPrepared {
+	prepared := make([]calibrationPrepared, len(inputs))
+	for i, input := range inputs {
+		batch := fixtureBatch(len(input.ids), maxRows)
+		if batch <= 1 {
+			prepared[i] = calibrationPrepared{ids: input.ids, mask: input.mask, seqLen: len(input.ids), batch: 1}
+			continue
+		}
+		ids := make([]int64, 0, len(input.ids)*batch)
+		mask := make([]int64, 0, len(input.mask)*batch)
+		for range batch {
+			ids = append(ids, input.ids...)
+			mask = append(mask, input.mask...)
+		}
+		prepared[i] = calibrationPrepared{ids: ids, mask: mask, seqLen: len(input.ids), batch: batch}
+	}
+	return prepared
+}
+
+func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []calibrationInput, dim, workers, threads, maxRows int) (calibrationResult, [][]float32, bool) {
 	sessions := make([]onnx.Session, 0, workers)
 	for range workers {
 		sess, err := factory(threads)
@@ -170,54 +342,59 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 		}
 	}()
 
-	reference := make([][]float32, len(inputs))
-	for i, input := range inputs {
-		out, err := sessions[0].Run(input.ids, input.mask, 1, len(input.ids), dim)
+	prepared := prepareInputs(inputs, maxRows)
+	// The reference pass doubles as sessions[0]'s warmup; the loop below warms
+	// only the remaining sessions, so a candidate pays one warmup pass, not two.
+	reference := make([][]float32, len(prepared))
+	for i, input := range prepared {
+		out, err := sessions[0].Run(input.ids, input.mask, input.batch, input.seqLen, dim)
 		if err != nil || len(out) == 0 {
 			return calibrationResult{}, nil, false
 		}
 		reference[i] = append([]float32(nil), out...)
 	}
-	for _, sess := range sessions {
-		for _, input := range inputs {
-			if _, err := sess.Run(input.ids, input.mask, 1, len(input.ids), dim); err != nil {
+	for _, sess := range sessions[1:] {
+		for _, input := range prepared {
+			if _, err := sess.Run(input.ids, input.mask, input.batch, input.seqLen, dim); err != nil {
 				return calibrationResult{}, nil, false
 			}
 		}
 	}
 
-	userBefore, sysBefore := ProcessCPUTimes()
+	userBefore, sysBefore := calibrationCPUTimes()
 	started := time.Now()
 	var mu sync.Mutex
 	var latencies []time.Duration
+	var rows int64
 	var wg sync.WaitGroup
 	for _, sess := range sessions {
 		wg.Add(1)
 		go func(sess onnx.Session) {
 			defer wg.Done()
 			for repeat := 0; repeat < 3; repeat++ {
-				for _, input := range inputs {
+				for _, input := range prepared {
 					start := time.Now()
-					out, err := sess.Run(input.ids, input.mask, 1, len(input.ids), dim)
+					out, err := sess.Run(input.ids, input.mask, input.batch, input.seqLen, dim)
 					elapsed := time.Since(start)
 					if err != nil || !calibrationOutputValid(out) {
 						return
 					}
 					mu.Lock()
 					latencies = append(latencies, elapsed)
+					rows += int64(input.batch)
 					mu.Unlock()
 				}
 			}
 		}(sess)
 	}
 	wg.Wait()
-	userAfter, sysAfter := ProcessCPUTimes()
-	if len(latencies) != workers*len(inputs)*3 {
+	userAfter, sysAfter := calibrationCPUTimes()
+	if len(latencies) != workers*len(prepared)*3 {
 		return calibrationResult{}, nil, false
 	}
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	return calibrationResult{
-		Rows:    len(latencies),
+		Rows:    int(rows),
 		CPUUsec: (userAfter - userBefore) + (sysAfter - sysBefore),
 		P95:     latencies[(len(latencies)*95-1)/100],
 		Elapsed: time.Since(started),

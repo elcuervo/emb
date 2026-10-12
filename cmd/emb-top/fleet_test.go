@@ -455,6 +455,55 @@ func fleetOfThree(t *testing.T) *fleet {
 	return f
 }
 
+// seedNodePlan fills a node's sampler with rates plus a process CPU plan, so
+// the fleet's summed plan line can be exercised.
+func seedNodePlan(n *fleetNode, reqs, budget, active, peak int64, allowance float64) {
+	t := time.Unix(0, 0)
+	n.tui.sampler.SetClock(func() time.Time { return t })
+	for _, r := range []int64{0, reqs} {
+		res := fakePoll(r, r*4, 0, 0)
+		res.CPUPlanKnown = true
+		res.CPUBudgetEnabled = true
+		res.CPUBudget = budget
+		res.CPUActiveTokens = active
+		res.CPUPeakTokens = peak
+		res.CPUAllowance = allowance
+		res.CPUAllowanceKnown = true
+		res.CPUAllowanceSrc = "scheduler/affinity"
+		n.tui.applyResult(res)
+		t = t.Add(time.Second)
+	}
+	n.reachable = true
+	n.tui.connected = true
+}
+
+// The fleet total is the sum of independent per-node plans: each node resolves
+// its own allowance and budget, so the fleet line shows aggregate tokens in use
+// against aggregate admitted capacity.
+func TestFleetViewShowsAggregateCPUPlan(t *testing.T) {
+	a, b := "10.0.0.1:6379", "10.0.0.2:6379"
+	f := fakeFleet(nil, map[string]dashboardClient{
+		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b},
+	}, rn(a), rn(b))
+	f.width, f.height = 140, 40
+	seedNodePlan(f.nodes[0], 10, 8, 3, 6, 10)
+	seedNodePlan(f.nodes[1], 8, 4, 2, 4, 4)
+
+	view := f.View()
+	for _, want := range []string{"cpu budget 12", "tokens 5/12", "peak 10", "14.00 cores"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("fleet view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestFleetViewOmitsUnknownCPUPlan(t *testing.T) {
+	f := fleetOfThree(t)
+	if view := f.View(); strings.Contains(view, "cpu budget") {
+		t.Errorf("fleet view invented a CPU plan:\n%s", view)
+	}
+}
+
 func TestFleetViewRendersTrafficAndRows(t *testing.T) {
 	f := fleetOfThree(t)
 	view := f.View()

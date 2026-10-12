@@ -250,6 +250,20 @@ bench-script BASE="" CAND="":
 bench-shape:
     @DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" bash bench/script/shape.sh
 
+# Seeded local inference benchmark. Offers model-call pairs on a fixed open-loop
+# schedule (default 10 pairs/s, the reported production load shape) for single,
+# paired-serial, and paired-parallel layouts under warm and cold cache, then
+# writes a self-contained JSON report to bench-out/inference/inference.json with
+# offered/completed/dropped pairs, per-leg and pair latency, CPU seconds per
+# pair and per ORT row, RSS, cache hits/misses, errors, and the selected layout.
+# Requires both fixtures: just download-model && just download-model repo=Xenova/bge-small-en-v1.5 dir=./models/bge
+# Args are positional (rate pairs/s, seconds):
+#   just bench-inference          # 10 pairs/s for 2s per case
+#   just bench-inference 5 10     # 5 pairs/s for 10s per case
+bench-inference rate="10" duration="2":
+    @mkdir -p bench-out/inference
+    @EMB_BENCH_PAIR_RATE={{rate}} EMB_BENCH_DURATION={{duration}} DYLD_LIBRARY_PATH="{{ort_lib}}:$DYLD_LIBRARY_PATH" go test ./internal/server/ -run=^$ -bench="BenchmarkInferencePairs" -benchtime=1x -timeout 30m -v
+
 # Enforce the scripted-inference budgets (latency parity, metal parity,
 # materialization, memory, throughput scaling). Timing- and RSS-sensitive: run
 # on a quiet reference machine. Set EMB_BENCH_REFERENCE=1 to also assert the

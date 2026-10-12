@@ -95,16 +95,25 @@ func benchConn(b testing.TB, addr string) (*net.TCPConn, *bufio.Reader) {
 // scalar) so each iteration measures a full request/response cycle.
 func benchDrainValue(b testing.TB, r *bufio.Reader) {
 	b.Helper()
+	if err := drainValue(r); err != nil {
+		b.Fatal(err)
+	}
+}
+
+// drainValue consumes exactly one complete RESP value (bulk, array, or scalar)
+// and returns any read error. It reports errors instead of failing the test so
+// worker goroutines (which must not call Fatal) can use it too.
+func drainValue(r *bufio.Reader) error {
 	var buf []byte
 	for {
 		chunk := make([]byte, 64*1024)
 		n, err := r.Read(chunk)
 		if err != nil {
-			b.Fatal(err)
+			return err
 		}
 		buf = append(buf, chunk[:n]...)
 		if consumed, ok := respValueLen(buf); ok && consumed == len(buf) {
-			return
+			return nil
 		}
 	}
 }

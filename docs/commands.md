@@ -28,6 +28,15 @@ Full reference for the `emb` command surface. See the
 | `HELLO [2\|3]` | Negotiate the RESP protocol version for the connection (default 2); bare `HELLO` reports the current version |
 | `PING` | PONG |
 
+`EMB.INFO` and `EMB.STATS` report the process CPU plan chosen at startup.
+`EMB.STATS` carries `cpu_allowance`, `cpu_allowance_source`, `cpu_capacity`,
+`cpu_reserve`, `cpu_budget`, `cpu_active_tokens`, and `cpu_peak_tokens`.
+`EMB.INFO` carries each model's `workers`, `intra_op_threads`,
+`cpu_thread_share`, and `allow_spinning` — the calibrated layout when
+calibration selected it. See
+[Startup calibration](configuration.md#startup-calibration) for defaults,
+precedence, and fallbacks.
+
 ## EMB.MULTI
 
 `EMB.MULTI` embeds texts against different models in a single round trip and

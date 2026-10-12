@@ -70,6 +70,21 @@ type PollResult struct {
 	CacheEvictions  int64
 	GoMaxProcs      int // node's own parallelism from INFO cpu (0 when absent)
 
+	// Process CPU plan, from EMB.STATS. Budget/active/peak are admission
+	// tokens: how much intra-op work the process will admit at once, how much
+	// is in use, and the highest seen. Allowance is the detected (possibly
+	// fractional) CPU entitlement the budget was derived from.
+	CPUBudgetEnabled  bool
+	CPUBudget         int64
+	CPUCapacity       int64
+	CPUReserve        int64
+	CPUActiveTokens   int64
+	CPUPeakTokens     int64
+	CPUAllowance      float64
+	CPUAllowanceKnown bool
+	CPUAllowanceSrc   string
+	CPUPlanKnown      bool // the node reported the EMB.STATS CPU plan fields
+
 	Models   []ModelListEntry // EMB.MODELS reply
 	PerModel map[string]*ModelStats
 	Events   []Event // MONITOR reply (newer than afterSeq)
@@ -108,6 +123,14 @@ type ModelStats struct {
 	CacheEntries     int64
 	CacheMaxBytes    int64
 	CacheCurBytes    int64
+
+	// CPU plan for this model: the selected session width, its share of the
+	// process budget, and whether ORT spinning is on.
+	CPUBudgetEnabled bool
+	CPUBudget        int
+	CPUThreadShare   int
+	IntraOpThreads   int
+	AllowSpinning    bool
 }
 
 // Poll runs one pipelined poll: EMB.MODELS, EMB.INFO for each known model,
@@ -317,6 +340,22 @@ func parseStats(r Reply) *PollResult {
 		CacheHits:       intField(m, "cache_hits"),
 		CacheMisses:     intField(m, "cache_misses"),
 		CacheEvictions:  intField(m, "cache_evictions"),
+
+		CPUBudgetEnabled: intField(m, "cpu_budget_enabled") != 0,
+		CPUBudget:        intField(m, "cpu_budget"),
+		CPUCapacity:      intField(m, "cpu_capacity"),
+		CPUReserve:       intField(m, "cpu_reserve"),
+		CPUActiveTokens:  intField(m, "cpu_active_tokens"),
+		CPUPeakTokens:    intField(m, "cpu_peak_tokens"),
+		CPUAllowanceSrc:  strField(m, "cpu_allowance_source"),
+	}
+	if _, ok := m["cpu_budget_enabled"]; ok {
+		res.CPUPlanKnown = true
+	}
+	if raw := strField(m, "cpu_allowance"); raw != "" {
+		if allowance, err := strconv.ParseFloat(raw, 64); err == nil {
+			res.CPUAllowance, res.CPUAllowanceKnown = allowance, true
+		}
 	}
 	return res
 }
@@ -365,6 +404,12 @@ func parseModelStats(r Reply) *ModelStats {
 		CacheEntries:     intField(m, "cache_entries"),
 		CacheMaxBytes:    intField(m, "cache_max_bytes"),
 		CacheCurBytes:    intField(m, "cache_memory_bytes"),
+
+		CPUBudgetEnabled: intField(m, "cpu_budget_enabled") != 0,
+		CPUBudget:        int(intField(m, "cpu_budget")),
+		CPUThreadShare:   int(intField(m, "cpu_thread_share")),
+		IntraOpThreads:   int(intField(m, "intra_op_threads")),
+		AllowSpinning:    intField(m, "allow_spinning") != 0,
 	}
 	return ms
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/permit"
+	"github.com/elcuervo/emb/internal/pipeline"
 )
 
 func TestResolveCPUPlan(t *testing.T) {
@@ -91,4 +92,83 @@ func TestBudgetedSessionReleasesOnError(t *testing.T) {
 	release()
 }
 
+// Two models share one process budget, so a busy model with a narrow run can
+// lend idle capacity to another model rather than each holding a reservation.
+func TestSharedBudgetLendsIdleCapacityAcrossModels(t *testing.T) {
+	gate := permit.NewBudget(3)
+	modelA := budgetedSession{Session: budgetTestSession{}, gate: gate, width: 1}
+	modelB := budgetedSession{Session: budgetTestSession{}, gate: gate, width: 2}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Model A holds one token while it runs; model B must still get its two.
+		_, _ = modelA.Run(nil, nil, 0, 0, 0)
+	}()
+	if _, err := modelB.Run(nil, nil, 0, 0, 0); err != nil {
+		t.Fatalf("borrowing run failed: %v", err)
+	}
+	<-done
+	if active, peak := gate.Stats(); active != 0 || peak > 3 {
+		t.Fatalf("budget after lending = active %d peak %d, want released within 3", active, peak)
+	}
+}
+
 var _ onnx.Session = budgetTestSession{}
+
+// NewWithConfig applies the process CPU policy to every model added later, so
+// a model's sessions, gate and calibration come from the shared plan rather
+// than the machine's core count. With cpu_budget off the policy stays nil and
+// models keep legacy sizing.
+func TestRegistryAppliesCPUPlanToAddedModel(t *testing.T) {
+	reg, err := NewWithConfig(&config.Config{Models: map[string]config.ModelConfig{"solo": {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := &ModelEntry{Name: "solo"}
+	reg.Add("solo", entry)
+
+	plan := reg.CPUStatus()
+	enabled, budget, share, threads, spinning := entry.CPUSettings()
+	if !enabled || budget != plan.Budget {
+		t.Fatalf("CPUSettings enabled=%v budget=%d, want the process plan (%d)", enabled, budget, plan.Budget)
+	}
+	if share != plan.Budget || threads != plan.Budget {
+		t.Fatalf("single-model share/threads = %d/%d, want the whole budget %d", share, threads, plan.Budget)
+	}
+	if spinning {
+		t.Error("shared embedding/image sessions must not spin under the budget policy")
+	}
+	if entry.cpuGate == nil {
+		t.Error("added model has no admission gate")
+	}
+}
+
+func TestRegistryKeepsLegacyPolicyWhenBudgetOff(t *testing.T) {
+	reg, err := NewWithConfig(&config.Config{
+		CPUBudget: "off",
+		Models:    map[string]config.ModelConfig{"solo": {}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := &ModelEntry{Name: "solo"}
+	reg.Add("solo", entry)
+
+	enabled, _, _, threads, _ := entry.CPUSettings()
+	if enabled || entry.cpuGate != nil {
+		t.Fatalf("cpu_budget off still enabled the policy (enabled=%v gate=%v)", enabled, entry.cpuGate)
+	}
+	if threads <= 0 {
+		t.Fatalf("legacy threads = %d, want the cores-2 default", threads)
+	}
+}
+
+// A model whose pool was already built before Add cannot be governed: the
+// policy arrives too late, so the warning is the only signal.
+func TestRegistryWarnsWhenPolicyArrivesAfterPoolBuild(t *testing.T) {
+	reg, err := NewWithConfig(&config.Config{Models: map[string]config.ModelConfig{"solo": {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("solo", &ModelEntry{Name: "solo", Pool: &pipeline.Pool{}})
+}

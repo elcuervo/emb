@@ -679,6 +679,15 @@ func (e *ModelEntry) ensurePool() error {
 
 	if e.cpuPolicy && e.calibrate && (cfg.IntraOpThreads <= 0 || cfg.Workers <= 0) {
 		budget := max(1, e.cpuThreads)
+		// Trial the batch shape the pool actually serves: a batcher coalesces
+		// concurrent requests, so single-row scoring under-provisions width.
+		batch := 1
+		if timeoutMS > 0 {
+			batch = calibrationBatchRows
+			if cfg.Batching.MaxBatch > 0 && cfg.Batching.MaxBatch < batch {
+				batch = cfg.Batching.MaxBatch
+			}
+		}
 		layout := calibrateLayout(func(threads int) (onnx.Session, error) {
 			sess, err := sessionFactoryFor(threads)
 			if err != nil {
@@ -688,7 +697,7 @@ func (e *ModelEntry) ensurePool() error {
 				return budgetedSession{Session: sess, gate: e.cpuGate, width: threads}, nil
 			}
 			return sess, nil
-		}, tok, cfg.Dim, cfg.MaxLength, budget, autoTuneWorkers(cfg.ONNX, budget), cfg.IntraOpThreads, cfg.Workers, timeoutMS > 0)
+		}, tok, cfg.Dim, cfg.MaxLength, budget, autoTuneWorkers(cfg.ONNX, budget), cfg.IntraOpThreads, cfg.Workers, timeoutMS > 0, batch)
 		intraThreads, numWorkers = layout.Threads, layout.Workers
 		e.tunedThreads.Store(int64(intraThreads))
 		e.tunedWorkers.Store(int64(numWorkers))
@@ -1199,6 +1208,12 @@ func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cpuGate != nil {
+		if entry.Pool != nil {
+			// LoadModel preloads, so a caller that adds afterwards left this pool
+			// with legacy sizing and no admission gate. Say so instead of running
+			// one model outside the process budget silently.
+			log.Printf("WARNING: model %q already built its pool before the CPU budget was applied; its sessions keep legacy sizing — use LoadModelDeferred then Add", name)
+		}
 		entry.cpuPolicy = true
 		entry.cpuGate = r.cpuGate
 		entry.cpuBudget = r.cpuPlan.Budget
