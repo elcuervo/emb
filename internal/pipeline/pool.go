@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -61,7 +62,7 @@ func (w *Worker) run() {
 		}
 		start := time.Now()
 		w.busy.Add(1)
-		resp := w.process(req.Texts)
+		resp := w.process(req)
 		w.busy.Add(-1)
 
 		w.requests.Add(1)
@@ -75,11 +76,22 @@ func (w *Worker) run() {
 // unbatched path (explicit timeout: 0, or degraded after a failed determinism
 // probe): co-batching a request's texts in one run would reintroduce exactly
 // the batch dependence the probe exists to reject.
-func (w *Worker) process(texts []string) Response {
-	embeddings := make([][]byte, 0, len(texts))
+func (w *Worker) process(req Request) Response {
+	ctx := req.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	embeddings := make([][]byte, 0, len(req.Texts))
 	var totalTokens int
-	for _, text := range texts {
-		emb, toks, err := processBatch(w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
+	for _, text := range req.Texts {
+		// A request whose caller has gone away stops here instead of occupying a
+		// worker for the rest of its texts.
+		if err := ctx.Err(); err != nil {
+			w.tokens.Add(int64(totalTokens))
+			w.errors.Add(1)
+			return Response{Err: err}
+		}
+		emb, toks, err := processBatch(ctx, w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
 		w.runs.Add(1)
 		totalTokens += toks
 		if err != nil {
@@ -205,6 +217,13 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 }
 
 func (p *Pool) Embed(texts []string) (Response, error) {
+	return p.EmbedContext(context.Background(), texts)
+}
+
+// EmbedContext embeds texts, abandoning the wait for a free worker or batch
+// window when ctx is done. Work already submitted runs to completion: the
+// caller stops waiting, the pipeline keeps its accounting.
+func (p *Pool) EmbedContext(ctx context.Context, texts []string) (Response, error) {
 	p.lifecycleMu.Lock()
 	if !p.accepting {
 		p.lifecycleMu.Unlock()
@@ -215,12 +234,21 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 	defer p.active.Done()
 
 	if p.batcher != nil {
-		return p.batcher.Embed(texts)
+		return p.batcher.EmbedContext(ctx, texts)
 	}
 	result := make(chan Response, 1)
+	req := Request{Texts: texts, Result: result, Ctx: ctx, Deadline: DeadlineOf(ctx)}
 	waitStart := time.Now()
-	p.req <- Request{Texts: texts, Result: result}
+	select {
+	case p.req <- req:
+	case <-ctx.Done():
+		return Response{}, ctx.Err()
+	}
 	p.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
+	// Once a worker owns the request the deadline no longer applies: the run is
+	// in flight, and reporting busy would refuse work that is about to complete.
+	// Work whose caller gave up before admission is dropped by the worker's own
+	// context check and answered with its error.
 	return <-result, nil
 }
 

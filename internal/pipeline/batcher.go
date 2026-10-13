@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -109,6 +110,12 @@ func (b *Batcher) producer() {
 }
 
 func (b *Batcher) Embed(texts []string) (Response, error) {
+	return b.EmbedContext(context.Background(), texts)
+}
+
+// EmbedContext embeds texts, abandoning the enqueue or the wait for the batch's
+// run when ctx is done.
+func (b *Batcher) EmbedContext(ctx context.Context, texts []string) (Response, error) {
 	b.lifecycleMu.Lock()
 	if !b.accepting {
 		b.lifecycleMu.Unlock()
@@ -119,10 +126,22 @@ func (b *Batcher) Embed(texts []string) (Response, error) {
 	defer b.active.Done()
 
 	result := make(chan Response, 1)
+	req := Request{Texts: texts, Result: result, Ctx: ctx, Deadline: DeadlineOf(ctx)}
 	waitStart := time.Now()
-	b.reqChan <- Request{Texts: texts, Result: result}
+	select {
+	case b.reqChan <- req:
+	case <-ctx.Done():
+		return Response{}, ctx.Err()
+	}
 	b.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
-	return <-result, nil
+	select {
+	case resp := <-result:
+		return resp, nil
+	case <-ctx.Done():
+		// The run loop owns the request now; its response lands in the buffered
+		// result channel nobody reads.
+		return Response{}, ctx.Err()
+	}
 }
 
 func (b *Batcher) run() {
@@ -139,6 +158,24 @@ func (b *Batcher) run() {
 		if len(batch) == 0 {
 			return
 		}
+		// Drop work whose caller has already gone away before it can consume a
+		// run: an abandoned request must not make the batch wait for it.
+		live := batch[:0]
+		deads := make([]time.Time, 0, len(batch))
+		for _, it := range batch {
+			if it.req.Ctx != nil && it.req.Ctx.Err() != nil {
+				b.errors.Add(1)
+				it.req.Result <- Response{Err: it.req.Ctx.Err()}
+				continue
+			}
+			deads = append(deads, it.req.Deadline)
+			live = append(live, it)
+		}
+		batch = live
+		if len(batch) == 0 {
+			budget = 0
+			return
+		}
 		start := time.Now()
 		b.busy.Add(1)
 
@@ -151,7 +188,11 @@ func (b *Batcher) run() {
 			totalTokens += it.tokens
 		}
 
-		resp, seqLen, err := b.process(all)
+		// A coalesced batch is abandoned only once every request in it has
+		// expired, so the latest deadline is what bounds its wait for admission.
+		runCtx, cancelRun := DeadlineAfter(deads...)
+		resp, seqLen, err := b.process(runCtx, all)
+		cancelRun()
 		b.busy.Add(-1)
 		b.runs.Add(1)
 		if err == nil {
@@ -278,8 +319,8 @@ func (b *Batcher) run() {
 	}
 }
 
-func (b *Batcher) process(encs []Encoding) (Response, int, error) {
-	embeddings, seqLen, err := runEncodings(b.session, encs, b.dim, b.normalize, b.pooling)
+func (b *Batcher) process(ctx context.Context, encs []Encoding) (Response, int, error) {
+	embeddings, seqLen, err := runEncodings(ctx, b.session, encs, b.dim, b.normalize, b.pooling)
 	if err != nil {
 		return Response{Err: err}, seqLen, err
 	}

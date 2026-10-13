@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
@@ -63,15 +64,15 @@ func ProbeBatchDeterminism(sessionFactory func() (onnx.Session, error), tok toke
 		encs[i] = []Encoding{{InputIDs: ids, AttentionMask: mask}}
 	}
 
-	aloneA, _, err := runEncodings(sess, encs[0], dim, normalize, pooling)
+	aloneA, _, err := runEncodings(context.Background(), sess, encs[0], dim, normalize, pooling)
 	if err != nil {
 		return fmt.Errorf("probe solo run A: %w", err)
 	}
-	aloneB, _, err := runEncodings(sess, encs[1], dim, normalize, pooling)
+	aloneB, _, err := runEncodings(context.Background(), sess, encs[1], dim, normalize, pooling)
 	if err != nil {
 		return fmt.Errorf("probe solo run B: %w", err)
 	}
-	co, _, err := runEncodings(sess, []Encoding{encs[0][0], encs[1][0]}, dim, normalize, pooling)
+	co, _, err := runEncodings(context.Background(), sess, []Encoding{encs[0][0], encs[1][0]}, dim, normalize, pooling)
 	if err != nil {
 		return fmt.Errorf("probe co-batched run: %w", err)
 	}
