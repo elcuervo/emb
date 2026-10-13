@@ -333,7 +333,12 @@ Docker on a four-vCPU host, and the matrix stopped there.
 
 ```text
 cells-complete  invalid  the run could not finish the matrix: docker run: exit status 125
+                        docker: Error response from daemon: range of CPUs is from 0.01 to 4.00,
+                        as there are only 4 CPUs available (63 of 84 cells measured)
 ```
+
+(That detail's trailing `Run 'docker run --help' for more information` line is
+elided.)
 
 `--cpus` above the CPUs the host presents is refused, so a tier can only be
 emulated up to that count: the four-vCPU rungs of the ladder (the free
