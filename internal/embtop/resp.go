@@ -74,16 +74,20 @@ type PollResult struct {
 	// tokens: how much intra-op work the process will admit at once, how much
 	// is in use, and the highest seen. Allowance is the detected (possibly
 	// fractional) CPU entitlement the budget was derived from.
-	CPUBudgetEnabled  bool
-	CPUBudget         int64
-	CPUCapacity       int64
-	CPUReserve        int64
-	CPUActiveTokens   int64
-	CPUPeakTokens     int64
-	CPUAllowance      float64
-	CPUAllowanceKnown bool
-	CPUAllowanceSrc   string
-	CPUPlanKnown      bool // the node reported the EMB.STATS CPU plan fields
+	CPUBudgetEnabled bool
+	CPUBudget        int64
+	CPUCapacity      int64
+	CPUReserve       int64
+	CPUActiveTokens  int64
+	CPUPeakTokens    int64
+	// CPU admission gate pressure: cumulative wait and timeouts, current waiters.
+	CPUAdmissionWaitUs   int64
+	CPUAdmissionWaiters  int64
+	CPUAdmissionTimeouts int64
+	CPUAllowance         float64
+	CPUAllowanceKnown    bool
+	CPUAllowanceSrc      string
+	CPUPlanKnown         bool // the node reported the EMB.STATS CPU plan fields
 
 	Models   []ModelListEntry // EMB.MODELS reply
 	PerModel map[string]*ModelStats
@@ -131,6 +135,22 @@ type ModelStats struct {
 	CPUThreadShare   int
 	IntraOpThreads   int
 	AllowSpinning    bool
+
+	// How the embedding layout was chosen ("none" until laid out), the process
+	// ceiling its candidates were bounded by, and which serving paths exist yet
+	// (unavailable, uninitialized or initialized). Empty from older servers.
+	CalibrationSource     string
+	CalibrationReason     string
+	CalibrationLimit      string
+	CalibrationDurationUs int64
+	CalibrationCeiling    int
+	EmbedState            string
+	ScriptState           string
+	ImageState            string
+	// Time queued at the CPU admission gate per path, excluded from run time.
+	EmbedAdmissionWaitUs  int64
+	ScriptAdmissionWaitUs int64
+	ImageAdmissionWaitUs  int64
 }
 
 // Poll runs one pipelined poll: EMB.MODELS, EMB.INFO for each known model,
@@ -348,6 +368,10 @@ func parseStats(r Reply) *PollResult {
 		CPUActiveTokens:  intField(m, "cpu_active_tokens"),
 		CPUPeakTokens:    intField(m, "cpu_peak_tokens"),
 		CPUAllowanceSrc:  strField(m, "cpu_allowance_source"),
+
+		CPUAdmissionWaitUs:   intField(m, "cpu_admission_wait_us"),
+		CPUAdmissionWaiters:  intField(m, "cpu_admission_waiters"),
+		CPUAdmissionTimeouts: intField(m, "cpu_admission_timeouts"),
 	}
 	if _, ok := m["cpu_budget_enabled"]; ok {
 		res.CPUPlanKnown = true
@@ -410,6 +434,18 @@ func parseModelStats(r Reply) *ModelStats {
 		CPUThreadShare:   int(intField(m, "cpu_thread_share")),
 		IntraOpThreads:   int(intField(m, "intra_op_threads")),
 		AllowSpinning:    intField(m, "allow_spinning") != 0,
+
+		CalibrationSource:     strField(m, "calibration_source"),
+		CalibrationReason:     strField(m, "calibration_reason"),
+		CalibrationLimit:      strField(m, "calibration_limit"),
+		CalibrationDurationUs: intField(m, "calibration_duration_us"),
+		CalibrationCeiling:    int(intField(m, "calibration_ceiling")),
+		EmbedState:            strField(m, "embed_state"),
+		ScriptState:           strField(m, "script_state"),
+		ImageState:            strField(m, "image_state"),
+		EmbedAdmissionWaitUs:  intField(m, "embed_admission_wait_us"),
+		ScriptAdmissionWaitUs: intField(m, "script_admission_wait_us"),
+		ImageAdmissionWaitUs:  intField(m, "image_admission_wait_us"),
 	}
 	return ms
 }

@@ -97,10 +97,12 @@ type modelInfoLine struct {
 	sessionsBusy      int64
 	sessionsTotal     int64
 	paddingEfficiency float64
+	admissionWaitUs   int64
 	// scripted-evaluation counters, separate from the embedding path.
-	scriptDispatchWaitUs int64
-	scriptRunUs          int64
-	scriptRuns           int64
+	scriptDispatchWaitUs  int64
+	scriptRunUs           int64
+	scriptRuns            int64
+	scriptAdmissionWaitUs int64
 }
 
 // infoSnapshot gathers the server's current statistics under one consistent
@@ -123,8 +125,10 @@ func (s *Server) infoSnapshot() infoSnapshot {
 			res.sessionsBusy = st.SessionsBusy
 			res.sessionsTotal = st.SessionsTotal
 			res.paddingEfficiency = st.PaddingEfficiency
+			res.admissionWaitUs = st.AdmissionWaitUs
 		}
 		res.scriptDispatchWaitUs, res.scriptRunUs, res.scriptRuns, _ = m.ScriptDispatch()
+		res.scriptAdmissionWaitUs = m.ScriptAdmissionWaitUs()
 		byName[m.Name] = res
 	}
 	sort.Strings(names)
@@ -178,10 +182,12 @@ func (s *Server) infoSnapshot() infoSnapshot {
 			sessionsBusy:      res.sessionsBusy,
 			sessionsTotal:     res.sessionsTotal,
 			paddingEfficiency: res.paddingEfficiency,
+			admissionWaitUs:   res.admissionWaitUs,
 
-			scriptDispatchWaitUs: res.scriptDispatchWaitUs,
-			scriptRunUs:          res.scriptRunUs,
-			scriptRuns:           res.scriptRuns,
+			scriptDispatchWaitUs:  res.scriptDispatchWaitUs,
+			scriptRunUs:           res.scriptRunUs,
+			scriptRuns:            res.scriptRuns,
+			scriptAdmissionWaitUs: res.scriptAdmissionWaitUs,
 		})
 	}
 
@@ -223,10 +229,12 @@ type registryEntrySnapshot struct {
 	sessionsBusy      int64
 	sessionsTotal     int64
 	paddingEfficiency float64
+	admissionWaitUs   int64
 	// Scripted-evaluation counters, measured independently of the pool.
-	scriptDispatchWaitUs int64
-	scriptRunUs          int64
-	scriptRuns           int64
+	scriptDispatchWaitUs  int64
+	scriptRunUs           int64
+	scriptRuns            int64
+	scriptAdmissionWaitUs int64
 }
 
 // buildInfoSections renders Redis-format INFO sections. An empty `which`

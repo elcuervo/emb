@@ -172,6 +172,7 @@ func statsReply(fields map[string]int64) []byte {
 		"cpu_budget_enabled", "cpu_allowance_source",
 		"cpu_capacity", "cpu_reserve", "cpu_budget",
 		"cpu_active_tokens", "cpu_peak_tokens",
+		"cpu_admission_wait_us", "cpu_admission_waiters", "cpu_admission_timeouts",
 	}
 	for _, k := range keys {
 		parts = append(parts, encodeBulk(k), encodeInt(fields[k]))

@@ -42,7 +42,11 @@ type Point struct {
 	CPUPeakTokens    int64
 	CPUAllowance     float64
 	CPUAllowanceSrc  string
-	CPUPlanKnown     bool // the node reported the EMB.STATS CPU plan fields
+	// Admission gate pressure: runs queued now, and cumulative wait and timeouts.
+	CPUAdmissionWaitUs   int64
+	CPUAdmissionWaiters  int64
+	CPUAdmissionTimeouts int64
+	CPUPlanKnown         bool // the node reported the EMB.STATS CPU plan fields
 }
 
 // CPUPlanText renders one node's (or an aggregate's) process CPU plan, or ""
@@ -58,6 +62,9 @@ func CPUPlanText(p Point) string {
 	line := fmt.Sprintf("cpu budget %d \u00b7 tokens %d/%d", p.CPUBudget, p.CPUActiveTokens, p.CPUBudget)
 	if p.CPUPeakTokens > 0 {
 		line += fmt.Sprintf(" \u00b7 peak %d", p.CPUPeakTokens)
+	}
+	if p.CPUAdmissionWaiters > 0 || p.CPUAdmissionTimeouts > 0 {
+		line += fmt.Sprintf(" \u00b7 queued %d \u00b7 timeouts %d", p.CPUAdmissionWaiters, p.CPUAdmissionTimeouts)
 	}
 	if p.CPUAllowance > 0 {
 		line += fmt.Sprintf(" \u00b7 %.2f cores", p.CPUAllowance)
@@ -183,6 +190,10 @@ func (s *Sampler) Push(res *PollResult) Point {
 		CPUAllowance:     res.CPUAllowance,
 		CPUAllowanceSrc:  res.CPUAllowanceSrc,
 		CPUPlanKnown:     res.CPUPlanKnown,
+
+		CPUAdmissionWaitUs:   res.CPUAdmissionWaitUs,
+		CPUAdmissionWaiters:  res.CPUAdmissionWaiters,
+		CPUAdmissionTimeouts: res.CPUAdmissionTimeouts,
 	}
 
 	totalHits := res.CacheHits

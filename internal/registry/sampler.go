@@ -20,12 +20,12 @@ const (
 	autotuneShrinkAfter = 10
 )
 
-// startSampler starts the traffic sampler for a scripted model. It is a no-op
-// once started.
-func (r *ScriptResources) startSampler(cores int) {
+// startSampler starts the traffic sampler for a scripted model, normalizing
+// CPU by cpus, the fractional effective bandwidth. It is a no-op once started.
+func (r *ScriptResources) startSampler(cpus float64) {
 	r.samplerOnce.Do(func() {
 		r.samplerWG.Add(1)
-		go r.runSampler(cores)
+		go r.runSampler(cpus)
 	})
 }
 
@@ -41,11 +41,11 @@ func (r *ScriptResources) stopSampler() {
 
 // runSampler periodically classifies the script path's traffic and adapts the
 // per-session concurrency allowance within the configured cap.
-func (r *ScriptResources) runSampler(cores int) {
+func (r *ScriptResources) runSampler(cpus float64) {
 	defer r.samplerWG.Done()
 
 	ctrl := permit.NewController(r.cap, int(r.allowance.Load()), autotuneGrowAfter, autotuneShrinkAfter)
-	prev := r.sample()
+	prev, prevAt := r.sample(), time.Now()
 	t := time.NewTicker(autotuneWindow)
 	defer t.Stop()
 	for {
@@ -53,9 +53,11 @@ func (r *ScriptResources) runSampler(cores int) {
 		case <-r.stop:
 			return
 		case <-t.C:
-			cur := r.sample()
-			class := permit.Classify(prev, cur, autotuneWindow, cores, autotuneCPUHigh, autotuneWaitRatio)
-			prev = cur
+			cur, curAt := r.sample(), time.Now()
+			// Normalize by the real (monotonic) time between samples: a delayed
+			// tick must not make the same CPU time look like less utilization.
+			class := permit.Classify(prev, cur, curAt.Sub(prevAt), cpus, autotuneCPUHigh, autotuneWaitRatio)
+			prev, prevAt = cur, curAt
 			r.class.Store(class)
 
 			allowance, changed, recommend := ctrl.Observe(class)

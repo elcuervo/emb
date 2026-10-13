@@ -1,8 +1,12 @@
 package registry
 
 import (
+	"context"
 	"errors"
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
@@ -83,21 +87,45 @@ func (budgetTestSession) Close() error { return nil }
 
 func TestBudgetedSessionReleasesOnError(t *testing.T) {
 	want := errors.New("inference failed")
-	gate := permit.NewBudget(1)
-	sess := budgetedSession{Session: budgetTestSession{err: want}, gate: gate, width: 1}
+	gate := permit.NewBudget(1, nil)
+	sess := newBudgetedSession(budgetTestSession{err: want}, gate, "m", 1, nil)
 	if _, err := sess.Run(nil, nil, 0, 0, 0); !errors.Is(err, want) {
 		t.Fatalf("Run error = %v, want %v", err, want)
 	}
-	release := gate.Acquire(1)
+	release, err := gate.Acquire(context.Background(), "m", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	release()
+}
+
+type namedTestSession struct{ err error }
+
+func (s namedTestSession) RunNamed([]onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+	return nil, s.err
+}
+func (namedTestSession) Close() error { return nil }
+
+// A named-tensor run that fails still gives back both its session charge and
+// any caller charge.
+func TestBudgetedNamedSessionReleasesOnError(t *testing.T) {
+	want := errors.New("run failed")
+	gate := permit.NewBudget(2, nil)
+	sess := budgetedNamedSession{NamedSession: namedTestSession{err: want}, shared: gate.Shared("m", 2)}
+	if _, err := sess.RunNamed(nil); !errors.Is(err, want) {
+		t.Fatalf("RunNamed error = %v, want %v", err, want)
+	}
+	if active, _ := gate.Stats(); active != 0 {
+		t.Fatalf("active = %d after a failed run, want 0", active)
+	}
 }
 
 // Two models share one process budget, so a busy model with a narrow run can
 // lend idle capacity to another model rather than each holding a reservation.
 func TestSharedBudgetLendsIdleCapacityAcrossModels(t *testing.T) {
-	gate := permit.NewBudget(3)
-	modelA := budgetedSession{Session: budgetTestSession{}, gate: gate, width: 1}
-	modelB := budgetedSession{Session: budgetTestSession{}, gate: gate, width: 2}
+	gate := permit.NewBudget(3, nil)
+	modelA := newBudgetedSession(budgetTestSession{}, gate, "a", 1, nil)
+	modelB := newBudgetedSession(budgetTestSession{}, gate, "b", 2, nil)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -171,4 +199,151 @@ func TestRegistryWarnsWhenPolicyArrivesAfterPoolBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg.Add("solo", &ModelEntry{Name: "solo", Pool: &pipeline.Pool{}})
+}
+
+// waitGateWaiters spins until n runs queue at the gate.
+func waitGateWaiters(t *testing.T, gate *permit.Budget, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, waiters, _ := gate.Pressure(); waiters == n {
+			return
+		}
+		runtime.Gosched()
+	}
+	t.Fatalf("gate waiters did not reach %d", n)
+}
+
+// The wait at the gate is reported once, as the path's admission wait, and
+// handed to the pipeline to keep out of run time.
+func TestBudgetedSessionReportsGateWait(t *testing.T) {
+	gate := permit.NewBudget(1, nil)
+	hold, err := gate.Acquire(context.Background(), "m", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var total atomic.Int64
+	sess := newBudgetedSession(budgetTestSession{}, gate, "m", 1, &total)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = sess.Run(nil, nil, 0, 0, 0)
+	}()
+	waitGateWaiters(t, gate, 1)
+	hold()
+	<-done
+	taken := sess.TakeAdmissionWait()
+	if taken.Microseconds() != total.Load() {
+		t.Fatalf("taken %v != path total %dus", taken, total.Load())
+	}
+	if again := sess.TakeAdmissionWait(); again != 0 {
+		t.Fatalf("second take = %v, want 0", again)
+	}
+}
+
+// A refused or expired admission surfaces from the run without touching the
+// native session.
+func TestBudgetedSessionRefusedAdmissionNeverRuns(t *testing.T) {
+	gate := permit.NewBudget(1, nil)
+	gate.SetTimeout(time.Millisecond)
+	hold, err := gate.Acquire(context.Background(), "m", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hold()
+	ran := errors.New("native session ran")
+	sess := newBudgetedSession(budgetTestSession{err: ran}, gate, "m", 1, nil)
+	if _, err := sess.Run(nil, nil, 0, 0, 0); !errors.Is(err, permit.ErrAdmissionTimeout) {
+		t.Fatalf("Run error = %v, want the admission timeout (not %v)", err, ran)
+	}
+}
+
+// gateWaitNamed is a named session that reports its whole 2ms call as gate wait.
+type gateWaitNamed struct{ namedTestSession }
+
+func (gateWaitNamed) runAdmitted([]onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error) {
+	start := time.Now()
+	for time.Since(start) < 2*time.Millisecond {
+	}
+	return nil, time.Since(start), nil
+}
+
+func TestScriptRunExcludesGateWait(t *testing.T) {
+	res := idleScriptResources(gateWaitNamed{})
+	if _, err := res.RunNamed(nil); err != nil {
+		t.Fatal(err)
+	}
+	_, runUs, runs, _ := res.DispatchCounters()
+	if runs != 1 || runUs >= 1000 {
+		t.Fatalf("runs=%d runUs=%d, want the 2ms gate wait kept out of run time", runs, runUs)
+	}
+}
+
+type refusedNamed struct{ namedTestSession }
+
+func (refusedNamed) runAdmitted([]onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error) {
+	return nil, 0, permit.ErrAdmissionTimeout
+}
+
+func TestScriptRefusedAdmissionIsNotARun(t *testing.T) {
+	res := idleScriptResources(refusedNamed{})
+	if _, err := res.RunNamed(nil); !errors.Is(err, permit.ErrAdmissionTimeout) {
+		t.Fatalf("RunNamed error = %v", err)
+	}
+	if _, _, runs, _ := res.DispatchCounters(); runs != 0 {
+		t.Fatalf("runs = %d, want 0 for a refused admission", runs)
+	}
+}
+
+// Shutdown with one queued and one running call: the queued call fails and
+// leaves the queue, the running call keeps its token and finishes normally.
+func TestRegistryCloseCancelsQueuedAdmissionNotRunning(t *testing.T) {
+	reg, err := NewWithConfig(&config.Config{Models: map[string]config.ModelConfig{"m": {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := reg.cpuGate
+	running, err := gate.Acquire(context.Background(), "m", gate.Capacity())
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued := make(chan error, 1)
+	go func() {
+		release, err := gate.Acquire(context.Background(), "m", 1)
+		if err == nil {
+			release()
+		}
+		queued <- err
+	}()
+	waitGateWaiters(t, gate, 1)
+	if err := reg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-queued; !errors.Is(err, permit.ErrAdmissionClosed) {
+		t.Fatalf("queued error = %v, want ErrAdmissionClosed", err)
+	}
+	if plan := reg.CPUStatus(); plan.Active != gate.Capacity() || plan.AdmissionWaiters != 0 {
+		t.Fatalf("after Close: active %d waiters %d, want the running call still holding %d", plan.Active, plan.AdmissionWaiters, gate.Capacity())
+	}
+	running()
+	if plan := reg.CPUStatus(); plan.Active != 0 {
+		t.Fatalf("tokens leaked: %d", plan.Active)
+	}
+}
+
+func TestPathStatesDoNotInitializeLazyPaths(t *testing.T) {
+	e := &ModelEntry{Name: "m", cfg: config.ModelConfig{Dim: 4, Pooling: "mean"}}
+	embed, script, image := e.PathStates()
+	if embed != PathUninitialized || script != PathUninitialized || image != PathUnavailable {
+		t.Fatalf("lazy states = %s/%s/%s", embed, script, image)
+	}
+	e.scriptResPtr.Store(idleScriptResources(namedTestSession{}))
+	e.poolReady.Store(true)
+	embed, script, _ = e.PathStates()
+	if embed != PathInitialized || script != PathInitialized {
+		t.Fatalf("loaded states = %s/%s", embed, script)
+	}
+	if e.loaded.Load() || e.scriptRes != nil {
+		t.Fatal("observing path state initialized a path")
+	}
 }

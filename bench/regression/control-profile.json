@@ -1,0 +1,24 @@
+{
+  "name": "control-minilm-bge",
+  "note": "Public-model control (minilm + bge). Deadlines are declared control values for the driver, not production deadlines; the incident profile declares the deployment's own before any incident measurement.",
+  "cpus": ["1", "4"],
+  "phases": [
+    { "name": "cold-first-use", "sustainable": true, "cpus": ["1"] },
+    { "name": "preloaded-startup", "sustainable": true, "cpus": ["1"] },
+    { "name": "warm-one-hot-idle-peer", "gated": true, "sustainable": true },
+    { "name": "paired-serial", "gated": true, "sustainable": true },
+    { "name": "paired-parallel", "gated": true, "sustainable": true },
+    { "name": "emb-multi", "gated": true, "sustainable": true },
+    { "name": "mixed-warm", "gated": true, "sustainable": true },
+    { "name": "mixed-cold", "gated": true, "sustainable": true },
+    { "name": "sustained", "gated": true, "sustainable": true, "cpus": ["0.5", "1", "1.5", "2", "4"] },
+    { "name": "burst", "cpus": ["1"] },
+    { "name": "recovery", "recovery_deadline_seconds": 30, "cpus": ["1"] }
+  ],
+  "deadlines": {
+    "request_seconds": 10,
+    "health_seconds": 5,
+    "recovery_seconds": 30
+  },
+  "required_assertions": ["offered-accounted", "replies-valid", "governor-enabled", "cache-expectation"]
+}

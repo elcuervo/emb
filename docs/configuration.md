@@ -104,7 +104,7 @@ models:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `weight` | `1` | Relative share used to split the process inference budget between configured models |
+| `weight` | `1` | Relative fair-share weight for admission turns when models contend for the process inference budget. It is not a reservation or a cap: an idle model's share is borrowable and does not limit another model's layout |
 | `onnx` | — | Path to ONNX model file |
 | `tokenizer` | `<model-dir>/tokenizer.json` | Path to HuggingFace tokenizer JSON |
 | `model_repo` | — | HuggingFace repo (auto-downloads ONNX + tokenizer) |
@@ -190,22 +190,45 @@ in the cache — a cache left by an earlier version can be repaired by deleting 
 
 `cpu_budget` is process-local and defaults to `auto`. The server keeps the
 fractional cgroup quota separate from integer capacity and Go scheduler
-parallelism. Automatic capacity floors the detected quota (minimum one), then
+parallelism. The quota is resolved once, from `/proc/self/mountinfo` and
+`/proc/self/cgroup`: cgroup v2 and v1 (combined `cpu,cpuacct` and hybrid)
+controller mounts, remapped mount roots, and every visible ancestor up to the
+mount point are read, and the tightest positive quota wins; affinity or a lower
+`GOMAXPROCS` that is tighter still bounds it. If nothing resolves (no cgroup
+mount, unreadable or malformed files, an unlimited hierarchy) the allowance
+falls back to scheduler/affinity and the startup log adds
+`CPU allowance fallback: <reason>` after the `CPU inference budget:` line, whose
+fields are `allowance` (fractional CPUs), `source` (the deciding file or
+`scheduler/affinity`), `scheduler`, `affinity`, `capacity`, `reserve` and
+`budget`. Sub-one-CPU quotas keep their fraction for saturation accounting (see
+[performance validation](./performance-validation.md)); admission capacity
+floors the allowance (minimum one), then
 reserves two CPUs at 8+, one at 4–7, and none below four. On an 8-CPU task the
 initial inference budget is six. `cpu_reserve` overrides that reserve when the
 budget is `auto`; it must be smaller than detected capacity. A numeric
 `cpu_budget` is an explicit final budget and cannot be combined with
 `cpu_reserve`. A budget above detected capacity starts with a warning.
 
-Models split the initial budget deterministically by `weight` (default 1).
-One FIFO admission gate covers embedding, image, and script
-ONNX runs; explicit over-budget runs execute alone. Automatic embedding and
+One admission controller covers embedding, image, script and calibration
+ONNX runs. Each model has its own FIFO queue; free tokens go to whichever
+model's head fits, with contended turns split by `weight` (default 1) and no
+idle reservation, so a busy model can use the whole budget while its peers are
+idle. A wide head that is passed over for a full round of the active models is
+served next, so narrow traffic cannot starve it. Explicit over-budget runs
+execute alone. A scripted session is charged its intra-op width once while any
+caller runs on it, plus one token for each further concurrent caller on that
+session (`script_callers_per_session` bounds the callers; the charge is never
+the width divided by the cap). Admission is a bound on admitted work, not an OS
+CPU limit. The startup log's `CPU plan` line reports each model's `weight`,
+its fair `share`, and its `intra_op_threads` (the whole budget until calibration
+or an explicit value changes it). Automatic embedding and
 image sessions disable ORT spinning. Set `cpu_budget: off` to restore legacy
 session sizing and spinning behavior; this does not roll back the binary.
 
 ### Startup calibration
 
-`calibrate` defaults to `true` and applies only with `cpu_budget: auto`.
+`calibrate` defaults to `true` and applies only when the CPU policy is on
+(`cpu_budget` is not `off`).
 Defaults require no model-specific tuning. Precedence, highest first:
 
 1. an explicit `workers` / `intra_op_threads` fixes that dimension and is never
@@ -213,16 +236,22 @@ Defaults require no model-specific tuning. Precedence, highest first:
 2. an explicit numeric `cpu_budget` sets both the admission budget and the
    candidate ceiling;
 3. `cpu_budget: auto` derives capacity and reserve;
-4. `calibrate: false` skips the trials and keeps conservative sizing — one
-   session at the model's share with the derived width — while admission stays
-   on;
+4. `calibrate: false` skips the trials and selects a deterministic,
+   process-capable layout: one session whose width is the whole process budget
+   (`budget / workers` wide when `workers` is set), with explicit values kept —
+   not the model's share — while admission stays on. It is not `cpu_budget:
+   off`: admission, the memory check below and the CPU budget still apply, and
+   the startup `CPU layout` line reports `source=default
+   reason=calibration_disabled`;
 5. `cpu_budget: off` restores legacy sizing, spinning, and shared scripted
    sessions, and bypasses calibration and admission entirely.
 
 After the batch-determinism probe, each embedding model builds representative
 short, typical, and long inputs from its own tokenizer (never user text),
 runs one warmup pass, then measures deduplicated width × session candidates
-that fit both the process CPU share and the model-size memory estimate. A
+that fit the **process** CPU budget and the process memory headroom (below). The
+ceiling is the whole budget, not the model's weighted share, so an idle
+configured peer never limits the model being calibrated. A
 batching model's trial serves tiled multi-row runs (a representative batch, not
 a single row), because width that barely helps one row is worth several threads
 for a coalesced batch; the batch shrinks with the fixture's length so one long
@@ -235,12 +264,33 @@ trial understates wide threads) and the lower-resource layout wins otherwise.
 An explicit dimension, or a budget with only one candidate, skips the trials.
 
 **Startup cost.** Trials are bounded by a 4-second deadline per model and at
-most 12 candidates, and the deadline is predicted between candidates from the
-last one's measured cost, so a slow model keeps its best validated layout
-instead of overrunning. Calibration runs when the model loads: at startup for
+most 12 candidates. The deadline is predicted between candidates from the last
+candidate's **total** cost — from before its sessions are created until they are
+closed, so slow session construction counts — while candidates are still scored
+on their timed inference only. A slow model keeps its best validated layout
+instead of overrunning; the deadline is soft around a native call that cannot be
+interrupted. Calibration runs when the model loads: at startup for
 `preload: true`, otherwise on that model's **first request** — so a lazily
 loaded model's first request pays both the model load and up to four seconds of
 trials.
+
+**Memory headroom.** Before sessions are created, the server reserves memory
+process-wide: the container memory limit (less a 10% margin) minus current RSS,
+the cache allowance, one session for every other configured model that is not
+resident yet, and what concurrent loads have already reserved. A session is
+estimated as the weights file plus any `_data`/`.data` sidecar plus 20%.
+Reservations are serialized, so two models loading at once cannot claim the same
+headroom. If a larger automatic candidate does not fit, the largest one that
+does is used and the layout is reported with `limit=memory`. An explicit
+`workers` that does not fit fails the load with an error naming the model rather
+than allocating past the limit. Estimates are not measurements: RSS supplies the
+measured part, and layouts are chosen at load time.
+
+**Outcome.** The startup log's `CPU layout` line reports `workers`,
+`intra_op_threads`, `source` (`calibrated`, `fallback` or `default`), `reason`,
+`limit` (`memory` or empty), `ceiling` (the process budget the candidates were
+bounded by) and `elapsed` (total calibration time). The same outcome is kept
+immutably per model.
 
 **Fallback.** Invalid fixtures, a failed baseline, unavailable CPU accounting,
 an expired deadline, or an unusable tokenizer keep the best validated candidate,
@@ -309,7 +359,7 @@ saving, not a way to exceed the core budget.
 ### Runtime autotuning
 
 With `capacity: auto` (the default) the server classifies each scripted model's
-traffic every second as `idle`, `latency`, `throughput`, or `saturated` from the
+traffic every second as `idle`, `latency`, `throughput`, `saturated` or `unmeasured` from the
 dispatch-wait/run-time ratio, in-flight count, and process CPU, and adapts the
 per-session concurrency allowance within `script_callers_per_session`:
 
@@ -321,6 +371,11 @@ per-session concurrency allowance within `script_callers_per_session`:
   latency-sensitive workload).
 - `saturated` never grows; it logs a recommendation to raise `script_workers`
   or `intra_op_threads` instead, because more concurrency cannot create CPU.
+- `unmeasured` (runs completed but process CPU accounting was unavailable or no
+  time elapsed) holds the allowance: without a CPU reading there is no headroom
+  to grow into. CPU is normalized by the fractional effective bandwidth and the
+  actual time between samples, so a saturated half-CPU quota reads as
+  saturated.
 
 The controller never changes the session count or per-session thread count at
 runtime. `capacity: latency` or `throughput` pins the creation-time layout

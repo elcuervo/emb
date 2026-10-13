@@ -69,7 +69,7 @@ explicitly (≤ 2 for small models) in production configs.
 | Workload       | Driver             | Purpose                                                       |
 |----------------|--------------------|---------------------------------------------------------------|
 | `fixed-length` | `redis-benchmark`  | uniform short texts (~8 tokens), batching efficiency baseline  |
-| `unique-text`  | `redis-benchmark`  | unique texts via `__rand_int__` (cache-cold, high token churn)|
+| `unique-text`  | `redis-benchmark`  | unique texts via `__rand_int__`, expanded because the run passes `-r` (cache-cold, high token churn)|
 | `mixed-length` | `bench/fargate/load.rb` | 80% short / 20% long texts, interleaved — padding-waste probe |
 | `cache-hit`    | `redis-benchmark`  | server launched with `-cache auto`, warmed once               |
 
@@ -84,8 +84,9 @@ One JSON bundle per recorded run:
 | `host` | the fingerprint (above): the shape, `identity`, `gold`, failed properties |
 | `model` | `name`, and `onnx`/`tokenizer` `{path,bytes,sha256}` of the files actually measured |
 | `config` | `platform`, `model`, `max_length`, `cpus`, `clients`, `pipelines`, `count_per_cell`, `req_gate`, `p50_gate` |
-| `cells` | `{tier,workload,clients,pipeline,req_s,p50_ms,p90_ms,p99_ms,padding_efficiency}` per measurement |
-| `assertions` | `{name,outcome,detail}` with outcome `pass`/`fail`/`invalid`/`skipped` |
+| `cells` | `{tier,workload,clients,pipeline,req_s,p50_ms,p90_ms,p99_ms,padding_efficiency}` per measurement; `p90_ms` is absent when the tool prints no literal p90 |
+| `assertions` | `{name,outcome,detail}` with outcome `pass`/`fail`/`invalid`/`skipped`/`inconclusive` |
+| `schema`, `regression` | release-comparator evidence (below); absent from cell bundles |
 
 Assertions recorded: `host-contract` (passes when the host is qualified, fails
 naming the property otherwise) and `cells-complete` (passes when every requested
@@ -99,7 +100,9 @@ the contract stays valid evidence of a `run`, but is not a reference.
 `{vCPU tier} × {clients} × {pipeline} × {workload}` → req/s, p50/p90/p99 ms, plus
 **padding efficiency** for mixed-length (real tokens / processed token-slots,
 computed with the real tokenizer over a `max_batch` window). Each cell is the
-median of 3 runs.
+median of 3 runs. `mixed-length` req/s is completed requests over the driver's wall
+elapsed time and its percentiles are nearest-rank order statistics; neither is
+derived from summed request latencies or approximated from a neighbour.
 
 **Diff gates:** inference-bound cells (<5000 req/s) require req/s ≥ −5% and
 p50 ≤ +10%. Saturated cells (≥5000 req/s, e.g. cache-hit) finish in
@@ -127,9 +130,38 @@ yourself if Docker lives somewhere else.
 
 Flags for `go run ./bench/fargate` (see `go run ./bench/fargate -h`):
 `-cpus -clients -pipeline -platform -count -model-dir -model -max-length -image
--out -mode (run|baseline|diff) -before -after -req-gate -p50-gate -mixed-count
--short-len -long-len -short-ratio -max-batch -batching-timeout -max-batch-tokens
--skip-build -keep`.
+-out -mode (run|baseline|diff|drive|compare) -before -after -req-gate -p50-gate
+-mixed-count -short-len -long-len -short-ratio -max-batch -batching-timeout
+-max-batch-tokens -skip-build -keep`. `drive` and `compare` add `-addr -models
+-dispatch -cache-state -rate -duration -request-timeout -drain-timeout
+-max-in-flight -dim -phase -round -cpu-limit -profile -bundle -meta -info
+-orchestrator -expect-fail -seed`.
+
+## Release regression driver
+
+`-mode drive` runs one open-loop pass of the pair driver (`bench/fargate/driver`)
+against an external, already-running server and appends it to a regression
+bundle; `-mode compare` reads two bundles under a profile and prints a named
+verdict (`pass`, `fail`, `inconclusive`, `invalid`). The driver is also what
+`internal/server`'s `BenchmarkInferencePairs` calls, so the benchmark is a thin
+wrapper. The control profile lives in `bench/regression/` (a server config and
+`control-profile.json`).
+
+```
+go run ./bench/fargate -mode drive -addr 127.0.0.1:16379 -models minilm,bge \
+  -dispatch parallel -cache-state warm -rate 10 -duration 120s \
+  -phase paired-parallel -cpu-limit 4 -round 1 \
+  -profile bench/regression/control-profile.json -meta arm.json -bundle known-good.json
+go run ./bench/fargate -mode compare -profile bench/regression/control-profile.json \
+  -before known-good.json -after candidate.json
+go test ./bench/fargate/...          # driver, comparator and the self-verification cases
+```
+
+Every scheduled pair is classified exactly once (`success`, `error`, `timeout`,
+`dropped`); a success needs a valid, finite float32 embedding of the expected
+dimension. The full contract (dispatch modes, deadlines, warm/cold counters, the
+`arm.json` metadata, bundle fields, thresholds, `-expect-fail`) is in
+[docs/performance-validation.md](../../docs/performance-validation.md).
 
 ## Layout
 
@@ -137,7 +169,12 @@ Flags for `go run ./bench/fargate` (see `go run ./bench/fargate -h`):
 bench/fargate/
   main.go          # orchestrator: host contract, build image, run tiers, workloads, bundle/diff
   main_test.go     # bundle schema, refusal rules, tolerance math (no Docker/model/network)
+  workload_test.go # redis-benchmark/mixed-workload fixes: wall-clock req/s, literal p90, __rand_int__
   load.rb          # pure-stdlib Ruby mixed-length RESP driver (latencies)
-  README.md        # this file
+  driver/          # open-loop pair driver: scheduler, reply validation, accounting, EMB.STATS/INFO counters
+  drive.go         # -mode drive: record one driven pass into a regression bundle
+  evidence.go      # regression bundle section: provenance, limits, runs, named assertions
+  compare.go       # -mode compare: fail-closed comparator and verdict
+  compare_test.go  # rejections, verdicts and the harness self-verification cases
   baseline.*.json  # recorded baselines (pre-fingerprint files are refused by the diff)
 ```

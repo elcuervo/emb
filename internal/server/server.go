@@ -19,6 +19,8 @@ import (
 	"github.com/tidwall/redcon"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/permit"
+	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
 	"github.com/elcuervo/emb/internal/telemetry"
@@ -974,7 +976,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	results, err := s.embedTexts(entry, modelName, texts)
 	if err != nil {
 		failed = true
-		conn.WriteError(fmt.Sprintf("ERR %v", err))
+		conn.WriteError(replyError(err))
 		return
 	}
 
@@ -1150,22 +1152,27 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	modelName := string(cmd.Args[1])
-	entry, err := s.reg.GetOrInit(modelName)
+	// Observation never loads a lazy path: an unloaded embedding pool reports
+	// zero counters and its uninitialized state.
+	entry, err := s.reg.Resolve(modelName)
 	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
-	stats := entry.Pool.Stats()
+	var stats pipeline.Stats
+	if pool := entry.LoadedPool(); pool != nil {
+		stats = pool.Stats()
+	}
 	verdict, reason := entry.BatchDeterminism, entry.BatchDeterminismReason
 	if verdict == "" {
 		verdict, reason = "untested", "untested"
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 48)
+		writePairs(conn, 59)
 	} else {
-		writePairs(conn, 41)
+		writePairs(conn, 52)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1264,6 +1271,35 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(stats.SessionsBusy))
 	conn.WriteBulkString("embed_sessions_total")
 	conn.WriteInt(int(stats.SessionsTotal))
+	// Time queued at the process CPU gate per path, kept out of the run time.
+	conn.WriteBulkString("embed_admission_wait_us")
+	conn.WriteInt(int(stats.AdmissionWaitUs))
+	conn.WriteBulkString("script_admission_wait_us")
+	conn.WriteInt(int(entry.ScriptAdmissionWaitUs()))
+	conn.WriteBulkString("image_admission_wait_us")
+	conn.WriteInt(int(entry.ImageAdmissionWaitUs()))
+	// How the embedding layout was chosen, and which serving paths exist yet.
+	source, reason, limit, durationUs, ceiling := "none", "", "", int64(0), 0
+	if c, ok := entry.Calibration(); ok {
+		source, reason, limit, durationUs, ceiling = c.Source, c.Reason, c.Limit, c.Duration.Microseconds(), c.Ceiling
+	}
+	conn.WriteBulkString("calibration_source")
+	conn.WriteBulkString(source)
+	conn.WriteBulkString("calibration_reason")
+	conn.WriteBulkString(reason)
+	conn.WriteBulkString("calibration_limit")
+	conn.WriteBulkString(limit)
+	conn.WriteBulkString("calibration_duration_us")
+	conn.WriteInt(int(durationUs))
+	conn.WriteBulkString("calibration_ceiling")
+	conn.WriteInt(ceiling)
+	embedState, scriptState, imageState := entry.PathStates()
+	conn.WriteBulkString("embed_state")
+	conn.WriteBulkString(embedState)
+	conn.WriteBulkString("script_state")
+	conn.WriteBulkString(scriptState)
+	conn.WriteBulkString("image_state")
+	conn.WriteBulkString(imageState)
 	if s.cache != nil {
 		cs := s.cache.Stats()
 		hitRate := 0.0
@@ -1302,8 +1338,8 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy := m.ScriptDispatch()
 		scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive := m.ScriptAutotune()
 		if sreq > 0 {
-			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t wait=%dus run=%dus runs=%d busy=%d/%d class=%s inflight=%d conc=%d/%d autotune=%t",
-				m.Name, sreq, serr, sessions, tokenizer, scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy, sessions,
+			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t wait=%dus admit=%dus run=%dus runs=%d busy=%d/%d class=%s inflight=%d conc=%d/%d autotune=%t",
+				m.Name, sreq, serr, sessions, tokenizer, scriptWaitUs, m.ScriptAdmissionWaitUs(), scriptRunUs, scriptRuns, scriptBusy, sessions,
 				scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive))
 		}
 		if pool := m.LoadedPool(); pool != nil {
@@ -1322,10 +1358,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			// Always surface the verdict, reason, and effective timeout (0 when
 			// batching is off or degraded): the batch-determinism spec requires
 			// both in EMB.STATS regardless of gating outcome.
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus run=%dus runs=%d busy=%d/%d",
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus admit=%dus run=%dus runs=%d busy=%d/%d",
 				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize,
 				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo,
-				st.DispatchWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
+				st.DispatchWaitUs, st.AdmissionWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
 		}
 	}
 
@@ -1350,7 +1386,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 58)
+	writePairs(conn, 61)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1471,6 +1507,22 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(cpu.Active)
 	conn.WriteBulkString("cpu_peak_tokens")
 	conn.WriteInt(cpu.Peak)
+	// Pressure at the CPU admission gate; native run time excludes this wait.
+	conn.WriteBulkString("cpu_admission_wait_us")
+	conn.WriteInt(int(cpu.AdmissionWaitUs))
+	conn.WriteBulkString("cpu_admission_waiters")
+	conn.WriteInt(cpu.AdmissionWaiters)
+	conn.WriteBulkString("cpu_admission_timeouts")
+	conn.WriteInt(int(cpu.AdmissionTimeouts))
+}
+
+// replyError renders an inference failure as a RESP error. An expired CPU
+// admission wait is a busy reply, like the request cap.
+func replyError(err error) string {
+	if errors.Is(err, permit.ErrAdmissionTimeout) {
+		return "ERR " + permit.ErrAdmissionTimeout.Error()
+	}
+	return fmt.Sprintf("ERR %v", err)
 }
 
 func boolInt(v bool) int {

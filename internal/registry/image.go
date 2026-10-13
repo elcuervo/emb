@@ -256,7 +256,7 @@ func (e *ModelEntry) openImageResources() (*ImageResources, error) {
 			return nil, fmt.Errorf("creating image session %d for %q: %w", i, e.Name, err)
 		}
 		if e.cpuGate != nil {
-			sess = budgetedNamedSession{NamedSession: sess, gate: e.cpuGate, width: intraThreads}
+			sess = budgetedNamedSession{NamedSession: sess, shared: e.cpuGate.Shared(e.Name, intraThreads), total: &e.imageAdmitUs}
 		}
 		sessions = append(sessions, sess)
 	}

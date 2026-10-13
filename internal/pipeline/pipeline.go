@@ -3,6 +3,7 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
@@ -38,11 +39,27 @@ type Stats struct {
 	// Dispatch/run observability (EMB.STATS/EMB.INFO): cumulative time waiting
 	// for a free worker or queue slot, cumulative inference time, the number of
 	// inference runs, and the live busy/total session gauges.
-	DispatchWaitUs int64
-	RunUs          int64
-	Runs           int64
-	SessionsBusy   int64
-	SessionsTotal  int64
+	// RunUs excludes AdmissionWaitUs, the time spent queued at the process CPU
+	// gate; admission is reported on its own.
+	DispatchWaitUs  int64
+	AdmissionWaitUs int64
+	RunUs           int64
+	Runs            int64
+	SessionsBusy    int64
+	SessionsTotal   int64
+}
+
+// admissionTimed is implemented by sessions that queue at a process CPU gate
+// before running. TakeAdmissionWait returns and clears the gate wait of the
+// calls made since the last take; a session has one caller, so it is exact.
+type admissionTimed interface{ TakeAdmissionWait() time.Duration }
+
+// takeAdmissionWait is the gate wait the session accrued, zero if it has none.
+func takeAdmissionWait(s onnx.Session) time.Duration {
+	if t, ok := s.(admissionTimed); ok {
+		return t.TakeAdmissionWait()
+	}
+	return 0
 }
 
 // encodeTexts tokenizes texts into encodings and returns the real token total.

@@ -19,21 +19,25 @@ import (
 )
 
 type Config struct {
-	Listen              string `yaml:"listen"`
-	CPUBudget           string `yaml:"cpu_budget"`
-	CPUReserve          *int   `yaml:"cpu_reserve"`
-	Calibrate           *bool  `yaml:"calibrate"`
-	Password            string `yaml:"password"`
-	TLSCert             string `yaml:"tls_cert"`
-	TLSKey              string `yaml:"tls_key"`
-	Cache               string `yaml:"cache"`
-	CacheFile           string `yaml:"cache_file"`
-	CacheLoad           *bool  `yaml:"cache_load"`
-	CacheSave           string `yaml:"cache_save"`
-	CacheSaveOnShutdown *bool  `yaml:"cache_save_on_shutdown"`
-	CacheRestoreLimit   string `yaml:"cache_restore_limit"`
-	CacheRestoreReserve string `yaml:"cache_restore_reserve"`
-	CacheSaveRateLimit  string `yaml:"cache_save_rate_limit"`
+	Listen     string `yaml:"listen"`
+	CPUBudget  string `yaml:"cpu_budget"`
+	CPUReserve *int   `yaml:"cpu_reserve"`
+	// CPUAdmissionTimeout bounds each wait at the CPU admission gate (not the
+	// whole command, and not a native call already running). Zero or omitted
+	// is unlimited; negative is invalid.
+	CPUAdmissionTimeout Duration `yaml:"cpu_admission_timeout"`
+	Calibrate           *bool    `yaml:"calibrate"`
+	Password            string   `yaml:"password"`
+	TLSCert             string   `yaml:"tls_cert"`
+	TLSKey              string   `yaml:"tls_key"`
+	Cache               string   `yaml:"cache"`
+	CacheFile           string   `yaml:"cache_file"`
+	CacheLoad           *bool    `yaml:"cache_load"`
+	CacheSave           string   `yaml:"cache_save"`
+	CacheSaveOnShutdown *bool    `yaml:"cache_save_on_shutdown"`
+	CacheRestoreLimit   string   `yaml:"cache_restore_limit"`
+	CacheRestoreReserve string   `yaml:"cache_restore_reserve"`
+	CacheSaveRateLimit  string   `yaml:"cache_save_rate_limit"`
 	// IdleTimeout closes connections that have not sent a command for the
 	// duration. nil (default) applies DefaultIdleTimeout; an explicit 0
 	// disables reaping entirely (strict Redis semantics).
@@ -512,6 +516,9 @@ func (c *Config) validate() error {
 	}
 	if c.CPUReserve != nil && *c.CPUReserve < 0 {
 		return fmt.Errorf("cpu_reserve must be non-negative, got %d", *c.CPUReserve)
+	}
+	if c.CPUAdmissionTimeout < 0 {
+		return fmt.Errorf("cpu_admission_timeout must not be negative, got %v", time.Duration(c.CPUAdmissionTimeout))
 	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		return fmt.Errorf("both tls_cert and tls_key must be set together")

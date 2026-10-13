@@ -163,7 +163,7 @@ func probe(src Sources, th Thresholds) Report {
 		PresentedCPUs: runtime.NumCPU(),
 		Allowance:     allowanceView(allowance),
 		Memory:        memory,
-		ServerBudget:  registry.EffectiveNumCPU(),
+		ServerBudget:  allowance.Capacity(),
 		Steal:         sampleSteal(src.ProcStat, th.SampleWindow, th.MaxStealPercent),
 		Throttle:      sampleThrottle(src.CPUStat, th.SampleWindow, th.MaxThrottleRatio),
 		Thresholds:    th,

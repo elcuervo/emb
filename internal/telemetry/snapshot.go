@@ -36,6 +36,11 @@ type Snapshot struct {
 	TruncatedPairs  int64
 	TruncatedImages int64
 
+	// CPU admission gate pressure: cumulative wait and timeouts, current waiters.
+	CPUAdmissionWaitUs   int64
+	CPUAdmissionWaiters  int64
+	CPUAdmissionTimeouts int64
+
 	// Models is the per-model breakdown, one entry per loaded model.
 	Models []ModelSnapshot
 }
@@ -60,12 +65,18 @@ type ModelSnapshot struct {
 	SessionsBusy      int64
 	SessionsTotal     int64
 	PaddingEfficiency float64
+	// AdmissionWaitUs is the embedding path's time queued at the CPU gate,
+	// excluded from RunUs.
+	AdmissionWaitUs int64
 
 	// Cumulative scripted-evaluation counters, separate from the embedding
 	// path above.
 	ScriptDispatchWaitUs int64
 	ScriptRunUs          int64
 	ScriptRuns           int64
+	// ScriptAdmissionWaitUs is the script path's time queued at the CPU gate,
+	// excluded from ScriptRunUs.
+	ScriptAdmissionWaitUs int64
 
 	// Latency is the model's cumulative completed-request latency histogram;
 	// Buckets is nil when the model has no series.

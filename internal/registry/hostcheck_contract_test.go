@@ -10,30 +10,35 @@ import (
 	"github.com/elcuervo/emb/internal/registry"
 )
 
-// writeCgroup builds a cgroup v2 layout: root/cpu.max plus the cgroup
-// membership file that points at it. An empty quota writes no cpu.max at all,
-// the shape of a host with no cgroup CPU file.
-func writeCgroup(t *testing.T, membership, quota string) (root, membershipPath string) {
+// writeCgroup builds a cgroup v2 layout: root/cpu.max, a mountinfo that mounts
+// it, and the cgroup membership file that points at it. An empty quota writes
+// no cpu.max at all, the shape of a host with no cgroup CPU file.
+func writeCgroup(t *testing.T, membership, quota string) (mountinfo, membershipPath string) {
 	t.Helper()
-	root = t.TempDir()
+	root := t.TempDir()
 	if quota != "" {
 		if err := os.WriteFile(filepath.Join(root, "cpu.max"), []byte(quota+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	membershipPath = filepath.Join(t.TempDir(), "cgroup")
+	files := t.TempDir()
+	mountinfo = filepath.Join(files, "mountinfo")
+	if err := os.WriteFile(mountinfo, []byte("30 25 0:26 / "+root+" rw - cgroup2 cgroup2 rw\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	membershipPath = filepath.Join(files, "cgroup")
 	if err := os.WriteFile(membershipPath, []byte(membership), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return root, membershipPath
+	return mountinfo, membershipPath
 }
 
 // reportFor derives the host report's CPU fields from a synthetic cgroup
 // layout through the server's own resolution, so the contract's verdict is
 // taken on exactly what the server would plan from.
-func reportFor(t *testing.T, root, membership string, presented, affinity int) hostcheck.Report {
+func reportFor(t *testing.T, mountinfo, membership string, presented, affinity int) hostcheck.Report {
 	t.Helper()
-	allowance, budget := registry.CgroupViewForTest(root, membership, presented, affinity)
+	allowance, budget := registry.CgroupViewForTest(mountinfo, membership, presented, affinity)
 	r := hostcheck.Report{
 		OS:            "linux",
 		Arch:          "arm64",
@@ -62,8 +67,8 @@ func TestHostContractOverSyntheticCgroupLayouts(t *testing.T) {
 	t.Run("sub-one-CPU quota is unqualified and names the quota", func(t *testing.T) {
 		// The Fly shared-cpu-* shape: 5 ms of CPU every 80 ms, which the
 		// integer budget floors to one CPU while the host presents four.
-		root, membership := writeCgroup(t, "0::/\n", "5000 80000")
-		r := reportFor(t, root, membership, 4, 4)
+		mountinfo, membership := writeCgroup(t, "0::/\n", "5000 80000")
+		r := reportFor(t, mountinfo, membership, 4, 4)
 		r.Qualify()
 		if r.Qualified() {
 			t.Fatalf("verdict = %s, want unqualified", r.Verdict)
@@ -80,8 +85,8 @@ func TestHostContractOverSyntheticCgroupLayouts(t *testing.T) {
 	})
 
 	t.Run("quota equal to the presented CPUs is qualified", func(t *testing.T) {
-		root, membership := writeCgroup(t, "0::/\n", "400000 100000")
-		r := reportFor(t, root, membership, 4, 4)
+		mountinfo, membership := writeCgroup(t, "0::/\n", "400000 100000")
+		r := reportFor(t, mountinfo, membership, 4, 4)
 		r.Qualify()
 		if !r.Qualified() {
 			t.Fatalf("verdict = %s (%v), want qualified", r.Verdict, r.FailedProperties)
@@ -92,8 +97,8 @@ func TestHostContractOverSyntheticCgroupLayouts(t *testing.T) {
 	})
 
 	t.Run("missing cgroup file reports the scheduler/affinity source", func(t *testing.T) {
-		root, membership := writeCgroup(t, "0::/\n", "")
-		r := reportFor(t, root, membership, 4, 4)
+		mountinfo, membership := writeCgroup(t, "0::/\n", "")
+		r := reportFor(t, mountinfo, membership, 4, 4)
 		r.Qualify()
 		if r.Allowance.Quota {
 			t.Fatal("the contract reported a quota the layout does not have")

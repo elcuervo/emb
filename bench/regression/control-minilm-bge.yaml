@@ -1,0 +1,22 @@
+# Control profile server config: the public minilm + bge pair from
+# test-two-models.yaml, started through cmd/emb exactly as production starts it
+# (automatic CPU budget, no governor bypass). It is the public-model control for
+# the release regression gate, not a substitute for the incident profile.
+#
+# Finite limits: a regression must show up as busy replies and bounded queues,
+# not as unbounded accepted work. Both models preload so readiness means warm;
+# the reply cache is on because the driver asserts warm/cold from its counters.
+listen: "127.0.0.1:16379"
+cache: 256MB
+
+max_connections: 64
+max_concurrent_requests: 32
+
+models:
+  minilm:
+    model_repo: Xenova/all-MiniLM-L6-v2
+    preload: true
+
+  bge:
+    model_repo: Xenova/bge-small-en-v1.5
+    preload: true

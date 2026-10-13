@@ -12,17 +12,35 @@ utilization expressed as a fraction of the CPU budget the server believes it
 has:
 
 ```
-(Δuser + Δsys) / (window × cores) ≥ 0.90   →  saturated
+(Δuser + Δsys) / (elapsed × cpus) ≥ 0.90   →  saturated
 ```
 
-`cores` is `registry.EffectiveNumCPU()`, which floors a cgroup quota to
-`max(1, quota/period)`. A host that presents *N* cores but delivers fewer —
-shared or burstable vCPU, a quota below the presented count, steal from
-neighbours — makes `saturated` unreachable, and turns the CPU-saturation safety
-gate into a claim no test can contradict. Fly `shared-cpu-*` is the worked
-example: it enforces a 5 ms/80 ms quota per vCPU, which floors to a budget of
-one CPU, so the server plans for and judges itself against one CPU while the
-machine bursts to four.
+`cpus` is the fractional `registry.EffectiveCPUAllowance().CPUs` (the quota
+divided by its period, bounded by affinity) and `elapsed` is the actual
+monotonic time between two samples, not the nominal one-second ticker. A
+half-CPU quota that burns 0.5 CPU-seconds per second is therefore fully
+utilized, not 50% idle, and a sample delayed to two seconds is normalized by two
+seconds. A window with completed runs but no measurable CPU accounting is
+classified `unmeasured`: it holds the allowance and never claims headroom to
+grow on.
+
+Admission planning is different: it needs whole tokens, so
+`CPUAllowance.Capacity()` floors the allowance to `max(1, floor(cpus))` and
+bounds it by the Go scheduler. Below one CPU that rounds up to one token for
+admission only; the saturation test above still sees the real fraction. A host
+that presents *N* cores but delivers fewer — shared or burstable vCPU, a quota
+below the presented count, steal from neighbours — is still caught by the host
+contract below. Fly `shared-cpu-*` is the worked example: it enforces a
+5 ms/80 ms quota per vCPU (0.0625 CPU), which plans as one admission token
+while the machine bursts to four.
+
+The quota is found from `/proc/self/mountinfo` and `/proc/self/cgroup`, not
+from an assumed `/sys/fs/cgroup`: cgroup v2 and v1 `cpu` (including combined
+`cpu,cpuacct` and hybrid layouts) mounts are located, a remapped mount root is
+honoured, and every visible ancestor up to the mount point is read; the
+tightest positive quota wins. When nothing resolves, the allowance falls back to
+scheduler/affinity and the startup log carries the reason
+(`CPU allowance fallback: …`).
 
 ## The host contract
 
@@ -144,6 +162,141 @@ just bench-fargate-diff <baseline.json> <candidate.json>    # same-host, per-cel
 
 The diff gates inference-bound cells (<5000 req/s) at req/s ≥ −5% and p50 ≤ +10%,
 and saturated cells at p50 only.
+
+The recorded cells measure wall time: the `mixed-length` cell's req/s is completed
+requests over the Ruby driver's wall elapsed time (not summed request latencies),
+its p50/p90/p99 are nearest-rank order statistics, and `unique-text` passes
+`-r` so `redis-benchmark` really expands `__rand_int__`. `redis-benchmark` prints
+no p90, so its cells omit `p90_ms` rather than reuse p95.
+
+## The release regression driver and comparator
+
+The cell bundles above compare one build against a recorded baseline on one host.
+The release gate answers a different question: does a candidate keep a known-good
+build's throughput and tails under the deployed policy? It drives each artifact
+(known-good, known-pre4, candidate) through its own production startup path with
+one external driver, so the server is whatever `cmd/emb` builds and the driver
+only speaks RESP to it.
+
+### The pair driver
+
+`bench/fargate/driver` is the open-loop driver. `internal/server`'s
+`BenchmarkInferencePairs` (`just bench-inference`) is a thin wrapper over the same
+package; it starts an in-process server built with `registry.New()`, so it
+exercises scheduling and accounting but not the governor, and its CPU and RSS
+include the driver because they share a process.
+
+- **Open loop.** Pair *i* is scheduled at `start + i/rate` whether or not earlier
+  pairs finished. A scheduled pair with no free in-flight slot is `dropped`.
+- **Dispatch.** `single`, `serial` (stops at the first failed leg), `parallel`
+  (legs on separate connections) or `multi` (one `EMB.MULTI`).
+- **Valid replies only.** Replies are decoded with `internal/resp`. A leg
+  succeeds only for a bulk of exactly `dim × 4` bytes whose float32 values are all
+  finite. RESP errors (`ERR busy…` is counted separately), nulls, wrong types or
+  lengths, NaN/Inf, undecodable replies and transport failures are errors.
+- **Exact accounting.** Every scheduled pair ends as exactly one of `success`,
+  `error`, `timeout` or `dropped`, and the driver fails if `offered` is not their
+  sum. Per-leg outcomes (`legs`) and error kinds (`error_kinds`) stay visible
+  without double-counting pairs.
+- **Bounded.** Each pair has one deadline from its wire start across all legs
+  (`-request-timeout`), and the final drain waits at most `-drain-timeout` after the
+  window; a pair still running then is counted as a timeout.
+- **Honest rates and tails.** Throughput is successful pairs over wall elapsed
+  time (at least the full window). Pair latency is reported from the scheduled time
+  and from the wire start, so a late scheduler is visible; p90 is a literal
+  nearest-rank value.
+- **Warm and cold.** A warm phase first sends the whole warm corpus to every model;
+  cold texts are unique for the process and, through a per-run nonce, across runs.
+  Texts cycle short/typical/long by request index. After the pass the driver reads
+  `EMB.STATS` and `EMB.INFO` deltas and fails a warm phase that missed the cache or
+  a cold phase that hit it.
+
+`EMB.INFO` initializes a lazy model. Pass `-info=false` for a cold-first-use phase
+so only `EMB.STATS` (which never loads anything) is read.
+
+### Recording a run
+
+```bash
+go run ./bench/fargate -mode drive \
+  -addr 127.0.0.1:16379 -models minilm,bge -dispatch parallel -cache-state warm \
+  -rate 10 -duration 120s -phase paired-parallel -cpu-limit 4 -round 1 \
+  -profile bench/regression/control-profile.json -meta arm.json -bundle known-good.json
+```
+
+`-meta` names what only the person starting the arm knows: `role`
+(`known-good`, `known-bad` or `candidate`), `mode`, the baseline's `approval`
+(and what approved it), the `artifact` digest, runtime versions, the server's
+config file and the model directories (`model.onnx` + `tokenizer.json`), which are
+hashed into the bundle. `-orchestrator restarts=0,oom_kills=0,recovery_seconds=12`
+supplies what the driver cannot see (restarts, OOM kills, CPU throttling,
+readiness, recovery time); anything not supplied is recorded `unavailable`.
+A failing run is still written to the bundle and the command exits non-zero.
+
+Each run records the `regression` section of the bundle (`schema` 2): the role,
+evidence `mode`, `approval`, `artifact` digest, `runtime` (Go/ORT version, CPU
+model), `inputs` (model, tokenizer, config and corpus hashes), `observed_limits`
+(the server's own `EMB.STATS` view of its CPU budget, allowance and request/
+connection caps), `startup` (selected layouts and calibration metadata) and one
+run per round × phase × CPU bandwidth: offered/success/error/timeout/drop counts,
+throughput, both latency views, correctness, cache and admission/inference timing,
+CPU, throttle and RSS, recovery, and named assertions
+(`offered-accounted`, `replies-valid`, `governor-enabled`, `cache-expectation`,
+`no-restart-oom`). Anything an older release does not report, such as
+`cpu_admission_wait_us`, is `{"unavailable": "<reason>"}`, never zero.
+
+The bundle's `host` is the machine running the driver. A `reference` arm is valid
+only when that host passed the host contract; a `constrained-reproduction` arm
+records an intentional fractional quota and is never mistaken for a qualified
+reference, and also never skipped because the host is not qualified.
+
+### The profile
+
+`bench/regression/control-profile.json` declares the required matrix: the phases
+(cold first use, preloaded startup, warm one-hot with an idle peer, paired serial,
+paired parallel, `EMB.MULTI`, mixed warm/cold, sustained, burst, recovery), the
+CPU bandwidths each is measured at (the sustained phase covers 0.5, 1, 1.5, 2 and
+4), the declared request/health/recovery deadlines, and the required assertions.
+The matrix is the profile's, never the baseline's. A profile may tighten the
+default thresholds but never loosen them. The control profile's deadlines are
+declared control values; the incident profile declares the deployment's own.
+
+### The verdict
+
+```bash
+go run ./bench/fargate -mode compare -profile bench/regression/control-profile.json \
+  -before known-good.json -after candidate.json
+go run ./bench/fargate -mode compare -profile bench/regression/control-profile.json \
+  -before known-good.json -after pre4.json -expect-fail throughput-floor   # known-bad discrimination
+```
+
+The comparator is read-only and exits 0 only on `pass`. It prints every named
+check and one status:
+
+| Status | Meaning |
+|---|---|
+| `invalid` | structural rejection, decided before any ratio: empty, duplicate or missing required cells; rounds that were not interleaved; incomplete runs; required assertions missing, `invalid`, `skipped` or failing on the baseline; mismatched model/tokenizer/config/corpus digests, evidence mode, host identity or server-observed limits; a zero-success control; a baseline that is not an approved `known-good`; missing artifact digests; a profile with undeclared deadlines or loosened thresholds |
+| `inconclusive` | evidence too thin or noisy: fewer than 3 rounds per cell, a gated baseline run under 1000 successful pairs, any gated run under 120 s, or known-good round-to-round spread above 5% throughput / 10% latency. The ratio gates are withheld, thresholds are never widened |
+| `fail` | candidate useful throughput below 95% of known-good (`throughput-floor`), pair p50/p95/p99 above 110% (`latency-p50/p95/p99`), any error, timeout or drop in a sustainable phase (`no-unexpected-loss`), a failing required assertion (`candidate-assertions`) or a recovery past its deadline (`recovery-deadline`) |
+| `pass` | all of the above clear |
+
+Ratios use the median across rounds per cell and the latency from the scheduled
+time. `-expect-fail <check>` succeeds only when the verdict is `fail` on exactly
+that check, so an unrelated startup failure or a missing fixture is `invalid` and
+never counts as reproducing a regression.
+
+### Harness self-verification
+
+```bash
+go test ./bench/fargate/...
+```
+
+The harness proves its own teeth: application-error replies fail `replies-valid`
+(and, in a candidate arm, `candidate-assertions` and `no-unexpected-loss`), an
+empty bundle fails `required-cells`, a known-good arm with zero control work fails
+`control-nonzero`, a deliberate throughput collapse fails `throughput-floor`, and
+a good-versus-good comparison passes. Driver tests cover a `-ERR` reply, a null
+and a short blob, a stalled reply (counted as a timeout, drain bounded), and the
+warm/cold cache assertions.
 
 ## The per-change smoke gate
 

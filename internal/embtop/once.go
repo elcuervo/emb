@@ -239,6 +239,9 @@ func appendCPUPlanFields(b []byte, p *Point) []byte {
 	b = appendF(b, "cpu_budget", p.CPUBudget)
 	b = appendF(b, "cpu_active_tokens", p.CPUActiveTokens)
 	b = appendF(b, "cpu_peak_tokens", p.CPUPeakTokens)
+	b = appendF(b, "cpu_admission_wait_us", p.CPUAdmissionWaitUs)
+	b = appendF(b, "cpu_admission_waiters", p.CPUAdmissionWaiters)
+	b = appendF(b, "cpu_admission_timeouts", p.CPUAdmissionTimeouts)
 	b = appendRate(b, "cpu_allowance", p.CPUAllowance)
 	return b
 }
@@ -343,6 +346,14 @@ func appendModelSections(b []byte, order []string, res *PollResult, s *Sampler) 
 			b = appendF(b, "workers", int64(ms.Workers))
 			b = appendF(b, "intra_op_threads", int64(ms.IntraOpThreads))
 			b = appendF(b, "cpu_thread_share", int64(ms.CPUThreadShare))
+			b = appendF(b, "calibration_ceiling", int64(ms.CalibrationCeiling))
+			b = appendF(b, "calibration_duration_us", ms.CalibrationDurationUs)
+		}
+		if ms.CalibrationSource != "" {
+			b = append(b, " calibration="...)
+			b = append(b, ms.CalibrationSource...)
+			b = append(b, " embed_state="...)
+			b = append(b, ms.EmbedState...)
 		}
 	}
 	return b

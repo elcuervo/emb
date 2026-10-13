@@ -11,11 +11,17 @@ package main
 // baseline` insists on a qualified host; the diff refuses any pair whose
 // fingerprint identities differ.
 //
+// The release regression gate drives an external server with the open-loop pair
+// driver (bench/fargate/driver), records each pass into a regression bundle, and
+// compares a candidate against a known-good arm under a declared profile.
+//
 // Run from the repo root inside `nix develop`:
 //
 //	go run ./bench/fargate -mode run
 //	go run ./bench/fargate -mode baseline
 //	go run ./bench/fargate -mode diff -before <a.json> -after <b.json>
+//	go run ./bench/fargate -mode drive -addr 127.0.0.1:6379 -models minilm,bge ...
+//	go run ./bench/fargate -mode compare -profile <p.json> -before <good.json> -after <cand.json>
 
 import (
 	"crypto/sha256"
@@ -24,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -63,6 +70,7 @@ type options struct {
 	maxBatchTokens  int
 	skipBuild       bool
 	keep            bool
+	drive           driveOptions
 }
 
 func parseFlags() (*options, error) {
@@ -78,7 +86,7 @@ func parseFlags() (*options, error) {
 	flag.IntVar(&o.maxLen, "max-length", 512, "max_length for the harness server config")
 	flag.StringVar(&o.image, "image", "elcuervo/emb:fargate-bench", "docker image tag for the server")
 	flag.StringVar(&o.outDir, "out", "bench/fargate/out", "output directory for per-cell runs")
-	flag.StringVar(&o.mode, "mode", "run", "run | baseline | diff")
+	flag.StringVar(&o.mode, "mode", "run", "run | baseline | diff | drive | compare")
 	flag.StringVar(&o.before, "before", "", "baseline JSON (diff mode)")
 	flag.StringVar(&o.after, "after", "", "candidate JSON (diff mode)")
 	flag.Float64Var(&o.reqGate, "req-gate", 0.05, "req/s tolerance for diff (fraction)")
@@ -92,6 +100,7 @@ func parseFlags() (*options, error) {
 	flag.IntVar(&o.maxBatchTokens, "max-batch-tokens", 0, "server batching max_batch_tokens budget; 0 = count-only")
 	flag.BoolVar(&o.skipBuild, "skip-build", false, "skip the docker image build")
 	flag.BoolVar(&o.keep, "keep", false, "keep server containers running after each tier")
+	o.drive.register()
 	flag.Parse()
 
 	var err error
@@ -147,13 +156,15 @@ type hostBundle struct {
 }
 
 // Assertion outcomes. The list is closed: invalid is an unmet precondition (the
-// run could not reach what the assertion needs) and skipped is a run that could
-// not exercise the assertion; neither is ever a pass.
+// run could not reach what the assertion needs), skipped is a run that could
+// not exercise the assertion, and inconclusive is evidence too thin or noisy to
+// decide; none of them is ever a pass.
 const (
-	outcomePass    = "pass"
-	outcomeFail    = "fail"
-	outcomeInvalid = "invalid"
-	outcomeSkipped = "skipped"
+	outcomePass         = "pass"
+	outcomeFail         = "fail"
+	outcomeInvalid      = "invalid"
+	outcomeSkipped      = "skipped"
+	outcomeInconclusive = "inconclusive"
 )
 
 // Assertion names the harness records.
@@ -206,7 +217,7 @@ type benchCell struct {
 	Pipeline int      `json:"pipeline"`
 	Reqs     float64  `json:"req_s"`
 	P50      float64  `json:"p50_ms"`
-	P90      float64  `json:"p90_ms"`
+	P90      float64  `json:"p90_ms,omitempty"` // absent when the tool emits no literal p90
 	P99      float64  `json:"p99_ms"`
 	PadEff   *float64 `json:"padding_efficiency,omitempty"`
 }
@@ -222,6 +233,11 @@ type result struct {
 	Config     harnessConfig `json:"config"`
 	Cells      []benchCell   `json:"cells"`
 	Assertions []assertion   `json:"assertions"`
+
+	// Schema and Regression are the release-comparator evidence (see evidence.go);
+	// bundles recorded before it carry neither.
+	Schema     int                 `json:"schema,omitempty"`
+	Regression *regressionEvidence `json:"regression,omitempty"`
 }
 
 func tierMemory(tier int) string {
@@ -256,9 +272,26 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	case "drive":
+		if err := runDrive(o); err != nil {
+			fatal("%v", err)
+		}
+		return
+	case "compare":
+		if o.before == "" || o.after == "" || o.drive.profile == "" {
+			fatal("compare mode requires -profile, -before (known-good) and -after (candidate)")
+		}
+		ok, err := compareBundles(o.drive.profile, o.before, o.after, o.drive.expectFail)
+		if err != nil {
+			fatal("%v", err)
+		}
+		if !ok {
+			os.Exit(1)
+		}
+		return
 	case "run", "baseline":
 	default:
-		fatal("unknown mode %q (want run|baseline|diff)", o.mode)
+		fatal("unknown mode %q (want run|baseline|diff|drive|compare)", o.mode)
 	}
 
 	report := hostcheck.Probe(hostcheck.DefaultThresholds())
@@ -367,15 +400,15 @@ func cellsCompleteAssertion(expected, produced int, runErr error) assertion {
 	}
 }
 
-// checkAssertions rejects an outcome outside the four the schema defines, so a
+// checkAssertions rejects an outcome outside the five the schema defines, so a
 // typo cannot record an unmet precondition or an unexercised assertion as a
 // pass.
 func checkAssertions(as []assertion) error {
 	for _, a := range as {
 		switch a.Outcome {
-		case outcomePass, outcomeFail, outcomeInvalid, outcomeSkipped:
+		case outcomePass, outcomeFail, outcomeInvalid, outcomeSkipped, outcomeInconclusive:
 		default:
-			return fmt.Errorf("assertion %q has outcome %q (want pass|fail|invalid|skipped)", a.Name, a.Outcome)
+			return fmt.Errorf("assertion %q has outcome %q (want pass|fail|invalid|skipped|inconclusive)", a.Name, a.Outcome)
 		}
 	}
 	return nil
@@ -640,7 +673,38 @@ type bench struct {
 var (
 	reRps  = regexp.MustCompile(`([0-9.]+)\s+requests per second`)
 	rePctS = regexp.MustCompile(`p((?:[0-9]+(?:\.[0-9]+)?))=([0-9.]+)\s+msec`)
+	reWall = regexp.MustCompile(`wall_ms=([0-9.]+)`)
 )
+
+// uniqueKeyspace is the `-r` range that makes redis-benchmark expand
+// __rand_int__ (a 12-digit number). Without -r the token is sent verbatim and
+// every "unique" request carries the same text.
+const uniqueKeyspace = "1000000000000"
+
+// redisWorkload is the redis-benchmark argument tail of one workload: the
+// randomization flag where the text must be unique, then the EMB command.
+func redisWorkload(workload, model string) ([]string, error) {
+	switch workload {
+	case "fixed-length", "cache-hit":
+		return []string{"EMB", model, "hello world"}, nil
+	case "unique-text":
+		return []string{"-r", uniqueKeyspace, "EMB", model, "benchmark text __rand_int__"}, nil
+	}
+	return nil, fmt.Errorf("unknown redis workload %q", workload)
+}
+
+// parseWallMs reads the elapsed wall time load.rb reports for its whole run.
+func parseWallMs(out string) (float64, error) {
+	m := reWall.FindStringSubmatch(out)
+	if m == nil {
+		return 0, fmt.Errorf("load.rb printed no wall_ms: %q", out)
+	}
+	ms, err := strconv.ParseFloat(m[1], 64)
+	if err != nil || ms <= 0 {
+		return 0, fmt.Errorf("load.rb reported an unusable wall_ms %q", m[1])
+	}
+	return ms, nil
+}
 
 func redisBench(port, clients, pipeline, count int, args ...string) (*bench, error) {
 	cmdArgs := []string{"redis-benchmark", "-h", "127.0.0.1", "-p", strconv.Itoa(port),
@@ -695,15 +759,8 @@ func parseBench(out string) (*bench, error) {
 			}
 		}
 		b.p50 = pcts["50"]
-		b.p90 = pcts["90"]
-		if b.p90 == 0 {
-			b.p90 = pcts["95"]
-		}
+		b.p90 = pcts["90"] // stays 0 (unavailable) unless the tool printed a literal p90
 		b.p99 = pcts["99"]
-	}
-	// redis-benchmark does not emit p90; approximate it with p95.
-	if b.p90 == 0 {
-		b.p90 = b.p95
 	}
 	if b.rps == 0 {
 		return nil, fmt.Errorf("no throughput in redis-benchmark output:\n%s", out)
@@ -711,12 +768,13 @@ func parseBench(out string) (*bench, error) {
 	return b, nil
 }
 
+// pct is the nearest-rank percentile of a sorted sample: a literal order
+// statistic, so p90 of three samples is the largest, not an interpolation.
 func pct(sorted []float64, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(p / 100.0 * float64(len(sorted)-1))
-	return sorted[idx]
+	return sorted[max(0, int(math.Ceil(p/100.0*float64(len(sorted))))-1)]
 }
 
 // median64 returns the median of the values (copies and sorts its input).
@@ -921,14 +979,9 @@ func runMatrix(o *options, res *result) error {
 }
 
 func collectRedisCells(o *options, res *result, tier, port int, workload string, clients, pipeline int) error {
-	var text string
-	switch workload {
-	case "fixed-length", "cache-hit":
-		text = "hello world"
-	case "unique-text":
-		text = "benchmark text __rand_int__"
-	default:
-		return fmt.Errorf("unknown redis workload %q", workload)
+	args, err := redisWorkload(workload, o.model)
+	if err != nil {
+		return err
 	}
 	count := o.count
 	if workload == "cache-hit" {
@@ -941,7 +994,7 @@ func collectRedisCells(o *options, res *result, tier, port int, workload string,
 	var rps, p50, p90, p99 []float64
 	reps := 3 // median-of-3 per the harness noise gate
 	for i := 0; i < reps; i++ {
-		b, err := redisBench(port, clients, pipeline, count, "EMB", o.model, text)
+		b, err := redisBench(port, clients, pipeline, count, args...)
 		if err != nil {
 			return fmt.Errorf("%s tier=%d clients=%d pipe=%d: %w", workload, tier, clients, pipeline, err)
 		}
@@ -987,10 +1040,13 @@ func collectMixedCell(o *options, res *result, tier, port int) error {
 			if err != nil {
 				return err
 			}
-			wall := 0.0
-			for _, l := range lats {
-				wall += l
+			wall, err := parseWallMs(string(out))
+			if err != nil {
+				return fmt.Errorf("mixed workload tier=%d clients=%d: %w", tier, n, err)
 			}
+			// Throughput is completed requests over the driver's wall elapsed
+			// time; summing per-request latencies would divide by the offered
+			// concurrency and overstate req/s by the client count.
 			rps = append(rps, float64(len(lats))/(wall/1000.0))
 			p50s = append(p50s, pct(lats, 50))
 			p90s = append(p90s, pct(lats, 90))
@@ -1166,7 +1222,6 @@ func diffRun(before, after *result, reqGate, p50Gate float64) bool {
 			a.Tier, a.Workload, a.Clients, a.Pipeline,
 			b.Reqs, a.Reqs, dReq, b.P50, a.P50, dP50, verdict)
 	}
-	_ = pct
 	fmt.Printf("diff: %d pass, %d fail\n", pass, fail)
 	if fail > 0 {
 		fmt.Printf("FAIL: %d cells outside tolerances (inference cells: req/s >= -%.0f%%, p50 <= +%.0f%%; saturated cells: p50 <= +%.0f%%)\n",

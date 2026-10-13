@@ -27,6 +27,10 @@ func (s *Server) telemetrySnapshot() telemetry.Snapshot {
 		TruncatedPairs:    s.truncatedPairs.Load(),
 		TruncatedImages:   s.truncatedImages.Load(),
 	}
+	cpu := s.reg.CPUStatus()
+	out.CPUAdmissionWaitUs = cpu.AdmissionWaitUs
+	out.CPUAdmissionWaiters = int64(cpu.AdmissionWaiters)
+	out.CPUAdmissionTimeouts = cpu.AdmissionTimeouts
 	if snap.cache != nil {
 		out.CacheHits = snap.cache.Hits
 		out.CacheMisses = snap.cache.Misses
@@ -47,10 +51,12 @@ func (s *Server) telemetrySnapshot() telemetry.Snapshot {
 			SessionsBusy:      m.sessionsBusy,
 			SessionsTotal:     m.sessionsTotal,
 			PaddingEfficiency: m.paddingEfficiency,
+			AdmissionWaitUs:   m.admissionWaitUs,
 
-			ScriptDispatchWaitUs: m.scriptDispatchWaitUs,
-			ScriptRunUs:          m.scriptRunUs,
-			ScriptRuns:           m.scriptRuns,
+			ScriptDispatchWaitUs:  m.scriptDispatchWaitUs,
+			ScriptRunUs:           m.scriptRunUs,
+			ScriptRuns:            m.scriptRuns,
+			ScriptAdmissionWaitUs: m.scriptAdmissionWaitUs,
 		}
 		// The latency histogram is its own measured signal: the accumulator is
 		// read directly rather than derived from the command aggregation.

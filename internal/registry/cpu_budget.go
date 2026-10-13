@@ -1,11 +1,14 @@
 package registry
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
 	"sort"
 	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
@@ -22,6 +25,10 @@ type CPUPlan struct {
 	Warning   string
 	Active    int
 	Peak      int
+	// Admission pressure at the gate: cumulative wait and timeouts, current waiters.
+	AdmissionWaitUs   int64
+	AdmissionWaiters  int
+	AdmissionTimeouts int64
 }
 
 func ResolveCPUPlan(cfg *config.Config, allowance CPUAllowance) (CPUPlan, error) {
@@ -29,10 +36,7 @@ func ResolveCPUPlan(cfg *config.Config, allowance CPUAllowance) (CPUPlan, error)
 	if !plan.Enabled {
 		return plan, nil
 	}
-	capacity := max(1, int(math.Floor(allowance.CPUs)))
-	if allowance.Scheduler > 0 && allowance.Scheduler < capacity {
-		capacity = allowance.Scheduler
-	}
+	capacity := allowance.Capacity()
 	plan.Capacity = capacity
 	if cfg.CPUBudget != "" && cfg.CPUBudget != "auto" {
 		budget, err := strconv.Atoi(cfg.CPUBudget)
@@ -109,31 +113,83 @@ func logCPUPlan(plan CPUPlan) {
 		return
 	}
 	log.Printf("CPU inference budget: allowance=%.2f source=%s scheduler=%d affinity=%d capacity=%d reserve=%d budget=%d", plan.Allowance.CPUs, plan.Allowance.Source, plan.Allowance.Scheduler, plan.Allowance.Affinity, plan.Capacity, plan.Reserve, plan.Budget)
+	if plan.Allowance.Provenance != "" {
+		log.Printf("CPU allowance fallback: %s", plan.Allowance.Provenance)
+	}
 	if plan.Warning != "" {
 		log.Printf("WARNING: %s", plan.Warning)
 	}
 }
 
+// budgetedSession admits every Run through the process gate. The gate wait is
+// kept out of the call's run time: it accrues in pending, which the pipeline
+// takes after each batch (see pipeline.admissionTimed), and in total, the
+// path's cumulative admission wait.
 type budgetedSession struct {
 	onnx.Session
-	gate  *permit.Budget
-	width int
+	gate    *permit.Budget
+	model   string
+	width   int
+	pending atomic.Int64 // microseconds since the last TakeAdmissionWait
+	total   *atomic.Int64
 }
 
-func (s budgetedSession) Run(ids, mask []int64, batch, length, dim int) ([]float32, error) {
-	release := s.gate.Acquire(s.width)
+func newBudgetedSession(sess onnx.Session, gate *permit.Budget, model string, width int, total *atomic.Int64) *budgetedSession {
+	return &budgetedSession{Session: sess, gate: gate, model: model, width: width, total: total}
+}
+
+func (s *budgetedSession) Run(ids, mask []int64, batch, length, dim int) ([]float32, error) {
+	start := time.Now()
+	release, err := s.gate.Acquire(context.Background(), s.model, s.width)
+	waited := time.Since(start).Microseconds()
+	s.pending.Add(waited)
+	if s.total != nil {
+		s.total.Add(waited)
+	}
+	if err != nil {
+		return nil, err
+	}
 	defer release()
 	return s.Session.Run(ids, mask, batch, length, dim)
 }
 
+// TakeAdmissionWait returns and clears the gate wait accrued by Run.
+func (s *budgetedSession) TakeAdmissionWait() time.Duration {
+	return time.Duration(s.pending.Swap(0)) * time.Microsecond
+}
+
+// budgetedNamedSession charges a named-tensor session through its shared
+// accounting: the session's width while any caller runs, plus one token per
+// further concurrent caller.
 type budgetedNamedSession struct {
 	onnx.NamedSession
-	gate  *permit.Budget
-	width int
+	shared *permit.Shared
+	total  *atomic.Int64 // the path's cumulative admission wait
 }
 
 func (s budgetedNamedSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
-	release := s.gate.Acquire(s.width)
-	defer release()
-	return s.NamedSession.RunNamed(inputs)
+	out, _, err := s.runAdmitted(inputs)
+	return out, err
+}
+
+// runAdmitted is RunNamed that also reports how long the call queued at the
+// gate, so the caller can keep that out of its run time.
+func (s budgetedNamedSession) runAdmitted(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error) {
+	start := time.Now()
+	exit, err := s.shared.Enter(context.Background())
+	waited := time.Since(start)
+	if s.total != nil {
+		s.total.Add(waited.Microseconds())
+	}
+	if err != nil {
+		return nil, waited, err
+	}
+	defer exit()
+	out, err := s.NamedSession.RunNamed(inputs)
+	return out, waited, err
+}
+
+// admittedNamedSession is a named session that reports its gate wait per call.
+type admittedNamedSession interface {
+	runAdmitted(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error)
 }

@@ -280,3 +280,59 @@ func TestRunOnceFleetReportsCPUPlan(t *testing.T) {
 		t.Errorf("node:b cpu_budget = %v, want 4", got)
 	}
 }
+
+// The admission pressure and calibration outcome the server reports reach the
+// headless line, and an older server that omits them parses as zeros.
+func TestRunOnceReportsAdmissionAndCalibration(t *testing.T) {
+	_, addr := startScripted(t, func(cmd []string, _ int) []byte {
+		switch strings.ToUpper(cmd[0]) {
+		case "EMB.MODELS":
+			return modelsReply([]string{"m", "384"})
+		case "EMB.INFO":
+			return infoReply(map[string]string{
+				"calibration_source": "calibrated", "calibration_reason": "measured", "embed_state": "initialized",
+			}, map[string]int64{
+				"cpu_budget_enabled": 1, "cpu_budget": 4, "calibration_ceiling": 4, "calibration_duration_us": 1500,
+			})
+		case "EMB.STATS":
+			return statsReply(map[string]int64{
+				"uptime_secs": 1, "models_loaded": 1, "cpu_budget_enabled": 1, "cpu_budget": 4,
+				"cpu_admission_wait_us": 900, "cpu_admission_waiters": 2, "cpu_admission_timeouts": 3,
+			})
+		case "INFO":
+			return encodeBulk("gomaxprocs:4\r\n")
+		case "MONITOR":
+			return encodeArray()
+		default:
+			return encodeError("ERR unknown " + cmd[0])
+		}
+	})
+	var out bytes.Buffer
+	if err := RunOnce(NewClient(addr, "", false), time.Second, 2, &out); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	line := lines[len(lines)-1]
+	for key, want := range map[string]float64{
+		"cpu_admission_wait_us": 900, "cpu_admission_waiters": 2, "cpu_admission_timeouts": 3,
+		"calibration_ceiling": 4, "calibration_duration_us": 1500,
+	} {
+		if got := numKV(t, line, key); got != want {
+			t.Errorf("%s = %v, want %v", key, got, want)
+		}
+	}
+	if !strings.Contains(line, "calibration=calibrated embed_state=initialized") {
+		t.Errorf("per-model calibration/state missing from %q", line)
+	}
+}
+
+func TestCPUPlanTextShowsAdmissionPressure(t *testing.T) {
+	p := Point{CPUPlanKnown: true, CPUBudgetEnabled: true, CPUBudget: 4, CPUAdmissionWaiters: 2, CPUAdmissionTimeouts: 1}
+	if got := CPUPlanText(p); !strings.Contains(got, "queued 2") || !strings.Contains(got, "timeouts 1") {
+		t.Fatalf("plan text %q omits admission pressure", got)
+	}
+	p.CPUAdmissionWaiters, p.CPUAdmissionTimeouts = 0, 0
+	if got := CPUPlanText(p); strings.Contains(got, "queued") {
+		t.Fatalf("idle gate rendered pressure: %q", got)
+	}
+}

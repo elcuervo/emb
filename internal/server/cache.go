@@ -431,6 +431,11 @@ func percentCacheBudget(pct float64, mem uint64) (int64, error) {
 	return int64(pct / 100 * float64(mem)), nil
 }
 
+// CacheAllowance resolves a cache setting (as passed to New) to the bytes the
+// cache may grow to, so model memory planning can leave room for it before the
+// server exists.
+func CacheAllowance(s string) (int64, error) { return parseCacheConfig(s) }
+
 func parseCacheConfig(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {

@@ -1052,3 +1052,31 @@ func TestLoadReservedModelNames(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadCPUAdmissionTimeout(t *testing.T) {
+	load := func(value string) (*Config, error) {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		body := "models:\n  test:\n    onnx: ./model.onnx\n    tokenizer: ./tok.json\n    dim: 128\n" + value
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return Load(path)
+	}
+	for _, tc := range []struct {
+		yaml string
+		want time.Duration
+	}{{"", 0}, {"cpu_admission_timeout: 0\n", 0}, {"cpu_admission_timeout: 2s\n", 2 * time.Second}} {
+		cfg, err := load(tc.yaml)
+		if err != nil {
+			t.Fatalf("%q: %v", tc.yaml, err)
+		}
+		if got := time.Duration(cfg.CPUAdmissionTimeout); got != tc.want {
+			t.Fatalf("%q: timeout %v, want %v", tc.yaml, got, tc.want)
+		}
+	}
+	for _, bad := range []string{"cpu_admission_timeout: -1s\n", "cpu_admission_timeout: soon\n", "cpu_admission_timeout: 5\n"} {
+		if _, err := load(bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
+	}
+}

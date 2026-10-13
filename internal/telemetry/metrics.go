@@ -133,6 +133,21 @@ var metricDefs = []metricDef{
 		global: func(s Snapshot) float64 { return float64(s.TruncatedImages) },
 	},
 	{
+		name: "emb.cpu.admission.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:   "Seconds inference runs spent queued at the CPU admission gate",
+		global: func(s Snapshot) float64 { return float64(s.CPUAdmissionWaitUs) / 1e6 },
+	},
+	{
+		name: "emb.cpu.admission.waiters", kind: Gauge, unit: "{run}", num: IntNumber,
+		desc:   "Inference runs currently queued at the CPU admission gate",
+		global: func(s Snapshot) float64 { return float64(s.CPUAdmissionWaiters) },
+	},
+	{
+		name: "emb.cpu.admission.timeouts", kind: Sum, unit: "{run}", num: IntNumber,
+		desc:   "Inference runs refused after waiting past cpu_admission_timeout",
+		global: func(s Snapshot) float64 { return float64(s.CPUAdmissionTimeouts) },
+	},
+	{
 		name: "emb.net.input.bytes", kind: Sum, unit: "By", num: IntNumber,
 		desc:   "RESP bytes received from all connections since start",
 		global: func(s Snapshot) float64 { return float64(s.NetInBytes) },
@@ -164,6 +179,12 @@ var metricDefs = []metricDef{
 		needsPool: true,
 	},
 	{
+		name: "emb.admission.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:      "Seconds embedding runs spent queued at the CPU admission gate, by model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.AdmissionWaitUs) / 1e6 },
+		needsPool: true,
+	},
+	{
 		name: "emb.inference.duration", kind: Sum, unit: "s", num: DoubleNumber,
 		desc:      "Seconds of embedding inference work, by model",
 		model:     func(m ModelSnapshot) float64 { return float64(m.RunUs) / 1e6 },
@@ -192,6 +213,11 @@ var metricDefs = []metricDef{
 		desc:      "Embedding tokens consumed divided by token slots processed, by model",
 		model:     func(m ModelSnapshot) float64 { return m.PaddingEfficiency },
 		needsPool: true,
+	},
+	{
+		name: "emb.script.admission.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:  "Seconds scripted runs spent queued at the CPU admission gate, by model",
+		model: func(m ModelSnapshot) float64 { return float64(m.ScriptAdmissionWaitUs) / 1e6 },
 	},
 	{
 		name: "emb.script.dispatch.wait", kind: Sum, unit: "s", num: DoubleNumber,

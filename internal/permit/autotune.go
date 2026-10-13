@@ -15,6 +15,9 @@ const (
 	ClassThroughput Class = "throughput"
 	// ClassSaturated means CPU is the bottleneck; more concurrency cannot help.
 	ClassSaturated Class = "saturated"
+	// ClassUnmeasured means runs completed but the window's CPU use could not be
+	// measured, so headroom is unknown and concurrency must not grow on it.
+	ClassUnmeasured Class = "unmeasured"
 )
 
 // Sample is one window's cumulative counter reading plus live gauges.
@@ -28,21 +31,22 @@ type Sample struct {
 	CPUSysUsec     uint64
 }
 
-// Classify returns the class implied by the delta between two samples over
-// window at the given CPU capacity. cores below 1 counts as 1.
-func Classify(prev, cur Sample, window time.Duration, cores int, cpuHigh, waitRatio float64) Class {
+// Classify returns the class implied by the delta between two samples. elapsed
+// is the actual monotonic time between them and cpus the fractional effective
+// CPU bandwidth, so a saturated half-CPU quota reads as fully utilized. A
+// window with runs but no measurable CPU (no elapsed time, no bandwidth, or a
+// counter that did not advance) is ClassUnmeasured: it never claims headroom.
+func Classify(prev, cur Sample, elapsed time.Duration, cpus float64, cpuHigh, waitRatio float64) Class {
 	runs := cur.Runs - prev.Runs
 	if runs <= 0 {
 		return ClassIdle
 	}
-	if cores < 1 {
-		cores = 1
+	cpuUs := float64((cur.CPUUserUsec - prev.CPUUserUsec) + (cur.CPUSysUsec - prev.CPUSysUsec))
+	if elapsed <= 0 || cpus <= 0 || cur.CPUUserUsec+cur.CPUSysUsec <= prev.CPUUserUsec+prev.CPUSysUsec {
+		return ClassUnmeasured
 	}
-	if window > 0 {
-		cpuUs := float64((cur.CPUUserUsec - prev.CPUUserUsec) + (cur.CPUSysUsec - prev.CPUSysUsec))
-		if cpuUs/float64(window.Microseconds()*int64(cores)) >= cpuHigh {
-			return ClassSaturated
-		}
+	if cpuUs/(float64(elapsed.Microseconds())*cpus) >= cpuHigh {
+		return ClassSaturated
 	}
 	waitPerRun := float64(cur.DispatchWaitUs-prev.DispatchWaitUs) / float64(runs)
 	runPerRun := float64(cur.RunUs-prev.RunUs) / float64(runs)
@@ -116,7 +120,7 @@ func (c *Controller) Observe(class Class) (allowance int, changed, recommend boo
 			c.shrinkStreak = 0
 			return c.allowance, true, false
 		}
-	case ClassIdle:
+	case ClassIdle, ClassUnmeasured:
 		c.growStreak, c.shrinkStreak = 0, 0
 	case ClassSaturated:
 		c.growStreak, c.shrinkStreak = 0, 0

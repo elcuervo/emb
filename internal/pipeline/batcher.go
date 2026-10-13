@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
@@ -38,6 +39,7 @@ type Batcher struct {
 	tokenizeWorkers int
 	requests        atomic.Int64
 	totalLat        atomic.Int64
+	admissionWaitUs atomic.Int64
 	tokens          atomic.Int64
 	errors          atomic.Int64
 	runs            atomic.Int64
@@ -153,7 +155,11 @@ func (b *Batcher) run() {
 
 		resp, seqLen, err := b.process(all)
 		b.busy.Add(-1)
-		b.runs.Add(1)
+		wait := takeAdmissionWait(b.session)
+		b.admissionWaitUs.Add(wait.Microseconds())
+		if !permit.IsAdmissionError(err) {
+			b.runs.Add(1)
+		}
 		if err == nil {
 			// Track padding efficiency: real tokens / processed token-slots.
 			b.tokens.Add(int64(totalTokens))
@@ -173,7 +179,7 @@ func (b *Batcher) run() {
 		}
 
 		b.requests.Add(int64(len(batch)))
-		b.totalLat.Add(time.Since(start).Microseconds())
+		b.totalLat.Add((time.Since(start) - wait).Microseconds())
 
 		batch = batch[:0]
 		budget = 0

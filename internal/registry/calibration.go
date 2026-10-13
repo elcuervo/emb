@@ -17,6 +17,11 @@ type calibratedLayout struct {
 	Threads int
 	Source  string
 	Reason  string
+	// Limit names what cut the candidate set below the CPU ceiling ("memory"),
+	// or is empty. Ceiling is the CPU ceiling candidates were bounded by; both
+	// are filled in by the caller that owns those limits.
+	Limit   string
+	Ceiling int
 	Elapsed time.Duration
 }
 
@@ -76,14 +81,14 @@ const (
 )
 
 // calibrationCandidates screens the thread-width/session-count pairs a model
-// may be calibrated at: deduplicated, inside the process CPU share (the width ×
-// session product may not exceed budget), and capped by maxWorkers, which is
-// the model-size memory estimate (see autoTuneWorkers). A dimension the
-// operator set explicitly is fixed to that value so calibration never replaces
-// it. When the batcher owns embedding inference (batched) only one session can
-// run batches, so session counts stay at 1 and only the width is screened.
-// Joint multi-model trials are deliberately not attempted here (future
-// benchmark work); the shared admission budget bounds the concurrent product.
+// may be calibrated at: deduplicated, inside the process CPU budget (the width
+// × session product may not exceed budget), and capped by maxWorkers, the
+// process memory headroom (see memoryPlanner). A dimension the operator set
+// explicitly is fixed to that value so calibration never replaces it. When the
+// batcher owns embedding inference (batched) only one session can run
+// batches, so session counts stay at 1 and only the width is screened. Joint
+// multi-model trials are deliberately not attempted here; the shared admission
+// budget bounds the concurrent product.
 func calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWorkers int, batched bool) [][2]int {
 	widths := []int{1}
 	if configuredThreads > 0 {
@@ -153,9 +158,9 @@ func calibrateLayout(factory func(int) (onnx.Session, error), tok tokenizer.Toke
 
 	candidates := calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWorkers, batched)
 	if len(candidates) == 0 {
-		// Every candidate costs more than this model's share of the budget —
-		// reachable with an explicit width when several models split the
-		// process budget. Keep the explicit width; there is nothing to try.
+		// Every candidate costs more than the process budget — reachable with an
+		// explicit width above it. Keep the explicit width; there is nothing
+		// to try.
 		fallback.Reason = "over_budget"
 		return fallback
 	}
@@ -192,7 +197,7 @@ search:
 				break search
 			}
 			result, candidateRef, ok := runCalibrationCandidate(factory, inputs, dim, candidate[0], candidate[1], batch)
-			candidateCost = result.Elapsed
+			candidateCost = result.Total
 			if i == 0 && round == 0 {
 				if !ok {
 					return finishCalibration(best, bestScore, fallback, "baseline_failed", started)
@@ -284,7 +289,11 @@ type calibrationResult struct {
 	Rows    int
 	CPUUsec uint64
 	P95     time.Duration
+	// Elapsed is the timed inference section and drives scoring; Total is the
+	// candidate's whole cost, session construction through close, and drives
+	// deadline prediction.
 	Elapsed time.Duration
+	Total   time.Duration
 }
 
 // calibrationOrder keeps the serial baseline (candidates[0]) first and sorts
@@ -343,7 +352,17 @@ func prepareInputs(inputs []calibrationInput, maxRows int) []calibrationPrepared
 	return prepared
 }
 
+// runCalibrationCandidate measures one candidate and stamps its total cost,
+// from before the first session is created until every temporary session is
+// closed.
 func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []calibrationInput, dim, workers, threads, maxRows int) (calibrationResult, [][]float32, bool) {
+	begin := calibrationNow()
+	result, reference, ok := trialCalibrationCandidate(factory, inputs, dim, workers, threads, maxRows)
+	result.Total = calibrationNow().Sub(begin)
+	return result, reference, ok
+}
+
+func trialCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []calibrationInput, dim, workers, threads, maxRows int) (calibrationResult, [][]float32, bool) {
 	sessions := make([]onnx.Session, 0, workers)
 	for range workers {
 		sess, err := factory(threads)

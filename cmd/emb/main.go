@@ -50,6 +50,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("resolving CPU budget: %w", err)
 	}
+	// An invalid cache setting is reported by server.New; planning just skips it.
+	if bytes, err := server.CacheAllowance(fc.Cache); err == nil && bytes > 0 {
+		reg.SetCacheAllowance(uint64(bytes))
+	}
 	closeRegistry := true
 	defer func() {
 		if closeRegistry {
