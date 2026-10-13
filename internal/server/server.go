@@ -178,6 +178,9 @@ func (s *Server) admitInference() (release func(), replyErr string) {
 		return nil, "ERR server shutting down"
 	}
 	if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
+		// Counted with the admission refusals: both are the server declining
+		// work it cannot serve in time.
+		s.busyRefusals.Add(1)
 		return nil, fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs)
 	}
 	s.activeReqs.Add(1)
@@ -1209,9 +1212,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 48)
+		writePairs(conn, 49)
 	} else {
-		writePairs(conn, 41)
+		writePairs(conn, 42)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1302,6 +1305,8 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(boolInt(scriptActive))
 	conn.WriteBulkString("embed_dispatch_wait_us")
 	conn.WriteInt(int(stats.DispatchWaitUs))
+	conn.WriteBulkString("embed_admission_wait_us")
+	conn.WriteInt(int(stats.AdmissionWaitUs))
 	conn.WriteBulkString("embed_run_us")
 	conn.WriteInt(int(stats.RunUs))
 	conn.WriteBulkString("embed_runs")
@@ -1368,10 +1373,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			// Always surface the verdict, reason, and effective timeout (0 when
 			// batching is off or degraded): the batch-determinism spec requires
 			// both in EMB.STATS regardless of gating outcome.
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus run=%dus runs=%d busy=%d/%d",
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus admit=%dus run=%dus runs=%d busy=%d/%d",
 				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize,
 				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo,
-				st.DispatchWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
+				st.DispatchWaitUs, st.AdmissionWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
 		}
 	}
 
@@ -1396,7 +1401,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 60)
+	writePairs(conn, 63)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1521,6 +1526,15 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(cpu.Active)
 	conn.WriteBulkString("cpu_peak_tokens")
 	conn.WriteInt(cpu.Peak)
+	// Admission pressure: what callers waited at the CPU gate, how many are
+	// waiting now, and the waits that ended without a grant. Separate from
+	// cpu_active_tokens/cpu_peak_tokens, which count admitted runs.
+	conn.WriteBulkString("cpu_admission_wait_us")
+	conn.WriteInt(int(cpu.AdmissionWaitUs))
+	conn.WriteBulkString("cpu_admission_waiters")
+	conn.WriteInt(cpu.AdmissionWaiters)
+	conn.WriteBulkString("cpu_admission_timeouts")
+	conn.WriteInt(cpu.AdmissionTimeouts)
 }
 
 func boolInt(v bool) int {

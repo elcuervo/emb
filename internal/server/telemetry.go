@@ -27,6 +27,10 @@ func (s *Server) telemetrySnapshot() telemetry.Snapshot {
 		TruncatedPairs:    s.truncatedPairs.Load(),
 		TruncatedImages:   s.truncatedImages.Load(),
 	}
+	cpu := s.reg.CPUStatus()
+	out.CPUAdmissionWaitUs = cpu.AdmissionWaitUs
+	out.CPUAdmissionWaiters = int64(cpu.AdmissionWaiters)
+	out.CPUAdmissionTimeouts = int64(cpu.AdmissionTimeouts)
 	if snap.cache != nil {
 		out.CacheHits = snap.cache.Hits
 		out.CacheMisses = snap.cache.Misses
@@ -42,6 +46,7 @@ func (s *Server) telemetrySnapshot() telemetry.Snapshot {
 
 			HasPool:           m.hasPool,
 			DispatchWaitUs:    m.dispatchWaitUs,
+			AdmissionWaitUs:   m.admissionWaitUs,
 			RunUs:             m.runUs,
 			Runs:              m.runs,
 			SessionsBusy:      m.sessionsBusy,

@@ -30,12 +30,17 @@ Full reference for the `emb` command surface. See the
 
 `EMB.INFO` and `EMB.STATS` report the process CPU plan chosen at startup.
 `EMB.STATS` carries `cpu_allowance`, `cpu_allowance_source`, `cpu_capacity`,
-`cpu_reserve`, `cpu_budget`, `cpu_active_tokens`, and `cpu_peak_tokens`.
+`cpu_reserve`, `cpu_budget`, `cpu_active_tokens`, `cpu_peak_tokens`, and the
+admission pressure `cpu_admission_wait_us`, `cpu_admission_waiters`,
+`cpu_admission_timeouts`, `admission_refusals` and `admission_timeout_ms`.
 `EMB.INFO` carries each model's `workers`, `intra_op_threads`,
-`cpu_thread_share`, and `allow_spinning` — the calibrated layout when
-calibration selected it. See
+`cpu_thread_share`, `allow_spinning`, and the `embed_dispatch_wait_us` /
+`embed_admission_wait_us` / `embed_run_us` split of the embedding path — the
+calibrated layout when calibration selected it. See
 [Startup calibration](configuration.md#startup-calibration) for defaults,
-precedence, and fallbacks.
+precedence, and fallbacks, and
+[Operations](operations.md#reading-the-process-cpu-plan) for what each timing
+does and does not include.
 
 ## EMB.MULTI
 

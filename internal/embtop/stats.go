@@ -43,6 +43,11 @@ type Point struct {
 	CPUAllowance     float64
 	CPUAllowanceSrc  string
 	CPUPlanKnown     bool // the node reported the EMB.STATS CPU plan fields
+	// Admission pressure: the wait callers spent queueing at the CPU gate, the
+	// queue depth now, and the waits that ended without a grant.
+	CPUAdmissionWaitUs   int64
+	CPUAdmissionWaiters  int64
+	CPUAdmissionTimeouts int64
 }
 
 // CPUPlanText renders one node's (or an aggregate's) process CPU plan, or ""
@@ -64,6 +69,11 @@ func CPUPlanText(p Point) string {
 		if p.CPUAllowanceSrc != "" {
 			line += " (" + p.CPUAllowanceSrc + ")"
 		}
+	}
+	// A gate with waiters or expired waits says the budget is the limit, not the
+	// model; an idle gate stays quiet.
+	if p.CPUAdmissionWaiters > 0 || p.CPUAdmissionTimeouts > 0 {
+		line += fmt.Sprintf(" \u00b7 queued %d \u00b7 timeouts %d", p.CPUAdmissionWaiters, p.CPUAdmissionTimeouts)
 	}
 	return line
 }
@@ -183,6 +193,10 @@ func (s *Sampler) Push(res *PollResult) Point {
 		CPUAllowance:     res.CPUAllowance,
 		CPUAllowanceSrc:  res.CPUAllowanceSrc,
 		CPUPlanKnown:     res.CPUPlanKnown,
+
+		CPUAdmissionWaitUs:   res.CPUAdmissionWaitUs,
+		CPUAdmissionWaiters:  res.CPUAdmissionWaiters,
+		CPUAdmissionTimeouts: res.CPUAdmissionTimeouts,
 	}
 
 	totalHits := res.CacheHits

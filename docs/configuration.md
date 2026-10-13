@@ -30,6 +30,7 @@ cpu_budget: auto              # process-local ORT budget; use off for legacy siz
 # cache_restore_reserve: 10%
 # cache_save_rate_limit: 100MB/s
 # idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32
+# admission_timeout: 10s        # how long a command may wait for CPU admission (0 = unbounded)
 # max_command_bytes: 64MB       # max buffered bytes per command (0 = unlimited)
 # max_images: 4096              # images per EMB.IMG/EMB.IMGMULTI (0 = unlimited)
 # max_image_bytes: 32MB         # per-image byte cap (0 = unlimited)
@@ -202,6 +203,18 @@ One FIFO admission gate covers embedding, image, and script
 ONNX runs; explicit over-budget runs execute alone. Automatic embedding and
 image sessions disable ORT spinning. Set `cpu_budget: off` to restore legacy
 session sizing and spinning behavior; this does not roll back the binary.
+
+A run whose width does not fit waits for capacity, and a narrower run is
+admitted into idle capacity past a wider one that is still blocked, so one slow
+run does not park every later one behind it. The queue is bounded at twice the
+budget in waiters: past that the server answers `ERR busy: admission queue full`
+instead of queueing without limit. `admission_timeout` additionally bounds how
+long a command may wait for admission (`10s` by default, an explicit `0` waits
+without a deadline); an expired wait answers `ERR busy: admission timed out`.
+Both the wait and the refusal are counted (see
+[Operations](operations.md#reading-the-process-cpu-plan)). A deadline does not
+interrupt a run that has already been admitted: work in flight completes, and
+only the waiter stops.
 
 ### Startup calibration
 

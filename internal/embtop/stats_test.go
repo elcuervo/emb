@@ -2,6 +2,7 @@ package embtop
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -307,5 +308,21 @@ func TestMissedModelPollKeepsLastKnownSample(t *testing.T) {
 	}
 	if got.Requests != 30 || got.ReqRate != 10 {
 		t.Errorf("returning poll = %+v, want requests=30 req_rate=10", got)
+	}
+}
+
+// TestCPUPlanTextShowsAdmissionPressure covers the new admission line: an idle
+// gate stays quiet, and a gate that queued or expired waits says so.
+func TestCPUPlanTextShowsAdmissionPressure(t *testing.T) {
+	p := Point{CPUPlanKnown: true, CPUBudgetEnabled: true, CPUBudget: 4}
+	if got := CPUPlanText(p); strings.Contains(got, "queued") {
+		t.Fatalf("idle gate rendered pressure: %q", got)
+	}
+
+	p.CPUAdmissionWaiters = 2
+	p.CPUAdmissionTimeouts = 1
+	got := CPUPlanText(p)
+	if !strings.Contains(got, "queued 2") || !strings.Contains(got, "timeouts 1") {
+		t.Fatalf("admission pressure missing from %q", got)
 	}
 }

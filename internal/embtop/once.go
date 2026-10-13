@@ -240,6 +240,9 @@ func appendCPUPlanFields(b []byte, p *Point) []byte {
 	b = appendF(b, "cpu_active_tokens", p.CPUActiveTokens)
 	b = appendF(b, "cpu_peak_tokens", p.CPUPeakTokens)
 	b = appendRate(b, "cpu_allowance", p.CPUAllowance)
+	b = appendF(b, "cpu_admission_wait_us", p.CPUAdmissionWaitUs)
+	b = appendF(b, "cpu_admission_waiters", p.CPUAdmissionWaiters)
+	b = appendF(b, "cpu_admission_timeouts", p.CPUAdmissionTimeouts)
 	return b
 }
 
@@ -252,6 +255,7 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 	var req, tok, errRate, cpu float64
 	var cpuBudget, cpuActive, cpuPeak int64
 	var cpuAllowance float64
+	var cpuWaiters, cpuTimeouts int64
 	planKnown := false
 	for _, st := range states {
 		if !st.sampled {
@@ -279,6 +283,8 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 			cpuActive += p.CPUActiveTokens
 			cpuPeak += p.CPUPeakTokens
 			cpuAllowance += p.CPUAllowance
+			cpuWaiters += p.CPUAdmissionWaiters
+			cpuTimeouts += p.CPUAdmissionTimeouts
 		}
 	}
 	b = appendF(b, "uptime_secs", states[0].sampler.Latest.UptimeSecs)
@@ -311,6 +317,8 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 		b = appendF(b, "cpu_active_tokens", cpuActive)
 		b = appendF(b, "cpu_peak_tokens", cpuPeak)
 		b = appendRate(b, "cpu_allowance", cpuAllowance)
+		b = appendF(b, "cpu_admission_waiters", cpuWaiters)
+		b = appendF(b, "cpu_admission_timeouts", cpuTimeouts)
 	}
 	return b
 }

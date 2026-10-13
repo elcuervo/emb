@@ -24,6 +24,8 @@ func TestMetricSetCoversSpec(t *testing.T) {
 		"emb.sessions.busy", "emb.sessions.total", "emb.padding.efficiency",
 		"emb.script.dispatch.wait", "emb.script.inference.duration",
 		"emb.script.inference.runs",
+		"emb.admission.wait", "emb.cpu.admission.wait", "emb.cpu.admission.waiters",
+		"emb.cpu.admission.timeouts",
 	}
 	counts := map[string]int{}
 	for _, d := range metricDefs {
@@ -376,6 +378,24 @@ func TestEncodeModelTimingAndSessionSeries(t *testing.T) {
 	if got := *findMetric(t, req, "emb.inference.runs").Sum.DataPoints[0].AsInt; got != "3" {
 		t.Errorf("inference runs delta = %s, want 3", got)
 	}
+	// The admission wait is its own series, exported apart from the run time.
+	cur.Models[0].AdmissionWaitUs = 1_500_000
+	cur.CPUAdmissionWaitUs = 1_500_000
+	cur.CPUAdmissionWaiters = 2
+	cur.CPUAdmissionTimeouts = 1
+	req = decode(t, mustEncode(t, cur, &prev))
+	if got := *findMetric(t, req, "emb.admission.wait").Sum.DataPoints[0].AsDouble; math.Abs(got-1.5) > 1e-12 {
+		t.Errorf("admission wait delta = %v, want 1.5s", got)
+	}
+	if got := *findMetric(t, req, "emb.cpu.admission.wait").Sum.DataPoints[0].AsDouble; math.Abs(got-1.5) > 1e-12 {
+		t.Errorf("gate admission wait delta = %v, want 1.5s", got)
+	}
+	if got := *findMetric(t, req, "emb.cpu.admission.waiters").Gauge.DataPoints[0].AsInt; got != "2" {
+		t.Errorf("gate waiters = %s, want 2", got)
+	}
+	if got := *findMetric(t, req, "emb.cpu.admission.timeouts").Sum.DataPoints[0].AsInt; got != "1" {
+		t.Errorf("gate admission timeouts = %s, want 1", got)
+	}
 	if got := *findMetric(t, req, "emb.script.inference.runs").Sum.DataPoints[0].AsInt; got != "2" {
 		t.Errorf("script runs delta = %s, want 2", got)
 	}
@@ -406,6 +426,7 @@ func TestEncodeModelSeriesOmitModelsWithoutPool(t *testing.T) {
 	for _, name := range []string{
 		"emb.dispatch.wait", "emb.inference.duration", "emb.inference.runs",
 		"emb.sessions.busy", "emb.sessions.total", "emb.padding.efficiency",
+		"emb.admission.wait",
 	} {
 		m := findMetric(t, req, name)
 		for _, got := range datapointModels(m) {

@@ -228,6 +228,23 @@ pool. In `-once` and `-frames` output every node section carries that node's own
 `cpu_thread_share`. A server that predates these fields reports no plan and the
 line stays blank, rather than reading as `cpu_budget: off`.
 
+When the gate is the limit rather than the model, the same line grows
+`· queued <N> · timeouts <N>`, and `EMB.STATS` carries `cpu_admission_wait_us`
+(cumulative time callers spent queueing at the gate), `cpu_admission_waiters`
+(callers queueing now) and `cpu_admission_timeouts` (waits that ended without a
+grant — refused at the queue bound or expired). `admission_refusals` counts the
+commands the server declined with a busy reply.
+
+`cpu_active_tokens` and `cpu_peak_tokens` count *admitted* runs. A busy gate with
+those two low is queueing, not computing; if they sit at `cpu_peak_tokens ==
+cpu_budget` and throughput does not scale with concurrency, the admitted width
+fills the budget and runs are being served one at a time. `EMB.INFO` and the
+`per_model` line in `EMB.STATS` separate the same request into `wait` (local
+dispatch: waiting for a free worker or batch window), `admit`/`embed_admission_wait_us`
+(waiting at the CPU gate) and `run` (`embed_run_us`, the native inference). The
+run time excludes the gate wait, so `run` staying flat while `admit` grows means
+the budget is the constraint, and `run` growing instead points at the model.
+
 ### Watching a fleet
 
 With more than one node monitored, `emb-top` renders a cluster view: a fleet

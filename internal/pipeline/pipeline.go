@@ -72,13 +72,29 @@ type Stats struct {
 	BatchingMaxTokens int
 	PaddingEfficiency float64
 	// Dispatch/run observability (EMB.STATS/EMB.INFO): cumulative time waiting
-	// for a free worker or queue slot, cumulative inference time, the number of
-	// inference runs, and the live busy/total session gauges.
-	DispatchWaitUs int64
-	RunUs          int64
-	Runs           int64
-	SessionsBusy   int64
-	SessionsTotal  int64
+	// for a free worker or queue slot, cumulative time waiting at the process
+	// CPU gate, cumulative inference time, the number of inference runs, and the
+	// live busy/total session gauges. AdmissionWaitUs is kept out of RunUs: a
+	// run's reported duration is its own, not the queue's.
+	DispatchWaitUs  int64
+	AdmissionWaitUs int64
+	RunUs           int64
+	Runs            int64
+	SessionsBusy    int64
+	SessionsTotal   int64
+}
+
+// admissionTimed is implemented by sessions that record how long their last run
+// waited for CPU admission, so the time can be reported apart from the run.
+type admissionTimed interface{ TakeAdmissionWait() time.Duration }
+
+// takeAdmissionWait reports the admission wait the session accrued for the run
+// just executed, zero for sessions that do not observe admission.
+func takeAdmissionWait(sess onnx.Session) time.Duration {
+	if t, ok := sess.(admissionTimed); ok {
+		return t.TakeAdmissionWait()
+	}
+	return 0
 }
 
 // encodeTexts tokenizes texts into encodings and returns the real token total.

@@ -5,11 +5,19 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // ErrBusy is returned when the admission queue is at its bound: the caller is
 // refused rather than queued, so overload becomes a bounded error.
 var ErrBusy = errors.New("permit: admission queue is full")
+
+// IsAdmissionError reports that err is a refusal or an abandoned wait at this
+// gate, so no native call ran for it. Callers keep such work out of their run
+// counters and run-time totals.
+func IsAdmissionError(err error) bool {
+	return errors.Is(err, ErrBusy) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
 
 // Budget admits runs by their configured intra-op width against one
 // process-wide capacity. Waiters are served in arrival order, and idle
@@ -28,7 +36,8 @@ type Budget struct {
 	borrowBurst int   // followers admitted past a blocked head before the gate drains
 	borrowed    int   // borrowed admissions since the head last changed
 	refused     int64 // cumulative ErrBusy outcomes
-	admitted    int64 // cumulative admissions
+	waitUs      int64 // cumulative time spent queueing, whether then admitted or abandoned
+	timeouts    int64 // cumulative waits that ended without a grant
 }
 
 type budgetWaiter struct {
@@ -53,60 +62,78 @@ func (b *Budget) SetQueueBound(n int) {
 	b.maxWaiters = n
 }
 
-// Acquire waits for a permit without a deadline. It is the compatibility entry
-// point for call sites that cannot carry a context yet: it blocks until
-// admitted and ignores the queue bound.
-func (b *Budget) Acquire(width int) func() {
-	if width < 1 {
-		width = 1
-	}
-	w := &budgetWaiter{width: width, ready: make(chan struct{}, 1)}
-	b.mu.Lock()
-	b.waiters = append(b.waiters, w)
-	b.dispatchLocked()
-	b.mu.Unlock()
-	<-w.ready
-	return b.releaseFunc(width)
-}
-
 // AcquireContext blocks until a permit of the given width is available, the
 // context is done, or the queue bound refuses the caller. On success it returns
 // the release function, which must be called exactly once and is safe to call
 // more than once.
 func (b *Budget) AcquireContext(ctx context.Context, width int) (func(), error) {
+	release, _, err := b.AcquireContextWait(ctx, width)
+	return release, err
+}
+
+// AcquireContextWait is AcquireContext and also reports how long the caller
+// queued: zero when it was admitted on the spot, so a run that never waited can
+// report no wait rather than the cost of asking. The time is accumulated for the
+// stats surface whether or not the caller was admitted.
+func (b *Budget) AcquireContextWait(ctx context.Context, width int) (func(), time.Duration, error) {
 	if width < 1 {
 		width = 1
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	// start is read only on the parked branch (see below).
 	w := &budgetWaiter{width: width, ready: make(chan struct{}, 1)}
 
 	b.mu.Lock()
 	if b.maxWaiters > 0 && len(b.waiters) >= b.maxWaiters {
 		b.mu.Unlock()
 		atomic.AddInt64(&b.refused, 1)
-		return nil, ErrBusy
+		return nil, 0, ErrBusy
 	}
 	b.waiters = append(b.waiters, w)
 	b.dispatchLocked()
+	// Released under the lock without queueing: nothing waited, so nothing is
+	// recorded and the context is not consulted again.
+	queued := !w.admitted
 	b.mu.Unlock()
+	if !queued {
+		return b.releaseFunc(width), 0, nil
+	}
+	// Only a caller that actually parks pays for the clock, and it is read after
+	// the lock is released: the fast path stays clock-free and a queued caller
+	// does not lengthen the critical section everyone else waits on.
+	start := time.Now()
 
 	select {
 	case <-w.ready:
-		return b.releaseFunc(width), nil
+		waited := b.recordWait(start, false)
+		return b.releaseFunc(width), waited, nil
 	case <-ctx.Done():
 		// The context may have expired in the same instant the waiter was
 		// admitted; whichever wins, exactly one of the two paths owns it.
 		b.mu.Lock()
 		if w.admitted {
 			b.mu.Unlock()
-			return b.releaseFunc(width), nil
+			waited := b.recordWait(start, false)
+			return b.releaseFunc(width), waited, nil
 		}
 		b.removeLocked(w)
 		b.mu.Unlock()
-		return nil, ctx.Err()
+		waited := b.recordWait(start, true)
+		return nil, waited, ctx.Err()
 	}
+}
+
+// recordWait accumulates a wait that has ended — expired marks a wait that ended
+// without a grant — and returns it.
+func (b *Budget) recordWait(start time.Time, expired bool) time.Duration {
+	waited := time.Since(start)
+	atomic.AddInt64(&b.waitUs, waited.Microseconds())
+	if expired {
+		atomic.AddInt64(&b.timeouts, 1)
+	}
+	return waited
 }
 
 // dispatchLocked admits waiters while the capacity allows: the head first, then
@@ -123,7 +150,6 @@ func (b *Budget) dispatchLocked() {
 		if b.used > b.peak {
 			b.peak = b.used
 		}
-		atomic.AddInt64(&b.admitted, 1)
 		w.admitted = true
 		w.ready <- struct{}{}
 	}
@@ -196,18 +222,27 @@ func (b *Budget) Stats() (active, peak int) {
 	return b.used, b.peak
 }
 
-// Counters reports the cumulative admissions and refusals and the current queue
-// depth: the gate's own view of load, for the stats surface and its tests.
-func (b *Budget) Counters() (admitted, refused int64, queued int) {
-	b.mu.Lock()
-	queued = len(b.waiters)
-	b.mu.Unlock()
-	return atomic.LoadInt64(&b.admitted), atomic.LoadInt64(&b.refused), queued
+// Pressure is the gate's own view of load, for the stats surface: how long
+// callers queued, how many are queueing now, and how many waits ended without a
+// grant (refused at the bound or abandoned by their caller).
+type Pressure struct {
+	WaitUs   int64
+	Waiters  int
+	Timeouts int
+	Refused  int64
 }
 
-// Waiters reports the current queue depth.
-func (b *Budget) Waiters() int {
+// Pressure reports the gate's cumulative queueing time, its current queue depth
+// and the waits that ended without a grant: how loaded admission was, separate
+// from how long the runs it admitted took.
+func (b *Budget) Pressure() Pressure {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	return len(b.waiters)
+	waiters := len(b.waiters)
+	b.mu.Unlock()
+	return Pressure{
+		WaitUs:   atomic.LoadInt64(&b.waitUs),
+		Waiters:  waiters,
+		Timeouts: int(atomic.LoadInt64(&b.timeouts)),
+		Refused:  atomic.LoadInt64(&b.refused),
+	}
 }

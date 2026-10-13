@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
@@ -26,10 +27,13 @@ type Worker struct {
 	errors    atomic.Int64
 	runs      atomic.Int64
 	busy      atomic.Int64
-	stop      chan struct{}
-	done      chan struct{}
-	closeOnce sync.Once
-	closeErr  error
+	// admissionWaitUs accumulates the time this worker's requests spent at the
+	// process CPU gate, kept out of totalLat.
+	admissionWaitUs atomic.Int64
+	stop            chan struct{}
+	done            chan struct{}
+	closeOnce       sync.Once
+	closeErr        error
 }
 
 // NewWorker starts a worker reading from reqChan. The channel is shared by
@@ -63,10 +67,20 @@ func (w *Worker) run() {
 		start := time.Now()
 		w.busy.Add(1)
 		resp := w.process(req)
+		// The wait at the CPU gate is not run time: it is reported apart from it.
+		waited := takeAdmissionWait(w.session)
 		w.busy.Add(-1)
 
 		w.requests.Add(1)
-		w.totalLat.Add(time.Since(start).Microseconds())
+		// The wait is subtracted from the request's run time, never added to it.
+		run := time.Since(start) - waited
+		if run < 0 {
+			run = 0
+		}
+		w.totalLat.Add(run.Microseconds())
+		if waited > 0 {
+			w.admissionWaitUs.Add(waited.Microseconds())
+		}
 
 		req.Result <- resp
 	}
@@ -92,7 +106,10 @@ func (w *Worker) process(req Request) Response {
 			return Response{Err: err}
 		}
 		emb, toks, err := processBatch(ctx, w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
-		w.runs.Add(1)
+		// A run admission refused or abandoned is not a run.
+		if !permit.IsAdmissionError(err) {
+			w.runs.Add(1)
+		}
 		totalTokens += toks
 		if err != nil {
 			w.tokens.Add(int64(totalTokens))
@@ -268,6 +285,7 @@ func (p *Pool) Stats() Stats {
 			BatchingMaxTokens: p.batcher.maxBatchTokens,
 			PaddingEfficiency: p.batcher.paddingEfficiency(),
 			DispatchWaitUs:    p.batcher.dispatchWaitUs.Load(),
+			AdmissionWaitUs:   p.batcher.admissionWaitUs.Load(),
 			RunUs:             p.batcher.totalLat.Load(),
 			Runs:              p.batcher.runs.Load(),
 			SessionsBusy:      p.batcher.busy.Load(),
@@ -276,6 +294,7 @@ func (p *Pool) Stats() Stats {
 	}
 	var totalReqs int64
 	var totalLat int64
+	var totalAdmissionWait int64
 	var totalTokens int64
 	var totalErrors int64
 	var totalRuns int64
@@ -283,6 +302,7 @@ func (p *Pool) Stats() Stats {
 	for _, w := range p.workers {
 		totalReqs += w.Requests()
 		totalLat += w.totalLat.Load()
+		totalAdmissionWait += w.admissionWaitUs.Load()
 		totalTokens += w.Tokens()
 		totalErrors += w.Errors()
 		totalRuns += w.runs.Load()
@@ -293,19 +313,20 @@ func (p *Pool) Stats() Stats {
 		avg = float64(totalLat) / float64(totalReqs)
 	}
 	return Stats{
-		Requests:       totalReqs,
-		AvgLatency:     avg,
-		NumWorkers:     len(p.workers),
-		Tokens:         totalTokens,
-		Errors:         totalErrors,
-		Pooling:        p.pooling,
-		Normalize:      p.normalize,
-		MaxLen:         p.maxLen,
-		DispatchWaitUs: p.dispatchWaitUs.Load(),
-		RunUs:          totalLat,
-		Runs:           totalRuns,
-		SessionsBusy:   busy,
-		SessionsTotal:  int64(len(p.workers)),
+		Requests:        totalReqs,
+		AvgLatency:      avg,
+		NumWorkers:      len(p.workers),
+		Tokens:          totalTokens,
+		Errors:          totalErrors,
+		Pooling:         p.pooling,
+		Normalize:       p.normalize,
+		MaxLen:          p.maxLen,
+		DispatchWaitUs:  p.dispatchWaitUs.Load(),
+		AdmissionWaitUs: totalAdmissionWait,
+		RunUs:           totalLat,
+		Runs:            totalRuns,
+		SessionsBusy:    busy,
+		SessionsTotal:   int64(len(p.workers)),
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
@@ -44,6 +45,9 @@ type Batcher struct {
 	runs            atomic.Int64
 	busy            atomic.Int64
 	dispatchWaitUs  atomic.Int64
+	// admissionWaitUs accumulates the time this batcher's runs spent at the
+	// process CPU gate, kept out of totalLat.
+	admissionWaitUs atomic.Int64
 	realTokens      atomic.Int64
 	processedSlots  atomic.Int64
 	done            chan struct{}
@@ -138,8 +142,10 @@ func (b *Batcher) EmbedContext(ctx context.Context, texts []string) (Response, e
 	case resp := <-result:
 		return resp, nil
 	case <-ctx.Done():
-		// The run loop owns the request now; its response lands in the buffered
-		// result channel nobody reads.
+		// The request is dropped out of the window before it consumes a run
+		// (flush re-checks the deadline), so the caller's bound still holds
+		// here: the batch it would have joined may itself be waiting for
+		// admission, and that wait must not outlive the caller's deadline.
 		return Response{}, ctx.Err()
 	}
 }
@@ -192,9 +198,14 @@ func (b *Batcher) run() {
 		// expired, so the latest deadline is what bounds its wait for admission.
 		runCtx, cancelRun := DeadlineAfter(deads...)
 		resp, seqLen, err := b.process(runCtx, all)
+		// The wait at the CPU gate is not run time, and a batch admission never
+		// admitted is not a run.
+		waited := takeAdmissionWait(b.session)
 		cancelRun()
 		b.busy.Add(-1)
-		b.runs.Add(1)
+		if !permit.IsAdmissionError(err) {
+			b.runs.Add(1)
+		}
 		if err == nil {
 			// Track padding efficiency: real tokens / processed token-slots.
 			b.tokens.Add(int64(totalTokens))
@@ -214,7 +225,15 @@ func (b *Batcher) run() {
 		}
 
 		b.requests.Add(int64(len(batch)))
-		b.totalLat.Add(time.Since(start).Microseconds())
+		// The wait is subtracted from the batch's run time, never added to it.
+		run := time.Since(start) - waited
+		if run < 0 {
+			run = 0
+		}
+		b.totalLat.Add(run.Microseconds())
+		if waited > 0 {
+			b.admissionWaitUs.Add(waited.Microseconds())
+		}
 
 		batch = batch[:0]
 		budget = 0

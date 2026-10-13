@@ -92,6 +92,7 @@ type modelInfoLine struct {
 	// and session counters are not measured at all.
 	hasPool           bool
 	dispatchWaitUs    int64
+	admissionWaitUs   int64
 	runUs             int64
 	runs              int64
 	sessionsBusy      int64
@@ -118,6 +119,7 @@ func (s *Server) infoSnapshot() infoSnapshot {
 			res.req, res.tok, res.err = st.Requests, st.Tokens, st.Errors
 			res.hasPool = true
 			res.dispatchWaitUs = st.DispatchWaitUs
+			res.admissionWaitUs = st.AdmissionWaitUs
 			res.runUs = st.RunUs
 			res.runs = st.Runs
 			res.sessionsBusy = st.SessionsBusy
@@ -173,6 +175,7 @@ func (s *Server) infoSnapshot() infoSnapshot {
 
 			hasPool:           res.hasPool,
 			dispatchWaitUs:    res.dispatchWaitUs,
+			admissionWaitUs:   res.admissionWaitUs,
 			runUs:             res.runUs,
 			runs:              res.runs,
 			sessionsBusy:      res.sessionsBusy,
@@ -218,6 +221,7 @@ type registryEntrySnapshot struct {
 	// model has no loaded pool, in which case the rest stay zero.
 	hasPool           bool
 	dispatchWaitUs    int64
+	admissionWaitUs   int64
 	runUs             int64
 	runs              int64
 	sessionsBusy      int64

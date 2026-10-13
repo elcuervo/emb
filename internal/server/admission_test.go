@@ -44,6 +44,13 @@ func TestAdmissionTimeoutRefusesWhileHealthAnswers(t *testing.T) {
 	if got := statsIntField(t, c2, "admission_refusals"); got != 1 {
 		t.Fatalf("the refusal was not counted: admission_refusals=%d", got)
 	}
+	// The new admission signals are part of the reply, and an idle gate with no
+	// run that waited for it reports zero rather than a missing field.
+	for _, f := range []string{"cpu_admission_wait_us", "cpu_admission_waiters", "cpu_admission_timeouts"} {
+		if got := statsIntField(t, c2, f); got != 0 {
+			t.Fatalf("%s = %d with an idle gate, want 0", f, got)
+		}
+	}
 
 	// Control commands keep answering while admission refuses work.
 	c2.Write([]byte("*1\r\n$4\r\nPING\r\n"))

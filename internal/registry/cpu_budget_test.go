@@ -1,9 +1,11 @@
 package registry
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
@@ -85,20 +87,82 @@ func (budgetTestSession) Close() error { return nil }
 func TestBudgetedSessionReleasesOnError(t *testing.T) {
 	want := errors.New("inference failed")
 	gate := permit.NewBudget(1)
-	sess := budgetedSession{Session: budgetTestSession{err: want}, gate: gate, width: 1}
+	sess := &budgetedSession{Session: budgetTestSession{err: want}, gate: gate, width: 1}
 	if _, err := sess.Run(nil, nil, 0, 0, 0); !errors.Is(err, want) {
 		t.Fatalf("Run error = %v, want %v", err, want)
 	}
-	release := gate.Acquire(1)
+	release, err := gate.AcquireContext(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("the gate still holds the run's permit: %v", err)
+	}
 	release()
+}
+
+// TestBudgetedSessionReportsItsQueuedWait covers the attribution wiring: a run
+// admitted on the spot reports no wait, a run that queued reports how long, and
+// taking the value clears it.
+func TestBudgetedSessionReportsItsQueuedWait(t *testing.T) {
+	gate := permit.NewBudget(1)
+	sess := &budgetedSession{Session: budgetTestSession{}, gate: gate, width: 1}
+	if _, err := sess.Run(nil, nil, 0, 0, 0); err != nil {
+		t.Fatalf("uncontended run: %v", err)
+	}
+	if waited := sess.TakeAdmissionWait(); waited != 0 {
+		t.Fatalf("a run admitted on the spot reported a wait of %s", waited)
+	}
+
+	release := mustHoldGate(t, gate)
+	done := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, err := sess.RunContext(ctx, nil, nil, 0, 0, 0)
+		done <- err
+	}()
+	waitGateQueued(t, gate, 1)
+	time.Sleep(30 * time.Millisecond)
+	release()
+	if err := <-done; err != nil {
+		t.Fatalf("queued run: %v", err)
+	}
+	if waited := sess.TakeAdmissionWait(); waited < 25*time.Millisecond {
+		t.Fatalf("a run that queued ~30ms reported %s", waited)
+	}
+	if waited := sess.TakeAdmissionWait(); waited != 0 {
+		t.Fatalf("the wait was reported twice: %s", waited)
+	}
+}
+
+// mustHoldGate takes the whole gate and returns its release.
+func mustHoldGate(t *testing.T, gate *permit.Budget) func() {
+	t.Helper()
+	release, err := gate.AcquireContext(context.Background(), gate.Capacity())
+	if err != nil {
+		t.Fatalf("taking the gate: %v", err)
+	}
+	return release
+}
+
+// waitGateQueued waits until the gate has n callers queued, so a test can act on
+// a state it observed rather than on elapsed time.
+func waitGateQueued(t *testing.T, gate *permit.Budget, n int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if gate.Pressure().Waiters == n {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("gate never reached %d queued callers", n)
 }
 
 // Two models share one process budget, so a busy model with a narrow run can
 // lend idle capacity to another model rather than each holding a reservation.
 func TestSharedBudgetLendsIdleCapacityAcrossModels(t *testing.T) {
 	gate := permit.NewBudget(3)
-	modelA := budgetedSession{Session: budgetTestSession{}, gate: gate, width: 1}
-	modelB := budgetedSession{Session: budgetTestSession{}, gate: gate, width: 2}
+	modelA := &budgetedSession{Session: budgetTestSession{}, gate: gate, width: 1}
+	modelB := &budgetedSession{Session: budgetTestSession{}, gate: gate, width: 2}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

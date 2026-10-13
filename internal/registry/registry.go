@@ -233,8 +233,13 @@ func (r *ScriptResources) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.N
 	r.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
 	runStart := time.Now()
 	out, err := sess.RunNamed(inputs)
-	r.runUs.Add(time.Since(runStart).Microseconds())
-	r.runs.Add(1)
+	// The wait at the CPU gate is not run time, and a run admission never
+	// admitted is not a run. The wait stays visible in the gate's own pressure.
+	waited := takeAdmissionWait(sess)
+	if !permit.IsAdmissionError(err) {
+		r.runs.Add(1)
+	}
+	r.runUs.Add((time.Since(runStart) - waited).Microseconds())
 	r.pool.Release(sess)
 	return out, err
 }
@@ -350,6 +355,10 @@ func (r *Registry) CPUStatus() CPUPlan {
 	plan := r.cpuPlan
 	if r.cpuGate != nil {
 		plan.Active, plan.Peak = r.cpuGate.Stats()
+		pressure := r.cpuGate.Pressure()
+		plan.AdmissionWaitUs = pressure.WaitUs
+		plan.AdmissionWaiters = pressure.Waiters
+		plan.AdmissionTimeouts = pressure.Timeouts
 	}
 	return plan
 }
@@ -718,7 +727,7 @@ func (e *ModelEntry) ensurePool() error {
 				return nil, err
 			}
 			if e.cpuGate != nil {
-				return budgetedSession{Session: sess, gate: e.cpuGate, width: threads}, nil
+				return &budgetedSession{Session: sess, gate: e.cpuGate, width: threads}, nil
 			}
 			return sess, nil
 		}, tok, cfg.Dim, cfg.MaxLength, budget, autoTuneWorkers(cfg.ONNX, budget), cfg.IntraOpThreads, cfg.Workers, timeoutMS > 0, batch)
@@ -740,7 +749,7 @@ func (e *ModelEntry) ensurePool() error {
 			return nil, err
 		}
 		if e.cpuGate != nil {
-			return budgetedSession{Session: sess, gate: e.cpuGate, width: intraThreads}, nil
+			return &budgetedSession{Session: sess, gate: e.cpuGate, width: intraThreads}, nil
 		}
 		return sess, nil
 	}
@@ -912,7 +921,7 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 			// caller would let the first run take the whole budget and serialise
 			// the callers that script_callers_per_session exists to run together.
 			charge := max(1, (intraThreads+cfg.ScriptCallers()-1)/cfg.ScriptCallers())
-			sess = budgetedNamedSession{NamedSession: sess, gate: e.cpuGate, width: charge}
+			sess = &budgetedNamedSession{NamedSession: sess, gate: e.cpuGate, width: charge}
 		}
 		sessions = append(sessions, sess)
 	}

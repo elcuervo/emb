@@ -4,7 +4,7 @@
 
 ### Requirement: Shared inference admission
 
-Embedding, scripted, image, and calibration ONNX runs SHALL share one fair process-local admission controller. Tokens SHALL be acquired immediately around actual Session.Run and released on every result path. Idle model capacity SHALL be borrowable: a waiter whose width fits the current usage SHALL be admitted even while an earlier, wider waiter is still blocked. Explicit work wider than the budget SHALL run alone with a warning. Admission SHALL be bounded — a caller SHALL supply a deadline, the controller SHALL return a busy or timeout outcome rather than waiting without limit, it SHALL refuse a queue beyond its configured bound, and it SHALL abandon admission for a request whose client has gone away. While the process budget admits more than one run, no single run SHALL hold the whole budget once other work is pending. The controller SHALL report admission wait separately from preprocessing, local pool wait, and run time. Tokens are an admission bound, not an OS CPU limit.
+Embedding, scripted, image, and calibration ONNX runs SHALL share one fair process-local admission controller. Tokens SHALL be acquired immediately around actual Session.Run and released on every result path. Idle model capacity SHALL be borrowable: a waiter whose width fits the current usage SHALL be admitted even while an earlier, wider waiter is still blocked. Explicit work wider than the budget SHALL run alone with a warning. Admission SHALL be bounded — a caller SHALL supply a context, the controller SHALL return a busy or timeout outcome rather than waiting without limit, it SHALL refuse a queue beyond its configured bound, and an abandoned or expired wait SHALL leave the queue without occupying capacity or running. While the process budget admits more than one run, no single run SHALL hold the whole budget once other work is pending. The controller SHALL report admission wait, queue depth, and waits that ended without a grant separately from preprocessing, local pool wait, and run time. Tokens are an admission bound, not an OS CPU limit.
 
 #### Scenario: Concurrent models
 
@@ -34,11 +34,12 @@ Embedding, scripted, image, and calibration ONNX runs SHALL share one fair proce
 - **THEN** further requests SHALL be refused with a busy outcome rather than queued
 - **AND** the refusal SHALL be counted and observable
 
-#### Scenario: Abandoned request
+#### Scenario: Abandoned wait
 
-- **WHEN** the client disconnects or abandons a request that is waiting for admission
+- **WHEN** a request's context ends — its deadline expires, or its caller is gone — while it waits for admission
 - **THEN** the controller SHALL release the pending wait and its accounting
-- **AND** the abandoned request SHALL NOT occupy capacity or be run afterwards
+- **AND** the wait SHALL NOT be counted as a run and SHALL NOT be left holding capacity
+- **AND** a disconnect the transport cannot observe mid-command SHALL be covered by the server's own bounded wait rather than claimed as detected
 
 #### Scenario: No monopolizing run
 
@@ -49,7 +50,9 @@ Embedding, scripted, image, and calibration ONNX runs SHALL share one fair proce
 
 - **WHEN** any run waits for admission
 - **THEN** the elapsed admission wait SHALL be recorded separately from local pool wait, preprocessing and run time
-- **AND** it SHALL be visible in `EMB.INFO`/`EMB.STATS` and the inference metrics
+- **AND** the reported run time SHALL NOT include it
+- **AND** the current queue depth and the waits that ended without a grant SHALL be reported beside it
+- **AND** all of it SHALL be visible in `EMB.INFO`/`EMB.STATS` and the inference metrics
 
 ### Requirement: Bounded automatic calibration
 

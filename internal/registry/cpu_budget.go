@@ -7,6 +7,8 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
@@ -24,6 +26,12 @@ type CPUPlan struct {
 	Warning    string
 	Active     int
 	Peak       int
+	// Admission pressure: the wait callers spent queueing at the gate, the
+	// callers queueing now, and the waits that ended without a grant. Kept
+	// apart from Active/Peak, which count runs that were admitted.
+	AdmissionWaitUs   int64
+	AdmissionWaiters  int
+	AdmissionTimeouts int
 }
 
 func ResolveCPUPlan(cfg *config.Config, allowance CPUAllowance) (CPUPlan, error) {
@@ -145,35 +153,69 @@ type budgetedSession struct {
 	onnx.Session
 	gate  *permit.Budget
 	width int
+	// pending is the microseconds the last admitted run spent waiting at the
+	// gate, unclaimed until the pipeline takes it: the pipeline subtracts it
+	// from the run time and reports it as the admission wait instead.
+	pending atomic.Int64
 }
 
-func (s budgetedSession) Run(ids, mask []int64, batch, length, dim int) ([]float32, error) {
+func (s *budgetedSession) Run(ids, mask []int64, batch, length, dim int) ([]float32, error) {
 	return s.RunContext(context.Background(), ids, mask, batch, length, dim)
 }
 
 // RunContext admits the run only if the caller is still waiting, and abandons
 // the wait when its context ends: admission is bounded from the request rather
 // than from the run.
-func (s budgetedSession) RunContext(ctx context.Context, ids, mask []int64, batch, length, dim int) ([]float32, error) {
-	release, err := s.gate.AcquireContext(ctx, s.width)
+func (s *budgetedSession) RunContext(ctx context.Context, ids, mask []int64, batch, length, dim int) ([]float32, error) {
+	release, waited, err := s.gate.AcquireContextWait(ctx, s.width)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
+	s.pending.Store(waited.Microseconds())
 	return onnx.RunContext(ctx, s.Session, ids, mask, batch, length, dim)
+}
+
+// TakeAdmissionWait returns and clears the wait this session recorded for the
+// run the caller just executed.
+func (s *budgetedSession) TakeAdmissionWait() time.Duration {
+	return time.Duration(s.pending.Swap(0)) * time.Microsecond
+}
+
+// admissionTimed is implemented by the gate wrappers: it reports how long the
+// run the caller just executed spent waiting for CPU admission.
+type admissionTimed interface{ TakeAdmissionWait() time.Duration }
+
+// takeAdmissionWait reports and clears the wait the session accrued for the run
+// just executed, zero for sessions that do not pass through the gate.
+func takeAdmissionWait(sess any) time.Duration {
+	if t, ok := sess.(admissionTimed); ok {
+		return t.TakeAdmissionWait()
+	}
+	return 0
 }
 
 type budgetedNamedSession struct {
 	onnx.NamedSession
 	gate  *permit.Budget
 	width int
+	// pending as in budgetedSession: the scripted and image host APIs carry no
+	// context of their own, so their wait is bounded by the queue bound alone.
+	pending atomic.Int64
 }
 
-func (s budgetedNamedSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
-	// The scripted and image host APIs carry no context yet, so this path waits
-	// unbounded on admission: threading their deadline is tracked separately
-	// (design D1, task 9.1).
-	release := s.gate.Acquire(s.width)
+func (s *budgetedNamedSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+	release, waited, err := s.gate.AcquireContextWait(context.Background(), s.width)
+	if err != nil {
+		return nil, err
+	}
 	defer release()
+	s.pending.Store(waited.Microseconds())
 	return s.NamedSession.RunNamed(inputs)
+}
+
+// TakeAdmissionWait returns and clears the wait this session recorded for the
+// run the caller just executed.
+func (s *budgetedNamedSession) TakeAdmissionWait() time.Duration {
+	return time.Duration(s.pending.Swap(0)) * time.Microsecond
 }

@@ -36,6 +36,13 @@ type Snapshot struct {
 	TruncatedPairs  int64
 	TruncatedImages int64
 
+	// Process CPU admission pressure, cumulative except the waiter gauge.
+	// Waits are counted per attempt: one that ends without a grant shows up in
+	// Timeouts rather than in a run.
+	CPUAdmissionWaitUs   int64
+	CPUAdmissionWaiters  int64
+	CPUAdmissionTimeouts int64
+
 	// Models is the per-model breakdown, one entry per loaded model.
 	Models []ModelSnapshot
 }
@@ -53,8 +60,11 @@ type ModelSnapshot struct {
 	HasPool bool
 
 	// Cumulative embedding-path timing and session counters, in the units
-	// EMB.INFO renders them (microseconds for the time counters).
+	// EMB.INFO renders them (microseconds for the time counters). AdmissionWaitUs
+	// is the part of the request that waited at the process CPU gate and is
+	// therefore excluded from RunUs.
 	DispatchWaitUs    int64
+	AdmissionWaitUs   int64
 	RunUs             int64
 	Runs              int64
 	SessionsBusy      int64
