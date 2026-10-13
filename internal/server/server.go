@@ -20,6 +20,7 @@ import (
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/permit"
+	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
 	"github.com/elcuervo/emb/internal/telemetry"
@@ -957,6 +958,17 @@ func admissionBusyMessage(err error) (string, bool) {
 	return "", false
 }
 
+// writeModelError maps a registry lookup error to its reply: a model whose
+// layout is still undecided is a not-ready answer (the caller may retry), not an
+// internal error.
+func writeModelError(conn redcon.Conn, err error) {
+	if errors.Is(err, registry.ErrNotReady) {
+		conn.WriteError("ERR " + err.Error())
+		return
+	}
+	conn.WriteError(fmt.Sprintf("ERR %v", err))
+}
+
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	if len(cmd.Args) < 3 {
 		conn.WriteError("ERR wrong number of arguments for 'EMB' command")
@@ -1003,10 +1015,10 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		texts = texts[:int(limit)]
 	}
 
-	entry, err := s.reg.GetOrInit(modelName)
+	entry, err := s.reg.ResolveReady(modelName)
 	if err != nil {
 		failed = true
-		conn.WriteError(fmt.Sprintf("ERR %v", err))
+		writeModelError(conn, err)
 		return
 	}
 
@@ -1179,7 +1191,7 @@ func (s *Server) handleMODELS(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteBulkString("dim")
 			conn.WriteInt(m.Dim)
 			conn.WriteBulkString("status")
-			conn.WriteBulkString("ready")
+			conn.WriteBulkString(m.Status())
 		}
 		return
 	}
@@ -1188,7 +1200,7 @@ func (s *Server) handleMODELS(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteArray(3)
 		conn.WriteBulkString(m.Name)
 		conn.WriteInt(m.Dim)
-		conn.WriteBulkString("ready")
+		conn.WriteBulkString(m.Status())
 	}
 }
 
@@ -1199,22 +1211,27 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	modelName := string(cmd.Args[1])
-	entry, err := s.reg.GetOrInit(modelName)
+	// Observation never initializes a model: an undecided layout reports its
+	// status and zeros instead of being loaded by a stats read.
+	entry, err := s.reg.Resolve(modelName)
 	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
-	stats := entry.Pool.Stats()
+	stats := pipeline.Stats{}
+	if pool := entry.LoadedPool(); pool != nil {
+		stats = pool.Stats()
+	}
 	verdict, reason := entry.BatchDeterminism, entry.BatchDeterminismReason
 	if verdict == "" {
 		verdict, reason = "untested", "untested"
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 49)
+		writePairs(conn, 52)
 	} else {
-		writePairs(conn, 42)
+		writePairs(conn, 45)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1261,10 +1278,23 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(cpuBudget)
 	conn.WriteBulkString("cpu_thread_share")
 	conn.WriteInt(cpuShare)
+	conn.WriteBulkString("cpu_share_reclaimed")
+	conn.WriteInt(boolInt(entry.ShareReclaimed()))
 	conn.WriteBulkString("intra_op_threads")
 	conn.WriteInt(intraThreads)
 	conn.WriteBulkString("allow_spinning")
 	conn.WriteInt(boolInt(spinning))
+	// How the layout was chosen: a calibrated layout is distinguishable from a
+	// policy-derived, fallback or unresolved one, and an unresolved trial
+	// carries its reason. "none" until the model's layout is decided.
+	layoutSource, layoutReason := "none", ""
+	if outcome, ok := entry.Layout(); ok {
+		layoutSource, layoutReason = outcome.Source, outcome.Reason
+	}
+	conn.WriteBulkString("calibration_source")
+	conn.WriteBulkString(layoutSource)
+	conn.WriteBulkString("calibration_reason")
+	conn.WriteBulkString(layoutReason)
 	// Scripted-evaluation counters and resource footprint, distinct from the
 	// embedding pool's requests/errors above.
 	scriptReqs, scriptErrs := entry.ScriptStats()
@@ -1401,7 +1431,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 63)
+	writePairs(conn, 67)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1535,6 +1565,19 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(cpu.AdmissionWaiters)
 	conn.WriteBulkString("cpu_admission_timeouts")
 	conn.WriteInt(cpu.AdmissionTimeouts)
+	// The kernel's own view of CPU we could not use: cgroup throttling and
+	// stolen time, cumulative. This is what separates "the budget is the limit"
+	// from "the host is starving us" — a throttled group cannot be fixed by
+	// tuning the layout, and the counters stay zero on an unthrottled host.
+	throttle := registry.ReadCPUThrottle()
+	conn.WriteBulkString("cpu_throttle_periods")
+	conn.WriteInt64(int64(throttle.Periods))
+	conn.WriteBulkString("cpu_throttled_periods")
+	conn.WriteInt64(int64(throttle.Throttled))
+	conn.WriteBulkString("cpu_throttle_usec")
+	conn.WriteInt64(int64(throttle.ThrottleUs))
+	conn.WriteBulkString("cpu_steal_usec")
+	conn.WriteInt64(int64(throttle.StealUs))
 }
 
 func boolInt(v bool) int {
@@ -1616,7 +1659,7 @@ func writeMultiResult(conn redcon.Conn, s *Server, format replyFormat, pairs [][
 				continue
 			}
 			model := string(pairs[i*2])
-			entry, err := s.reg.GetOrInit(model)
+			entry, err := s.reg.Resolve(model)
 			if err != nil {
 				conn.WriteNull()
 				continue
@@ -1691,7 +1734,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		}
 	}
 
-	entry, err := s.reg.GetOrInit(model)
+	entry, err := s.reg.ResolveReady(model)
 	if err != nil {
 		failed = true
 		return

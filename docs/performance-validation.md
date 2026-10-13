@@ -190,6 +190,29 @@ one-core arm (`saturation-enforced`) is where that assertion is enforced per
 change instead. Verified on the development machine: 16 pass, 1 skip, 0 fail,
 67 s.
 
+## Regression gate for the plain embedding path
+
+`just bench-plain-emb` (also selected by `-run Smoke`, so `just bench-smoke` and
+the sweep run both gates) drives the plain `EMB` path in-process against
+`testdata/plain-emb` — an in-repo miniature, so no model download — through
+serial → burst → recovery and twelve assertion arms:
+
+| Arm | What it drives | Assertions |
+|---|---|---|
+| `plain` | bulk `EMB`, batching on, an explicit `cpu_budget`, reply cache, preloaded | `plain-emb-pinned`, `plain-emb-latency`, `admission-wait-reported`, `drain-after-disconnect`, `health-answers`, `cache-idle` |
+| `pool` | batching off, several sessions at one thread against a small budget | `layout-concurrency`, `queue-bounded`, `admission-bounded` |
+| `deadline` | the same shape with the admission bound derived from the measured serial request | `admission-bounded` (expiry, not only latency) |
+| `layout` | the policy layout with calibration off | `calibration-off-request-path` |
+| `fair` | two models over one budget: a wide run holds the budget while a narrow probe arrives | `admission-fair` |
+
+Bounds are derived per host from a measured serial request rather than pinned to
+a constant (latency, admission and fairness each use their own multiple), so a
+faster or slower runner scales instead of flaking; a phase that cannot be
+exercised is reported as `skipped` with the host property, never as a pass.
+`plain-emb-pinned` compares digests of the returned embeddings and says which
+text took the looser per-component tolerance when a digest differs (the fixture
+README records how the pins are regenerated).
+
 ## Gate self-verification
 
 ```bash
@@ -209,6 +232,15 @@ the assertion each one must trip:
 | `02-saturation-out-of-reach.patch` | the saturation threshold raised out of reach, so the class can never fire | `saturation-enforced` |
 | `03-cache-hits-count-as-traffic.patch` | a reply-cache hit counted as a run, so a cache-served window stops being idle | `cache-idle` |
 | `04-layout-reshape.patch` | the reported session count follows the live allowance: a runtime reshape of the layout | `layout-immutable` |
+| `05-fifo-head.patch` | admission considers only the head of the queue: no borrowing past a blocked wide waiter | `admission-fair` |
+| `06-admission-unbounded.patch` | the configured admission bound is ignored, so a command may wait forever | `admission-bounded` |
+| `07-queue-unbounded.patch` | the admission queue is never refused | `queue-bounded` |
+| `08-single-session-layout.patch` | one session holding the whole share, so a run fills the budget | `layout-concurrency` |
+| `09-calibration-on-request.patch` | the request path loads (and calibrates) a model synchronously | `calibration-off-request-path` |
+
+Mutants `05`–`09` are the plain-`EMB` tier-2 regressions: the scripted gate
+cannot see an admission stall, so they are caught by `TestPlainEMBSmoke`, which
+`-run Smoke` also selects.
 
 Recorded sweep on the development machine:
 

@@ -1,0 +1,18 @@
+# assertion: admission-fair
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/permit/budget.go
++++ b/internal/permit/budget.go
+@@ -171,12 +171,7 @@
+ 	if b.borrowed >= b.borrowBurst {
+ 		return -1
+ 	}
+-	for i := 1; i < len(b.waiters); i++ {
+-		if b.canAdmit(b.waiters[i].width) {
+-			b.borrowed++
+-			return i
+-		}
+-	}
++	// (mutant) only the head is ever considered: no borrowing past a blocked head.
+ 	return -1
+ }
+ 

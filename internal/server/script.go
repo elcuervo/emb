@@ -386,10 +386,12 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 	}
 	// emb.embed is bound only for models that can produce embeddings, so a
 	// script targeting a non-embeddable graph leaves the function absent (the
-	// same gating style as emb.image). The pool loads lazily on first call.
+	// same gating style as emb.image). The pool is decided off the script's
+	// path: a call that meets an undecided layout reports it rather than
+	// running calibration inside the evaluation.
 	if entry.Embeddable() {
 		hosts.Embed = func(texts []string) ([][]byte, error) {
-			e, err := s.reg.GetOrInit(model)
+			e, err := s.reg.ResolveReady(model)
 			if err != nil {
 				return nil, err
 			}

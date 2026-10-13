@@ -1,0 +1,18 @@
+# assertion: calibration-off-request-path
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/registry/registry.go
++++ b/internal/registry/registry.go
+@@ -1331,11 +1331,8 @@
+ 	// concurrent requests cannot each start a load or wait on one another.
+ 	// The read lock is held for the load's duration so a concurrent Close waits
+ 	// for it instead of closing resources under it.
+-	go func() {
+-		r.mu.RLock()
+-		defer r.mu.RUnlock()
+-		entry.once.Do(entry.startLoad)
+-	}()
++	// (mutant) the request waits for the load, calibration included.
++	entry.once.Do(entry.startLoad)
+ 
+ 	if entry.layoutDecided() {
+ 		return entry, nil

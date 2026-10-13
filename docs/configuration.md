@@ -198,10 +198,17 @@ budget is `auto`; it must be smaller than detected capacity. A numeric
 `cpu_budget` is an explicit final budget and cannot be combined with
 `cpu_reserve`. A budget above detected capacity starts with a warning.
 
-Models split the initial budget deterministically by `weight` (default 1).
+Models split the initial budget deterministically by `weight` (default 1). When
+the configured weights and the one-unit-per-model floor would allocate more than
+the budget (more models than the budget has units), the excess is reclaimed from
+the smallest shares and smallest weights, so the shares always sum to the budget;
+a reclaimed model keeps no reservation, runs at width one, and lives on capacity
+its peers leave idle. The boot log names the reclaimed models and `EMB.INFO`
+reports `cpu_share_reclaimed` per model.
 One FIFO admission gate covers embedding, image, and script
 ONNX runs; explicit over-budget runs execute alone. Automatic embedding and
-image sessions disable ORT spinning. Set `cpu_budget: off` to restore legacy
+image sessions disable ORT spinning (`allow_spinning: true` still overrides that
+for a single caller that wants it). Set `cpu_budget: off` to restore legacy
 session sizing and spinning behavior; this does not roll back the binary.
 
 A run whose width does not fit waits for capacity, and a narrower run is
@@ -250,16 +257,31 @@ An explicit dimension, or a budget with only one candidate, skips the trials.
 **Startup cost.** Trials are bounded by a 4-second deadline per model and at
 most 12 candidates, and the deadline is predicted between candidates from the
 last one's measured cost, so a slow model keeps its best validated layout
-instead of overrunning. Calibration runs when the model loads: at startup for
-`preload: true`, otherwise on that model's **first request** — so a lazily
-loaded model's first request pays both the model load and up to four seconds of
-trials.
+instead of overrunning. The deadline also stops a candidate in flight, so one
+slow candidate cannot run past it.
 
-**Fallback.** Invalid fixtures, a failed baseline, unavailable CPU accounting,
-an expired deadline, or an unusable tokenizer keep the best validated candidate,
-or select one session × one thread (or the explicit dimensions) and log a reason
-such as `baseline_failed`, `cpu_accounting_unavailable`, `calibration_deadline`,
-`candidate_failed`, `p95_regression`, `invalid_limits`, or `invalid_fixture`.
+**Where calibration runs.** Off the request path, always. `preload: true`
+decides the layout during boot (readiness waits for it); a model left lazy is
+laid out in the background on its first use, and requests that arrive while its
+layout is undecided are answered `ERR not ready: model "x" is initializing`
+rather than waiting for calibration. `EMB.MODELS` reports each model's state
+(`ready`, `loading`, `uninitialized`, or `failed: <reason>`), so a lazy path is
+observable instead of just slow. For a model on a serving path, set
+`preload: true`: it turns an unbounded first-request stall into a documented
+boot cost.
+
+**Fallback and unresolved outcomes.** Invalid fixtures, an unusable tokenizer, or
+an explicit width wider than the model's share keep the policy-derived layout and
+report a **fallback** with its reason (`invalid_limits`, `invalid_fixture: …`,
+`over_budget`). A search that ran but produced no calibrated choice — a failed
+baseline, unavailable CPU accounting, a rejected tail, or an expired deadline —
+is recorded as **unresolved** with its reason (`baseline_failed`,
+`cpu_accounting_unavailable`, `p95_regression`, `deadline`, `no_valid_candidate`)
+and keeps the policy layout, so a failed search never collapses a model to one
+thread while the process has headroom. A truncated search is unresolved even when
+it measured something: the smallest measured layout is never presented as a
+calibrated winner. The boot log and `EMB.INFO` (`calibration_source`,
+`calibration_reason`) make all of this distinguishable from a calibrated choice.
 A batch-determinism probe failure turns batching off *before* calibration, so a
 degraded model is calibrated for single-row inference and cannot keep
 batch-sized worker defaults.

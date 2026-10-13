@@ -54,6 +54,10 @@ type ModelEntry struct {
 	// choose one, so the reported intra-op width is what a run actually charges
 	// rather than the model's share.
 	policyThreads atomic.Int64
+	// cpuShareReclaimed records that the model's per-model reservation was
+	// reclaimed because the configured weights over-allocated the budget. Written
+	// by Add before the pool is built and read by EMB.INFO.
+	cpuShareReclaimed bool
 
 	// Quantization is "int8" when quantized weights were resolved, else "fp32".
 	Quantization string
@@ -69,11 +73,19 @@ type ModelEntry struct {
 	BatchDeterminism       string
 	BatchDeterminismReason string
 
-	once      sync.Once
-	cfg       config.ModelConfig
-	poolReady atomic.Bool
-	loaded    atomic.Bool
-	loadErr   error
+	once        sync.Once
+	cfg         config.ModelConfig
+	poolReady   atomic.Bool
+	loaded      atomic.Bool
+	loadErr     error
+	loadStarted atomic.Bool
+	loadDone    atomic.Bool
+
+	// layout is how this model's embedding layout was chosen: source
+	// (calibrated, unresolved, fallback, policy, legacy), reason, and the
+	// effective sessions/width published before the pool. Written inside
+	// ensurePool, published atomically so EMB.INFO never forces a lazy load.
+	layout atomic.Pointer[layoutOutcome]
 
 	// scripted resources (task: scripted-model path): a generic named-tensor
 	// session plus the word-aligned tokenizer, created lazily on first script
@@ -168,6 +180,11 @@ func (e *ModelEntry) CPUSettings() (enabled bool, budget, share, threads int, sp
 	}
 	return true, e.cpuBudget, e.cpuThreads, threads, spinning
 }
+
+// ShareReclaimed reports whether this model's per-model reservation was reclaimed
+// because the configured weights over-allocated the process budget. A reclaimed
+// model keeps no reservation and runs on capacity its peers leave idle.
+func (e *ModelEntry) ShareReclaimed() bool { return e.cpuShareReclaimed }
 
 // ScriptFootprint reports the model's scripted resource cost without creating
 // anything: the number of named-tensor sessions opened and whether the script
@@ -320,6 +337,9 @@ type Registry struct {
 	cpuPlan     CPUPlan
 	cpuGate     *permit.Budget
 	threadShare map[string]int
+	// reclaimedShares names the models whose per-model reservation was reclaimed
+	// because the configured weights over-allocated the budget.
+	reclaimedShares map[string]bool
 	calibrate   bool
 }
 
@@ -345,7 +365,15 @@ func NewWithConfig(cfg *config.Config) (*Registry, error) {
 		r.cpuPlan = plan
 		r.cpuGate = permit.NewBudget(plan.Budget)
 		r.cpuGate.SetQueueBound(plan.QueueBound)
-		r.threadShare = modelThreadShares(cfg.Models, plan.Budget)
+		shares, reclaimed := modelThreadShares(cfg.Models, plan.Budget)
+		r.threadShare = shares
+		if len(reclaimed) > 0 {
+			log.Printf("CPU shares reclaimed: budget %d across %d configured models; no reservation for %s (they run on capacity their peers leave idle)", plan.Budget, len(cfg.Models), strings.Join(reclaimed, ", "))
+			r.reclaimedShares = make(map[string]bool, len(reclaimed))
+			for _, name := range reclaimed {
+				r.reclaimedShares[name] = true
+			}
+		}
 	}
 	logCPUPlan(plan)
 	return r, nil
@@ -565,6 +593,34 @@ var newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim 
 	return onnx.NewRuntimeSessionFromBytes(data, inputNames, outputNames, dim, rank, intraOpThreads, interOpThreads, execMode, allowSpinning)
 }
 
+// layoutOutcome is the immutable record of how a model's embedding layout was
+// chosen, so the boot log and EMB.INFO can report the provenance instead of
+// only the numbers: a layout selected by calibration is distinguishable from a
+// policy-derived one, and an unresolved trial carries its reason.
+type layoutOutcome struct {
+	Source  string // calibrated | unresolved | fallback | policy | legacy
+	Reason  string
+	Workers int
+	Threads int
+	Share   int
+	Elapsed time.Duration
+}
+
+// Layout reports how this model's embedding layout was chosen, and whether it
+// has been decided yet. It reads published state only and never loads a model.
+func (e *ModelEntry) Layout() (layoutOutcome, bool) {
+	if out := e.layout.Load(); out != nil {
+		return *out, true
+	}
+	return layoutOutcome{}, false
+}
+
+// setLayout publishes the chosen layout. The first write wins: the layout is
+// decided once, before the pool exists.
+func (e *ModelEntry) setLayout(out layoutOutcome) {
+	e.layout.CompareAndSwap(nil, &out)
+}
+
 func (e *ModelEntry) ensurePool() error {
 	if e.loaded.Load() {
 		return nil
@@ -706,7 +762,12 @@ func (e *ModelEntry) ensurePool() error {
 		numWorkers, intraThreads = policyPoolLayout(e.cpuThreads, cfg.Workers, cfg.IntraOpThreads, timeoutMS > 0)
 		e.policyThreads.Store(int64(intraThreads))
 		if !e.calibrate || (cfg.IntraOpThreads > 0 && cfg.Workers > 0) {
-			log.Printf("  %s: policy layout workers=%d intra_op_threads=%d (share=%d, batched=%t)", e.Name, numWorkers, intraThreads, e.cpuThreads, timeoutMS > 0)
+			reason := "calibration_disabled"
+			if cfg.IntraOpThreads > 0 && cfg.Workers > 0 {
+				reason = "explicit_layout"
+			}
+			e.setLayout(layoutOutcome{Source: "policy", Reason: reason, Workers: numWorkers, Threads: intraThreads, Share: e.cpuThreads})
+			log.Printf("  %s: policy layout workers=%d intra_op_threads=%d share=%d batched=%t reason=%s", e.Name, numWorkers, intraThreads, e.cpuThreads, timeoutMS > 0, reason)
 		}
 	}
 
@@ -731,10 +792,22 @@ func (e *ModelEntry) ensurePool() error {
 			}
 			return sess, nil
 		}, tok, cfg.Dim, cfg.MaxLength, budget, autoTuneWorkers(cfg.ONNX, budget), cfg.IntraOpThreads, cfg.Workers, timeoutMS > 0, batch)
-		intraThreads, numWorkers = layout.Threads, layout.Workers
+		// Only a calibrated choice replaces the policy layout. A fallback or an
+		// unresolved trial would otherwise collapse the model to the fallback's
+		// single thread while the process holds headroom — the defect the policy
+		// exists to fix — so the derived layout is kept and the reason reported.
+		if layout.Source == "calibrated" {
+			intraThreads, numWorkers = layout.Threads, layout.Workers
+		}
+		e.setLayout(layoutOutcome{Source: layout.Source, Reason: layout.Reason, Workers: numWorkers, Threads: intraThreads, Share: e.cpuThreads, Elapsed: layout.Elapsed})
 		e.tunedThreads.Store(int64(intraThreads))
 		e.tunedWorkers.Store(int64(numWorkers))
-		log.Printf("  %s: CPU calibration workers=%d intra_op_threads=%d source=%s reason=%s elapsed=%s", e.Name, numWorkers, intraThreads, layout.Source, layout.Reason, layout.Elapsed.Round(time.Millisecond))
+		log.Printf("  %s: layout workers=%d intra_op_threads=%d share=%d source=%s reason=%s elapsed=%s", e.Name, numWorkers, intraThreads, e.cpuThreads, layout.Source, layout.Reason, layout.Elapsed.Round(time.Millisecond))
+	} else if e.cpuPolicy {
+		e.tunedThreads.Store(int64(intraThreads))
+		e.tunedWorkers.Store(int64(numWorkers))
+	} else {
+		e.setLayout(layoutOutcome{Source: "legacy", Reason: "cpu_budget_off", Workers: numWorkers, Threads: intraThreads})
 	}
 	// A width that fills the budget was the measured defect (cpu_peak_tokens ==
 	// capacity, runs admitted alone). The policy no longer derives one; an
@@ -1208,8 +1281,9 @@ func (e *ModelEntry) Preload() error {
 	cfg, name := e.cfg, e.Name
 	if cfg.Preload {
 		log.Printf("  preloading model %q...", name)
-		if err := e.ensurePool(); err != nil {
-			return err
+		e.once.Do(e.startLoad)
+		if e.loadErr != nil {
+			return e.loadErr
 		}
 	}
 	if cfg.ScriptPreload {
@@ -1229,25 +1303,126 @@ func (e *ModelEntry) Preload() error {
 	return nil
 }
 
-func (r *Registry) GetOrInit(name string) (*ModelEntry, error) {
-	// Hold the read lock across initialization so a concurrent Close (which
-	// takes the write lock) waits for the load instead of closing under it.
+// ErrNotReady reports that a model's embedding layout is not decided yet. The
+// request that met it did not wait for initialization: the layout is decided off
+// the request path, and the caller gets an explicit answer it can retry.
+var ErrNotReady = errors.New("not ready")
+
+// ResolveReady returns a model entry whose embedding layout is decided, without
+// ever initializing one on the caller's path. An undecided model is started in
+// the background (once, idempotent) and reported as not ready, so no request
+// runs calibration and no request waits on another request's initialization.
+func (r *Registry) ResolveReady(name string) (*ModelEntry, error) {
+	// Hold the read lock across the lookup so a concurrent Close (which takes
+	// the write lock) waits for the decision instead of racing it.
+	r.mu.RLock()
+	entry, ok := r.models[name]
+	if !ok {
+		r.mu.RUnlock()
+		return nil, fmt.Errorf("model '%s' not found", name)
+	}
+	if entry.layoutDecided() {
+		r.mu.RUnlock()
+		return entry, nil
+	}
+	r.mu.RUnlock()
+
+	// Start the load off the request path. once makes it single-flight, so
+	// concurrent requests cannot each start a load or wait on one another.
+	// The read lock is held for the load's duration so a concurrent Close waits
+	// for it instead of closing resources under it.
+	go func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		entry.once.Do(entry.startLoad)
+	}()
+
+	if entry.layoutDecided() {
+		return entry, nil
+	}
+	if err := entry.LoadError(); err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("%w: model %q is initializing", ErrNotReady, name)
+}
+
+// startLoad runs the pool initialization once, marking the entry as started and
+// finished so observers can tell "initializing" from "uninitialized" and
+// "failed" without waiting for it.
+func (e *ModelEntry) startLoad() {
+	e.loadStarted.Store(true)
+	defer e.loadDone.Store(true)
+	e.loadErr = e.ensurePool()
+}
+
+// layoutDecided reports whether this model can serve embeddings now: its layout
+// was chosen, or a pool is already published (a caller that injected one).
+func (e *ModelEntry) layoutDecided() bool {
+	return e.layout.Load() != nil || e.LoadedPool() != nil
+}
+
+// LoadError reports a failed initialization: nil while it is undecided, in
+// flight, or has succeeded. It never waits for an initialization.
+func (e *ModelEntry) LoadError() error {
+	if !e.loadDone.Load() {
+		return nil
+	}
+	return e.loadErr
+}
+
+// Status is the model's readiness answer, exported by EMB.MODELS: "ready" once
+// its embedding layout is decided, "failed: <reason>" once a load has failed,
+// "loading" while initialization runs, "uninitialized" for a lazy model that has
+// not been asked for anything yet. It reads published state only and never
+// starts an initialization.
+func (e *ModelEntry) Status() string {
+	switch {
+	case e.layoutDecided():
+		return "ready"
+	case e.loadDone.Load():
+		if e.loadErr != nil {
+			return "failed: " + e.loadErr.Error()
+		}
+		return "ready"
+	case e.loadStarted.Load():
+		return "loading"
+	default:
+		return "uninitialized"
+	}
+}
+
+// LayoutsDecided reports whether every model that must be laid out at startup
+// has a decided layout, naming the first blocker and its reason when not. Models
+// configured without preload are intentionally lazy and never block readiness.
+func (r *Registry) LayoutsDecided() (bool, string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, entry := range r.models {
+		if !entry.cfg.Preload || entry.layoutDecided() {
+			continue
+		}
+		if err := entry.LoadError(); err != nil {
+			return false, fmt.Sprintf("model %q: %v", entry.Name, err)
+		}
+		return false, fmt.Sprintf("model %q: layout not decided", entry.Name)
+	}
+	return true, ""
+}
+
+// Initialize loads the model's embedding pool and returns only when its layout
+// is decided (or the load failed). It is the startup path: it holds the registry
+// read lock for the load's duration, so a concurrent Close waits for it instead
+// of closing resources under it. The request path uses ResolveReady, which never
+// blocks on a load.
+func (r *Registry) Initialize(name string) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	entry, ok := r.models[name]
 	if !ok {
-		return nil, fmt.Errorf("model '%s' not found", name)
+		return fmt.Errorf("model '%s' not found", name)
 	}
-
-	// Always enter Once: checking Pool before Once races the initialization
-	// goroutine's publication of that pointer on simultaneous cold requests.
-	entry.once.Do(func() {
-		entry.loadErr = entry.ensurePool()
-	})
-	if entry.loadErr != nil {
-		return nil, entry.loadErr
-	}
-	return entry, nil
+	entry.once.Do(entry.startLoad)
+	return entry.loadErr
 }
 
 // Resolve returns a model entry without requiring the embedding pool. Script
@@ -1266,6 +1441,11 @@ func (r *Registry) Resolve(name string) (*ModelEntry, error) {
 func (r *Registry) Add(name string, entry *ModelEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if entry.Pool != nil {
+		// The caller handed over a built pool: publish it as loaded so
+		// observation and the request path agree that this model can serve.
+		entry.poolReady.Store(true)
+	}
 	if r.cpuGate != nil {
 		if entry.Pool != nil {
 			// LoadModel preloads, so a caller that adds afterwards left this pool
@@ -1277,6 +1457,7 @@ func (r *Registry) Add(name string, entry *ModelEntry) {
 		entry.cpuGate = r.cpuGate
 		entry.cpuBudget = r.cpuPlan.Budget
 		entry.cpuThreads = r.threadShare[name]
+		entry.cpuShareReclaimed = r.reclaimedShares[name]
 		entry.calibrate = r.calibrate
 		if entry.cpuThreads < 1 {
 			entry.cpuThreads = 1

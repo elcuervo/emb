@@ -74,7 +74,16 @@ func ResolveCPUPlan(cfg *config.Config, allowance CPUAllowance) (CPUPlan, error)
 	return plan, nil
 }
 
-func modelThreadShares(models map[string]config.ModelConfig, budget int) map[string]int {
+// modelThreadShares splits the process budget across models by weight, and
+// reclaims the over-allocation when more models are configured than the budget
+// has units. Every model is entitled to one unit while the budget has room; the
+// floor of one each can exceed the budget (four models, a budget of three), so
+// the excess is reclaimed from the smallest shares and smallest weights until the
+// shares sum to the budget. A reclaimed model keeps no reservation and runs on
+// capacity borrowed from idle peers, which is what the admission controller
+// already lends; the second return value names those models for the boot log and
+// EMB.INFO.
+func modelThreadShares(models map[string]config.ModelConfig, budget int) (map[string]int, []string) {
 	names := make([]string, 0, len(models))
 	maxWeight := 0.0
 	for name, model := range models {
@@ -82,7 +91,7 @@ func modelThreadShares(models map[string]config.ModelConfig, budget int) map[str
 		maxWeight = math.Max(maxWeight, model.AdmissionWeight())
 	}
 	if len(names) == 0 {
-		return map[string]int{}
+		return map[string]int{}, nil
 	}
 	totalWeight := 0.0
 	for _, name := range names {
@@ -109,8 +118,33 @@ func modelThreadShares(models map[string]config.ModelConfig, budget int) map[str
 		for i := 0; i < left; i++ {
 			shares[names[i%len(names)]]++
 		}
+		sort.Strings(names)
 	}
-	return shares
+
+	// Reclaim: drop the least entitled reservations until the shares fit the
+	// budget. The victim is the model with the smallest share, then the smallest
+	// weight, then the first name — deterministic, so the same config always
+	// reclaims the same models.
+	var reclaimed []string
+	for allocated > budget {
+		victim := ""
+		for _, name := range names {
+			if shares[name] == 0 {
+				continue
+			}
+			if victim == "" || shares[name] < shares[victim] ||
+				(shares[name] == shares[victim] && models[name].AdmissionWeight() < models[victim].AdmissionWeight()) {
+				victim = name
+			}
+		}
+		if victim == "" {
+			break
+		}
+		allocated -= shares[victim]
+		shares[victim] = 0
+		reclaimed = append(reclaimed, victim)
+	}
+	return shares, reclaimed
 }
 
 // policyPoolLayout decides an unbatched model's worker count and intra-op width

@@ -894,11 +894,11 @@ func TestServerINFOArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 84 {
-		t.Fatalf("expected 84 declared elements, got %d: %q", declared, resp)
+	if declared != 90 {
+		t.Fatalf("expected 90 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 84 {
-		t.Fatalf("expected 84 actual elements, got %d: %q", actual, resp)
+	if actual != 90 {
+		t.Fatalf("expected 90 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -912,11 +912,11 @@ func TestCacheInfoArrayCount(t *testing.T) {
 	resp := readRESP(t, c)
 
 	declared, actual := parseRESPArrayCount(resp)
-	if declared != 98 {
-		t.Fatalf("expected 98 declared elements, got %d: %q", declared, resp)
+	if declared != 104 {
+		t.Fatalf("expected 104 declared elements, got %d: %q", declared, resp)
 	}
-	if actual != 98 {
-		t.Fatalf("expected 98 actual elements, got %d: %q", actual, resp)
+	if actual != 104 {
+		t.Fatalf("expected 104 actual elements, got %d: %q", actual, resp)
 	}
 
 	c.Close()
@@ -1384,11 +1384,11 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 126 {
-				t.Fatalf("expected 126 declared elements, got %d: %q", declared, resp)
+			if declared != 134 {
+				t.Fatalf("expected 134 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 126 {
-				t.Fatalf("expected 126 actual elements, got %d: %q", actual, resp)
+			if actual != 134 {
+				t.Fatalf("expected 134 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
@@ -1401,6 +1401,7 @@ func TestStatsRESPParity(t *testing.T) {
 				"cpu_budget_enabled", "cpu_allowance", "cpu_allowance_source", "cpu_capacity",
 				"cpu_reserve", "cpu_budget", "cpu_active_tokens", "cpu_peak_tokens",
 				"cpu_admission_wait_us", "cpu_admission_waiters", "cpu_admission_timeouts",
+				"cpu_throttle_periods", "cpu_throttled_periods", "cpu_throttle_usec", "cpu_steal_usec",
 				"cache_hits", "cache_misses", "cache_evictions",
 				"script_requests", "script_errors", "script_avg_latency_us", "per_model_scripts",
 			} {

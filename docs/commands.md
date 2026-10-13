@@ -32,11 +32,19 @@ Full reference for the `emb` command surface. See the
 `EMB.STATS` carries `cpu_allowance`, `cpu_allowance_source`, `cpu_capacity`,
 `cpu_reserve`, `cpu_budget`, `cpu_active_tokens`, `cpu_peak_tokens`, and the
 admission pressure `cpu_admission_wait_us`, `cpu_admission_waiters`,
-`cpu_admission_timeouts`, `admission_refusals` and `admission_timeout_ms`.
+`cpu_admission_timeouts`, `admission_refusals` and `admission_timeout_ms`. It
+also reports the kernel's CPU we could not use: `cpu_throttle_periods`,
+`cpu_throttled_periods`, `cpu_throttle_usec` and `cpu_steal_usec`.
 `EMB.INFO` carries each model's `workers`, `intra_op_threads`,
-`cpu_thread_share`, `allow_spinning`, and the `embed_dispatch_wait_us` /
+`cpu_thread_share`, `cpu_share_reclaimed`, `allow_spinning`, and the
+`embed_dispatch_wait_us` /
 `embed_admission_wait_us` / `embed_run_us` split of the embedding path — the
-calibrated layout when calibration selected it. See
+calibrated layout when calibration selected it. `cpu_share_reclaimed` is 1 when
+the configured weights over-allocated the process budget and this model gave up
+its reservation (it then runs on capacity its peers leave idle). `calibration_source` reports how
+the layout was chosen (`calibrated`, `unresolved`, `fallback`, `policy`,
+`legacy`, or `none` before it is decided) and `calibration_reason` carries the
+reason an unresolved or fallback layout was served. See
 [Startup calibration](configuration.md#startup-calibration) for defaults,
 precedence, and fallbacks, and
 [Operations](operations.md#reading-the-process-cpu-plan) for what each timing

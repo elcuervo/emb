@@ -329,7 +329,7 @@ func TestCloseWaitsForInFlightInitialization(t *testing.T) {
 
 	loaded := make(chan error, 1)
 	go func() {
-		_, err := reg.GetOrInit("test")
+		err := reg.Initialize("test")
 		loaded <- err
 	}()
 	<-entered
@@ -344,7 +344,7 @@ func TestCloseWaitsForInFlightInitialization(t *testing.T) {
 
 	close(gate)
 	if err := <-loaded; err == nil {
-		t.Fatal("GetOrInit succeeded with a missing model file")
+		t.Fatal("Initialize succeeded with a missing model file")
 	}
 	if err := <-closed; err != nil {
 		t.Fatal(err)

@@ -65,6 +65,14 @@ func run() error {
 			return fmt.Errorf("loading model %q: %w", name, err)
 		}
 		reg.Add(name, entry)
+		// The embedding layout is decided at startup for a model configured for
+		// preload — never inside a request. A lazy model is laid out in the
+		// background and answers not-ready until it is.
+		if modelCfg.Preload {
+			if err := reg.Initialize(name); err != nil {
+				return fmt.Errorf("initializing model %q: %w", name, err)
+			}
+		}
 		if err := entry.Preload(); err != nil {
 			return fmt.Errorf("preloading model %q: %w", name, err)
 		}
@@ -165,8 +173,12 @@ func run() error {
 		return warmups[i].SHA < warmups[j].SHA
 	})
 
-	if modelCount > 0 {
+	if ok, blocker := reg.LayoutsDecided(); ok {
 		srv.SetReady()
+	} else {
+		// A model configured for preload has no decided layout: report it and
+		// stay not-ready rather than advertising a server that cannot serve it.
+		log.Printf("not ready: %s", blocker)
 	}
 	// The warm runs after readiness, in the background: a declared payload is an
 	// optimization, and the platform's health check must not wait on it. It

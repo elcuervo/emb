@@ -44,6 +44,10 @@ const (
 	// allowance must have halved: the controller's autotuneShrinkAfter dwell is
 	// 10 consecutive latency windows.
 	smokeQuietWindows = 12
+	// smokeIdleWait bounds how long the idle phase waits for the sampler to
+	// classify idle (the window is one second, and a burst's tail can take a
+	// window to clear).
+	smokeIdleWait = 6 * time.Second
 	// smokeSaturationThreshold mirrors the sampler's autotuneCPUHigh: the CPU
 	// fraction at or above which a class of `saturated` is required.
 	smokeSaturationThreshold = 0.90
@@ -418,9 +422,23 @@ func smokeBurstPhase(t *testing.T, s *smokeServer, clients int, d time.Duration)
 	return samples, peakCPU, done.Load()
 }
 
-// smokeIdlePhase samples with no traffic flowing.
+// smokeIdlePhase samples with no traffic flowing. It first waits, within a
+// bound, for the sampler to classify idle: the class only changes on the
+// sampler's own one-second tick, so a burst's tail can spill into the first
+// window after it stops and a fixed-length phase would assert on the sampler's
+// phase alignment rather than on the property. The wait is reported, and if it
+// expires the samples below simply never contain idle, which is what the
+// assertion checks.
 func smokeIdlePhase(t *testing.T, s *smokeServer, d time.Duration) []smokeInfo {
 	t.Helper()
+	waitDeadline := time.Now().Add(smokeIdleWait)
+	for time.Now().Before(waitDeadline) {
+		if smokeRead(t, s.addr).class == "idle" {
+			t.Logf("emb-smoke: idle phase: classified idle after %s", smokeIdleWait-time.Until(waitDeadline))
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	var samples []smokeInfo
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {

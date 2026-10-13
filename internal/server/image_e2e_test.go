@@ -56,7 +56,7 @@ func TestCrossModalSmoke(t *testing.T) {
 	reg := registry.New()
 	reg.Add("fused", entry)
 	t.Cleanup(func() { _ = reg.Close() })
-	if _, err := reg.GetOrInit("fused"); err != nil {
+	if err := reg.Initialize("fused"); err != nil {
 		t.Fatalf("warming text pool: %v", err)
 	}
 

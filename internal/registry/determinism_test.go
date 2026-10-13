@@ -52,9 +52,15 @@ var _ tokenizer.Tokenizer = registryTok{}
 // dynamic-quantized graph. Session counting happens in the injected factory.
 type fakeSession struct {
 	sensitive bool
+	// fail makes every Run error, so a caller can drive the calibration's
+	// baseline-failure path without a real model.
+	fail bool
 }
 
 func (s *fakeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	if s.fail {
+		return nil, errors.New("fake session: run failed")
+	}
 	hidden := make([]float32, batchSize*seqLen*dim)
 	for b := 0; b < batchSize; b++ {
 		for t := 0; t < seqLen; t++ {
@@ -124,7 +130,7 @@ func openRegistry(t *testing.T, cfg config.ModelConfig, sensitive bool) (*Regist
 
 func TestEnsurePoolProbePassKeepsBatching(t *testing.T) {
 	reg, name, _ := openRegistry(t, modelConfigOnMinilm(1, 1), false)
-	_, err := reg.GetOrInit(name)
+	err := reg.Initialize(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +147,7 @@ func TestEnsurePoolProbePassKeepsBatching(t *testing.T) {
 
 func TestEnsurePoolProbeFailureDegradesToWorkerPool(t *testing.T) {
 	reg, name, opens := openRegistry(t, modelConfigOnMinilm(1, 2), true)
-	_, err := reg.GetOrInit(name)
+	err := reg.Initialize(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +170,7 @@ func TestEnsurePoolProbeFailureDegradesToWorkerPool(t *testing.T) {
 
 func TestEnsurePoolSkipsProbeWhenBatchingDisabled(t *testing.T) {
 	reg, name, opens := openRegistry(t, modelConfigOnMinilm(0, 2), true)
-	_, err := reg.GetOrInit(name)
+	err := reg.Initialize(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,16 +190,16 @@ func TestEnsurePoolSkipsProbeWhenBatchingDisabled(t *testing.T) {
 }
 
 // TestEnsurePoolProbeRunsOnce proves the verdict is computed at most once per
-// model lifetime: repeated GetOrInit (which short-circuits on the loaded flag)
+// model lifetime: repeated Initialize (which short-circuits on the loaded flag)
 // opens no additional sessions and never re-runs the probe.
 func TestEnsurePoolProbeRunsOnce(t *testing.T) {
 	reg, name, opens := openRegistry(t, modelConfigOnMinilm(1, 1), false)
 	for i := 0; i < 3; i++ {
-		if _, err := reg.GetOrInit(name); err != nil {
+		if err := reg.Initialize(name); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// 1 probe session + 1 batcher session, once; repeated GetOrInit adds none.
+	// 1 probe session + 1 batcher session, once; repeated Initialize adds none.
 	if got := opens.Load(); got != 2 {
 		t.Fatalf("session opens = %d, want 2 (probe once + batcher session once)", got)
 	}
@@ -236,7 +242,7 @@ func TestEnsurePoolProbeErrorClassifiesSeparately(t *testing.T) {
 	}
 	reg := New()
 	reg.Add("probe", entry)
-	if _, err := reg.GetOrInit("probe"); err != nil {
+	if err := reg.Initialize("probe"); err != nil {
 		t.Fatal(err)
 	}
 	verdict, reason := entry.BatchDeterminism, entry.BatchDeterminismReason

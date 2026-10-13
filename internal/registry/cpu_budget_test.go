@@ -11,6 +11,7 @@ import (
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/pipeline"
+	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
 func TestResolveCPUPlan(t *testing.T) {
@@ -70,8 +71,8 @@ func TestResolveCPUPlanOffDisablesPolicy(t *testing.T) {
 func TestModelThreadSharesAreStableAndWeighted(t *testing.T) {
 	w := 3.0
 	models := map[string]config.ModelConfig{"b": {}, "a": {Weight: &w}}
-	one := modelThreadShares(models, 6)
-	two := modelThreadShares(map[string]config.ModelConfig{"a": {Weight: &w}, "b": {}}, 6)
+	one, _ := modelThreadShares(models, 6)
+	two, _ := modelThreadShares(map[string]config.ModelConfig{"a": {Weight: &w}, "b": {}}, 6)
 	if one["a"] != 5 || one["b"] != 1 || one["a"] != two["a"] || one["b"] != two["b"] {
 		t.Fatalf("shares = %v then %v, want stable weighted shares 5/1", one, two)
 	}
@@ -183,7 +184,272 @@ var _ onnx.Session = budgetTestSession{}
 // NewWithConfig applies the process CPU policy to every model added later, so
 // a model's sessions, gate and calibration come from the shared plan rather
 // than the machine's core count. With cpu_budget off the policy stays nil and
-// models keep legacy sizing.
+// the models keep legacy sizing.
+//
+// policyRegistry loads cfg through the registry's own deferred path with the
+// CPU policy enabled, so ensurePool (and therefore calibration and the layout
+// record) runs exactly as production runs it; the seams make the sessions fake.
+func policyRegistry(t *testing.T, budget string, calibrate *bool, session func() onnx.Session, cfg config.ModelConfig) (*Registry, *ModelEntry) {
+	t.Helper()
+	initORT(t)
+	origTok, origRT := newTokenizer, newRuntimeSession
+	t.Cleanup(func() { newTokenizer, newRuntimeSession = origTok, origRT })
+	newTokenizer = func(string, bool) (tokenizer.Tokenizer, error) { return registryTok{}, nil }
+	newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
+		return session(), nil
+	}
+	reg, err := NewWithConfig(&config.Config{
+		CPUBudget: budget,
+		Calibrate: calibrate,
+		Models:    map[string]config.ModelConfig{"probe": cfg},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := LoadModelDeferred(cfg, "probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Add("probe", entry)
+	if err := entry.ensurePool(); err != nil {
+		t.Fatalf("ensurePool: %v", err)
+	}
+	return reg, entry
+}
+
+// TestLayoutProvenanceIsPublished covers the startup contract: the chosen
+// layout carries how it was chosen, so a calibrated layout is distinguishable
+// from a policy-derived one, and an unresolved trial carries its reason.
+func TestLayoutProvenanceIsPublished(t *testing.T) {
+	t.Run("calibrated", func(t *testing.T) {
+		_, entry := policyRegistry(t, "4", nil, func() onnx.Session { return &fakeSession{} }, modelConfigOnMinilm(1, 1))
+		outcome, ok := entry.Layout()
+		if !ok || outcome.Source != "calibrated" || outcome.Elapsed <= 0 {
+			t.Fatalf("layout = %+v (ok=%v), want a calibrated choice with its duration", outcome, ok)
+		}
+	})
+
+	t.Run("calibration disabled", func(t *testing.T) {
+		off := false
+		_, entry := policyRegistry(t, "4", &off, func() onnx.Session { return &fakeSession{} }, modelConfigOnMinilm(1, 1))
+		outcome, ok := entry.Layout()
+		if !ok || outcome.Source != "policy" || outcome.Reason != "calibration_disabled" {
+			t.Fatalf("layout = %+v (ok=%v), want the policy layout reported", outcome, ok)
+		}
+	})
+
+	// A model that cannot run must not be reported as calibrated, and must keep
+	// the policy-derived layout: the fallback would collapse it to one thread
+	// while the process holds headroom.
+	t.Run("unresolved keeps the policy layout", func(t *testing.T) {
+		_, entry := policyRegistry(t, "4", nil, func() onnx.Session {
+			return &fakeSession{fail: true}
+		}, modelConfigOnMinilm(1, 1))
+		outcome, ok := entry.Layout()
+		if !ok || outcome.Source != "unresolved" || outcome.Reason != "baseline_failed" {
+			t.Fatalf("layout = %+v (ok=%v), want unresolved:baseline_failed", outcome, ok)
+		}
+		// The probe also fails with this fake, so the policy layout is the
+		// unbatched split of the share (2 sessions at width 2, then the explicit
+		// worker count of 1): width 2, not the fallback's 1x1 collapse.
+		if outcome.Workers != 1 || outcome.Threads != 2 {
+			t.Fatalf("unresolved layout = %d workers x %d threads, want the policy layout 1x2", outcome.Workers, outcome.Threads)
+		}
+	})
+
+	// An explicit width wider than the model's share leaves nothing to trial:
+	// the layout is a fallback with its reason, not an unresolved trial.
+	t.Run("fallback", func(t *testing.T) {
+		cfg := modelConfigOnMinilm(1, 1)
+		// An explicit width wider than the share, with the session count left to
+		// calibration: there is no candidate to trial, so the layout is a
+		// fallback carrying the reason rather than an unresolved trial.
+		cfg.Workers = 0
+		cfg.IntraOpThreads = 8
+		_, entry := policyRegistry(t, "4", nil, func() onnx.Session { return &fakeSession{} }, cfg)
+		outcome, ok := entry.Layout()
+		if !ok || outcome.Source != "fallback" || outcome.Reason != "over_budget" {
+			t.Fatalf("layout = %+v (ok=%v), want fallback:over_budget", outcome, ok)
+		}
+	})
+
+	t.Run("legacy", func(t *testing.T) {
+		_, entry := policyRegistry(t, "off", nil, func() onnx.Session { return &fakeSession{} }, modelConfigOnMinilm(1, 1))
+		outcome, ok := entry.Layout()
+		if !ok || outcome.Source != "legacy" {
+			t.Fatalf("layout = %+v (ok=%v), want the legacy sizing reported", outcome, ok)
+		}
+	})
+}
+
+// TestExplicitSpinningOverridesThePolicyDefault covers the other half of the
+// spinning decision: the policy forces spinning off for shared sessions, but an
+// operator who sets allow_spinning explicitly still gets it — and the reported
+// effective value follows.
+func TestExplicitSpinningOverridesThePolicyDefault(t *testing.T) {
+	on := true
+	off := false
+	cases := []struct {
+		name  string
+		value *bool
+		want  bool
+	}{
+		{name: "unset follows the policy", value: nil, want: false},
+		{name: "explicit off", value: &off, want: false},
+		{name: "explicit on", value: &on, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg, err := NewWithConfig(&config.Config{
+				Models: map[string]config.ModelConfig{"solo": {AllowSpinning: tc.value}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry := &ModelEntry{Name: "solo", cfg: config.ModelConfig{AllowSpinning: tc.value}}
+			reg.Add("solo", entry)
+			_, _, _, _, spinning := entry.CPUSettings()
+			if spinning != tc.want {
+				t.Fatalf("effective allow_spinning = %v, want %v", spinning, tc.want)
+			}
+		})
+	}
+}
+
+// TestModelThreadSharesSumToTheBudget covers the reclaim contract: the shares
+// always fit the process budget, and the models that gave up their reservation
+// are named so the boot log and EMB.INFO can report them.
+func TestModelThreadSharesSumToTheBudget(t *testing.T) {
+	models := func(n int, weight func(i int) float64) map[string]config.ModelConfig {
+		out := make(map[string]config.ModelConfig, n)
+		for i := range n {
+			name := string(rune('a' + i))
+			w := weight(i)
+			out[name] = config.ModelConfig{Weight: &w}
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name    string
+		models  int
+		weight  func(i int) float64
+		budgets []int
+	}{
+		{name: "equal weights", models: 4, weight: func(int) float64 { return 1 }},
+		{name: "skewed weights", models: 3, weight: func(i int) float64 { return float64(3 - i) }},
+		{name: "more models than budget", models: 6, weight: func(int) float64 { return 1 }, budgets: []int{1, 2, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			budgets := tc.budgets
+			if budgets == nil {
+				budgets = []int{1, 2, 3, 4, 8}
+			}
+			for _, budget := range budgets {
+				shares, reclaimed := modelThreadShares(models(tc.models, tc.weight), budget)
+				sum := 0
+				for _, share := range shares {
+					if share < 0 || share > budget {
+						t.Fatalf("budget %d: share %d outside 0..%d", budget, share, budget)
+					}
+					sum += share
+				}
+				if sum != budget {
+					t.Fatalf("budget %d: shares sum to %d, want %d (%v)", budget, sum, budget, shares)
+				}
+				// A reclaim is only reported when a model actually gave up its
+				// reservation, and every reclaimed model is named exactly once.
+				seen := map[string]bool{}
+				for _, name := range reclaimed {
+					if seen[name] {
+						t.Fatalf("budget %d: %q reclaimed twice", budget, name)
+					}
+					seen[name] = true
+					if shares[name] != 0 {
+						t.Fatalf("budget %d: %q reported reclaimed but holds share %d", budget, name, shares[name])
+					}
+				}
+				if extra := tc.models - budget; extra > 0 && len(reclaimed) == 0 {
+					t.Fatalf("budget %d with %d models: over-allocation was not reclaimed (%v)", budget, tc.models, shares)
+				}
+			}
+		})
+	}
+}
+
+// TestReclaimIsReportedPerModel covers the reporting half: a model whose
+// reservation was reclaimed says so, and one that kept its share does not.
+func TestReclaimIsReportedPerModel(t *testing.T) {
+	weights := map[string]config.ModelConfig{
+		"a": {}, "b": {}, "c": {},
+	}
+	shares, reclaimed := modelThreadShares(weights, 1)
+	survivors := 0
+	for _, share := range shares {
+		if share > 0 {
+			survivors++
+		}
+	}
+	if len(reclaimed) != 2 || survivors != 1 {
+		t.Fatalf("budget 1 with three models: shares=%v reclaimed=%v, want two reclaimed and one survivor", shares, reclaimed)
+	}
+	reg, err := NewWithConfig(&config.Config{
+		CPUBudget: "1",
+		Models:    weights,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name := range weights {
+		entry := &ModelEntry{Name: name}
+		reg.Add(name, entry)
+		want := shares[name] == 0
+		if entry.ShareReclaimed() != want {
+			t.Fatalf("model %q ShareReclaimed=%v, want %v (share %d)", name, entry.ShareReclaimed(), want, shares[name])
+		}
+	}
+}
+
+// TestReadCPUThrottleParsesBothFormats covers the kernel accounting the live
+// server reports: cgroup v2 throttled_usec, the older v1 throttled_time in
+// nanoseconds, and the steal column of /proc/stat. A platform without the files
+// reports zeros and Known=false, so a stats read cannot break there.
+func TestReadCPUThrottleParsesBothFormats(t *testing.T) {
+	v2 := "usage_usec 1234\nnr_periods 500\nnr_throttled 20\nthrottled_usec 250000\n"
+	periods, throttled, usec := parseCPUStat(v2)
+	if periods != 500 || throttled != 20 || usec != 250_000 {
+		t.Fatalf("v2 parse = %d/%d/%d, want 500/20/250000", periods, throttled, usec)
+	}
+	v1 := "nr_periods 700\nnr_throttled 3\nthrottled_time 1500000000\n"
+	periods, throttled, usec = parseCPUStat(v1)
+	if periods != 700 || throttled != 3 || usec != 1_500_000 {
+		t.Fatalf("v1 parse = %d/%d/%d, want 700/3/1500000 (nanoseconds normalized)", periods, throttled, usec)
+	}
+	if _, _, usec := parseCPUStat("nr_periods notanumber\n"); usec != 0 {
+		t.Fatalf("malformed counter parsed as %d", usec)
+	}
+
+	procStat := "cpu  100 0 200 3000 50 0 0 42 0 0\ncpu0 1 2 3 4 5 6 7 8 9 10\n"
+	steal, ok := parseProcStatSteal(procStat)
+	if !ok || steal != 420_000 {
+		t.Fatalf("steal = %d us (ok=%v), want 420000 us", steal, ok)
+	}
+	if _, ok := parseProcStatSteal("cpu  1 2 3\n"); ok {
+		t.Fatal("a truncated cpu line parsed as a measurement")
+	}
+
+	// A root without the kernel files yields zero counters and Known=false.
+	prev := cgroupRoot
+	cgroupRoot = t.TempDir()
+	t.Cleanup(func() { cgroupRoot = prev })
+	throttle := ReadCPUThrottle()
+	if throttle.Periods != 0 || throttle.Throttled != 0 || throttle.ThrottleUs != 0 {
+		t.Fatalf("missing cgroup files reported %+v, want zeros", throttle)
+	}
+}
+
+// TestRegistryAppliesCPUPlanToAddedModel covers that a model added after the
+// plan was resolved is governed: the process plan attaches to the entry, and its
+// sessions are wrapped in the shared admission gate.
 func TestRegistryAppliesCPUPlanToAddedModel(t *testing.T) {
 	reg, err := NewWithConfig(&config.Config{Models: map[string]config.ModelConfig{"solo": {}}})
 	if err != nil {
@@ -320,7 +586,7 @@ func TestPolicyLayoutAcrossModelCounts(t *testing.T) {
 				name, cfg := model(fmt.Sprintf("m%d", i))
 				models[name] = cfg
 			}
-			shares := modelThreadShares(models, budget)
+			shares, _ := modelThreadShares(models, budget)
 			for name, share := range shares {
 				workers, threads := policyPoolLayout(share, 0, 0, false)
 				if threads < 1 {

@@ -18,7 +18,7 @@ func TestConcurrentColdLoadIsRaceFree(t *testing.T) {
 	for range 32 {
 		wg.Go(func() {
 			<-start
-			if _, err := reg.GetOrInit("test"); err != nil {
+			if err := reg.Initialize("test"); err != nil {
 				t.Error(err)
 			}
 		})

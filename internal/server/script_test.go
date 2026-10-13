@@ -48,6 +48,11 @@ func serveScriptTest(t *testing.T, cacheCfg string, opts ...Option) (string, *Se
 		t.Skip("onnx runtime unavailable (run inside nix develop)")
 	}
 	reg.Add("test", entry)
+	// The layout is decided at startup in production; the tests that serve EMB
+	// or emb.embed need the same, since a request never initializes a model.
+	if err := reg.Initialize("test"); err != nil {
+		t.Fatal(err)
+	}
 
 	gate := make(chan struct{})
 	blockPool, err := pipeline.NewPool(

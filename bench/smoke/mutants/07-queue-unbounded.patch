@@ -1,0 +1,13 @@
+# assertion: queue-bounded
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/registry/registry.go
++++ b/internal/registry/registry.go
+@@ -361,7 +361,7 @@
+ 		// Two waiters per admission unit: past that, overload is refused with a
+ 		// busy error instead of queued without limit (the provisional bound from
+ 		// the reproduction; the tier-2 burst test re-derives it).
+-		plan.QueueBound = max(2, 2*plan.Budget)
++		plan.QueueBound = 0 // (mutant) the admission queue is never refused
+ 		r.cpuPlan = plan
+ 		r.cpuGate = permit.NewBudget(plan.Budget)
+ 		r.cpuGate.SetQueueBound(plan.QueueBound)

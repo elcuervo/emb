@@ -1,0 +1,17 @@
+# assertion: admission-bounded
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -937,10 +937,8 @@
+ 
+ // admissionContext bounds how long an inference command may wait for admission.
+ func (s *Server) admissionContext() (context.Context, context.CancelFunc) {
+-	if s.admissionTimeout <= 0 {
+-		return context.Background(), func() {}
+-	}
+-	return context.WithTimeout(context.Background(), s.admissionTimeout)
++	// (mutant) the configured bound is ignored: a command may wait forever.
++	return context.Background(), func() {}
+ }
+ 
+ // admissionBusyMessage maps an admission failure to the busy reply shape: a

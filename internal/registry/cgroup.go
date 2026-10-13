@@ -149,6 +149,95 @@ func readCgroupMemoryLimit(root string) uint64 {
 	return 0
 }
 
+// CPUThrottle is the kernel's own accounting of CPU the process could not use:
+// cgroup throttling (periods the group was held off the CPU and the time it was
+// kept off) plus the host's stolen-CPU time. Every counter is cumulative, so a
+// reader diffs two samples; Known is false when neither source is readable (a
+// platform without cgroups), and zeros must then not be read as "measured zero".
+type CPUThrottle struct {
+	Periods    uint64
+	Throttled  uint64
+	ThrottleUs uint64
+	StealUs    uint64
+	Known      bool
+}
+
+// ReadCPUThrottle reads the process's cgroup cpu.stat (v2, else the v1
+// cpu/cpu.stat) and the host's steal time from /proc/stat. It never fails: an
+// unreadable source leaves its fields zero so a stats read cannot break a server
+// on a platform without cgroups.
+func ReadCPUThrottle() CPUThrottle {
+	var out CPUThrottle
+	for _, p := range []string{
+		"cpu.stat",     // v2
+		"cpu/cpu.stat", // v1
+	} {
+		data, err := os.ReadFile(filepath.Join(cgroupRoot, p))
+		if err != nil {
+			continue
+		}
+		out.Periods, out.Throttled, out.ThrottleUs = parseCPUStat(string(data))
+		out.Known = true
+		break
+	}
+	if data, err := os.ReadFile("/proc/stat"); err == nil {
+		if steal, ok := parseProcStatSteal(string(data)); ok {
+			out.StealUs = steal
+			out.Known = true
+		}
+	}
+	return out
+}
+
+// parseCPUStat parses cgroup cpu.stat for nr_periods, nr_throttled and the
+// throttled time. v2 reports throttled_usec; the older v1 format reports
+// throttled_time in nanoseconds, normalized here to microseconds.
+func parseCPUStat(s string) (periods, throttled, usec uint64) {
+	for _, line := range strings.Split(s, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		v, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		switch fields[0] {
+		case "nr_periods":
+			periods = v
+		case "nr_throttled":
+			throttled = v
+		case "throttled_usec":
+			usec = v
+		case "throttled_time":
+			usec = v / 1000
+		}
+	}
+	return periods, throttled, usec
+}
+
+// parseProcStatSteal reads the aggregate "cpu" line of /proc/stat and returns
+// its steal column in microseconds. The counters are in USER_HZ ticks; 100Hz is
+// what Linux reports here (and the kernel's own steal accounting is in ticks).
+func parseProcStatSteal(s string) (uint64, bool) {
+	for _, line := range strings.Split(s, "\n") {
+		if !strings.HasPrefix(line, "cpu ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		// cpu user nice system idle iowait irq softirq steal
+		if len(fields) < 9 {
+			return 0, false
+		}
+		ticks, err := strconv.ParseUint(fields[8], 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return ticks * 10_000, true // ticks at 100Hz -> microseconds
+	}
+	return 0, false
+}
+
 // parseCgroupLimit parses a cgroup limit value. "max" and the v1
 // effectively-unlimited sentinel (a value near 2^63) mean unlimited.
 func parseCgroupLimit(s string) (uint64, bool) {
