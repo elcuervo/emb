@@ -487,6 +487,11 @@ bench-host-check *args="":
 bench-smoke:
     @EMB_BENCH_SMOKE=1 {{ort_var}}="{{ort_lib}}:${{ort_var}}" go test ./internal/server/ -run Smoke -v -count=1 -timeout 600s
 
+# Run the dispatched reference workflow locally, including a Fargate bundle
+# and same-host self-diff. See the script header for model/runtime prerequisites.
+bench-reference-local:
+    @bash bench/script/reference-local.sh
+
 # Fargate-shaped benchmark harness (linux/arm64, Graviton CPU). Requires Docker
 # and a model at ./models; redis-benchmark/redis-cli/ruby run from `nix develop`.
 # Emits bench/fargate/out/run.<sha>.<ts>.json
