@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1" //nolint:gosec // script cache identity by SHA1, Redis semantics (not a security primitive)
 	"encoding/hex"
 	"errors"
@@ -395,7 +396,7 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 			if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
 				return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
 			}
-			return s.embedTexts(e, model, texts)
+			return s.embedTexts(context.Background(), e, model, texts)
 		}
 	}
 	// A model with an image surface also gets emb.image.preprocess / info /

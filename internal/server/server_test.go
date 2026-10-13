@@ -1310,12 +1310,20 @@ func TestMaxConnections(t *testing.T) {
 }
 
 // blockingSession blocks in Run until released, so tests can hold a request
-// in flight and observe the concurrency gate.
+// in flight and observe the concurrency gate. entered, when set, signals that a
+// run has actually started (active_requests only counts admitted commands).
 type blockingSession struct {
-	gate chan struct{}
+	gate    chan struct{}
+	entered chan struct{}
 }
 
 func (b *blockingSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	if b.entered != nil {
+		select {
+		case b.entered <- struct{}{}:
+		default:
+		}
+	}
 	<-b.gate
 	data := make([]float32, batchSize*seqLen*dim)
 	for i := range data {
@@ -1376,11 +1384,11 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 116 {
-				t.Fatalf("expected 116 declared elements, got %d: %q", declared, resp)
+			if declared != 120 {
+				t.Fatalf("expected 120 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 116 {
-				t.Fatalf("expected 116 actual elements, got %d: %q", actual, resp)
+			if actual != 120 {
+				t.Fatalf("expected 120 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
@@ -1388,6 +1396,7 @@ func TestStatsRESPParity(t *testing.T) {
 				"truncated_pairs", "image_requests", "truncated_images", "total_tokens",
 				"total_errors", "models_loaded", "per_model", "connections",
 				"idle_timeout_ms", "max_connections", "max_concurrent_requests",
+				"admission_refusals", "admission_timeout_ms",
 				"mem", "cpu_user_usec", "cpu_sys_usec", "goroutines",
 				"cpu_budget_enabled", "cpu_allowance", "cpu_allowance_source", "cpu_capacity",
 				"cpu_reserve", "cpu_budget", "cpu_active_tokens", "cpu_peak_tokens",

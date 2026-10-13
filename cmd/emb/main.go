@@ -111,6 +111,7 @@ func run() error {
 		server.WithIdleTimeout(idleTimeout),
 		server.WithMaxConnections(fc.MaxConnections),
 		server.WithMaxConcurrentRequests(fc.MaxConcurrentRequests),
+		server.WithAdmissionTimeout(fc.AdmissionTimeoutOrDefault()),
 		server.WithMaxTexts(intPtrOrDefault(fc.MaxTexts, 4096)),
 		server.WithMaxPairs(intPtrOrDefault(fc.MaxPairs, 4096)),
 		server.WithMaxImages(intPtrOrDefault(fc.MaxImages, 4096)),

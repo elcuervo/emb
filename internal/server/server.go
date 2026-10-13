@@ -19,6 +19,7 @@ import (
 	"github.com/tidwall/redcon"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
 	"github.com/elcuervo/emb/internal/telemetry"
@@ -90,6 +91,12 @@ type Server struct {
 	idleTimeout       time.Duration
 	maxConns          int
 	maxConcurrentReqs int
+	// admissionTimeout bounds how long an inference command may wait for
+	// admission before the server answers busy (0 = unbounded).
+	admissionTimeout time.Duration
+	// busyRefusals counts inference commands refused because admission was
+	// saturated or timed out.
+	busyRefusals atomic.Int64
 	// The max* caps below are runtime-editable via CONFIG SET, so they are
 	// atomic: request handlers read them while a CONFIG SET writes them.
 	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via
@@ -212,6 +219,12 @@ func WithMaxConnections(n int) Option {
 // Control commands (PING, AUTH, EMB.READY, EMB.STATS, …) stay reachable.
 func WithMaxConcurrentRequests(n int) Option {
 	return func(s *Server) { s.maxConcurrentReqs = n }
+}
+
+// WithAdmissionTimeout bounds how long an inference command may wait for
+// admission before the server answers busy. Zero leaves the wait unbounded.
+func WithAdmissionTimeout(d time.Duration) Option {
+	return func(s *Server) { s.admissionTimeout = d }
 }
 
 // WithMaxTexts bounds the texts processed per EMB command; commands beyond the
@@ -871,9 +884,9 @@ func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
 // and the scripted `emb.embed` host, so embeddings produced by either path
 // share cache entries and batcher admission. entry.Pool must already be
 // resolved (see Registry.GetOrInit).
-func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []string) ([][]byte, error) {
+func (s *Server) embedTexts(ctx context.Context, entry *registry.ModelEntry, model string, texts []string) ([][]byte, error) {
 	if s.cache == nil {
-		resp, err := entry.Pool.Embed(texts)
+		resp, err := entry.Pool.EmbedContext(ctx, texts)
 		if err != nil {
 			return nil, err
 		}
@@ -904,7 +917,7 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 	for j, idx := range missIdxs {
 		missTexts[j] = texts[idx]
 	}
-	resp, err := entry.Pool.Embed(missTexts)
+	resp, err := entry.Pool.EmbedContext(ctx, missTexts)
 	if err != nil {
 		return nil, err
 	}
@@ -916,6 +929,29 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 		s.cache.Set(textCacheKey(model, texts[idx]), resp.Embeddings[j])
 	}
 	return results, nil
+}
+
+// admissionContext bounds how long an inference command may wait for admission.
+func (s *Server) admissionContext() (context.Context, context.CancelFunc) {
+	if s.admissionTimeout <= 0 {
+		return context.Background(), func() {}
+	}
+	return context.WithTimeout(context.Background(), s.admissionTimeout)
+}
+
+// admissionBusyMessage maps an admission failure to the busy reply shape: a
+// refusal is the server declining work it cannot serve in time, not an internal
+// error.
+func admissionBusyMessage(err error) (string, bool) {
+	switch {
+	case errors.Is(err, permit.ErrBusy):
+		return "ERR busy: admission queue full", true
+	case errors.Is(err, context.DeadlineExceeded):
+		return "ERR busy: admission timed out", true
+	case errors.Is(err, context.Canceled):
+		return "ERR busy: request abandoned", true
+	}
+	return "", false
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
@@ -971,9 +1007,19 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	results, err := s.embedTexts(entry, modelName, texts)
+	// One deadline for the whole command: it bounds the wait for admission and
+	// lets work whose caller has gone away stop rather than run to completion.
+	ctx, cancel := s.admissionContext()
+	defer cancel()
+
+	results, err := s.embedTexts(ctx, entry, modelName, texts)
 	if err != nil {
 		failed = true
+		if msg, busy := admissionBusyMessage(err); busy {
+			s.busyRefusals.Add(1)
+			conn.WriteError(msg)
+			return
+		}
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
@@ -1350,7 +1396,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 58)
+	writePairs(conn, 60)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1389,6 +1435,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(s.maxConns)
 	conn.WriteBulkString("max_concurrent_requests")
 	conn.WriteInt(s.maxConcurrentReqs)
+	conn.WriteBulkString("admission_refusals")
+	conn.WriteInt64(s.busyRefusals.Load())
+	conn.WriteBulkString("admission_timeout_ms")
+	conn.WriteInt64(s.admissionTimeout.Milliseconds())
 	// Process resource usage: mem is process RSS in MB (heap fallback on
 	// platforms without RSS), and CPU/goroutines are live runtime values.
 	res := s.resourceStats()
