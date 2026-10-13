@@ -252,11 +252,17 @@ A dispatch runs, in order:
 3. `bench/script/run.sh` with the same binary as both arms — the interleaved A/B
    harness against itself, which is how this host's noise floor is established
    before any baseline is recorded on it.
-4. `bench-out/reference/` is uploaded as an artifact even when the contract
+4. `bench/fargate -mode run` — the evidence bundle, diffed against itself: the
+   fingerprint, the revision and model digests, the per-cell metrics, and every
+   assertion outcome. The tiers are the Fargate ones this host presents, and the
+   step fails unless the bundle is a valid reference (`gold`, with nothing
+   `fail` or `invalid` among its assertions).
+5. `bench-out/reference/` is uploaded as an artifact even when the contract
    refuses the host, so the verdict is always inspectable.
 
-The scripted model set (`models/gliner2`) is cached with `actions/cache`, the
-same way `test-cgo` caches `models/minilm`.
+The scripted model set (`models/gliner2`) and the minilm fixture
+(`models/minilm`) are cached with `actions/cache`, the same way `test-cgo`
+caches `models/minilm`.
 
 ### The first qualified run
 
@@ -308,8 +314,35 @@ same-host baseline is worth recording against; the cross-host refusal itself is
 covered by the tooling's tests (`TestDiffRefusesDifferingFingerprintsAndPrintsBoth`,
 and the legacy baselines refused by `TestDiffRefusesTheCommittedLegacyBaselines`).
 
-A `bench/fargate` bundle from this host is not part of the dispatched record: the
-job uploads the fingerprint plus the shape and A/B logs, so the bundle-schema
-clause of the end-to-end verification has no bundle to inspect. The rule it
-checks — an unmet precondition is recorded `invalid` and never a pass — is
-covered by the tooling's own tests.
+### The recorded bundle
+
+The first dispatch that carried the bundle step (run `38434484120`, 13m26s,
+`reference-arm64` on `perf-regression`, revision `ee836da`) recorded host
+identity `8791c2cc689361fa`, 63 cells over tiers 1, 2 and 4, and a
+`bench/fargate -mode diff` of the bundle against itself of `63 pass, 0 fail`:
+
+```text
+host-contract   pass   qualified linux/arm64: 4.00 CPUs from scheduler/affinity, server budget 4
+cells-complete  pass   63 of 63 cells measured
+```
+
+No assertion is `fail` or `invalid`, so that bundle is usable as a reference.
+The dispatch before it (run `38432129052`) was green while its bundle was not:
+it asked for the harness's default tier list, so it requested eight CPUs from
+Docker on a four-vCPU host, and the matrix stopped there.
+
+```text
+cells-complete  invalid  the run could not finish the matrix: docker run: exit status 125
+```
+
+`--cpus` above the CPUs the host presents is refused, so a tier can only be
+emulated up to that count: the four-vCPU rungs of the ladder (the free
+`ubuntu-24.04-arm` runner, Hetzner `CAX21`, the Fargate ARM task) record tiers
+1, 2 and 4, and tier 8 needs a host with eight or more CPUs. Emulating more
+vCPUs than the host has would not be the tier it claims to be, so the run
+records the tiers it measured and the step fails when the bundle it produced is
+not a valid reference — a green job may not carry an invalid matrix.
+
+The recorded bundle for that run is
+`bundles/run.ee836da.1791911348.json` in the `emb-reference-arm64` artifact
+(sha256 `9e0b04e0370ff3693a26fb722b8f272f137248ccd4ef9928c5f7605622f95d88`).

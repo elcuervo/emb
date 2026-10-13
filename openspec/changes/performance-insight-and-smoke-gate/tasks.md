@@ -45,7 +45,7 @@
 ## 8. Integration verification
 
 - [x] 8.1 Run the whole documented loop in `nix develop`: `just bench-host-check`, `just bench-smoke`, `bash bench/smoke/verify-gate.sh`, `EMB_BENCH_BUDGETS=1` budgets, `just test`, `just lint`, `just deadcode`, `just cover`. Verify the existing budget gates and golden baselines are unchanged and all listed commands pass.
-- [ ] 8.2 Verify the reference path end to end on the qualified host: host check → shape run → A/B run → bundle → same-host diff, with the autotune transitions reproduced and the saturating phase's precondition recorded as met. Verify the bundle's assertion list shows no `invalid` entries for the enforced assertions.
+- [x] 8.2 Verify the reference path end to end on the qualified host: host check → shape run → A/B run → bundle → same-host diff, with the autotune transitions reproduced and the saturating phase's precondition recorded as met. Verify the bundle's assertion list shows no `invalid` entries for the enforced assertions.
 - [x] 8.3 Run `openspec validate performance-insight-and-smoke-gate --strict` and confirm the change's spec deltas match what was implemented (capabilities `performance-validation` added, `fargate-benchmark-harness` baseline capture modified).
 
 ## Workflow follow-up
