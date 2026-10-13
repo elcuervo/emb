@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
@@ -13,15 +14,16 @@ import (
 )
 
 type CPUPlan struct {
-	Allowance CPUAllowance
-	Capacity  int
-	Budget    int
-	Reserve   int
-	Enabled   bool
-	Explicit  bool
-	Warning   string
-	Active    int
-	Peak      int
+	Allowance  CPUAllowance
+	Capacity   int
+	Budget     int
+	Reserve    int
+	QueueBound int
+	Enabled    bool
+	Explicit   bool
+	Warning    string
+	Active     int
+	Peak       int
 }
 
 func ResolveCPUPlan(cfg *config.Config, allowance CPUAllowance) (CPUPlan, error) {
@@ -103,6 +105,31 @@ func modelThreadShares(models map[string]config.ModelConfig, budget int) map[str
 	return shares
 }
 
+// policyPoolLayout decides an unbatched model's worker count and intra-op width
+// under the CPU policy. A pool serves several runs at once, so a run that
+// consumed the model's whole share made admission exclusive: group 1 measured
+// cpu_peak_tokens == capacity and a 2.17x aggregate throughput loss at a fixed
+// layout, and an uncalibrated policy default of one session holding the share
+// cost 2.7x in tail latency. The share is therefore split so a second run of the
+// same width fits the gate, with at least two workers to use it. A batched pool
+// has one run slot by construction and keeps the whole share. Explicit settings
+// stay authoritative.
+func policyPoolLayout(share, configuredWorkers, configuredThreads int, batched bool) (workers, threads int) {
+	if batched {
+		workers, threads = 1, max(1, share)
+	} else {
+		workers, threads = 2, max(1, share/2)
+	}
+	if configuredWorkers > 0 {
+		workers = configuredWorkers
+	}
+	if configuredThreads > 0 {
+		threads = configuredThreads
+	}
+	return workers, threads
+}
+
+// logCPUPlan logs the process plan once per registry.
 func logCPUPlan(plan CPUPlan) {
 	if !plan.Enabled {
 		log.Printf("CPU inference budget disabled; using legacy session sizing")
@@ -121,9 +148,19 @@ type budgetedSession struct {
 }
 
 func (s budgetedSession) Run(ids, mask []int64, batch, length, dim int) ([]float32, error) {
-	release := s.gate.Acquire(s.width)
+	return s.RunContext(context.Background(), ids, mask, batch, length, dim)
+}
+
+// RunContext admits the run only if the caller is still waiting, and abandons
+// the wait when its context ends: admission is bounded from the request rather
+// than from the run.
+func (s budgetedSession) RunContext(ctx context.Context, ids, mask []int64, batch, length, dim int) ([]float32, error) {
+	release, err := s.gate.AcquireContext(ctx, s.width)
+	if err != nil {
+		return nil, err
+	}
 	defer release()
-	return s.Session.Run(ids, mask, batch, length, dim)
+	return onnx.RunContext(ctx, s.Session, ids, mask, batch, length, dim)
 }
 
 type budgetedNamedSession struct {
@@ -133,6 +170,9 @@ type budgetedNamedSession struct {
 }
 
 func (s budgetedNamedSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
+	// The scripted and image host APIs carry no context yet, so this path waits
+	// unbounded on admission: threading their deadline is tracked separately
+	// (design D1, task 9.1).
 	release := s.gate.Acquire(s.width)
 	defer release()
 	return s.NamedSession.RunNamed(inputs)

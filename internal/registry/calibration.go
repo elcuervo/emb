@@ -112,6 +112,12 @@ func calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWork
 	seen := map[[2]int]bool{}
 	out := make([][2]int, 0, len(widths)*len(workers))
 	for _, width := range widths {
+		// An unbatched pool serves several runs at once, so a candidate whose
+		// width would fill the budget makes admission exclusive. Explicit
+		// widths are the operator's call and stay visible.
+		if !batched && configuredThreads <= 0 && 2*width > budget {
+			continue
+		}
 		for _, count := range workers {
 			candidate := [2]int{count, width}
 			if count*width > budget || seen[candidate] {

@@ -50,6 +50,10 @@ type ModelEntry struct {
 	calibrate    bool
 	tunedWorkers atomic.Int64
 	tunedThreads atomic.Int64
+	// policyThreads is the width the CPU policy derived when calibration did not
+	// choose one, so the reported intra-op width is what a run actually charges
+	// rather than the model's share.
+	policyThreads atomic.Int64
 
 	// Quantization is "int8" when quantized weights were resolved, else "fp32".
 	Quantization string
@@ -152,6 +156,8 @@ func (e *ModelEntry) CPUSettings() (enabled bool, budget, share, threads int, sp
 	threads = e.cpuThreads
 	if tuned := int(e.tunedThreads.Load()); tuned > 0 {
 		threads = tuned
+	} else if policy := int(e.policyThreads.Load()); policy > 0 {
+		threads = policy
 	}
 	if e.cfg.IntraOpThreads > 0 {
 		threads = e.cfg.IntraOpThreads
@@ -327,7 +333,13 @@ func NewWithConfig(cfg *config.Config) (*Registry, error) {
 	r.cpuPlan = plan
 	r.calibrate = cfg.CalibrationEnabled()
 	if plan.Enabled {
+		// Two waiters per admission unit: past that, overload is refused with a
+		// busy error instead of queued without limit (the provisional bound from
+		// the reproduction; the tier-2 burst test re-derives it).
+		plan.QueueBound = max(2, 2*plan.Budget)
+		r.cpuPlan = plan
 		r.cpuGate = permit.NewBudget(plan.Budget)
+		r.cpuGate.SetQueueBound(plan.QueueBound)
 		r.threadShare = modelThreadShares(cfg.Models, plan.Budget)
 	}
 	logCPUPlan(plan)
@@ -560,6 +572,8 @@ func (e *ModelEntry) ensurePool() error {
 	numWorkers := cfg.Workers
 	if numWorkers <= 0 {
 		if e.cpuPolicy {
+			// Superseded by policyPoolLayout once the determinism probe has
+			// decided whether this pool batches.
 			numWorkers = 1
 		} else {
 			numWorkers = autoTuneWorkers(cfg.ONNX, 0)
@@ -676,6 +690,17 @@ func (e *ModelEntry) ensurePool() error {
 		e.BatchDeterminism, e.BatchDeterminismReason = "passed", "passed"
 	}
 
+	// The policy layout is finalised here, once the determinism probe has decided
+	// whether the pool batches: an unbatched pool serves several runs at once, so
+	// the share is split to leave room for a second run (see policyPoolLayout).
+	if e.cpuPolicy {
+		numWorkers, intraThreads = policyPoolLayout(e.cpuThreads, cfg.Workers, cfg.IntraOpThreads, timeoutMS > 0)
+		e.policyThreads.Store(int64(intraThreads))
+		if !e.calibrate || (cfg.IntraOpThreads > 0 && cfg.Workers > 0) {
+			log.Printf("  %s: policy layout workers=%d intra_op_threads=%d (share=%d, batched=%t)", e.Name, numWorkers, intraThreads, e.cpuThreads, timeoutMS > 0)
+		}
+	}
+
 	if e.cpuPolicy && e.calibrate && (cfg.IntraOpThreads <= 0 || cfg.Workers <= 0) {
 		budget := max(1, e.cpuThreads)
 		// Trial the batch shape the pool actually serves: a batcher coalesces
@@ -702,6 +727,13 @@ func (e *ModelEntry) ensurePool() error {
 		e.tunedWorkers.Store(int64(numWorkers))
 		log.Printf("  %s: CPU calibration workers=%d intra_op_threads=%d source=%s reason=%s elapsed=%s", e.Name, numWorkers, intraThreads, layout.Source, layout.Reason, layout.Elapsed.Round(time.Millisecond))
 	}
+	// A width that fills the budget was the measured defect (cpu_peak_tokens ==
+	// capacity, runs admitted alone). The policy no longer derives one; an
+	// operator still can, so say what it costs.
+	if e.cpuPolicy && timeoutMS <= 0 && e.cpuGate != nil && intraThreads >= e.cpuGate.Capacity() {
+		log.Printf("  %s: intra_op_threads=%d fills the admission budget %d — its runs are admitted alone; lower intra_op_threads to overlap runs", e.Name, intraThreads, e.cpuGate.Capacity())
+	}
+
 	poolFactory := func() (onnx.Session, error) {
 		sess, err := sessionFactoryFor(intraThreads)
 		if err != nil {
