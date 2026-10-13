@@ -56,9 +56,11 @@ kill_timeout = 40
   interval = "15s"
   timeout = "3s"
   # Fly caps a check's grace period at one minute, so asking for more only
-  # produces a warning. The first boot downloads both models onto the volume
-  # before /api/ready turns true; if that ever exceeds a minute, raise the
-  # volume or ship the models in the image rather than this number.
+  # produces a warning. The first boot downloads any model the volume lacks and
+  # then loads all of them before the server answers, which takes minutes: the
+  # check passes again once it does. `/api/ready` answers 503 while the server is
+  # starting or gone, so a check that stays down is a boot that never finished
+  # rather than a healthy machine OOM-restarting behind a passing check.
   grace_period = "60s"
   method = "GET"
   path = "/api/ready"
@@ -71,18 +73,21 @@ kill_timeout = 40
   path = "/api/health"
 
 [[vm]]
-  # Sized from the measured set, not a guess. The real `typed-decisions` Laya
-  # checkpoint dominates: ONNX Runtime materializes its ~807 MiB fp16 weights as
-  # fp32, so each session holds ~1.6 GiB. The first landing ran 4 GB and
-  # OOM-killed `emb` during the `laya-real` load: on Linux the batch-determinism
-  # probe fails for these exports, so each pool degraded to `workers`
-  # auto-tuned sessions, and the checkpoint was loaded once per worker.
-  # `workers: 1` is now pinned in sandbox.yaml (the bridge serializes upstream
-  # work anyway), which brings the footprint back to one embedding session plus
-  # the scripted session. 8 GB leaves headroom; it requires `shared-cpu-4x`
-  # because shared CPU memory is capped at 2 GB per CPU. The cheaper path is
-  # producing and hosting an int8 export (design D4), which would fit a far
-  # smaller machine. Re-measure if the model set changes.
+  # Sized from the measured set, not a guess. Resident memory is set by what the
+  # CPU execution provider materializes, not by the file on disk: it expands the
+  # weights to fp32 and keeps the dequantized copies, so a graph costs roughly
+  # 3-6x its file once its first call has run (docs/configuration.md). The real
+  # `typed-decisions` checkpoint dominates: as the 806 MB fp16 export the first
+  # deployment mounted it cost ~4.9 GB resident, which OOM-killed this machine in
+  # a loop once the media models were resident beside it; as the int8 export the
+  # sandbox mounts now it measures ~2.3 GB (sandbox.yaml's `laya-real` entry).
+  #
+  # `workers: 1` is pinned in sandbox.yaml (the bridge serializes upstream work
+  # anyway), and on Linux the batch-determinism probe fails for these exports, so
+  # each pool would otherwise degrade to `workers` sessions and multiply the
+  # resident weights. 8 GB holds the int8 set with headroom; it requires
+  # `shared-cpu-4x` because shared CPU memory is capped at 2 GB per CPU. Re-check
+  # the resident set before adding a model, and re-measure if one changes.
   size = "shared-cpu-4x"
   memory = "8gb"
 

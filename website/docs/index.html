@@ -1431,9 +1431,11 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         The website sandbox mounts two Laya entries: a 32-hidden miniature of the
         architecture — random weights, real mechanism — behind the two game loops
         (Snake, Pac-Man), and the published <code>typed-decisions</code> checkpoint
-        behind the typed-question examples (Inbox, Quickstart), mounted with
-        <code>model_subfolder: typed-decisions</code> and downloaded once onto the
-        volume. The loops show shapes; the typed answers are judgments.
+        behind the typed-question examples (Inbox, Quickstart), mounted as that
+        checkpoint's published int8 export (<code>model_int8.onnx</code>, resolved by
+        <code>quantize: auto</code>) and downloaded once onto the volume, because the
+        machine is sized by what the weights cost resident rather than by their file
+        size. The loops show shapes; the typed answers are judgments.
       </p>
     </div>
   </div>

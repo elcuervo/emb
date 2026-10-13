@@ -246,28 +246,38 @@ models:
             "choice:11+": 0.1006
             "noul:2": 1.98
 
-  # The real decision model: the published `typed-decisions` export
-  # (ModernBERT-large, fp16 on the hub), mounted from its subfolder in the
-  # repository and downloaded once onto the volume. The plate's typed-question
-  # examples (Inbox, Quickstart) answer with this checkpoint; the game loops stay
-  # on the miniature, because a ~400M model cannot keep a 96-tick episode
-  # realtime on one shared vCPU. `max_length` and the scripts' envelope come from
-  # the export's own `rl_agent_config.json` / `onnx_config.json`, so the preset's
-  # sequence construction matches the reference. typed-decisions is the
-  # fine-tuned customer-service / security / invoice export: the `multilingual`
-  # router export ships with identity temperatures and no fitted calibration, and
-  # marked legitimate mail as spam/phishing (see design D1). See
+  # The real decision model: the published `typed-decisions` export of
+  # ModernBERT-large, as its pre-quantized int8 member, downloaded once onto the
+  # volume. The plate's typed-question examples (Inbox, Quickstart) answer with
+  # this checkpoint; the game loops stay on the miniature, because a ~400M model
+  # cannot keep a 96-tick episode realtime on one shared vCPU. `max_length` and
+  # the scripts' envelope come from the export's own `rl_agent_config.json` /
+  # `onnx_config.json`, so the preset's sequence construction matches the
+  # reference. typed-decisions is the fine-tuned customer-service / security /
+  # invoice export: the `multilingual` router export ships with identity
+  # temperatures and no fitted calibration, and marked legitimate mail as
+  # spam/phishing (see design D1). See
   # openspec/changes/laya-real-checkpoint/design.md (D1, D5).
+  #
+  # int8, not the fp16 export the first deployment mounted: ONNX Runtime's CPU
+  # provider expands the weights to fp32 and keeps the dequantized copies, so
+  # the 806 MB fp16 graph cost ~4.9 GB resident once its first call had run —
+  # beside the ten other resident models, which OOM-killed the 8 GB machine in a
+  # loop (see fly.toml's `[[vm]]` note). The same checkpoint's int8 export
+  # measures ~2.3 GB resident and answers the plate's payloads with the same
+  # decisions, which `just verify-laya-int8` asserts.
   laya-real:
-    model_repo: codenamev/laya-onnx
-    model_subfolder: typed-decisions
-    # `laya-typed/`, not `laya-real/`: `downloadModel` returns early when the
-    # configured `onnx` exists, and the volume already holds the previous
-    # (`multilingual`) checkpoint at `laya-real/`. Naming a fresh path is what
-    # makes the first boot after this change fetch the new export.
-    onnx: /data/models/laya-typed/model.onnx
-    tokenizer: /data/models/laya-typed/tokenizer.json
+    model_repo: yehor-oleksiuk/laya-typed-decisions-onnx
+    # `int8/laya-typed/`, not the fp16 graph's directory: `downloadModel`
+    # returns early when the configured `onnx` exists — and, with `quantize`
+    # enabled, when a pre-quantized name sits beside it — so a fresh path is
+    # what makes the boot fetch this export instead of keeping the fp16 graph.
+    # The download writes the repo's int8 member beside the configured name and
+    # `quantize: auto` resolves it, which the boot line names.
+    onnx: /data/models/int8/laya-typed/model.onnx
+    tokenizer: /data/models/int8/laya-typed/tokenizer.json
     max_length: 1024
+    quantize: auto
     workers: 1
     # Intra-op threads matter here and inter-op threads do not: the graph is a
     # chain with two outputs, so the only parallelism is within one request's

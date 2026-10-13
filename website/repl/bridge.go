@@ -163,19 +163,25 @@ func (b *Bridge) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleReady reports whether the bridge can reach its server, and it is the
+// endpoint the platform's health check reads. Anything but ready answers 503:
+// the platform sees a machine that is loading, or whose server is gone, as
+// unhealthy instead of as a machine that answers 200 while it OOM-restarts, and
+// the body still names which of the two states it is for the clients that read
+// it.
 func (b *Bridge) handleReady(w http.ResponseWriter, r *http.Request) {
 	if !b.allowCORS(w, r) {
 		return
 	}
 	ok := b.probe()
-	state := "starting"
+	state, status := "starting", http.StatusServiceUnavailable
 	switch {
 	case ok:
-		state = "ready"
+		state, status = "ready", http.StatusOK
 	case b.everOK.Load():
 		state = "offline"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ready": ok, "state": state, "upstream": b.upstream})
+	writeJSON(w, status, map[string]any{"ready": ok, "state": state, "upstream": b.upstream})
 }
 
 // handlePresets publishes the digests the sandbox will accept EMB.EVSHA for, so

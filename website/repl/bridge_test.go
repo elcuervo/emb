@@ -274,19 +274,26 @@ func TestReadyFalseUntilServerAnswers(t *testing.T) {
 	_ = ln.Close()
 
 	b := newTestBridge(t, addr, presets{}, testLimits())
-	if got := readyState(t, b); got != "starting" {
-		t.Fatalf("state before the server exists = %q, want starting", got)
+	if status, got := readyState(t, b); got != "starting" || status != http.StatusServiceUnavailable {
+		t.Fatalf("before the server exists: status %d state %q, want 503 starting", status, got)
+	}
+
+	// A server that answered once and is now gone is a different state, and it
+	// fails the check the same way.
+	b.everOK.Store(true)
+	if status, got := readyState(t, b); got != "offline" || status != http.StatusServiceUnavailable {
+		t.Fatalf("after the server is gone: status %d state %q, want 503 offline", status, got)
 	}
 
 	// Now start the fake and the same probe must flip to ready.
 	f := startFakeEmb(t)
 	b2 := newTestBridge(t, f.addr(), presets{}, testLimits())
-	if got := readyState(t, b2); got != "ready" {
-		t.Fatalf("state after the server answers = %q, want ready", got)
+	if status, got := readyState(t, b2); got != "ready" || status != http.StatusOK {
+		t.Fatalf("after the server answers: status %d state %q, want 200 ready", status, got)
 	}
 }
 
-func readyState(t *testing.T, b *Bridge) string {
+func readyState(t *testing.T, b *Bridge) (int, string) {
 	t.Helper()
 	srv := httptest.NewServer(b.Handler())
 	defer srv.Close()
@@ -305,7 +312,10 @@ func readyState(t *testing.T, b *Bridge) string {
 	if body.Ready != (body.State == "ready") {
 		t.Fatalf("ready=%v state=%q disagree", body.Ready, body.State)
 	}
-	return body.State
+	if body.Ready != (resp.StatusCode == http.StatusOK) {
+		t.Fatalf("ready=%v with status %d: the status must track readiness", body.Ready, resp.StatusCode)
+	}
+	return resp.StatusCode, body.State
 }
 
 // --- 3.2 upstream client ---------------------------------------------------

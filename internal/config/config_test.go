@@ -946,6 +946,10 @@ func TestParseFlagsModelSubfolder(t *testing.T) {
 // sandbox mounts a shipped miniature behind the loops and a real checkpoint
 // behind the typed-question examples, with both entries preloading the same
 // preset (one digest) and the real entry carrying its own complete envelope.
+// The real entry mounts that checkpoint's published int8 export: the machine is
+// sized by what the weights cost resident, and the fp16 graph's ~4.9 GB does
+// not fit beside the rest of the set (README's int8 section, `just
+// verify-laya-int8`).
 func TestSandboxConfigExampleEntries(t *testing.T) {
 	cfg, err := Load("../../website/repl/sandbox.yaml")
 	if err != nil {
@@ -959,8 +963,14 @@ func TestSandboxConfigExampleEntries(t *testing.T) {
 	if !ok {
 		t.Fatal("sandbox has no `laya-real` (real checkpoint) entry")
 	}
-	if real.ModelRepo == "" || real.ModelSubfolder == "" {
-		t.Fatalf("laya-real must download from a repository subfolder, got repo=%q subfolder=%q", real.ModelRepo, real.ModelSubfolder)
+	if real.ModelRepo == "" {
+		t.Fatal("laya-real must download the checkpoint from a repository")
+	}
+	if real.Quantize != "auto" {
+		t.Fatalf("laya-real quantize = %q, want auto so the published int8 member resolves", real.Quantize)
+	}
+	if dir := filepath.ToSlash(filepath.Dir(real.ONNX)); !strings.HasSuffix(dir, "/int8/laya-typed") {
+		t.Fatalf("laya-real onnx %q must name a fresh int8 mount path so the int8 export downloads", real.ONNX)
 	}
 
 	findLaya := func(m ModelConfig) (ScriptEntry, bool) {

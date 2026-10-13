@@ -192,6 +192,29 @@ broken panel.
 - **WHEN** the client cannot reach the sandbox at all
 - **THEN** the console renders an offline state that names the condition and offers a retry, and no transcript is shown as if it were a real reply
 
+### Requirement: The readiness endpoint's status tracks readiness
+
+The bridge's readiness endpoint SHALL answer a failing status while its server
+is starting or unreachable, and a success status only when the server answers,
+so the platform's health check reports a machine that never finishes its boot
+as unhealthy. The reply body SHALL keep naming which of the states the sandbox
+is in, so the clients that read it render the same distinction as before.
+
+#### Scenario: A boot in progress fails the check
+
+- **WHEN** the platform's check reads the readiness endpoint while the server is still loading its models
+- **THEN** the reply carries a failing status and says the sandbox is starting
+
+#### Scenario: A server that died fails the check
+
+- **WHEN** the server process has exited and the bridge is still up
+- **THEN** the reply carries a failing status and says the sandbox is offline
+
+#### Scenario: Ready is the only success
+
+- **WHEN** the server answers the bridge's probe
+- **THEN** the reply carries a success status and says the sandbox is ready
+
 ### Requirement: One client drives both surfaces
 
 The landing console and the standalone terminal SHALL be driven by one client
@@ -333,6 +356,30 @@ continue to hold for both.
 
 - **WHEN** a visitor runs the Inbox or Quickstart example
 - **THEN** the call is served by the real checkpoint, not the miniature
+
+#### Scenario: The mounted export is the pre-quantized one
+
+- **WHEN** the sandbox's server configuration is inspected
+- **THEN** the real checkpoint is configured to mount the published int8 export of that checkpoint, and the boot log names the int8 weights it loaded
+
+### Requirement: The configured model set fits the machine
+
+The shipped server configuration and the machine size SHALL be chosen together
+so the resident memory of the loaded model set stays inside the machine's limit
+through a boot and its warm-up, because the sandbox loads every configured model
+at startup and the platform replaces a machine whose server is killed for
+memory.
+
+#### Scenario: The size follows the resident cost, not the file size
+
+- **WHEN** the sandbox's machine size and model configuration are inspected
+- **THEN** the size accounts for the resident cost of the weights, which the CPU execution provider multiplies several times over their files
+- **AND** the checkpoint that dominates the footprint mounts a pre-quantized export
+
+#### Scenario: A boot completes without a kill
+
+- **WHEN** the sandbox boots with the shipped configuration and its models already on the volume
+- **THEN** it reaches ready without the platform killing the server for memory, and it stays up while the preloaded presets warm their replies
 
 ### Requirement: The decision checkpoint uses the machine's cores
 
