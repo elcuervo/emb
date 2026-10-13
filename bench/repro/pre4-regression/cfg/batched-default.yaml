@@ -1,0 +1,8 @@
+# Arm A/B — batched defaults. One batcher session, threads from the default
+# derivation (pre3: cores-2; pre4: the model's admission share, then calibration).
+listen: "127.0.0.1:17001"
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512

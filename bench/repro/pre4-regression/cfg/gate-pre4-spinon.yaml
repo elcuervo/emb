@@ -1,0 +1,15 @@
+# Arm G'' (pre4) — identical layout and budget to cfg/gate-pre4.yaml with ORT
+# spinning explicitly on, to separate the policy's spinning default from the
+# admission gate.
+listen: "127.0.0.1:17009"
+cpu_budget: 3
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    workers: 4
+    intra_op_threads: 3
+    allow_spinning: true
+    batching:
+      timeout: 0

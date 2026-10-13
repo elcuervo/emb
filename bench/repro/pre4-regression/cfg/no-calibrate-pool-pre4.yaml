@@ -1,0 +1,12 @@
+# Arm H (pre4) — the policy default with no calibration to rescue it: unbatched
+# pool, workers unset (policy => 1 session under the CPU policy), width = the
+# model's raw admission share. This is the layout the policy alone produces.
+listen: "127.0.0.1:17007"
+calibrate: false
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    batching:
+      timeout: 0

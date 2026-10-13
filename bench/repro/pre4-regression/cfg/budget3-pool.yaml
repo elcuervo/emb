@@ -1,0 +1,14 @@
+# Fix verification (tasks 3.2/4.1) — the arm that measured the D4 defect, run
+# against the fixed tree. Same configuration as cfg/no-calibrate-pool-pre4.yaml
+# (policy default, unbatched, no calibration to rescue the layout), so the only
+# difference from the recorded pre4 arm is the code.
+listen: "127.0.0.1:17010"
+cpu_budget: 3
+calibrate: false
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    batching:
+      timeout: 0

@@ -1,0 +1,10 @@
+# Arm C/D — unbatched pool. pre3 sizes `autoTuneWorkers` sessions; pre4 pins one
+# session under the CPU policy. Same file for both revisions (no pre4-only keys).
+listen: "127.0.0.1:17002"
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    batching:
+      timeout: 0
