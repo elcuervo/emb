@@ -502,10 +502,30 @@ jobs:
       # same path reproduces locally as `just bench-reference-local`.
       - name: Evidence bundle (same host, diffed against itself)
         run: |
-          go run ./bench/fargate -mode run -out bench-out/reference/bundles 2>&1 | tee bench-out/reference/bundle.log
+          # A tier can only be emulated up to the CPUs the host presents: Docker
+          # refuses `--cpus` above them (exit 125), which would leave the matrix
+          # incomplete and the bundle's `cells-complete` assertion invalid — a
+          # bundle that is not a reference. Emulate the Fargate tiers this host
+          # can hold (all four on a host with eight or more CPUs).
+          tiers=""
+          for t in 1 2 4 8; do
+            [ "$t" -le "$(nproc)" ] && tiers="${tiers:+$tiers,}$t"
+          done
+          echo "emulating Fargate tiers: $tiers (host presents $(nproc) CPUs)"
+          go run ./bench/fargate -mode run -cpus "$tiers" -out bench-out/reference/bundles 2>&1 | tee bench-out/reference/bundle.log
           bundle=$(find bench-out/reference/bundles -maxdepth 1 -name 'run.*.json' -print -quit)
           [ -n "$bundle" ] || { echo "no benchmark bundle written" >&2; exit 1; }
           go run ./bench/fargate -mode diff -before "$bundle" -after "$bundle" 2>&1 | tee -a bench-out/reference/bundle.log
+          # The record must be usable as a reference: only the host contract and
+          # a complete matrix, and nothing left invalid or failed. A green job
+          # with an invalid bundle is the failure this whole tier guards against.
+          jq -e '.host.gold == true
+                 and ([.assertions[] | select(.outcome == "fail" or .outcome == "invalid")] | length == 0)' \
+            "$bundle" >/dev/null || {
+              echo "the bundle is not a valid reference:" >&2
+              jq '.host.gold, .assertions' "$bundle" >&2
+              exit 1
+            }
 
       - name: Upload the reference record
         if: always()
