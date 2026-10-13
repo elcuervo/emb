@@ -1,6 +1,8 @@
 package permit
 
 import (
+	"context"
+	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -57,4 +59,200 @@ func waitBudgetQueue(t *testing.T, b *Budget, n int) {
 		runtime.Gosched()
 	}
 	t.Fatalf("waiters did not reach %d", n)
+}
+
+func TestBudgetAcquireRespectsDeadline(t *testing.T) {
+	b := NewBudget(2)
+	release := b.Acquire(2)
+	defer release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	got, err := b.AcquireContext(ctx, 2)
+	if err == nil {
+		got()
+		t.Fatal("acquire succeeded while the budget was exhausted")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want DeadlineExceeded, got %v", err)
+	}
+	if waited := time.Since(start); waited < 50*time.Millisecond {
+		t.Fatalf("returned after %s, before the deadline", waited)
+	}
+	if active, _ := b.Stats(); active != 2 {
+		t.Fatalf("deadline path leaked a permit: active=%d", active)
+	}
+	if b.Waiters() != 0 {
+		t.Fatalf("expired waiter left in the queue: %d", b.Waiters())
+	}
+}
+
+func TestBudgetAcquireContextCancelled(t *testing.T) {
+	b := NewBudget(1)
+	release := b.Acquire(1)
+	defer release()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	if _, err := b.AcquireContext(ctx, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	if b.Waiters() != 0 {
+		t.Fatalf("cancelled waiter left in the queue: %d", b.Waiters())
+	}
+}
+
+func TestBudgetQueueBoundRefusesRatherThanQueues(t *testing.T) {
+	b := NewBudget(1)
+	b.SetQueueBound(1)
+	release := b.Acquire(1)
+	defer release()
+
+	blocked := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_, err := b.AcquireContext(ctx, 1)
+		blocked <- err
+	}()
+	waitBudgetQueue(t, b, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := b.AcquireContext(ctx, 1); !errors.Is(err, ErrBusy) {
+		t.Fatalf("want ErrBusy past the bound, got %v", err)
+	}
+	if _, refused, _ := b.Counters(); refused != 1 {
+		t.Fatalf("refusal not counted: %d", refused)
+	}
+	release()
+	if err := <-blocked; err != nil {
+		t.Fatalf("the queued waiter failed: %v", err)
+	}
+}
+
+func TestBudgetBorrowsIdleCapacityPastABlockedHead(t *testing.T) {
+	b := NewBudget(4)
+	held := b.Acquire(2)
+	defer held()
+
+	wide := make(chan func(), 1)
+	go func() { wide <- b.Acquire(3) }()
+	waitBudgetQueue(t, b, 1)
+
+	narrow := make(chan func(), 1)
+	go func() { narrow <- b.Acquire(2) }()
+
+	// The narrow waiter fits the idle capacity, so it must be admitted at once
+	// while the wide head stays queued (2 held + 3 does not fit).
+	select {
+	case release := <-narrow:
+		release()
+	case <-time.After(time.Second):
+		t.Fatal("a narrow waiter that fits idle capacity waited behind a blocked head")
+	}
+	select {
+	case release := <-wide:
+		release()
+		t.Fatal("the wide waiter was admitted while its width did not fit")
+	default:
+	}
+	if queued := b.Waiters(); queued != 1 {
+		t.Fatalf("want the wide waiter still queued, got %d waiters", queued)
+	}
+	held()
+	(<-wide)()
+}
+
+func TestBudgetReleaseIsIdempotent(t *testing.T) {
+	b := NewBudget(2)
+	release := b.Acquire(2)
+	release()
+	release()
+	if active, _ := b.Stats(); active != 0 {
+		t.Fatalf("double release corrupted the accounting: active=%d", active)
+	}
+	next := b.Acquire(2)
+	defer next()
+	if active, _ := b.Stats(); active != 2 {
+		t.Fatalf("budget unusable after a double release: active=%d", active)
+	}
+}
+
+func TestBudgetAdmissionNeverLeaksWhenTheDeadlineRacesAdmission(t *testing.T) {
+	b := NewBudget(1)
+	for i := 0; i < 200; i++ {
+		release := b.Acquire(1)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i%5)*time.Microsecond)
+		done := make(chan struct{})
+		var got func()
+		var err error
+		go func() {
+			got, err = b.AcquireContext(ctx, 1)
+			close(done)
+		}()
+		release()
+		<-done
+		cancel()
+		if err == nil && got != nil {
+			got()
+		}
+		if active, _ := b.Stats(); active != 0 {
+			t.Fatalf("iteration %d leaked width: active=%d", i, active)
+		}
+		if queued := b.Waiters(); queued != 0 {
+			t.Fatalf("iteration %d left %d waiters queued", i, queued)
+		}
+	}
+}
+
+// TestBudgetDoesNotStarveAWideWaiterBehindNarrowBorrows covers the fairness
+// half of the admission contract: idle capacity is borrowable past a blocked
+// wide head, but a stream of narrow waiters cannot starve it, so the gate
+// eventually drains and lets the wide waiter in.
+func TestBudgetDoesNotStarveAWideWaiterBehindNarrowBorrows(t *testing.T) {
+	b := NewBudget(4)
+	b.borrowBurst = 2
+	held := b.Acquire(3)
+
+	wide := make(chan func(), 1)
+	go func() { wide <- b.Acquire(4) }()
+	waitBudgetQueue(t, b, 1)
+
+	narrow1 := b.Acquire(1) // borrows the idle unit
+	narrow2 := make(chan func(), 1)
+	go func() { narrow2 <- b.Acquire(1) }()
+	waitBudgetQueue(t, b, 2)
+	narrow1() // frees the unit, which the second narrow waiter then borrows
+
+	var second func()
+	select {
+	case second = <-narrow2:
+	case <-time.After(time.Second):
+		t.Fatal("the second narrow waiter never borrowed the idle unit")
+	}
+	if active, _ := b.Stats(); active > b.Capacity() {
+		t.Fatalf("admitted width %d exceeds the budget %d", active, b.Capacity())
+	}
+
+	// The borrow burst is spent: a third narrow waiter must wait for the wide
+	// head rather than extend its starvation.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := b.AcquireContext(ctx, 1); err == nil {
+		t.Fatal("a narrow waiter barged past a wide head after the borrow burst")
+	}
+
+	second()
+	held()
+	select {
+	case release := <-wide:
+		release()
+	case <-time.After(time.Second):
+		t.Fatal("the wide waiter was starved by narrow borrows")
+	}
 }
