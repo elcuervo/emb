@@ -12,6 +12,7 @@
 TOTAL_PROD	86
 github.com/elcuervo/emb/internal/bounded	96
 github.com/elcuervo/emb/internal/config	91
+github.com/elcuervo/emb/internal/embstress	87
 github.com/elcuervo/emb/internal/embtop	91
 github.com/elcuervo/emb/internal/embverify	92
 github.com/elcuervo/emb/internal/emoji	97

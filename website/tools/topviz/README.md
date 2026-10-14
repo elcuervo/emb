@@ -47,17 +47,23 @@ Files here:
 | `run.sh` | what `asciinema` runs: the dashboard in front, the traffic behind it |
 | `trim.py` | cuts the raw recording to the dashboard's alt-screen session (and, with `--until-pct`, to a moment inside it) |
 | `publish.py` | writes the take, the frame, the caption and the figures into the page, the served set in `published-tree.py`, and the capture into the documentation |
-| `runs/` | the last run's `raw.cast`, `take.cast`, `frame.cast`, `frame.txt`, `node.log`, `traffic.log`, `samples.txt` — gitignored, unserved, and the only way to check what the artifacts show |
+| `runs/` | the last run's `raw.cast`, `take.cast`, `frame.cast`, `frame.txt`, `node.log`, `traffic.log`, `samples.txt` — and the fleet run's `cluster-*` beside them — gitignored, unserved, and the only way to check what the artifacts show |
 
-## The fleet capture
+## The fleet take
 
 `just website-clusterviz` records the same recorder against a fleet instead of
 one node: it starts two nodes from `models.yaml` (`:16379` and `:16380`), runs
-`emb-top -nodes a,b` in front and `cluster-traffic.sh` behind, and writes one
-animated GIF to `docs/assets/emb-top-cluster-<sha8>.gif` for
-`docs/operations.md`. It does not touch the site plate, which shows one node.
-The scripts are `run-cluster.sh` and `cluster-traffic.sh`, siblings of the
-single-node pair.
+`emb-top -nodes a,b` in front and `cluster-traffic.sh` behind, and publishes the
+fleet run in the same three forms the single-node run gets — the trimmed take
+into the served tree, its still frame and caption and figures into the
+documentation surface's own region (`<!-- fleetviz:begin -->`, which the page's
+existing `data-topviz-*` hooks drive, so there is no second script), and the
+animated GIF into `docs/assets/` for `docs/operations.md`'s fleet block. The
+`--fleet` flag is what makes `publish.py` write that set instead of the landing
+page's plate; the landing page keeps exactly one plate and is not touched. An
+`emb-top -once` sidecar on the same two nodes supplies the figures the caption
+and the screen-reader text carry. The scripts are `run-cluster.sh` and
+`cluster-traffic.sh`, siblings of the single-node pair.
 
 ## The plate is the recording, and the frame is what it falls back to
 

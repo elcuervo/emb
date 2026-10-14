@@ -153,7 +153,7 @@ func TestFleetAggregateCacheHitRateStaysBounded(t *testing.T) {
 	b := &onceNode{label: "b", sampler: NewSampler(4), res: &PollResult{CacheMisses: 100}, sampled: true}
 	b.sampler.Push(&PollResult{CacheMisses: 100})
 
-	out := string(appendFleetAggregate(nil, []*onceNode{a, b}))
+	out := string(appendFleetAggregate(nil, []*onceNode{a, b}, FleetRecommendation{}))
 	v, ok := parseKV(out, "cache_hit_rate")
 	if !ok {
 		t.Fatalf("no cache_hit_rate in %q", out)
@@ -278,5 +278,155 @@ func TestRunOnceFleetReportsCPUPlan(t *testing.T) {
 	}
 	if got := numKV(t, line[end:], "cpu_budget"); got != 4 {
 		t.Errorf("node:b cpu_budget = %v, want 4", got)
+	}
+}
+
+// boundResponder answers a full poll for a node that holds its whole CPU budget
+// with admission waits timing out: the sizing recommendation's CPU rule.
+func boundResponder(timeouts int64) func([]string, int) []byte {
+	return func(cmd []string, _ int) []byte {
+		switch strings.ToUpper(cmd[0]) {
+		case "EMB.MODELS":
+			return modelsReply([]string{"m", "384"})
+		case "EMB.INFO":
+			return infoReply(nil, map[string]int64{"requests": 4, "tokens": 16})
+		case "EMB.STATS":
+			return statsReply(map[string]int64{
+				"uptime_secs": 1, "models_loaded": 1, "total_requests": 4,
+				"cpu_budget_enabled": 1, "cpu_allowance": 800, "cpu_capacity": 8,
+				"cpu_budget": 8, "cpu_active_tokens": 8, "cpu_peak_tokens": 8,
+				"cpu_admission_timeouts": timeouts,
+			})
+		case "INFO":
+			return encodeBulk("gomaxprocs:8\r\n")
+		case "MONITOR":
+			return encodeArray()
+		default:
+			return encodeError("ERR unknown " + cmd[0])
+		}
+	}
+}
+
+// The headless lines carry the sizing recommendation a script needs, beside the
+// per-node and fleet numbers.
+func TestRunOnceCarriesRecommendation(t *testing.T) {
+	var round int
+	respond := func(cmd []string, _ int) []byte {
+		if strings.ToUpper(cmd[0]) == "EMB.STATS" {
+			round++
+			return boundResponder(int64(round*5))(cmd, 0)
+		}
+		return boundResponder(0)(cmd, 0)
+	}
+	_, addr := startScripted(t, respond)
+	c := NewClient(addr, "", false)
+	var out bytes.Buffer
+	if err := RunOnce(c, time.Second, 2, &out); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if got, ok := parseKV(lines[0], "rec"); ok {
+		t.Errorf("the first poll has one sample and cannot recommend, got rec=%s", got)
+	}
+	if got, ok := parseKV(lines[len(lines)-1], "rec"); !ok || got != ResourceCPU {
+		t.Fatalf("last line rec = %q (ok=%v), want %s:\n%s", got, ok, ResourceCPU, out.String())
+	}
+}
+
+// The fleet line carries the fleet's own recommendation and each node's own.
+func TestRunOnceFleetCarriesRecommendation(t *testing.T) {
+	var a, b int
+	nodeA := func(cmd []string, _ int) []byte {
+		if strings.ToUpper(cmd[0]) == "EMB.STATS" {
+			a++
+			return boundResponder(int64(a*5))(cmd, 0)
+		}
+		return boundResponder(0)(cmd, 0)
+	}
+	nodeB := func(cmd []string, _ int) []byte {
+		if strings.ToUpper(cmd[0]) == "EMB.STATS" {
+			b++
+			return boundResponder(int64(b*5))(cmd, 0)
+		}
+		return boundResponder(0)(cmd, 0)
+	}
+	_, addrA := startScripted(t, nodeA)
+	_, addrB := startScripted(t, nodeB)
+	ca, cb := NewClient(addrA, "", false), NewClient(addrB, "", false)
+	var out bytes.Buffer
+	if err := RunOnceFleet([]*Client{ca, cb}, []string{"a", "b"}, time.Second, 2, &out); err != nil {
+		t.Fatalf("RunOnceFleet: %v", err)
+	}
+	line := strings.Split(strings.TrimSpace(out.String()), "\n")[1]
+	// Both nodes hold their whole budget, so the fleet names the resource and
+	// the capacity it is out of.
+	if got, ok := parseKV(line, "rec"); !ok || got != ResourceCPU+"+"+ResourceNodes {
+		t.Errorf("fleet rec = %q (ok=%v), want %s+%s:\n%s", got, ok, ResourceCPU, ResourceNodes, line)
+	}
+	start := strings.Index(line, "node:a")
+	end := strings.Index(line, "node:b")
+	if start < 0 || end < start {
+		t.Fatalf("node sections not in expected order: %q", line)
+	}
+	if got, ok := parseKV(line[start:end], "rec"); !ok || got != ResourceCPU {
+		t.Errorf("node:a rec = %q (ok=%v), want %s", got, ok, ResourceCPU)
+	}
+	if got, ok := parseKV(line[end:], "rec"); !ok || got != ResourceCPU {
+		t.Errorf("node:b rec = %q (ok=%v), want %s", got, ok, ResourceCPU)
+	}
+}
+
+// The single-node line must carry the advisory with the node's own fields, not
+// after the model sections: a reader takes the aggregate as everything before
+// the first ` model:`.
+func TestRunOnceRecommendationSitsWithTheAggregate(t *testing.T) {
+	var round int
+	respond := func(cmd []string, _ int) []byte {
+		if strings.ToUpper(cmd[0]) == "EMB.STATS" {
+			round++
+			return boundResponder(int64(round*5))(cmd, 0)
+		}
+		return boundResponder(0)(cmd, 0)
+	}
+	_, addr := startScripted(t, respond)
+	c := NewClient(addr, "", false)
+	var out bytes.Buffer
+	if err := RunOnce(c, time.Second, 2, &out); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	line := strings.Split(strings.TrimSpace(out.String()), "\n")[1]
+	if _, ok := parseKV(line, "rec"); !ok {
+		t.Fatalf("no rec on the line: %q", line)
+	}
+	aggregate := line
+	if i := strings.Index(line, " model:"); i >= 0 {
+		aggregate = line[:i]
+	}
+	if _, ok := parseKV(aggregate, "rec"); !ok {
+		t.Fatalf("rec is not in the node's own fields: %q", line)
+	}
+}
+
+// A fleet whose only advice is a node to inspect must still say so: the token
+// cannot be dropped just because no resource is binding.
+func TestRunOnceFleetNamesTheNodeWhenNothingBinds(t *testing.T) {
+	states := []*onceNode{
+		{label: "a", sampler: NewSampler(4), res: &PollResult{}, sampled: true},
+		{label: "b", sampler: NewSampler(4), res: &PollResult{}, sampled: true},
+	}
+	for _, st := range states {
+		st.sampler.Push(&PollResult{})
+	}
+	// a is far slower than its peer at comparable load.
+	states[0].sampler.PushEvents([]Event{{Model: "m", LatencyUs: 1000}})
+	states[1].sampler.PushEvents([]Event{{Model: "m", LatencyUs: 9000}})
+
+	rec := fleetRecommendation(states)
+	if rec.First != "b" {
+		t.Fatalf("First = %q, want the slow peer b", rec.First)
+	}
+	line := string(appendFleetAggregate(nil, states, rec))
+	if got, ok := parseKV(line, "rec_first"); !ok || got != "b" {
+		t.Fatalf("rec_first = %q (ok=%v), want b:\n%s", got, ok, line)
 	}
 }

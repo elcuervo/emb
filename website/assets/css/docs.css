@@ -166,6 +166,13 @@
 .block--dark .doc-cmds dt,
 .block--dark .doc-cmds dd{ border-bottom-color: var(--rule-dark); }
 
+/* A `.plate` draws its labels, marks and areas in `--fg`, which is ink on the
+   paper blocks the measured plates were first drawn on. The operations block's
+   ground is inverted, so the plate's ink follows it: `--bg` is the paper this
+   block sets its own text in, and the atom keeps its one accent (`--accent`,
+   6.06:1 here) and its `--muted` remap untouched. */
+.block--dark .plate{ --fg: var(--bg); }
+
 /* code specimens reuse the landing's `.code` atom unchanged; the only
    page-local need is that a specimen inside a docs column may be wide. */
 /* code specimens reuse the landing's `.code` atom unchanged; the only

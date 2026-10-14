@@ -48,6 +48,23 @@ type Point struct {
 	CPUAdmissionWaitUs   int64
 	CPUAdmissionWaiters  int64
 	CPUAdmissionTimeouts int64
+
+	// The kernel's own view of CPU this process could not use, cumulative:
+	// cgroup throttling and stolen time.
+	CPUThrottlePeriods  int64
+	CPUThrottledPeriods int64
+	CPUThrottleUsec     int64
+	CPUStealUsec        int64
+
+	// Cache-restore headroom against the server's own limit, and the entries it
+	// dropped for want of memory.
+	CacheRestoreLimitBytes    int64
+	CacheRestoreHeadroomBytes int64
+	CacheRestoreSkippedMemory int64
+
+	// CacheBytes is the memory the model caches hold: the occupancy the
+	// growth check compares against.
+	CacheBytes int64
 }
 
 // CPUPlanText renders one node's (or an aggregate's) process CPU plan, or ""
@@ -197,6 +214,18 @@ func (s *Sampler) Push(res *PollResult) Point {
 		CPUAdmissionWaitUs:   res.CPUAdmissionWaitUs,
 		CPUAdmissionWaiters:  res.CPUAdmissionWaiters,
 		CPUAdmissionTimeouts: res.CPUAdmissionTimeouts,
+
+		CPUThrottlePeriods:  res.CPUThrottlePeriods,
+		CPUThrottledPeriods: res.CPUThrottledPeriods,
+		CPUThrottleUsec:     res.CPUThrottleUsec,
+		CPUStealUsec:        res.CPUStealUsec,
+
+		CacheRestoreLimitBytes:    res.CacheRestoreLimitBytes,
+		CacheRestoreHeadroomBytes: res.CacheRestoreHeadroomBytes,
+		CacheRestoreSkippedMemory: res.CacheRestoreSkippedMemory,
+	}
+	for _, ms := range res.PerModel {
+		p.CacheBytes += ms.CacheCurBytes
 	}
 
 	totalHits := res.CacheHits

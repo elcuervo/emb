@@ -301,6 +301,12 @@ func (f *fakePoller) Poll(_ []string, afterSeq uint64) (*embtop.PollResult, erro
 	}
 	res := fakePoll(int64(100*(n+1)), int64(400*(n+1)), 0, 1)
 	res.NextSeq = uint64(10 * (n + 1))
+	// A node holding its whole CPU budget with admission waits timing out: the
+	// frames must carry the sizing line the live dashboard renders.
+	res.CPUPlanKnown = true
+	res.CPUBudget = 8
+	res.CPUActiveTokens = 8
+	res.CPUAdmissionTimeouts = int64(3 * n)
 	return res, nil
 }
 
@@ -384,6 +390,10 @@ func TestRunFramesEmitsColoredFramesAndReconnects(t *testing.T) {
 	}
 	if seqs[2] != 0 {
 		t.Errorf("event cursor was not reset after reconnect: seqs=%v", seqs)
+	}
+	// The headless frames carry the sizing recommendation, not just the TUI.
+	if !strings.Contains(frames[3], "SIZING") || !strings.Contains(frames[3], "cpu budget is the limit") {
+		t.Errorf("frame does not carry the sizing recommendation: %q", frames[3])
 	}
 }
 

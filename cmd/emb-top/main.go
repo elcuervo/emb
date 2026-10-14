@@ -18,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"slices"
 	"strings"
@@ -89,7 +88,7 @@ type options struct {
 	window        int
 	showVersion   bool
 
-	specs []nodeSpec // parsed from addr/nodes/nodesCSV
+	specs []embtop.NodeSpec // parsed from addr/nodes/nodesCSV
 }
 
 // parseFlags parses args into options. It is separate from main so the node
@@ -114,7 +113,7 @@ func parseFlags(args []string, getenv func(string) string) (*options, error) {
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
-	specs, err := buildSpecs(o.addr, o.nodes, o.nodesCSV)
+	specs, err := embtop.BuildSpecs(o.addr, o.nodes, o.nodesCSV)
 	if err != nil {
 		return nil, err
 	}
@@ -152,13 +151,13 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		fprintln(stderr, "emb-top: -samples must be at least 1")
 		return 2
 	}
-	if o.password != "" && !o.useTLS && !allLoopback(o.specs) {
+	if o.password != "" && !o.useTLS && !embtop.AllLoopback(o.specs) {
 		fprintln(stderr,
 			"emb-top: warning: sending an AUTH password to a non-loopback address without -tls")
 	}
 
 	ctx := context.Background()
-	resolved, err := resolveSpecs(ctx, netResolver{}, o.specs)
+	resolved, err := embtop.ResolveSpecs(ctx, embtop.NetResolver{}, o.specs)
 	if err != nil {
 		fprintln(stderr, "emb-top:", err)
 		return 1
@@ -193,17 +192,6 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 // fprintln writes a line and ignores the error: diagnostics on a broken
 // stdout/stderr must not change the exit code.
 func fprintln(w io.Writer, a ...any) { _, _ = fmt.Fprintln(w, a...) }
-
-// allLoopback reports whether every specification is a loopback address, so a
-// plaintext AUTH is only silent for local fleets.
-func allLoopback(specs []nodeSpec) bool {
-	for _, s := range specs {
-		if !isLoopback(s.addr()) {
-			return false
-		}
-	}
-	return true
-}
 
 // dashboardClient is the slice of the emb-top client the dashboard uses: the
 // address its header names and a polled snapshot. It is an interface so the
@@ -287,20 +275,6 @@ func emitFrame(out io.Writer, frame string) error {
 	b = append(b, '\n')
 	_, err = out.Write(b)
 	return err
-}
-
-// isLoopback reports whether addr (host:port) resolves to a loopback host, so
-// a plaintext AUTH is only silent for local connections.
-func isLoopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		host = addr
-	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 // ---- messages ----
@@ -414,11 +388,9 @@ func streamDims(width, height int) (int, int) {
 const minStrip = 8
 
 // modelChrome is the number of non-model rows the dashboard always spends:
-// header, banner, the two stream charts, gauges, ticker, footer and the
-// model-list range line.
-// modelChrome is the number of non-model rows the dashboard always spends,
-// including the process CPU plan line above the model rows.
-const modelChrome = 18
+// header, banner, the sizing line, the two stream charts, gauges, ticker,
+// footer and the model-list range line.
+const modelChrome = 19
 
 // visibleRows is how many single-line model rows fit below the chrome.
 func (m tuiModel) visibleRows() int {
@@ -632,6 +604,8 @@ func (m tuiModel) View() string {
 	b.WriteString(m.headerView())
 	b.WriteString("\n")
 	b.WriteString(m.bannerView())
+	b.WriteString("\n")
+	b.WriteString(m.recommendView())
 	b.WriteString("\n")
 
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
@@ -903,14 +877,14 @@ func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64, l
 			latArrow = "↑"
 		}
 		if p50, _, p95, ok := m.sampler.ModelLatency(name); ok {
-			seg, _ := fixedLabeledCol(dimStyle, "p50", fmtLatency(p50), colLat)
+			seg, _ := fixedLabeledCol(dimStyle, "p50", embtop.FormatLatency(p50), colLat)
 			add(seg)
 			if l.lat2 {
-				seg2, _ := fixedLabeledCol(labelStyle, "p95", fmtLatency(p95)+latArrow, colLat)
+				seg2, _ := fixedLabeledCol(labelStyle, "p95", embtop.FormatLatency(p95)+latArrow, colLat)
 				add(seg2)
 			}
 		} else {
-			seg, _ := fixedLabeledCol(dimStyle, "avg", fmtLatency(mp.AvgLatencyUs)+latArrow, colLat)
+			seg, _ := fixedLabeledCol(dimStyle, "avg", embtop.FormatLatency(mp.AvgLatencyUs)+latArrow, colLat)
 			add(seg)
 			if l.lat2 {
 				add(strings.Repeat(" ", colLat))
@@ -923,7 +897,7 @@ func (m tuiModel) modelRow(name string, pts []embtop.ModelPoint, maxV float64, l
 			errArrow = "↑"
 		}
 		style := dimStyle
-		if mh.errRise || mh.status >= healthDegraded {
+		if mh.errRise || mh.status >= embtop.HealthDegraded {
 			style = errStyle
 		}
 		seg, _ := fixedLabeledCol(style, "err", fmt.Sprintf("%d%s", mp.Errors, errArrow), colErr)
@@ -1020,7 +994,7 @@ func (m tuiModel) tickerView() string {
 		return ""
 	}
 	mark := okStyle.Render("✓")
-	lat := fmtLatency(ev.LatencyUs)
+	lat := embtop.FormatLatency(ev.LatencyUs)
 	if ev.Err {
 		mark = errStyle.Render("✗")
 	}
@@ -1095,17 +1069,6 @@ func fmtRate(v float64) string {
 		return fmt.Sprintf("%.0f", v)
 	default:
 		return fmt.Sprintf("%.1f", v)
-	}
-}
-
-func fmtLatency(us int64) string {
-	switch {
-	case us >= 1_000_000:
-		return fmt.Sprintf("%.2fs", float64(us)/1e6)
-	case us >= 1000:
-		return fmt.Sprintf("%.1fms", float64(us)/1e3)
-	default:
-		return fmt.Sprintf("%dµs", us)
 	}
 }
 

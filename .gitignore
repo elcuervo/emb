@@ -44,3 +44,7 @@ __pycache__/
 # `just website-topviz` publishes, but not committed -- a 700KB cast per take is
 # history nobody reads twice.
 /website/tools/topviz/runs/
+
+# The same for the `emb-stress` rig: the recording, the run's own report, the
+# node logs and the `emb-top -frames` sidecar the plate's values come from.
+/website/tools/stressviz/runs/
