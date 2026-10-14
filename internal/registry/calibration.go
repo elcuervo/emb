@@ -218,7 +218,7 @@ search:
 				fallback.Reason = "candidate_failed"
 				continue
 			}
-			if result.CPUUsec == 0 {
+			if result.CPUSampled == 0 {
 				fallback.Reason = "cpu_accounting_unavailable"
 				continue
 			}
@@ -309,10 +309,15 @@ func finishCalibration(best calibratedLayout, bestScore float64, fallback calibr
 }
 
 type calibrationResult struct {
-	Rows    int
-	CPUUsec uint64
-	P95     time.Duration
-	Elapsed time.Duration
+	Rows int
+	// CPUSampled is the sampler's own reading for the process (cumulative
+	// microseconds), not this trial's delta: only a platform that cannot account
+	// CPU is unavailable, and a cheap trial's delta is legitimately 0 — Linux
+	// resolves /proc/self/stat to 10ms clock ticks, so a trial shorter than the
+	// remainder of a tick reads the same value before and after.
+	CPUSampled uint64
+	P95        time.Duration
+	Elapsed    time.Duration
 }
 
 // calibrationOrder keeps the serial baseline (candidates[0]) first and sorts
@@ -412,7 +417,6 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 		}
 	}
 
-	userBefore, sysBefore := calibrationCPUTimes()
 	started := time.Now()
 	var mu sync.Mutex
 	var latencies []time.Duration
@@ -456,10 +460,10 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 	}
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	return calibrationResult{
-		Rows:    int(rows),
-		CPUUsec: (userAfter - userBefore) + (sysAfter - sysBefore),
-		P95:     latencies[(len(latencies)*95-1)/100],
-		Elapsed: time.Since(started),
+		Rows:       int(rows),
+		CPUSampled: userAfter + sysAfter,
+		P95:        latencies[(len(latencies)*95-1)/100],
+		Elapsed:    time.Since(started),
 	}, reference, true, false
 }
 

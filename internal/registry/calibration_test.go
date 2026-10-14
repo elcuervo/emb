@@ -205,6 +205,19 @@ func TestCalibrationFallsBackWithoutCPUAccounting(t *testing.T) {
 	}
 }
 
+// A platform with a coarse CPU clock (Linux reports /proc/self/stat in 10ms
+// ticks) reads the same value before and after a trial that used less than the
+// remainder of a tick. That unchanged sample is a real measurement of a cheap
+// trial, not a platform that cannot account CPU — treating it as unavailable
+// would drop every short trial on Linux back to the policy layout.
+func TestCalibrationAcceptsAnUnchangedCPUClock(t *testing.T) {
+	withCalibrationSeams(t, func() (uint64, uint64) { return 240_000, 30_000 }, nil)
+	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: time.Millisecond} }, 4, 4, 0, 0, false, 1)
+	if layout.Source != "calibrated" {
+		t.Fatalf("layout = %+v, want the unchanged sample treated as a usable measurement", layout)
+	}
+}
+
 func TestCalibrationFallsBackOnDeadline(t *testing.T) {
 	base := time.Unix(0, 0)
 	calls := 0
