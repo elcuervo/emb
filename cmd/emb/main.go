@@ -178,7 +178,7 @@ func run() error {
 	} else {
 		// A model configured for preload has no decided layout: report it and
 		// stay not-ready rather than advertising a server that cannot serve it.
-		log.Printf("not ready: %s", blocker)
+		log.Printf("not ready: %s", blocker) // #nosec G706 -- blocker is a server-owned model name/reason, not request input
 	}
 	// The warm runs after readiness, in the background: a declared payload is an
 	// optimization, and the platform's health check must not wait on it. It

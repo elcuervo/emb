@@ -47,6 +47,9 @@ import (
 //	deadline  pool, with the admission bound derived from the measured request
 //	          - a wait that ends without a grant, counted, and none without end
 //	layout    batching off, policy layout     - two concurrent runs admissible
+//	lazy      no preload, not-ready at boot   - the first request drives the
+//	          off-request-path load, is answered not-ready inside the bound, and
+//	          the model then serves (the reachable calibration-on-request-path arm)
 //	fairness  two models, one budget          - a narrow waiter served while a
 //	          wider head is parked (the wide model's width is the whole budget)
 //
@@ -574,6 +577,11 @@ type embArmOptions struct {
 	admission time.Duration
 	budget    int
 	calibrate *bool
+	// lazy starts the model without a preload and leaves the server not-ready,
+	// so the first request drives ResolveReady's off-request-path load (the
+	// arm that exercises the calibration-on-request-path regression). The zero
+	// value preloads and reports ready, as every other arm expects.
+	lazy bool
 }
 
 // embStart starts an in-process server over the fixture, with the model
@@ -600,14 +608,20 @@ func embStart(t *testing.T, opts embArmOptions) *embArm {
 			t.Fatalf("loading %q: %v", name, err)
 		}
 		reg.Add(name, entry)
-		if err := entry.Preload(); err != nil {
-			t.Fatalf("preloading %q: %v", name, err)
+		if !opts.lazy {
+			if err := entry.Preload(); err != nil {
+				t.Fatalf("preloading %q: %v", name, err)
+			}
 		}
 	}
 	reg.SetModelCount(len(models))
 	addr := getFreeAddr()
 	srv := New(addr, reg, "", opts.cache, nil, WithAdmissionTimeout(opts.admission))
-	srv.SetReady()
+	// A lazy arm leaves the server not-ready until a request drives the load
+	// through ResolveReady, exactly as cmd/emb does when LayoutsDecided is false.
+	if !opts.lazy {
+		srv.SetReady()
+	}
 	go srv.ListenAndServe()
 	t.Cleanup(func() {
 		_ = srv.Close()
@@ -629,7 +643,7 @@ func embStart(t *testing.T, opts embArmOptions) *embArm {
 // embModelConfig is the fixture model's layout. batching is the coalescing
 // window (nil disables batching, which is what makes the admission gate
 // observable); workers and threads are explicit only where an arm needs them.
-func embModelConfig(batching *int, maxBatch, workers, threads int) config.ModelConfig {
+func embModelConfig(preload bool, batching *int, maxBatch, workers, threads int) config.ModelConfig {
 	return config.ModelConfig{
 		ONNX:           embFixturePath(embFixtureModel),
 		Tokenizer:      embFixtureTokenizer,
@@ -638,7 +652,7 @@ func embModelConfig(batching *int, maxBatch, workers, threads int) config.ModelC
 		Pooling:        embFixtureDoc().Pooling,
 		Normalize:      embFixtureDoc().Normalize,
 		OutputTensor:   embFixtureDoc().OutputTensor,
-		Preload:        true,
+		Preload:        preload,
 		Workers:        workers,
 		IntraOpThreads: threads,
 		Batching:       config.BatchingConfig{Timeout: batching, MaxBatch: maxBatch},
@@ -943,7 +957,7 @@ func TestPlainEMBSmoke(t *testing.T) {
 	gate := &embAssertions{}
 
 	plain := embStart(t, embArmOptions{
-		model:     embModelConfig(embBatchingWindow(), 8, 0, 0),
+		model:     embModelConfig(true, embBatchingWindow(), 8, 0, 0),
 		cache:     "32MB",
 		admission: config.DefaultAdmissionTimeout,
 		budget:    embBudget,
@@ -963,6 +977,7 @@ func TestPlainEMBSmoke(t *testing.T) {
 	embDrainPhase(t, gate, plain, fixture, digests)
 	embHealthPhase(t, gate, plain, stopHealth)
 	embCalibrationPhase(t, gate, plain, fixture)
+	embLazyStartPhase(t, gate, fixture)
 
 	serial, serialWait := embQueueBound(t, gate, fixture)
 	embAdmissionBounded(t, gate, fixture, serial, serialWait)
@@ -1174,6 +1189,60 @@ func embCalibrationPhase(t *testing.T, gate *embAssertions, arm *embArm, fixture
 		workers, threads, firstCall, embFirstCallBound)
 }
 
+// embLazyStartPhase covers the lazy path: a model configured without preload is
+// not ready at boot, so the first request drives ResolveReady's off-request-path
+// load. It asserts the request is answered not-ready inside the first-call bound
+// (the load runs in the background, not in the request), and that the model then
+// becomes ready and serves. This is the arm that reaches the load path a
+// regression moves onto the request — the other arms preload, so they cannot see
+// it.
+func embLazyStartPhase(t *testing.T, gate *embAssertions, fixture *embFixture) {
+	t.Helper()
+	arm := embStart(t, embArmOptions{
+		model:     embModelConfig(false, embBatchingWindow(), 8, 0, 0),
+		admission: config.DefaultAdmissionTimeout,
+		budget:    embBudget,
+		lazy:      true,
+	})
+	// A lazy model must not be advertised ready until its layout is decided.
+	early, earlyErr := embStatus(arm.addr, time.Now().Add(2*time.Second), "EMB.READY")
+	notReadyAtBoot := earlyErr == nil && early != "OK"
+
+	begin := time.Now()
+	reply, err := embAsk(arm.addr, time.Now().Add(30*time.Second), "EMB", embModelName, fixture.Texts[0])
+	firstCall := time.Since(begin)
+	// Clean: the request is refused explicitly inside the bound. A regression
+	// that loads on the request path either blocks past the bound or answers with
+	// embeddings because it paid for the load inline.
+	answered := err == nil && reply.err != "" && strings.Contains(reply.err, "not ready") && firstCall <= embFirstCallBound
+
+	// The async load the request kicked off must finish: poll until the model
+	// answers embeddings. embEmbed fatals on a reply error, so it is called from
+	// a closure that recovers — a still-initializing "not ready" reply is the
+	// transition being observed, not a failure.
+	served := false
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if embServed(arm.addr, fixture.Texts[0]) {
+			served = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	gate.check(t, "calibration-off-request-path",
+		notReadyAtBoot && answered && served,
+		"lazy model: not-ready at boot=%t, first request %s answered %q inside the %s bound=%t, served after load=%t",
+		notReadyAtBoot, firstCall, reply.err, embFirstCallBound, answered, served)
+}
+
+// embServed reports whether the model answers a non-empty embedding for text,
+// without the test fataling on a not-ready reply: it is the transition the lazy
+// arm observes while the background load finishes.
+func embServed(addr, text string) bool {
+	reply, err := embAsk(addr, time.Now().Add(10*time.Second), "EMB", embModelName, text)
+	return err == nil && reply.err == "" && len(reply.bulk) == 1 && reply.bulk[0] != ""
+}
+
 // embQueueBound starts the over-provisioned pool arm and asserts the admission
 // queue is bounded: past its bound requests are refused and counted rather than
 // queued, the queue depth never exceeds the bound, only a request that actually
@@ -1183,7 +1252,7 @@ func embQueueBound(t *testing.T, gate *embAssertions, fixture *embFixture) (time
 	t.Helper()
 	off := 0
 	arm := embStart(t, embArmOptions{
-		model:     embModelConfig(&off, 0, embPoolWorkers, 1),
+		model:     embModelConfig(true, &off, 0, embPoolWorkers, 1),
 		admission: config.DefaultAdmissionTimeout,
 		budget:    embBudget,
 	})
@@ -1229,7 +1298,7 @@ func embAdmissionBounded(t *testing.T, gate *embAssertions, fixture *embFixture,
 		admission = time.Millisecond
 	}
 	arm := embStart(t, embArmOptions{
-		model:     embModelConfig(&off, 0, embPoolWorkers, 1),
+		model:     embModelConfig(true, &off, 0, embPoolWorkers, 1),
 		admission: admission,
 		budget:    embBudget,
 	})
@@ -1242,8 +1311,10 @@ func embAdmissionBounded(t *testing.T, gate *embAssertions, fixture *embFixture,
 	timeouts := after.timeouts - before.timeouts
 	refusals := after.refusals - before.refusals
 	waits := after.waits - before.waits
-	// Nothing may outlive the bound by more than the few runs it was waiting
-	// behind: the bound is what ends a wait, not the queue's depth.
+	// timeouts > 0 is the deadline detector: an unbounded wait never ends, so it
+	// is never counted. The limit is the loose rail on how long a wait may
+	// outlive its deadline — a few runs behind the ones it queued behind — not a
+	// tight bound on a queue that is, by design, several deep.
 	limit := admission + 4*serial
 
 	gate.check(t, "admission-bounded",
@@ -1265,7 +1336,7 @@ func embLayoutConcurrency(t *testing.T, gate *embAssertions, fixture *embFixture
 	off := 0
 	calibrate := false
 	arm := embStart(t, embArmOptions{
-		model:     embModelConfig(&off, 0, 0, 0),
+		model:     embModelConfig(true, &off, 0, 0, 0),
 		admission: config.DefaultAdmissionTimeout,
 		budget:    embBudget,
 		calibrate: &calibrate,
@@ -1274,15 +1345,22 @@ func embLayoutConcurrency(t *testing.T, gate *embAssertions, fixture *embFixture
 	threads := embPairInt(t, arm.addr, "intra_op_threads", "EMB.INFO", embModelName)
 	share := embPairInt(t, arm.addr, "cpu_thread_share", "EMB.INFO", embModelName)
 
-	stopPeak := embWatch(arm.addr, []string{"EMB.STATS"}, "cpu_active_tokens", time.Millisecond)
-	commands := embSingleTextCommands(fixture, 2)
+	// Sample well under a fixture run (~1–5 ms) and fire enough commands that the
+	// runs actually overlap: with only two, the connection setup skew can exceed
+	// a run, so the peak reads 1 even on a correct layout.
+	stopPeak := embWatch(arm.addr, []string{"EMB.STATS"}, "cpu_active_tokens", 100*time.Microsecond)
+	commands := embSingleTextCommands(fixture, 8)
 	burst := embFire(arm.addr, commands, 30*time.Second, -1)
 	peak := stopPeak()
 
+	// The behavioural term is peak >= 2, not peak == budget: a single whole-budget
+	// session (the defect) also reaches the budget, so the structural
+	// workers >= 2 is what a pinned single-session layout breaks, and peak >= 2
+	// states that two runs overlapped without restating policyPoolLayout.
 	gate.check(t, "layout-concurrency",
-		workers >= 2 && workers*threads <= embBudget && share > 0 && peak == embBudget && burst.completed == len(commands),
-		"layout reports workers=%d intra_op_threads=%d share=%d at a budget of %d; two concurrent runs reached %d active token(s), %d/%d completed",
-		workers, threads, share, embBudget, peak, burst.completed, len(commands))
+		workers >= 2 && workers*threads <= embBudget && share > 0 && peak >= 2 && burst.completed == len(commands),
+		"layout reports workers=%d intra_op_threads=%d share=%d at a budget of %d; %d concurrent runs reached %d active token(s), %d/%d completed",
+		workers, threads, share, embBudget, len(commands), peak, burst.completed, len(commands))
 }
 
 // embFairness asserts the gate is work-conserving: a narrow waiter is admitted
@@ -1303,7 +1381,7 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 	arm := embStart(t, embArmOptions{
 		// Two sessions of one thread, so the holder cannot block the probe in the
 		// pool: the probe's wait is the gate's or nothing.
-		model:     embModelConfig(&off, 0, 2, 1),
+		model:     embModelConfig(true, &off, 0, 2, 1),
 		extra:     map[string]config.ModelConfig{wideModel: embWideModelConfig(&off)},
 		budget:    embFairBudget,
 		calibrate: &calibrate,
@@ -1361,7 +1439,7 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 // fills the whole budget, so its runs are admitted alone and can be parked
 // behind a narrower holder.
 func embWideModelConfig(batching *int) config.ModelConfig {
-	return embModelConfig(batching, 0, 1, embFairWideThreads)
+	return embModelConfig(true, batching, 0, 1, embFairWideThreads)
 }
 
 // embBurstCommands builds the batch-on burst: each client sends several uncached

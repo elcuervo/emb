@@ -195,7 +195,7 @@ change instead. Verified on the development machine: 16 pass, 1 skip, 0 fail,
 `just bench-plain-emb` (also selected by `-run Smoke`, so `just bench-smoke` and
 the sweep run both gates) drives the plain `EMB` path in-process against
 `testdata/plain-emb` — an in-repo miniature, so no model download — through
-serial → burst → recovery and twelve assertion arms:
+serial → burst → recovery and six arms (twelve assertions):
 
 | Arm | What it drives | Assertions |
 |---|---|---|
@@ -203,6 +203,7 @@ serial → burst → recovery and twelve assertion arms:
 | `pool` | batching off, several sessions at one thread against a small budget | `layout-concurrency`, `queue-bounded`, `admission-bounded` |
 | `deadline` | the same shape with the admission bound derived from the measured serial request | `admission-bounded` (expiry, not only latency) |
 | `layout` | the policy layout with calibration off | `calibration-off-request-path` |
+| `lazy` | no `preload`: the model is not ready at boot and the first request drives the off-request-path load | `calibration-off-request-path` (the load must not be on the request) |
 | `fair` | two models over one budget: a wide run holds the budget while a narrow probe arrives | `admission-fair` |
 
 Bounds are derived per host from a measured serial request rather than pinned to
@@ -223,8 +224,8 @@ A gate that cannot fail is not a gate. The sweep applies each committed
 regression under `bench/smoke/mutants/` to a scratch tree — a detached worktree
 at `HEAD` plus the current tree's changes, so the working tree is never touched
 — and requires the gate to go red **and name the assertion that caught it**.
-The catalogue is the four regressions named in the change, one patch each, with
-the assertion each one must trip:
+The catalogue is one patch per named regression, with the assertion each one
+must trip:
 
 | Mutant (`bench/smoke/mutants/`) | Planted regression | Assertion that must catch it |
 |---|---|---|
@@ -236,7 +237,7 @@ the assertion each one must trip:
 | `06-admission-unbounded.patch` | the configured admission bound is ignored, so a command may wait forever | `admission-bounded` |
 | `07-queue-unbounded.patch` | the admission queue is never refused | `queue-bounded` |
 | `08-single-session-layout.patch` | one session holding the whole share, so a run fills the budget | `layout-concurrency` |
-| `09-calibration-on-request.patch` | the request path loads (and calibrates) a model synchronously | `calibration-off-request-path` |
+| `09-calibration-on-request.patch` | the request path loads (and calibrates) a model synchronously | `calibration-off-request-path` (the `lazy` arm: a preloaded arm would never reach the load) |
 
 Mutants `05`–`09` are the plain-`EMB` tier-2 regressions: the scripted gate
 cannot see an admission stall, so they are caught by `TestPlainEMBSmoke`, which
@@ -260,8 +261,40 @@ Recorded sweep on the development machine:
 == 04-layout-reshape.patch (must fail on: layout-immutable) ==
 ✓ 04-layout-reshape.patch: red, and named layout-immutable (emb-smoke: assertions=17 pass=15 fail=1 skipped=1)
 
+== 05-fifo-head.patch (must fail on: admission-fair) ==
+✓ 05-fifo-head.patch: red, and named admission-fair (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 06-admission-unbounded.patch (must fail on: admission-bounded) ==
+✓ 06-admission-unbounded.patch: red, and named admission-bounded (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 07-queue-unbounded.patch (must fail on: queue-bounded) ==
+✓ 07-queue-unbounded.patch: red, and named queue-bounded (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 08-single-session-layout.patch (must fail on: layout-concurrency) ==
+✓ 08-single-session-layout.patch: red, and named layout-concurrency (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 09-calibration-on-request.patch (must fail on: calibration-off-request-path) ==
+✓ 09-calibration-on-request.patch: red, and named calibration-off-request-path (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
 verify-gate: every mutant was caught and the clean tree passed
 ```
+
+The `assertions=17` in each line is the *scripted* gate's summary: `-run Smoke`
+runs both gates and `gate_summary` reads the last summary line. The plain gate's
+own count (twelve) is in the same log; only the exit status decides the sweep.
+
+Two things the sweep depends on that are easy to get wrong, both fixed here:
+
+- **The working tree's changes must survive the loop.** `verify-gate.sh` applies
+  each mutant to a tree that already carries the uncommitted working diff;
+  restoring with `git checkout -- .` between mutants reverts that diff too, so
+  the mutants are tested against `HEAD`. A mutant only the working tree's new
+  coverage can catch — `09-calibration-on-request`, reached by the `lazy` arm —
+  then falsely passes. The loop re-applies the diff after the restore.
+- **A mutant patch's context is the code it edits.** Mutants are commit-ready
+  unified diffs; editing the lines around one (e.g. a comment above
+  `plan.QueueBound`) invalidates its context and the patch stops applying. Keep
+  `07-queue-unbounded.patch` in step with `registry.go` when that region moves.
 
 The script exits non-zero when a mutant passes, when a mutant fails without
 naming its assertion, or when the clean tree is red, so a green sweep is the

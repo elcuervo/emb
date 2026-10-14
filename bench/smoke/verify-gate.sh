@@ -96,7 +96,15 @@ for patch in "$mutants"/*.patch; do
   want="$(sed -n 's/^# assertion: //p' "$patch" | head -1)"
   echo
   echo "== $name (must fail on: ${want:-?}) =="
+  # Restore the tree under test before the next mutant: `checkout -- .` drops the
+  # working tree's changes that were applied above, so re-apply them. Without
+  # this the mutants are tested against HEAD, and a mutant that only the working
+  # tree's new coverage can catch (e.g. calibration-on-request, caught by the
+  # lazy arm) would falsely pass.
   git -C "$sandbox" checkout -- . >/dev/null 2>&1
+  if [ -s "$diff_file" ]; then
+    git -C "$sandbox" apply "$diff_file" >/dev/null 2>&1 || true
+  fi
   if ! git -C "$sandbox" apply "$patch"; then
     bad "$name: the mutant patch did not apply"
     continue

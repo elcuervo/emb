@@ -2,10 +2,10 @@
 # Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
 --- a/internal/registry/registry.go
 +++ b/internal/registry/registry.go
-@@ -361,7 +361,7 @@
- 		// Two waiters per admission unit: past that, overload is refused with a
- 		// busy error instead of queued without limit (the provisional bound from
- 		// the reproduction; the tier-2 burst test re-derives it).
+@@ -363,7 +363,7 @@
+ 		// provisional bound from the reproduction — the tier-2 gate asserts the
+ 		// queue respects it (refusals past it, depth within it), not that the
+ 		// value is right; re-deriving it needs the operator's latency SLO.
 -		plan.QueueBound = max(2, 2*plan.Budget)
 +		plan.QueueBound = 0 // (mutant) the admission queue is never refused
  		r.cpuPlan = plan

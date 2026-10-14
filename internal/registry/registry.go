@@ -340,7 +340,7 @@ type Registry struct {
 	// reclaimedShares names the models whose per-model reservation was reclaimed
 	// because the configured weights over-allocated the budget.
 	reclaimedShares map[string]bool
-	calibrate   bool
+	calibrate       bool
 }
 
 func New() *Registry {
@@ -359,8 +359,10 @@ func NewWithConfig(cfg *config.Config) (*Registry, error) {
 	r.calibrate = cfg.CalibrationEnabled()
 	if plan.Enabled {
 		// Two waiters per admission unit: past that, overload is refused with a
-		// busy error instead of queued without limit (the provisional bound from
-		// the reproduction; the tier-2 burst test re-derives it).
+		// busy error instead of queued without limit. The constant is the
+		// provisional bound from the reproduction — the tier-2 gate asserts the
+		// queue respects it (refusals past it, depth within it), not that the
+		// value is right; re-deriving it needs the operator's latency SLO.
 		plan.QueueBound = max(2, 2*plan.Budget)
 		r.cpuPlan = plan
 		r.cpuGate = permit.NewBudget(plan.Budget)
@@ -771,7 +773,8 @@ func (e *ModelEntry) ensurePool() error {
 		}
 	}
 
-	if e.cpuPolicy && e.calibrate && (cfg.IntraOpThreads <= 0 || cfg.Workers <= 0) {
+	switch {
+	case e.cpuPolicy && e.calibrate && (cfg.IntraOpThreads <= 0 || cfg.Workers <= 0):
 		budget := max(1, e.cpuThreads)
 		// Trial the batch shape the pool actually serves: a batcher coalesces
 		// concurrent requests, so single-row scoring under-provisions width.
@@ -803,12 +806,13 @@ func (e *ModelEntry) ensurePool() error {
 		e.tunedThreads.Store(int64(intraThreads))
 		e.tunedWorkers.Store(int64(numWorkers))
 		log.Printf("  %s: layout workers=%d intra_op_threads=%d share=%d source=%s reason=%s elapsed=%s", e.Name, numWorkers, intraThreads, e.cpuThreads, layout.Source, layout.Reason, layout.Elapsed.Round(time.Millisecond))
-	} else if e.cpuPolicy {
+	case e.cpuPolicy:
 		e.tunedThreads.Store(int64(intraThreads))
 		e.tunedWorkers.Store(int64(numWorkers))
-	} else {
+	default:
 		e.setLayout(layoutOutcome{Source: "legacy", Reason: "cpu_budget_off", Workers: numWorkers, Threads: intraThreads})
 	}
+
 	// A width that fills the budget was the measured defect (cpu_peak_tokens ==
 	// capacity, runs admitted alone). The policy no longer derives one; an
 	// operator still can, so say what it costs.
@@ -1355,10 +1359,13 @@ func (e *ModelEntry) startLoad() {
 	e.loadErr = e.ensurePool()
 }
 
-// layoutDecided reports whether this model can serve embeddings now: its layout
-// was chosen, or a pool is already published (a caller that injected one).
+// layoutDecided reports whether this model can serve embeddings now: its pool
+// is published. The layout decision is written before the pool is built (so a
+// caller can see the chosen layout while the sessions are still opening), which
+// means a decided layout alone would let a request reach an unbuilt pool: require
+// the pool. A caller that injected one publishes it too (see Add).
 func (e *ModelEntry) layoutDecided() bool {
-	return e.layout.Load() != nil || e.LoadedPool() != nil
+	return e.LoadedPool() != nil
 }
 
 // LoadError reports a failed initialization: nil while it is undecided, in
