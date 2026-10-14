@@ -111,20 +111,32 @@ def percentiles(samples):
 
 def run_level(args, level, total):
     per_worker = max(1, total // level)
-    latencies, errors = [], []
+    ok_latencies, errors = [], []
     lock = threading.Lock()
     ready = threading.Barrier(level)
 
     def worker():
-        client = Client(args.host, args.port, args.timeout)
         try:
-            ready.wait()
+            client = Client(args.host, args.port, args.timeout)
+        except OSError as err:
+            # A peer that cannot connect must not wedge the others on the
+            # barrier: break it, record why, and drop out.
+            with lock:
+                errors.append("connect: %s" % err)
+            ready.abort()
+            return
+        try:
+            try:
+                ready.wait(timeout=args.timeout)
+            except threading.BrokenBarrierError:
+                return
             for _ in range(per_worker):
                 elapsed, err = client.emb(args.model, [args.text], args.timeout)
                 with lock:
-                    latencies.append(elapsed)
                     if err:
                         errors.append(err)
+                    else:
+                        ok_latencies.append(elapsed)
         finally:
             client.close()
 
@@ -136,14 +148,20 @@ def run_level(args, level, total):
         t.join()
     wall = time.perf_counter() - start
     done = level * per_worker
+    succ = len(ok_latencies)
     return {
         "concurrency": level,
         "requests": done,
+        "requests_ok": succ,
         "wall_s": round(wall, 3),
-        "req_s": round(done / wall, 1) if wall > 0 else None,
+        # Throughput and latency are the *successful* work: an admission refusal
+        # (ERR busy) is not throughput, and its short latency must not enter the
+        # percentile sample as if the arm had served it.
+        "req_s": round(succ / wall, 1) if wall > 0 else None,
+        "req_s_attempted": round(done / wall, 1) if wall > 0 else None,
         "errors": len(errors),
         "error_sample": errors[0] if errors else None,
-        "latency": percentiles(latencies),
+        "latency": percentiles(ok_latencies),
     }
 
 
@@ -154,9 +172,16 @@ def background_load(args, stop, level):
     barrier = threading.Barrier(level)
 
     def worker():
-        client = Client(args.host, args.port, args.timeout)
         try:
-            barrier.wait()
+            client = Client(args.host, args.port, args.timeout)
+        except OSError:
+            barrier.abort()
+            return
+        try:
+            try:
+                barrier.wait(timeout=args.timeout)
+            except threading.BrokenBarrierError:
+                return
             while not stop.is_set():
                 _, err = client.emb(args.model, [args.text], args.timeout)
                 with lock:
@@ -209,17 +234,37 @@ def mode_probe(args):
 
 
 def mode_hol(args):
-    """One wide command, then narrow ones — head-of-line blocking probe."""
-    client = Client(args.host, args.port, args.timeout)
+    """One wide command in flight, then narrow ones on separate connections — the
+    head-of-line blocking probe. The narrow requests must overlap the wide
+    command, which requires their own connections: redcon runs a connection's
+    commands serially, so on one connection the narrow requests would only ever
+    run after the wide command finished and the probe would measure sequential
+    requests instead of blocking."""
+    wide = ["reproduction item %d" % i for i in range(args.texts)]
+    wide_client = Client(args.host, args.port, args.timeout)
+    box = {}
+
+    def run_wide():
+        box["wide"] = wide_client.emb(args.model, wide, args.timeout)
+
+    t = threading.Thread(target=run_wide)
+    t.start()
+    # Let the wide command reach the server and occupy its run before the narrow
+    # probes arrive; without it the probe races the wide command's dispatch.
+    time.sleep(0.01)
+    narrow = []
     try:
-        wide = ["reproduction item %d" % i for i in range(args.texts)]
-        wide_elapsed, wide_err = client.emb(args.model, wide, args.timeout)
-        narrow = []
         for _ in range(args.follow):
-            elapsed, err = client.emb(args.model, [args.text], args.timeout)
-            narrow.append({"s": round(elapsed, 4), "err": err})
+            c = Client(args.host, args.port, args.timeout)
+            try:
+                elapsed, err = c.emb(args.model, [args.text], args.timeout)
+                narrow.append({"s": round(elapsed, 4), "err": err})
+            finally:
+                c.close()
     finally:
-        client.close()
+        t.join()
+        wide_client.close()
+    wide_elapsed, wide_err = box.get("wide", (0.0, "wide request did not run"))
     return {
         "mode": "hol",
         "model": args.model,

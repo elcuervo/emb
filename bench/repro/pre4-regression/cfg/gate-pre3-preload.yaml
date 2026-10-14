@@ -1,0 +1,13 @@
+# Arm G (pre3) — identical layout to cfg/gate-pre4.yaml with the gate absent
+# (pre3 has no cpu_budget key and no admission controller).
+listen: "127.0.0.1:17012"
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    workers: 4
+    intra_op_threads: 3
+    batching:
+      timeout: 0
+    preload: true

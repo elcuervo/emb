@@ -73,7 +73,10 @@ type ModelEntry struct {
 	BatchDeterminism       string
 	BatchDeterminismReason string
 
-	once        sync.Once
+	once sync.Once
+	// loadKick guards the one background load ResolveReady may start, so a storm
+	// of not-ready requests spawns a single goroutine rather than one per request.
+	loadKick    sync.Once
 	cfg         config.ModelConfig
 	poolReady   atomic.Bool
 	loaded      atomic.Bool
@@ -1332,14 +1335,18 @@ func (r *Registry) ResolveReady(name string) (*ModelEntry, error) {
 	r.mu.RUnlock()
 
 	// Start the load off the request path. once makes it single-flight, so
-	// concurrent requests cannot each start a load or wait on one another.
-	// The read lock is held for the load's duration so a concurrent Close waits
-	// for it instead of closing resources under it.
-	go func() {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-		entry.once.Do(entry.startLoad)
-	}()
+	// concurrent requests cannot each start a load or wait on one another;
+	// loadKick makes the *goroutine* single-flight too, so a storm of not-ready
+	// requests spawns one background load instead of one goroutine (each holding
+	// the read lock) per request. The read lock is held for the load's duration
+	// so a concurrent Close waits for it instead of closing resources under it.
+	entry.loadKick.Do(func() {
+		go func() {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			entry.once.Do(entry.startLoad)
+		}()
+	})
 
 	if entry.layoutDecided() {
 		return entry, nil

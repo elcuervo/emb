@@ -68,3 +68,53 @@ func TestAdmissionTimeoutRefusesWhileHealthAnswers(t *testing.T) {
 		t.Fatalf("the in-flight request did not complete: %q", done)
 	}
 }
+
+// TestMultiAdmissionTimeoutDoesNotHang covers the EMB.MULTI path against the
+// same bound as EMB: a pair that cannot be dispatched inside the admission
+// deadline fails its slot instead of waiting on context.Background until the
+// worker frees. Before this test the pair used Pool.Embed (a background
+// context), so with the single worker parked it never returned.
+func TestMultiAdmissionTimeoutDoesNotHang(t *testing.T) {
+	gate := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	addr, _ := serveWithPool(t,
+		func() (onnx.Session, error) { return &blockingSession{gate: gate, entered: entered}, nil },
+		1, 0, 32,
+		WithAdmissionTimeout(100*time.Millisecond),
+	)
+	c1 := dial(t, addr)
+	c2 := dial(t, addr)
+
+	// c1 occupies the only worker.
+	c1.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$5\r\nhello\r\n"))
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first request never entered the session")
+	}
+
+	// The read deadline turns the old unbounded wait into a failure, not a hang.
+	if err := c2.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	c2.Write([]byte("*3\r\n$9\r\nEMB.MULTI\r\n$4\r\ntest\r\n$5\r\nworld\r\n"))
+	resp := readRESP(t, c2)
+	if waited := time.Since(start); waited > 3*time.Second {
+		t.Fatalf("EMB.MULTI waited %s for admission; want it bounded by the admission deadline", waited)
+	}
+	if !strings.HasPrefix(resp, "*") {
+		t.Fatalf("expected an EMB.MULTI array reply, got %q", resp)
+	}
+	// The pair could not be dispatched, so its slot is null rather than a
+	// fabricated embedding (MGET-style partial failure).
+	if !strings.Contains(resp, "$-1") {
+		t.Fatalf("expected the un-admitted pair's slot to be null, got %q", resp)
+	}
+
+	// The in-flight EMB still completes once the worker frees.
+	close(gate)
+	if done := readRESP(t, c1); len(done) < 3 || done[0] != '$' {
+		t.Fatalf("the in-flight request did not complete: %q", done)
+	}
+}

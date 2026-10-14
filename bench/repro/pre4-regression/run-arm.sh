@@ -64,7 +64,8 @@ json.dump({"start_to_ready_s": round((b - a) / 1e9, 3)}, open(d + "/startup.json
 PY
 
 # Cold first request: the incident's shape (a request arriving at a cold model).
-python3 "$here/drive.py" --port "$port" --model "$model" --mode hol --texts 1 --follow 0 >"$dir/cold-first.json" 2>&1 || true
+# A driver failure aborts the arm: evidence from a partial run is not evidence.
+python3 "$here/drive.py" --port "$port" --model "$model" --mode hol --texts 1 --follow 0 >"$dir/cold-first.json" 2>&1
 
 redis-cli -p "$port" EMB.INFO "$model" >"$dir/info.before.txt" 2>&1 || true
 redis-cli -p "$port" EMB.STATS >"$dir/stats.before.txt" 2>&1 || true
@@ -73,11 +74,11 @@ IFS=',' read -r -a mode_list <<<"$modes"
 for mode in "${mode_list[@]}"; do
   case "$mode" in
     sweep) python3 "$here/drive.py" --port "$port" --model "$model" --mode sweep \
-             --levels "$levels" --requests "$requests" >"$dir/sweep.json" 2>&1 || true ;;
+             --levels "$levels" --requests "$requests" >"$dir/sweep.json" 2>&1 ;;
     probe) python3 "$here/drive.py" --port "$port" --model "$model" --mode probe \
-             --background 128 --samples 25 >"$dir/probe.json" 2>&1 || true ;;
+             --background 128 --samples 25 >"$dir/probe.json" 2>&1 ;;
     hol)   python3 "$here/drive.py" --port "$port" --model "$model" --mode hol \
-             --texts 200 --follow 20 >"$dir/hol.json" 2>&1 || true ;;
+             --texts 200 --follow 20 >"$dir/hol.json" 2>&1 ;;
     *) echo "unknown mode $mode" >&2; exit 2 ;;
   esac
 done

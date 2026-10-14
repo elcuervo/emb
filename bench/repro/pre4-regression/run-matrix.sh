@@ -10,6 +10,7 @@ out=/tmp/emb-repro/results
 worktrees=/tmp/emb-repro
 requests=200
 only=""
+ran=()
 here=$(cd "$(dirname "$0")" && pwd)
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -44,6 +45,7 @@ for arm in "${arms[@]}"; do
   if [ -n "$only" ] && [[ ",$only," != *",$label,"* ]]; then continue; fi
   wt="$worktrees/$rev"
   [ -x "$wt/bin/emb" ] || { echo "missing binary for $rev at $wt/bin/emb" >&2; exit 1; }
+  ran+=("$label")
   echo "== $label ($rev, $cfg, port $port)"
   ( cd "$wt" && "$here/run-arm.sh" --bin "$wt/bin/emb" --cfg "$here/cfg/$cfg" \
       --label "$label" --port "$port" --model e5 --out "$out" --requests "$requests" )
@@ -51,11 +53,14 @@ done
 
 echo
 echo "== summary =="
-python3 - "$out" <<'PY'
+python3 - "$out" ${ran[@]+"${ran[@]}"} <<'PY'
 import json, os, sys
 root = sys.argv[1]
+# Only the labels dispatched in this invocation: a rerun with --arms over an
+# existing output directory must not present earlier arms' results as current.
+labels = sys.argv[2:]
 rows = []
-for label in sorted(os.listdir(root)):
+for label in labels:
     d = os.path.join(root, label)
     if not os.path.isdir(d) or not os.path.exists(os.path.join(d, "sweep.json")):
         continue

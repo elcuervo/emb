@@ -1,0 +1,15 @@
+# Arm G (pre4) — the admission gate in isolation: four sessions of width 3 are
+# wanted at once against a budget of 3, so each run is admitted alone (width ==
+# capacity), where the pre3 arm (cfg/gate-pre3.yaml) runs all four concurrently.
+listen: "127.0.0.1:17012"
+cpu_budget: 3
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    workers: 4
+    intra_op_threads: 3
+    batching:
+      timeout: 0
+    preload: true

@@ -1626,6 +1626,11 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	// not O(N), preserving MGET semantics and result ordering (results written by
 	// index).
 	fanOut := s.multiPairFanOut(n)
+	// Bound the whole command's admission like EMB does: one deadline shared by
+	// every pair, so a pair that cannot be admitted in time fails its slot
+	// instead of waiting without limit at the CPU gate.
+	ctx, cancel := s.admissionContext()
+	defer cancel()
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for w := 0; w < fanOut; w++ {
@@ -1633,7 +1638,7 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 		go func() {
 			defer wg.Done()
 			for idx := range jobs {
-				s.processMultiPair(pairs, results, idx)
+				s.processMultiPair(ctx, pairs, results, idx)
 			}
 		}()
 	}
@@ -1710,7 +1715,7 @@ func (s *Server) multiPairFanOut(n int) int {
 	return cap
 }
 
-func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
+func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [][]byte, idx int) {
 	model := string(pairs[idx*2])
 	text := string(pairs[idx*2+1])
 
@@ -1750,7 +1755,10 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		}
 	}
 
-	resp, err := entry.Pool.Embed([]string{text})
+	// One admission deadline for the whole command, shared by every pair: the
+	// same bound EMB carries, so an EMB.MULTI pair waits at the CPU gate for no
+	// longer than admission_timeout instead of blocking on context.Background.
+	resp, err := entry.Pool.EmbedContext(ctx, []string{text})
 	if err != nil || resp.Err != nil {
 		failed = true
 		return

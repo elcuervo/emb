@@ -221,7 +221,10 @@ without a deadline); an expired wait answers `ERR busy: admission timed out`.
 Both the wait and the refusal are counted (see
 [Operations](operations.md#reading-the-process-cpu-plan)). A deadline does not
 interrupt a run that has already been admitted: work in flight completes, and
-only the waiter stops.
+only the waiter stops. `EMB.MULTI` bounds the whole command with one deadline and
+fails only the affected pair: a pair that cannot be admitted in time leaves its
+MGET-style null slot rather than holding the command, where a plain `EMB`
+answers the busy error.
 
 ### Startup calibration
 
