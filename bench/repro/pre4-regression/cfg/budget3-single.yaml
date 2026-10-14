@@ -1,0 +1,15 @@
+# Corrected gate isolation — one session of width three (serial at the pool),
+# the shape the operator's explicit layout collapses to under a budget of three.
+listen: "127.0.0.1:17015"
+cpu_budget: 3
+calibrate: false
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    preload: true
+    workers: 1
+    intra_op_threads: 3
+    batching:
+      timeout: 0
