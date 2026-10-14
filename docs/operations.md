@@ -202,9 +202,9 @@ and renders:
   headless `-once` mode for scripts and CI.
 
 <!-- topviz:begin -->
-![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-aa3504c0.gif)
+![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-993783cd.gif)
 
-*Captured 2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 4 models · 127.0.0.1:16379.*
+*Captured 2026-10-14 · emb-top v0.4.3.pre5 · 38556b1 · 4 models · 127.0.0.1:16379.*
 <!-- topviz:end -->
 
 ```bash
@@ -326,9 +326,9 @@ fleet. The single-node dashboard is unchanged when exactly one node is
 monitored.
 
 <!-- clusterviz:begin -->
-![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-d67d35a5.gif)
+![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-94bf476c.gif)
 
-*Measured fleet run · 2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380. The traffic chart streams each node's inbound rate in its row's colour; the load bar and ingress rows split the fleet's inbound traffic, and the imbalance panel checks it across nodes. Re-record with `just website-clusterviz`.*
+*Measured fleet run · 2026-10-14 · emb-top v0.4.3.pre5 · 38556b1 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380. The traffic chart streams each node's inbound rate in its row's colour; the load bar and ingress rows split the fleet's inbound traffic, and the imbalance panel checks it across nodes. Re-record with `just website-clusterviz`.*
 <!-- clusterviz:end -->
 
 - `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a

@@ -789,6 +789,13 @@ website-player-check:
 # it about 1:1, and it is ~100 KiB smaller than a 14px render that would only be
 # downscaled to the same apparent size.
 #
+# The recording environment is pinned rather than inherited. `CI`, `NO_COLOR` and
+# a `dumb` `TERM` are each read by the dashboard's colour library as "no colour
+# terminal", and a take is published exactly as it was recorded -- so a rig run
+# from a shell that sets any of them publishes a grey dashboard. The recorder is
+# therefore handed a colour terminal, and the take is refused if it came out grey
+# anyway.
+#
 # Needs the full dev shell: it builds emb from Go+CGo, drives load with
 # redis-cli, and takes its recorder from the website half. Nothing else in the
 # site build depends on any of it.
@@ -798,6 +805,7 @@ website-topviz: build
     runs=website/tools/topviz/runs; \
     port=16379; \
     theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    rec='env -u CI -u NO_COLOR TERM=xterm-256color COLORTERM=truecolor asciinema'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-topviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
     done; \
@@ -823,8 +831,9 @@ website-topviz: build
     done; \
     echo "website-topviz: recording (about a minute)"; \
     ./bin/emb-top -addr 127.0.0.1:$port -once -samples 44 -interval 1s > $runs/samples.txt 2>&1 & sampler=$!; \
-    EMB_TOPVIS_LOG=$runs/traffic.log asciinema record --headless --quiet --overwrite --window-size 120x32 \
+    EMB_TOPVIS_LOG=$runs/traffic.log $rec record --headless --quiet --overwrite --window-size 120x32 \
       -c website/tools/topviz/run.sh $runs/raw.cast; \
+    grep -qE '3[48];[25];' $runs/raw.cast || { echo "website-topviz: the take carries no colour - refusing to publish a grey dashboard"; exit 1; }; \
     kill $sampler 2>/dev/null || true; \
     python3 website/tools/topviz/trim.py $runs/raw.cast $runs/take.cast; \
     python3 website/tools/topviz/trim.py --until-pct 65 $runs/raw.cast $runs/frame.cast; \
@@ -853,6 +862,7 @@ website-clusterviz: build
     runs=website/tools/topviz/runs; \
     portA=16379; portB=16380; \
     theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    rec='env -u CI -u NO_COLOR TERM=xterm-256color COLORTERM=truecolor asciinema'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-clusterviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
     done; \
@@ -881,8 +891,9 @@ website-clusterviz: build
     echo "website-clusterviz: recording (about a minute)"; \
     ./bin/emb-top -node 127.0.0.1:$portA -node 127.0.0.1:$portB -once -samples 44 -interval 1s > $runs/cluster-samples.txt 2>&1 & sampler=$!; \
     EMB_CLUSTERVIZ_A=127.0.0.1:$portA EMB_CLUSTERVIZ_B=127.0.0.1:$portB \
-      asciinema record --headless --quiet --overwrite --window-size 120x32 \
+      $rec record --headless --quiet --overwrite --window-size 120x32 \
       -c website/tools/topviz/run-cluster.sh $runs/cluster-raw.cast; \
+    grep -qE '3[48];[25];' $runs/cluster-raw.cast || { echo "website-clusterviz: the take carries no colour - refusing to publish a grey dashboard"; exit 1; }; \
     kill $sampler 2>/dev/null || true; \
     python3 website/tools/topviz/trim.py $runs/cluster-raw.cast $runs/cluster-take.cast; \
     python3 website/tools/topviz/trim.py --until-pct 65 $runs/cluster-raw.cast $runs/cluster-frame.cast; \

@@ -823,33 +823,33 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
            Do not hand-edit the frame, the caption or the figures. -->
       <figure class="topviz topviz--doc">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-a149a337.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre5 · 127.0.0.1:16379 · uptime 26s    ·  4 models · poll 1s
-● HEALTHY   connected │ err   0.0% │ p95 33.6ms  │ cpu  22% │ cache  44%
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-ac597a82.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre5 · 127.0.0.1:16379 · uptime 28s    ·  4 models · poll 1s
+● HEALTHY   connected │ err   0.0% │ p95 36.6ms  │ cpu  16% │ cache  49%
 
 ╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
-│     │                                   ╭╮  ╭─╮ │ ╰─╮╭ ││                                                   ░░   │
-│  123│                               ╭╮  │╰──╯ ╰─╯   ╰╯ ││                                     ░░░░░░░░██████████ │
-│     │                               │╰─╮│              ││                          ███████████████████░░░░░░░░░░ │
-│ 61.3│                               │  ╰╯              ││                  ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│     │                               │                  ││ █████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  0.0│                       ────────╯                  ││ p50–p99 ░  p95 █                                       │
+│     │                                 ╭╮  │╰╮ │ ╰─╮╭╮  ││                                            ░░          │
+│  123│                                 │╰──╯ ╰─╯   ╰╯│╭ ││                                     ░░░░░░░░░░░░░░░░░░ │
+│     │                             ╭───╯             ╰╯ ││                  █████████████████████████████████████ │
+│ 61.3│                             │                    ││         █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│     │                             │                    ││ ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  0.0│                          ───╯                    ││ p50–p99 ░  p95 █                                       │
 ╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
-● bge-small     384d·cls·fp32        17.0 r/s      578 t/s p50 7µs      p95 32.3ms↑  err 0       ███████████████████████
-● e5-small      384d·mean·fp32       65.0 r/s     1.8k t/s p50 21.0ms   p95 44.9ms   err 0       ███████████████████████
-● jina-small    512d·mean·fp32       26.0 r/s     1.3k t/s p50 12.5ms   p95 29.0ms↑  err 0       ███████████████████████
-● minilm        384d·mean·fp32       41.0 r/s      703 t/s p50 5.1ms    p95 22.0ms↑  err 0       ███████████████████████
+● bge-small     384d·cls·fp32         9.0 r/s      306 t/s p50 4µs      p95 36.9ms↑  err 0       ███████████████████████
+● e5-small      384d·mean·fp32       40.9 r/s     1.1k t/s p50 20.2ms   p95 42.5ms   err 0       ███████████████████████
+● jina-small    512d·mean·fp32       22.0 r/s     1.1k t/s p50 6.9ms    p95 34.2ms↑  err 0       ███████████████████████
+● minilm        384d·mean·fp32       36.9 r/s      633 t/s p50 5µs      p95 22.8ms↑  err 0       ███████████████████████
   rows 1–4 of 4 · req/s per model · older ████████ newer
-cache   43.7%                    cpu    219%                                                     mem  1.1kMB
+cache   48.5%                    cpu    162%                                                     mem  1.1kMB
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
   conns  2 · active  0 · goroutines  25 · truncated texts/pairs/images   0/  0/  0
   cpu budget 8 · tokens 0/8 · peak 6 · 10.00 cores (scheduler/affinity)
-  event e5-small ·   1 texts · 21.3ms  ✓
+  event minilm ·   1 texts · 6.0ms   ✓
 q quit · p pause · r reset · j/k scroll · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 4 models · 127.0.0.1:16379</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 181 requests/s, 5.5k tokens/s, p95 latency 24.6ms, cache hit rate 33%, CPU 281%, 1059MB resident. Per model: bge-small 21/s (avg 7.2ms, dim 384, cls, fp32); e5-small 73/s (avg 6.3ms, dim 384, mean, fp32); jina-small 42/s (avg 7.2ms, dim 512, mean, fp32); minilm 45/s (avg 2.4ms, dim 384, mean, fp32).</p>
+        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 38556b1 · 4 models · 127.0.0.1:16379</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 188 requests/s, 5.6k tokens/s, p95 latency 25.3ms, cache hit rate 33%, CPU 286%, 1059MB resident. Per model: bge-small 25/s (avg 7.4ms, dim 384, cls, fp32); e5-small 69/s (avg 6.5ms, dim 384, mean, fp32); jina-small 41/s (avg 7.3ms, dim 512, mean, fp32); minilm 53/s (avg 2.4ms, dim 384, mean, fp32).</p>
       </figure>
 
       <!-- The fleet run, on the same terms as the plate above and written by
@@ -864,34 +864,34 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
       <!-- fleetviz:begin -->
       <figure class="topviz topviz--doc" id="fleetviz-plate">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-ed7eaaae.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-29458d0f.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
           <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre5 · 2 nodes · poll 1s
 ● HEALTHY
 
   discovered 2 · receiving traffic 2 · idle 0 · orphaned 0
-IN  206 req/s · OUT 6.2k tok/s · 5 active · 11 conns · err 0.0% · p95 37.9ms   trend ▁▁▁▁▁▁▁▁▁▄▃▄▃▅▅▅▅▆▆▆▆▇█▇
-  cpu budget 16 · tokens 6/16 · peak 12 · 20.00 cores (scheduler/affinity)
+IN  186 req/s · OUT 5.5k tok/s · 8 active · 13 conns · err 0.0% · p95 39.7ms   trend ▁▁▁▁▁▄▄▃▄▆▆▅▅▅▇▆▆▅███▇▇▆
+  cpu budget 16 · tokens 9/16 · peak 12 · 20.00 cores (scheduler/affinity)
 TRAFFIC inbound req/s per node over the last polls · older ←  → newer
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│     │                                                             ╭─╮         ╭────────────────────────╯    ╰─────── │
-│ 85.1│                                      ╭────╮ ╭─────╮ ╭───────╯ ╰─────────╯      ╭─╮         ╭────────────────── │
-│     │                                   ╭─┬┴────┴─┴─────┴─┴──────────────────────────╯ ╰─────────╯                   │
-│  0.0│───────────────────────────────────┴─╯                                                                          │
+│     │                                      ╭───────────────╮ ╭────────────────────╮╭──╯                ╰──────────── │
+│ 76.5│                ╭──────────╮ ╭────────╯               ╰─╯   ╭────────────────┴┴──────────────────────────────── │
+│     │             ╭─┬┴─────────╮╰─╯╭─────────────────────────────╯                                                   │
+│  0.0│─────────────┴─╯          ╰───╯                                                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 65% · expected 50% each
+LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 63% · expected 50% each
 INGRESS  req/s into each node · bar scaled to the busiest · trend = recent polls
-▶ ● 127.0.0.1:16379             133 r/s   65% █████████████████ ▁▁▁▁▁▄▄▅▅▆▆▆█▇   p95 37.9ms  cpu 23%  cache 31% err 0.0%
-  ● 127.0.0.1:16380            73.0 r/s   35% █████████░░░░░░░░ ▁▁▁▁▁▃▃▅▅▆▆▆█▇   p95 36.7ms  cpu 12%  cache 17% err 0.0%
+▶ ● 127.0.0.1:16379             117 r/s   63% █████████████████ ▁▁▄▄▄▆▆▇▆▅██▇▆   p95 39.7ms  cpu 18%  cache 37% err 0.0%
+  ● 127.0.0.1:16380            69.5 r/s   37% ██████████░░░░░░░ ▁▁▃▃▃▅▅▆▆▆██▇▇   p95 37.1ms  cpu 12%  cache 20% err 0.0%
   nodes 1–2 of 2 · share of fleet req/s · j/k select · enter detail
 IMBALANCE  ✓ all 4 pass
-  ✓ inbound  range 73.0–133 req/s
-  ✓ latency  worst 127.0.0.1:16379 p95 37.9ms (1.0× peers' median)
+  ✓ inbound  range 69.5–117 req/s
+  ✓ latency  worst 127.0.0.1:16379 p95 39.7ms (1.1× peers' median)
   ✓ errors   max 0.0%
-  ✓ cpu      max 23%
+  ✓ cpu      max 18%
 q quit · p pause · r reset · j/k select · enter detail · esc back · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 258 requests/s, 7.5k tokens/s, cache hit rate 22%, CPU 442%, 2126MB resident across 2 nodes. Per node: 127.0.0.1:16379 172/s (67% of the fleet, p95 28.9ms, CPU 292%); 127.0.0.1:16380 86/s (33% of the fleet, p95 30.7ms, CPU 151%).</p>
+        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 38556b1 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 239 requests/s, 7.1k tokens/s, cache hit rate 22%, CPU 434%, 1988MB resident across 2 nodes. Per node: 127.0.0.1:16379 155/s (65% of the fleet, p95 26.7ms, CPU 279%); 127.0.0.1:16380 84/s (35% of the fleet, p95 29.1ms, CPU 155%).</p>
       </figure>
       <!-- fleetviz:end -->
 
