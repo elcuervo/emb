@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elcuervo/emb/internal/embtop"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/server"
 )
@@ -56,7 +57,7 @@ func freeAddrTop(t *testing.T) string {
 func TestFleetPollsTwoEmbeddedNodesOneTick(t *testing.T) {
 	a := serveEmbeddedTop(t)
 	b := serveEmbeddedTop(t)
-	f := newFleet([]resolvedNode{rn(a), rn(b)}, &options{interval: time.Second, window: 10})
+	f := newFleet([]embtop.ResolvedNode{rn(a), rn(b)}, &options{interval: time.Second, window: 10})
 	defer f.close()
 
 	if ok := f.pollAllSync(); ok != 2 {

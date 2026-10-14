@@ -14,6 +14,21 @@ import (
 	"github.com/elcuervo/emb/internal/embtop"
 )
 
+// fakeResolver is a scripted DNS resolver for the fleet's re-resolution.
+type fakeResolver struct {
+	answers map[string][]string
+	errs    map[string]error
+	calls   int
+}
+
+func (r *fakeResolver) LookupHost(_ context.Context, host string) ([]string, error) {
+	r.calls++
+	if err := r.errs[host]; err != nil {
+		return nil, err
+	}
+	return r.answers[host], nil
+}
+
 // ---- fakes ----
 
 type fakeResult struct {
@@ -90,15 +105,15 @@ func (c *fakeNodeClient) pollCount() int {
 	return c.calls
 }
 
-func rn(addr string) resolvedNode {
-	return resolvedNode{key: addr, spec: addr, addr: addr}
+func rn(addr string) embtop.ResolvedNode {
+	return embtop.ResolvedNode{Key: addr, Spec: addr, Addr: addr}
 }
 
-func namedRN(name, addr string) resolvedNode {
-	return resolvedNode{key: name, spec: name, name: name, addr: addr}
+func namedRN(name, addr string) embtop.ResolvedNode {
+	return embtop.ResolvedNode{Key: name, Spec: name, Name: name, Addr: addr}
 }
 
-func fakeFleet(opts *options, clients map[string]dashboardClient, nodes ...resolvedNode) *fleet {
+func fakeFleet(opts *options, clients map[string]dashboardClient, nodes ...embtop.ResolvedNode) *fleet {
 	if opts == nil {
 		opts = &options{interval: time.Second, window: 10}
 	}
@@ -126,7 +141,7 @@ func TestFleetAddsResolvedAddressWithoutRestart(t *testing.T) {
 	ca := &fakeNodeClient{addr: a}
 	cb := &fakeNodeClient{addr: b}
 	f := fakeFleet(nil, map[string]dashboardClient{a: ca, b: cb}, rn(a))
-	f.applyResolved([]resolvedNode{rn(a), rn(b)})
+	f.applyResolved([]embtop.ResolvedNode{rn(a), rn(b)})
 	if len(f.nodes) != 2 {
 		t.Fatalf("fleet has %d nodes, want 2", len(f.nodes))
 	}
@@ -141,7 +156,11 @@ func TestFleetAddsResolvedAddressWithoutRestart(t *testing.T) {
 func TestRefreshFailureKeepsKnownFleet(t *testing.T) {
 	a := "10.0.0.1:6379"
 	f := fakeFleet(nil, map[string]dashboardClient{a: &fakeNodeClient{addr: a}}, rn(a))
-	f.opts.specs = []nodeSpec{{raw: "emb.internal", host: "emb.internal", port: "6379", isName: true}}
+	spec, err := embtop.ParseNodeSpec("emb.internal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.opts.specs = []embtop.NodeSpec{spec}
 	f.resolver = &fakeResolver{errs: map[string]error{"emb.internal": errors.New("dns down")}}
 	f.refreshSync()
 	if len(f.nodes) != 1 || f.refreshErr == nil {
@@ -204,7 +223,7 @@ func TestNodeOrderIsFirstSeen(t *testing.T) {
 	f := fakeFleet(nil, map[string]dashboardClient{
 		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b}, c: &fakeNodeClient{addr: c},
 	}, rn(a), rn(b))
-	f.applyResolved([]resolvedNode{rn(c), rn(b), rn(a)})
+	f.applyResolved([]embtop.ResolvedNode{rn(c), rn(b), rn(a)})
 	got := make([]string, len(f.nodes))
 	for i, n := range f.nodes {
 		got[i] = n.addr
@@ -378,9 +397,9 @@ func TestStackedShareBarWidthAndProportion(t *testing.T) {
 }
 
 func TestImbalanceInboundNamesOffender(t *testing.T) {
-	checks := imbalanceChecks([]fleetNodeInput{
-		{label: "a", health: healthInput{connected: true, polls: 5}, reqRate: 90},
-		{label: "b", health: healthInput{connected: true, polls: 5}, reqRate: 10},
+	checks := imbalanceChecks([]embtop.FleetNodeInput{
+		{Label: "a", Health: embtop.HealthInput{Connected: true, Polls: 5}, ReqRate: 90},
+		{Label: "b", Health: embtop.HealthInput{Connected: true, Polls: 5}, ReqRate: 10},
 	})
 	if checks[0].name != "inbound" || checks[0].ok {
 		t.Fatalf("inbound check = %+v, want a failure", checks[0])
@@ -391,9 +410,9 @@ func TestImbalanceInboundNamesOffender(t *testing.T) {
 }
 
 func TestImbalanceSlowPeerNamesOffender(t *testing.T) {
-	checks := imbalanceChecks([]fleetNodeInput{
-		{label: "fast", health: healthInput{connected: true, polls: 5, p95Us: 100}, reqRate: 10},
-		{label: "slow", health: healthInput{connected: true, polls: 5, p95Us: 1000}, reqRate: 10},
+	checks := imbalanceChecks([]embtop.FleetNodeInput{
+		{Label: "fast", Health: embtop.HealthInput{Connected: true, Polls: 5, P95Us: 100}, ReqRate: 10},
+		{Label: "slow", Health: embtop.HealthInput{Connected: true, Polls: 5, P95Us: 1000}, ReqRate: 10},
 	})
 	if checks[1].name != "latency" || checks[1].ok {
 		t.Fatalf("latency check = %+v, want a failure", checks[1])
@@ -518,7 +537,7 @@ func TestFleetViewRendersTrafficAndRows(t *testing.T) {
 }
 
 func TestFleetRowStatesAreDistinct(t *testing.T) {
-	a, b, c := "idle:1", "orphan:1", "down:1"
+	a, b, c := "Idle:1", "orphan:1", "down:1"
 	f := fakeFleet(nil, map[string]dashboardClient{
 		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b}, c: &fakeNodeClient{addr: c},
 	}, rn(a), rn(b), rn(c))
@@ -537,7 +556,7 @@ func TestFleetRowStatesAreDistinct(t *testing.T) {
 }
 
 func TestMembershipCountsAreSeparate(t *testing.T) {
-	a, b, c := "idle:1", "orphan:1", "down:1"
+	a, b, c := "Idle:1", "orphan:1", "down:1"
 	f := fakeFleet(nil, map[string]dashboardClient{
 		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b}, c: &fakeNodeClient{addr: c},
 	}, rn(a), rn(b), rn(c))
@@ -556,7 +575,7 @@ func TestMembershipCountsAreSeparate(t *testing.T) {
 
 func TestFleetScrollReachesEveryNode(t *testing.T) {
 	var clients = map[string]dashboardClient{}
-	var nodes []resolvedNode
+	var nodes []embtop.ResolvedNode
 	for i := 0; i < 20; i++ {
 		addr := string(rune('a'+i%26)) + ":1"
 		if i >= 26 {

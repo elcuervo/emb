@@ -72,6 +72,21 @@ build:
         -ldflags="-X main.version={{image_tag}}" -o ./bin/emb ./cmd/emb
     CGO_ENABLED=0 go build \
         -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-top ./cmd/emb-top
+    CGO_ENABLED=0 go build \
+        -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-stress ./cmd/emb-stress
+
+# Drive synthetic embedding load across a fleet with emb-stress, and learn
+# where the knee is. `target` is one host:port or a DNS name (expanded to one
+# endpoint per address record); `config` is the emb server configuration the
+# fleet was started with, so the models exercised and their lengths come from
+# it. The fleet must already be serving: emb-stress refuses to exercise a model
+# that is not ready, and says which endpoint and model.
+# Pair it with `emb-top -nodes <target>` to watch the same fleet while it runs.
+# Usage: just stress [config] [target] [levels] [dwell] [warmup] [seed]
+stress config="test-two-models.yaml" target="127.0.0.1:16379" levels="1,2,4" dwell="10s" warmup="3s" seed="1":
+    @mkdir -p bin
+    CGO_ENABLED=0 go build -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-stress ./cmd/emb-stress
+    ./bin/emb-stress -config {{config}} -target {{target}} -levels {{levels}} -dwell {{dwell}} -warmup {{warmup}} -seed {{seed}}
 
 # Run all tests: Go server, Ruby client
 all: test build
@@ -565,7 +580,7 @@ verify-emb-multi: build
 
 # Unit-test the shared verification harness with no server, model, or ONNX.
 verify-harness:
-    CGO_ENABLED=0 go test -count=1 ./internal/resp/... ./internal/embverify/... ./internal/emoji/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/
+    CGO_ENABLED=0 go test -count=1 ./internal/resp/... ./internal/embverify/... ./internal/emoji/... ./internal/embstress/... ./cmd/emb-verify/ ./cmd/emb-multi-verify/ ./cmd/emb-stress/
 
 # Build Docker image (native platform)
 docker:

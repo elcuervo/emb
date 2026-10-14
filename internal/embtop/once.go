@@ -5,6 +5,7 @@ import (
 	"io"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -147,6 +148,10 @@ func writeOnceLine(out io.Writer, p Point, res *PollResult, order []string, s *S
 	b = append(b, "t="...)
 	b = strconv.AppendInt(b, p.At.Unix(), 10)
 	b = appendAggregateFields(b, &p, res)
+	// The node's own advisory goes with the node's own fields, before the model
+	// sections: a reader that takes the aggregate as everything before the
+	// first ` model:` would otherwise never see it.
+	b = appendRec(b, RecommendNode(s.Window).Kind)
 	if p50, p95, p99, ok := s.Latency(); ok {
 		b = appendF(b, "lat_p50_us", p50)
 		b = appendF(b, "lat_p95_us", p95)
@@ -171,7 +176,7 @@ func writeFleetOnceLine(out io.Writer, states []*onceNode) error {
 		}
 	}
 	b = strconv.AppendInt(b, now.Unix(), 10)
-	b = appendFleetAggregate(b, states)
+	b = appendFleetAggregate(b, states, fleetRecommendation(states))
 	for _, st := range states {
 		if !st.sampled {
 			continue
@@ -191,6 +196,7 @@ func writeFleetOnceLine(out io.Writer, states []*onceNode) error {
 		b = appendF(b, "cache_misses", st.res.CacheMisses)
 		b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
 		b = appendCPUPlanFields(b, &p)
+		b = appendRec(b, RecommendNode(st.sampler.Window).Kind)
 		if p50, p95, p99, ok := st.sampler.Latency(); ok {
 			b = appendF(b, "lat_p50_us", p50)
 			b = appendF(b, "lat_p95_us", p95)
@@ -249,7 +255,7 @@ func appendCPUPlanFields(b []byte, p *Point) []byte {
 // appendFleetAggregate sums the sampled nodes' counters and rates into the
 // aggregate field set. Percentiles are deliberately absent: they do not add
 // across independent nodes.
-func appendFleetAggregate(b []byte, states []*onceNode) []byte {
+func appendFleetAggregate(b []byte, states []*onceNode, rec FleetRecommendation) []byte {
 	var totalRequests, totalTokens, totalErrors, active, conns, mem, goroutines, models int64
 	var cacheHits, cacheMisses, cacheEvictions int64
 	var req, tok, errRate, cpu float64
@@ -310,6 +316,9 @@ func appendFleetAggregate(b []byte, states []*onceNode) []byte {
 		hitRate = float64(cacheHits) / float64(t) * 100
 	}
 	b = appendRate(b, "cache_hit_rate", hitRate)
+	// The fleet's own advisory, as tokens a script can match on. The per-node
+	// sections carry each node's own kind.
+	b = appendFleetRec(b, rec)
 	// Each node plans its own process, so these are fleet sums of independent
 	// budgets, not one shared pool.
 	if planKnown {
@@ -354,6 +363,46 @@ func appendModelSections(b []byte, order []string, res *PollResult, s *Sampler) 
 		}
 	}
 	return b
+}
+
+// appendRec writes one advisory sizing kind as a single token — a headless
+// consumer must see the recommendation the dashboard renders. Nothing is
+// written when there is nothing to recommend.
+func appendRec(b []byte, kind string) []byte {
+	if kind == "" {
+		return b
+	}
+	b = append(b, " rec="...)
+	return append(b, kind...)
+}
+
+// appendFleetRec writes a fleet recommendation as its tokens: the binding
+// resources joined into one, and the node to inspect first as its own field.
+// The node needs its own field because a recommendation can name a node without
+// naming any resource — the "one peer is slow, nothing else is near a
+// threshold" case — and dropping it would make the headless line say there is
+// nothing to recommend while the dashboard names a node.
+func appendFleetRec(b []byte, rec FleetRecommendation) []byte {
+	b = appendRec(b, strings.Join(rec.Kinds, "+"))
+	if rec.First != "" {
+		b = append(b, " rec_first="...)
+		b = append(b, rec.First...)
+	}
+	return b
+}
+
+// fleetRecommendation is the fleet advisory for the nodes that produced a
+// sample this poll.
+func fleetRecommendation(states []*onceNode) FleetRecommendation {
+	var in []FleetNodeRecInput
+	for _, st := range states {
+		if !st.sampled {
+			continue
+		}
+		_, _, p95, _ := st.sampler.Latency()
+		in = append(in, FleetNodeRecInput{Label: st.label, Hist: st.sampler.Window, P95Us: p95})
+	}
+	return RecommendFleet(in)
 }
 
 func appendF(b []byte, key string, v int64) []byte {

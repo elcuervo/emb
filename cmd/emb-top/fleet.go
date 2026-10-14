@@ -26,10 +26,10 @@ const (
 	orphanGrace     = 5 * time.Minute
 
 	// fleetChrome is the fixed number of non-node rows the fleet view spends on
-	// the header, banner, membership, traffic totals, process CPU plan, the
-	// TRAFFIC chart, load bar, ingress header, node legend, imbalance panel and
-	// footer.
-	fleetChrome = 21
+	// the header, banner, sizing line, membership, traffic totals, process CPU
+	// plan, the TRAFFIC chart, load bar, ingress header, node legend, imbalance
+	// panel and footer.
+	fleetChrome = 22
 	// trafficH is the traffic chart's canvas height (its border and caption add
 	// three more rows).
 	trafficH = 4
@@ -87,7 +87,7 @@ func (n *fleetNode) displayName() string {
 // headless modes.
 type fleet struct {
 	opts     *options
-	resolver resolver
+	resolver embtop.Resolver
 
 	nodes []*fleetNode
 	byKey map[string]*fleetNode
@@ -120,16 +120,16 @@ type fleet struct {
 // newFleet builds the monitored fleet from an initial resolution. Each node
 // gets its own RESP client and its own single-node dashboard model, so its
 // poll cannot touch another's connection or counters.
-func newFleet(resolved []resolvedNode, opts *options) *fleet {
-	return newFleetWith(resolved, opts, netResolver{}, nil)
+func newFleet(resolved []embtop.ResolvedNode, opts *options) *fleet {
+	return newFleetWith(resolved, opts, embtop.NetResolver{}, nil)
 }
 
 // newFleetWith is newFleet with an injectable resolver and client factory
 // (tests supply fakes). A nil resolver or factory takes the production one.
-func newFleetWith(resolved []resolvedNode, opts *options, r resolver, mk func(addr, tlsName string) dashboardClient) *fleet {
+func newFleetWith(resolved []embtop.ResolvedNode, opts *options, r embtop.Resolver, mk func(addr, tlsName string) dashboardClient) *fleet {
 	f := &fleet{
 		opts:         opts,
-		resolver:     netResolver{},
+		resolver:     embtop.NetResolver{},
 		byKey:        map[string]*fleetNode{},
 		resolveEvery: resolveInterval,
 		grace:        orphanGrace,
@@ -165,19 +165,19 @@ func newTrafficChart(w, h int) streamlinechart.Model {
 		streamlinechart.WithLineChart(yFmtChart(w, h, yFmtRate)))
 }
 
-func (f *fleet) addNode(rn resolvedNode) *fleetNode {
+func (f *fleet) addNode(rn embtop.ResolvedNode) *fleetNode {
 	n := &fleetNode{
-		key:       rn.key,
-		spec:      rn.spec,
-		name:      rn.name,
-		addr:      rn.addr,
-		tui:       newTUI(f.newClient(rn.addr, rn.name), f.opts.interval, f.opts.window),
+		key:       rn.Key,
+		spec:      rn.Spec,
+		name:      rn.Name,
+		addr:      rn.Addr,
+		tui:       newTUI(f.newClient(rn.Addr, rn.Name), f.opts.interval, f.opts.window),
 		resolved:  true,
 		firstSeen: f.nextSeen,
 	}
 	f.nextSeen++
 	f.nodes = append(f.nodes, n)
-	f.byKey[rn.key] = n
+	f.byKey[rn.Key] = n
 	return n
 }
 
@@ -194,7 +194,7 @@ func (f *fleet) model() tea.Model { return f }
 // ---- resolution & membership ----
 
 type resolveMsg struct {
-	nodes []resolvedNode
+	nodes []embtop.ResolvedNode
 	err   error
 }
 
@@ -209,7 +209,7 @@ func (f *fleet) resolveCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
 		defer cancel()
-		nodes, err := resolveSpecs(ctx, r, specs)
+		nodes, err := embtop.ResolveSpecs(ctx, r, specs)
 		return resolveMsg{nodes: nodes, err: err}
 	}
 }
@@ -218,7 +218,7 @@ func (f *fleet) resolveCmd() tea.Cmd {
 func (f *fleet) refreshSync() {
 	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
 	defer cancel()
-	nodes, err := resolveSpecs(ctx, f.resolver, f.opts.specs)
+	nodes, err := embtop.ResolveSpecs(ctx, f.resolver, f.opts.specs)
 	if err != nil {
 		f.refreshErr = err
 		return
@@ -230,19 +230,19 @@ func (f *fleet) refreshSync() {
 // applyResolved folds a resolution result into the fleet: known rows update in
 // place (following a name whose address moved), new addresses are added, and
 // addresses that vanished are marked unresolved rather than dropped.
-func (f *fleet) applyResolved(resolved []resolvedNode) {
+func (f *fleet) applyResolved(resolved []embtop.ResolvedNode) {
 	f.lastRefresh = f.now()
 	f.refreshNow = false
 	seen := make(map[string]bool, len(resolved))
 	for _, rn := range resolved {
-		seen[rn.key] = true
-		if n := f.byKey[rn.key]; n != nil {
-			if n.addr != rn.addr { // a name's record moved: follow it
-				n.tui.client.SetAddr(rn.addr)
-				n.addr = rn.addr
+		seen[rn.Key] = true
+		if n := f.byKey[rn.Key]; n != nil {
+			if n.addr != rn.Addr { // a name's record moved: follow it
+				n.tui.client.SetAddr(rn.Addr)
+				n.addr = rn.Addr
 				n.tui.reset()
 			}
-			n.name = rn.name
+			n.name = rn.Name
 			n.resolved = true
 			continue
 		}
@@ -626,6 +626,8 @@ func (f *fleet) fleetView() string {
 	b.WriteString("\n")
 	b.WriteString(f.fleetBannerView())
 	b.WriteString("\n")
+	b.WriteString(f.fleetRecommendView())
+	b.WriteString("\n")
 	b.WriteString(f.membershipView())
 	b.WriteString("\n")
 	b.WriteString(f.totalsView())
@@ -696,25 +698,56 @@ func widthOr(w, def int) int {
 }
 
 func (f *fleet) fleetBannerView() string {
-	st, sigs := fleetHealth(f.fleetInputs())
+	st, sigs := embtop.FleetHealth(f.fleetInputs())
 	dot := okStyle.Render("●")
 	switch st {
-	case healthNoData:
+	case embtop.HealthNoData:
 		dot = warnStyle.Render("○")
-	case healthDegraded:
+	case embtop.HealthDegraded:
 		dot = warnStyle.Render("●")
-	case healthCritical:
+	case embtop.HealthCritical:
 		dot = errStyle.Render("●")
 	}
 	chips := make([]string, 0, len(sigs))
 	for _, s := range sigs {
-		chips = append(chips, styleFor(s.level).Render(s.text))
+		chips = append(chips, styleFor(s.Level).Render(s.Text))
 	}
-	line := dot + " " + headerStyle.Render(fmt.Sprintf("%-8s", healthLabel(st)))
+	line := dot + " " + headerStyle.Render(fmt.Sprintf("%-8s", st.String()))
 	if len(chips) > 0 {
 		line += "  " + strings.Join(chips, dimStyle.Render(" │ "))
 	}
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
+}
+
+// fleetRecommendView renders the advisory fleet sizing line: every resource a
+// node binds on, the fleet's headroom, and the node to look at first. Always
+// present, so the fixed chrome budget stays exact; a quiet fleet renders it
+// blank.
+func (f *fleet) fleetRecommendView() string {
+	rec := embtop.RecommendFleet(f.fleetRecInputs())
+	if rec.Empty() {
+		return ""
+	}
+	line := labelStyle.Render("SIZING") + "  " + rec.Text
+	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
+}
+
+// fleetRecInputs gathers each reachable node's Point series and tail latency
+// for the fleet recommendation. An unreachable node has no signals to offer.
+func (f *fleet) fleetRecInputs() []embtop.FleetNodeRecInput {
+	out := make([]embtop.FleetNodeRecInput, 0, len(f.nodes))
+	for _, n := range f.nodes {
+		if !n.reachable {
+			continue
+		}
+		_, _, p95, _ := n.tui.sampler.Latency()
+		out = append(out, embtop.FleetNodeRecInput{
+			Label: n.displayName(),
+			Hist:  n.tui.sampler.Window,
+			P95Us: p95,
+		})
+	}
+	return out
 }
 
 // trafficView is the fleet's inbound traffic over the window: one stream line
@@ -753,7 +786,7 @@ func (f *fleet) totalsView() string {
 		dimStyle.Render(" · ") + labelStyle.Render("OUT ") + fmtRate(tok) + " tok/s" +
 		dimStyle.Render(" · ") + fmt.Sprintf("%d active · %d conns", active, conns) +
 		dimStyle.Render(" · ") + fmt.Sprintf("err %.1f%%", errPct) +
-		dimStyle.Render(" · ") + "p95 " + fmtLatency(medianInt64(p95s)) +
+		dimStyle.Render(" · ") + "p95 " + embtop.FormatLatency(embtop.MedianInt64(p95s)) +
 		dimStyle.Render("   trend ") + sparkline(f.aggHistory, 24, reqLineStyle)
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
 }
@@ -1064,14 +1097,14 @@ func (f *fleet) nodeStateOf(n *fleetNode) nodeState {
 }
 
 // nodeHealth is the per-node verdict the row's trend colour follows.
-func (f *fleet) nodeHealth(n *fleetNode) healthStatus {
+func (f *fleet) nodeHealth(n *fleetNode) embtop.HealthStatus {
 	switch f.nodeStateOf(n) {
 	case nodeUnreachable:
-		return healthCritical
+		return embtop.HealthCritical
 	case nodeOrphaned:
-		return healthDegraded
+		return embtop.HealthDegraded
 	}
-	st, _ := health(n.tui.healthState())
+	st, _ := embtop.Health(n.tui.healthState())
 	return st
 }
 
@@ -1146,12 +1179,12 @@ func (f *fleet) ingressRow(n *fleetNode, reqTotal, maxV float64, selected bool, 
 	if l.showP95 {
 		txt := "—"
 		if _, _, p95, ok := n.tui.sampler.Latency(); ok && n.reachable {
-			txt = fmtLatency(p95)
+			txt = embtop.FormatLatency(p95)
 		}
 		row += " " + dimStyle.Render(colRight("p95 "+txt, l.latW))
 	}
 	if l.showCPU {
-		cpu := p.CPUPercent / float64(nodeParallelism(p.GoMaxProcs))
+		cpu := p.CPUPercent / float64(embtop.NodeParallelism(p.GoMaxProcs))
 		row += " " + num(colRight(fmt.Sprintf("cpu %.0f%%", cpu), l.cpuW))
 	}
 	if l.showCache {
@@ -1258,14 +1291,14 @@ func (f *fleet) footerView() string {
 type imbalanceCheck struct {
 	name   string
 	ok     bool
-	level  healthStatus
+	level  embtop.HealthStatus
 	detail string
 }
 
 // imbalanceChecks runs the actionable cross-node checks: inbound spread,
 // latency, errors and CPU. Cache spread is informational and deliberately not
 // one of them.
-func imbalanceChecks(nodes []fleetNodeInput) []imbalanceCheck {
+func imbalanceChecks(nodes []embtop.FleetNodeInput) []imbalanceCheck {
 	return []imbalanceCheck{
 		inboundSpreadCheck(nodes),
 		latencySpreadCheck(nodes),
@@ -1274,15 +1307,15 @@ func imbalanceChecks(nodes []fleetNodeInput) []imbalanceCheck {
 	}
 }
 
-func inboundSpreadCheck(nodes []fleetNodeInput) imbalanceCheck {
+func inboundSpreadCheck(nodes []embtop.FleetNodeInput) imbalanceCheck {
 	type sample struct {
 		label string
 		rate  float64
 	}
 	var s []sample
 	for _, n := range nodes {
-		if n.health.connected && !n.unreachable && !n.idle {
-			s = append(s, sample{n.label, n.reqRate})
+		if n.Health.Connected && !n.Unreachable && !n.Idle {
+			s = append(s, sample{n.Label, n.ReqRate})
 		}
 	}
 	if len(s) < 2 {
@@ -1300,36 +1333,36 @@ func inboundSpreadCheck(nodes []fleetNodeInput) imbalanceCheck {
 	}
 	// Same peers-mean rule the verdict uses, so the panel and the banner agree.
 	peersMean := (total - hi) / float64(len(s)-1)
-	ok := peersMean <= 0 || hi <= peersMean*fleetSkewDegraded
+	ok := peersMean <= 0 || hi <= peersMean*embtop.FleetSkewDegraded
 	detail := fmt.Sprintf("range %s–%s req/s", fmtRate(lo), fmtRate(hi))
 	if !ok {
 		detail = fmt.Sprintf("%s is %.1f× its peers' mean (%.1f req/s) — %s",
 			s[top].label, hi/peersMean, peersMean, detail)
 	}
-	return imbalanceCheck{name: "inbound", ok: ok, level: healthDegraded, detail: detail}
+	return imbalanceCheck{name: "inbound", ok: ok, level: embtop.HealthDegraded, detail: detail}
 }
 
-func latencySpreadCheck(nodes []fleetNodeInput) imbalanceCheck {
-	worst, worstRatio := fleetNodeInput{}, 0.0
+func latencySpreadCheck(nodes []embtop.FleetNodeInput) imbalanceCheck {
+	worst, worstRatio := embtop.FleetNodeInput{}, 0.0
 	found := false
 	for i, n := range nodes {
-		if !n.health.connected || n.health.p95Us <= 0 {
+		if !n.Health.Connected || n.Health.P95Us <= 0 {
 			continue
 		}
 		var peers []int64
 		for j, o := range nodes {
-			if j != i && o.health.connected && o.health.p95Us > 0 {
-				peers = append(peers, o.health.p95Us)
+			if j != i && o.Health.Connected && o.Health.P95Us > 0 {
+				peers = append(peers, o.Health.P95Us)
 			}
 		}
 		if len(peers) == 0 {
 			continue
 		}
-		med := medianInt64(peers)
+		med := embtop.MedianInt64(peers)
 		if med <= 0 {
 			continue
 		}
-		ratio := float64(n.health.p95Us) / float64(med)
+		ratio := float64(n.Health.P95Us) / float64(med)
 		if !found || ratio > worstRatio {
 			found, worst, worstRatio = true, n, ratio
 		}
@@ -1339,41 +1372,41 @@ func latencySpreadCheck(nodes []fleetNodeInput) imbalanceCheck {
 	}
 	return imbalanceCheck{
 		name:  "latency",
-		ok:    worstRatio <= fleetPeerP95Rise,
-		level: healthDegraded,
+		ok:    worstRatio <= embtop.FleetPeerP95Rise,
+		level: embtop.HealthDegraded,
 		detail: fmt.Sprintf("worst %s p95 %s (%.1f× peers' median)",
-			worst.label, fmtLatency(worst.health.p95Us), worstRatio),
+			worst.Label, embtop.FormatLatency(worst.Health.P95Us), worstRatio),
 	}
 }
 
-func errorCheck(nodes []fleetNodeInput) imbalanceCheck {
+func errorCheck(nodes []embtop.FleetNodeInput) imbalanceCheck {
 	worst, label := 0.0, ""
 	for _, n := range nodes {
-		if n.health.connected && n.health.errRatio > worst {
-			worst, label = n.health.errRatio, n.label
+		if n.Health.Connected && n.Health.ErrRatio > worst {
+			worst, label = n.Health.ErrRatio, n.Label
 		}
 	}
-	ok := worst <= errRatioDegraded
+	ok := worst <= embtop.ErrRatioDegraded
 	detail := fmt.Sprintf("max %.1f%%", worst*100)
 	if !ok {
 		detail = fmt.Sprintf("%s %.1f%% — %s", label, worst*100, detail)
 	}
-	return imbalanceCheck{name: "errors", ok: ok, level: healthDegraded, detail: detail}
+	return imbalanceCheck{name: "errors", ok: ok, level: embtop.HealthDegraded, detail: detail}
 }
 
-func cpuCheck(nodes []fleetNodeInput) imbalanceCheck {
+func cpuCheck(nodes []embtop.FleetNodeInput) imbalanceCheck {
 	worst, label := 0.0, ""
 	for _, n := range nodes {
-		if n.health.connected && n.health.cpuPct > worst {
-			worst, label = n.health.cpuPct, n.label
+		if n.Health.Connected && n.Health.CPUPct > worst {
+			worst, label = n.Health.CPUPct, n.Label
 		}
 	}
-	ok := worst <= cpuDegradedPct
+	ok := worst <= embtop.CPUDegradedPct
 	detail := fmt.Sprintf("max %.0f%%", worst)
 	if !ok {
 		detail = fmt.Sprintf("%s %.0f%% — %s", label, worst, detail)
 	}
-	return imbalanceCheck{name: "cpu", ok: ok, level: healthDegraded, detail: detail}
+	return imbalanceCheck{name: "cpu", ok: ok, level: embtop.HealthDegraded, detail: detail}
 }
 
 // imbalanceView renders the cross-node checks as a compact pass/fail panel,
@@ -1403,20 +1436,20 @@ func (f *fleet) imbalanceView() []string {
 }
 
 // fleetInputs builds the fleet verdict's per-node inputs from the live rows.
-func (f *fleet) fleetInputs() []fleetNodeInput {
-	ins := make([]fleetNodeInput, 0, len(f.nodes))
+func (f *fleet) fleetInputs() []embtop.FleetNodeInput {
+	ins := make([]embtop.FleetNodeInput, 0, len(f.nodes))
 	for _, n := range f.nodes {
 		p := n.tui.sampler.Latest
-		ins = append(ins, fleetNodeInput{
-			label:       n.displayName(),
-			health:      n.tui.healthState(),
-			reqRate:     p.ReqRate,
-			idle:        f.nodeIdle(n),
-			orphaned:    !n.resolved,
-			unreachable: !n.reachable && !n.unreachableSince.IsZero(),
-			uptimeSecs:  p.UptimeSecs,
-			hasCache:    n.hasCache(),
-			cachePct:    p.CacheHitRate,
+		ins = append(ins, embtop.FleetNodeInput{
+			Label:       n.displayName(),
+			Health:      n.tui.healthState(),
+			ReqRate:     p.ReqRate,
+			Idle:        f.nodeIdle(n),
+			Orphaned:    !n.resolved,
+			Unreachable: !n.reachable && !n.unreachableSince.IsZero(),
+			UptimeSecs:  p.UptimeSecs,
+			HasCache:    n.hasCache(),
+			CachePct:    p.CacheHitRate,
 		})
 	}
 	return ins

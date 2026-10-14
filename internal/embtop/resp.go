@@ -89,6 +89,19 @@ type PollResult struct {
 	CPUAdmissionWaitUs   int64
 	CPUAdmissionWaiters  int64
 	CPUAdmissionTimeouts int64
+	// The kernel's own view of CPU the process could not use: cgroup throttling
+	// and stolen time, cumulative. This is what separates "the budget is the
+	// limit" from "the host is starving us". Zero on an unthrottled host.
+	CPUThrottlePeriods  int64
+	CPUThrottledPeriods int64
+	CPUThrottleUsec     int64
+	CPUStealUsec        int64
+	// Cache-restore accounting: the limit the server derived for itself, what
+	// headroom it had under that limit, and how many entries it dropped for
+	// want of memory.
+	CacheRestoreLimitBytes    int64
+	CacheRestoreHeadroomBytes int64
+	CacheRestoreSkippedMemory int64
 
 	Models   []ModelListEntry // EMB.MODELS reply
 	PerModel map[string]*ModelStats
@@ -261,6 +274,56 @@ func (c *Client) writePoll(known []string, afterSeq uint64) error {
 	return c.WriteArgv("MONITOR", strconv.FormatUint(afterSeq, 10), "512")
 }
 
+// Models sends EMB.MODELS and returns the models the node reports. The
+// connection must already be established (EnsureConn).
+func (c *Client) Models() ([]ModelListEntry, error) {
+	_ = c.SetDeadline(time.Now().Add(c.Timeout()))
+	if err := c.WriteArgv("EMB.MODELS"); err != nil {
+		return nil, err
+	}
+	if err := c.Flush(); err != nil {
+		return nil, err
+	}
+	rep, err := c.ReadReply()
+	if err != nil {
+		// The stream is no longer at a reply boundary: drop the connection so
+		// the next call dials clean instead of misparsing what is left.
+		_ = c.Close()
+		return nil, err
+	}
+	if err := rep.Err(); err != nil {
+		return nil, fmt.Errorf("EMB.MODELS: %w", err)
+	}
+	return parseModelList(rep), nil
+}
+
+// Embed sends one EMB request and reads its reply on the current connection
+// (EnsureConn). The reply's values are not decoded: a caller driving load
+// measures the round trip, not the vector. A server-side error is returned so it
+// is counted rather than read as success, and a reply that cannot be read closes
+// the connection so the caller's next request starts from a clean stream.
+func (c *Client) Embed(model, text string) error {
+	_ = c.SetDeadline(time.Now().Add(c.Timeout()))
+	if err := c.WriteArgv("EMB", model, text); err != nil {
+		return err
+	}
+	if err := c.Flush(); err != nil {
+		return err
+	}
+	rep, err := c.ReadReply()
+	if err != nil {
+		// A read that failed (timeout, reset, unparseable reply) leaves the
+		// connection mid-stream. Closing it makes the next request re-dial, so
+		// one failure cannot become an unbounded run of spurious ones.
+		_ = c.Close()
+		return err
+	}
+	if err := rep.Err(); err != nil {
+		return fmt.Errorf("EMB %s: %w", model, err)
+	}
+	return nil
+}
+
 // parseModelList decodes the EMB.MODELS reply: array of [name, dim, status].
 func parseModelList(r Reply) []ModelListEntry {
 	var out []ModelListEntry
@@ -357,6 +420,15 @@ func parseStats(r Reply) *PollResult {
 		CPUAdmissionWaitUs:   intField(m, "cpu_admission_wait_us"),
 		CPUAdmissionWaiters:  intField(m, "cpu_admission_waiters"),
 		CPUAdmissionTimeouts: intField(m, "cpu_admission_timeouts"),
+
+		CPUThrottlePeriods:  intField(m, "cpu_throttle_periods"),
+		CPUThrottledPeriods: intField(m, "cpu_throttled_periods"),
+		CPUThrottleUsec:     intField(m, "cpu_throttle_usec"),
+		CPUStealUsec:        intField(m, "cpu_steal_usec"),
+
+		CacheRestoreLimitBytes:    intField(m, "cache_restore_limit_bytes"),
+		CacheRestoreHeadroomBytes: intField(m, "cache_restore_headroom_bytes"),
+		CacheRestoreSkippedMemory: intField(m, "cache_restore_skipped_memory"),
 	}
 	if _, ok := m["cpu_budget_enabled"]; ok {
 		res.CPUPlanKnown = true

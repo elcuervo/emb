@@ -220,7 +220,7 @@ emb-top -nodes emb.internal
 
 # headless: machine-readable lines (rates + latency percentiles from MONITOR)
 emb-top -addr localhost:6379 -once -samples 10 -interval 1s
-# t=... total_requests=6 req_rate=2.0 tok_rate=11.0 cpu_pct=14.5 lat_p50_us=1139 lat_p95_us=1801 …
+# t=... total_requests=6 req_rate=2.0 tok_rate=11.0 cpu_pct=14.5 lat_p50_us=1139 lat_p95_us=1801 … rec=cpu
 
 # headless: stream the dashboard's own rendered frames (JSON lines)
 emb-top -addr localhost:6379 -frames -interval 1s
@@ -272,6 +272,47 @@ dispatch: waiting for a free worker or batch window), `admit`/`embed_admission_w
 run time excludes the gate wait, so `run` staying flat while `admit` grows means
 the budget is the constraint, and `run` growing instead points at the model.
 
+### Reading the sizing recommendation
+
+Under the verdict line, `emb-top` renders one advisory **sizing** line naming the
+resource to change and the counters it was derived from — `SIZING  …` in the node
+dashboard and in the cluster view. It is advice, not a verdict: it has no
+severity, it never raises or lowers the health status, and a node at 100% of its
+budget with no errors is simultaneously `HEALTHY` and "add CPU". Every rule has
+its own fixed thresholds (built-in defaults, no flags) and reads only counters
+the node already publishes.
+
+| Line | Fires when | Counters it names |
+|---|---|---|
+| `cpu budget is the limit` | the node holds ≥95% of `cpu_budget` and `cpu_admission_timeouts` grew over the window | `cpu_active_tokens`/`cpu_budget`, the timeouts |
+| `host is the constraint` | `cpu_throttled_periods` or `cpu_steal_usec` grew while the node was *not* holding its budget | throttled/total periods, throttled and stolen time |
+| `memory: cache-restore headroom` | `cache_restore_headroom_bytes` is under 10% of `cache_restore_limit_bytes` and `cache_restore_skipped_memory` grew | the headroom and the limit, the skipped entries |
+| `memory rose … unexplained growth` | the window's second half sits at least 10% and at least 8 MB above its first, while `req_rate` and the caches' bytes stay flat | the RSS rise, the load, the cache bytes |
+
+The host rule deliberately excludes a held budget: widening a node's own budget
+cannot give back CPU the kernel refused, so a throttled or starved group is
+named as the host's fault rather than the node's. The memory rules are kept
+apart for the same reason — a spent cache-restore headroom is bought away, a
+monotonic RSS rise at flat load is a bug that no amount of memory fixes, so it
+is reported as unexplained rather than as a purchase. The memory line quotes the
+*server's own* cache-restore limit, never a percentage of the machine's RAM; a
+pod running several processes or a sidecar will therefore under-report.
+
+With several nodes the cluster view renders one fleet sizing line: every
+resource a node binds on (a memory-limited node in a CPU-limited fleet is
+reported as both, never averaged away), the fleet's CPU headroom, and the node
+to inspect first. The first node named is the one bound on a resource its peers
+are not, or failing that the one whose client-measured p95 is far above its
+peers' while it carries comparable load; a node-count recommendation is named
+last, so a node that does not look like its peers is inspected before the fleet
+is grown. In `-once` output each line carries the recommendation as single tokens:
+`rec=cpu`, `rec=host`, `rec=memory`, `rec=growth` or `rec=nodes` beside the
+node's own fields, and on the fleet aggregate the binding resources joined into
+one (`rec=cpu+memory`) plus `rec_first=<node>` for the node to inspect first.
+The node gets its own field because a fleet can have nothing binding and still
+have a node worth looking at. Both are absent when there is nothing to
+recommend.
+
 ### Watching a fleet
 
 With more than one node monitored, `emb-top` renders a cluster view: a fleet
@@ -313,7 +354,8 @@ and the imbalance panel checks it across nodes. Re-record with
   ignored. The fleet verdict is driven only by actionable cross-node signals:
   unreachable or auth-refusing nodes, a node far slower than the fleet median,
   a cold cache after a restart, and load spread beyond what the node count
-  explains.
+  explains. The fleet **sizing** line beside it is advisory and separate: see
+  [Reading the sizing recommendation](#reading-the-sizing-recommendation).
 - A fleet of one (including the default `localhost:6379`) renders the original
   single-node dashboard, and `-once` / `-frames` keep their single-node output.
   With several nodes, `-once` prints the fleet aggregate followed by one
@@ -334,3 +376,96 @@ UTF-8; a color-capable terminal is recommended.
 It ships inside the Docker image (`/usr/local/bin/emb-top`) and the
 `emb-server` gem (`bin/emb-top`). It requires no `onnxruntime` — it is a pure
 RESP client and builds with `CGO_ENABLED=0`.
+
+## Load: emb-stress
+
+`emb-top` observes a fleet; `emb-stress` drives one. It takes the **same server
+configuration the fleet was started with** (so the models exercised, their
+dimensions and their maximum lengths come from the fleet's own contract), a
+**target** that is one `host:port` or a DNS name, expands the name into the node
+set behind it, reconciles the configured models against what each node reports,
+and then offers synthetic embedding load to every node at each level in turn. It
+is a pure RESP client — no model, no ONNX Runtime, `CGO_ENABLED=0` — so it runs
+from anywhere `emb-top` does.
+
+```bash
+# a local fleet, four levels of concurrency, 6s per level with a 2s warm-up
+emb-stress -config server.yaml -target 127.0.0.1:6379 -levels 1,2,4,8 -dwell 6s -warmup 2s
+
+# a name expands to one endpoint per address record, driven concurrently
+emb-stress -config server.yaml -target emb.internal -levels 1,2,4
+
+# machine-readable, for a script or a record
+emb-stress -config server.yaml -target emb.internal -json
+
+# the same thing through the justfile (builds bin/emb-stress first)
+just stress server.yaml 127.0.0.1:6379 1,2,4 10s 3s
+```
+
+The result reports, **per endpoint and for the fleet**, the offered load, the
+completed requests per second, the p50/p95/p99 latency and the error count, at
+every level. The latency is the client's own send-to-reply measurement; no
+server counter is substituted for it. The fleet aggregate sums the endpoints'
+work and recomputes the percentiles over every endpoint's samples, so one slow
+node shows up in its own section instead of hiding in the average.
+
+### What a run actually does
+
+- **Levels are closed-loop.** Each level fixes a worker count per endpoint and
+  each worker sends its next request only when the previous reply arrived, so no
+  arrival scheduler is needed and the server's own batcher still sees the
+  concurrency. The reported knee is a knee, not an SLO guarantee: there is no
+  open-loop mode and no target rate.
+- **Each level is held before it is measured.** A level runs for `-dwell`, and
+  the leading `-warmup` is discarded, so its numbers describe a fleet that has
+  settled — caches filled, queue at its steady depth. Throughput is drawn from
+  the settled window only.
+- **Every worker gets its own connection.** A RESP socket carries one request
+  and one reply at a time; workers sharing one would interleave their writes and
+  reads and the run would report the corruption as load.
+- **Texts are generated from the seed, not from a corpus.** Each text's length
+  comes from a length class derived from the configured `max_length` (an eighth,
+  a quarter, a half and the whole of it), so two runs with the same `-seed`
+  offer the same request set. `-corpus <file>` replaces generation with one text
+  per line. The classes are **word counts, not token counts**: the tokenizer is
+  in-process only, so a client cannot count tokens, and any client-side token
+  figure would be an invention. The server reports the token count; `emb-top`
+  reads it. That split is the point of having both tools.
+- **A pair that fails reconciliation is named, not exercised.** For each
+  (endpoint, model) the run compares the configuration with what the endpoint
+  reports: a model the endpoint does not report, a model whose status is not
+  `ready` (the server is still loading it), or a dimension that disagrees — with
+  the configuration when it states one, and with the rest of the fleet when it
+  does not, since a model's dimension may be auto-detected at load — keeps that
+  endpoint out of the workload and is listed under `NOT EXERCISED`. A run that
+  exercised nothing exits non-zero rather than presenting an empty fleet as a
+  result. **Start the fleet before the run**: a node still initializing a model
+  is named as `status "uninitialized": not ready to serve`.
+- **One target per run.** `-target` takes a single specification; a DNS name is
+  how one run covers many nodes. DNS weights are ignored and workers are split
+  evenly, for the same reason `emb-top` reads them as equal: the offered share
+  and the observed share must stay comparable.
+
+### Pairing it with emb-top
+
+Run both against the same target and the two agree. `emb-top` reports each node's
+*observed* share of the fleet; `emb-stress` reports the *offered* share, so a
+node that is offered its 1/N and serves less is a node to look at.
+
+```bash
+# watch the fleet while the run drives it
+emb-top -node emb.internal -interval 1s &
+emb-stress -config server.yaml -target emb.internal -levels 1,2,4
+
+# the fleet's sizing advice, from the counters the run pushed up
+emb-top -node emb.internal -once -samples 10 -interval 1s   # … rec=cpu
+```
+
+What to read off the pair: the level where throughput stops rising is the knee;
+if `emb-top`'s sizing line says `cpu budget is the limit` at that point, the CPU
+budget is what binds and the answer is more nodes; if it says
+`host is the constraint`, the host is throttling or stealing CPU and no amount
+of budget will help; if it says `memory: cache-restore headroom`, the cache's
+restore limit is nearly spent. `emb-stress`'s own per-node latency percentiles
+say which node to look at first, and `emb-top`'s fleet sizing line says the same
+thing from the observed side.
