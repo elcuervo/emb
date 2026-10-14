@@ -19,6 +19,8 @@ import (
 	"github.com/tidwall/redcon"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/permit"
+	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/registry"
 	"github.com/elcuervo/emb/internal/script"
 	"github.com/elcuervo/emb/internal/telemetry"
@@ -90,6 +92,12 @@ type Server struct {
 	idleTimeout       time.Duration
 	maxConns          int
 	maxConcurrentReqs int
+	// admissionTimeout bounds how long an inference command may wait for
+	// admission before the server answers busy (0 = unbounded).
+	admissionTimeout time.Duration
+	// busyRefusals counts inference commands refused because admission was
+	// saturated or timed out.
+	busyRefusals atomic.Int64
 	// The max* caps below are runtime-editable via CONFIG SET, so they are
 	// atomic: request handlers read them while a CONFIG SET writes them.
 	// maxTexts bounds texts per EMB command (0 = unlimited; default 4096 via
@@ -171,6 +179,9 @@ func (s *Server) admitInference() (release func(), replyErr string) {
 		return nil, "ERR server shutting down"
 	}
 	if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
+		// Counted with the admission refusals: both are the server declining
+		// work it cannot serve in time.
+		s.busyRefusals.Add(1)
 		return nil, fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs)
 	}
 	s.activeReqs.Add(1)
@@ -212,6 +223,12 @@ func WithMaxConnections(n int) Option {
 // Control commands (PING, AUTH, EMB.READY, EMB.STATS, …) stay reachable.
 func WithMaxConcurrentRequests(n int) Option {
 	return func(s *Server) { s.maxConcurrentReqs = n }
+}
+
+// WithAdmissionTimeout bounds how long an inference command may wait for
+// admission before the server answers busy. Zero leaves the wait unbounded.
+func WithAdmissionTimeout(d time.Duration) Option {
+	return func(s *Server) { s.admissionTimeout = d }
 }
 
 // WithMaxTexts bounds the texts processed per EMB command; commands beyond the
@@ -871,9 +888,9 @@ func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
 // and the scripted `emb.embed` host, so embeddings produced by either path
 // share cache entries and batcher admission. entry.Pool must already be
 // resolved (see Registry.GetOrInit).
-func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []string) ([][]byte, error) {
+func (s *Server) embedTexts(ctx context.Context, entry *registry.ModelEntry, model string, texts []string) ([][]byte, error) {
 	if s.cache == nil {
-		resp, err := entry.Pool.Embed(texts)
+		resp, err := entry.Pool.EmbedContext(ctx, texts)
 		if err != nil {
 			return nil, err
 		}
@@ -904,7 +921,7 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 	for j, idx := range missIdxs {
 		missTexts[j] = texts[idx]
 	}
-	resp, err := entry.Pool.Embed(missTexts)
+	resp, err := entry.Pool.EmbedContext(ctx, missTexts)
 	if err != nil {
 		return nil, err
 	}
@@ -916,6 +933,40 @@ func (s *Server) embedTexts(entry *registry.ModelEntry, model string, texts []st
 		s.cache.Set(textCacheKey(model, texts[idx]), resp.Embeddings[j])
 	}
 	return results, nil
+}
+
+// admissionContext bounds how long an inference command may wait for admission.
+func (s *Server) admissionContext() (context.Context, context.CancelFunc) {
+	if s.admissionTimeout <= 0 {
+		return context.Background(), func() {}
+	}
+	return context.WithTimeout(context.Background(), s.admissionTimeout)
+}
+
+// admissionBusyMessage maps an admission failure to the busy reply shape: a
+// refusal is the server declining work it cannot serve in time, not an internal
+// error.
+func admissionBusyMessage(err error) (string, bool) {
+	switch {
+	case errors.Is(err, permit.ErrBusy):
+		return "ERR busy: admission queue full", true
+	case errors.Is(err, context.DeadlineExceeded):
+		return "ERR busy: admission timed out", true
+	case errors.Is(err, context.Canceled):
+		return "ERR busy: request abandoned", true
+	}
+	return "", false
+}
+
+// writeModelError maps a registry lookup error to its reply: a model whose
+// layout is still undecided is a not-ready answer (the caller may retry), not an
+// internal error.
+func writeModelError(conn redcon.Conn, err error) {
+	if errors.Is(err, registry.ErrNotReady) {
+		conn.WriteError("ERR " + err.Error())
+		return
+	}
+	conn.WriteError(fmt.Sprintf("ERR %v", err))
 }
 
 func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
@@ -964,16 +1015,26 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 		texts = texts[:int(limit)]
 	}
 
-	entry, err := s.reg.GetOrInit(modelName)
+	entry, err := s.reg.ResolveReady(modelName)
 	if err != nil {
 		failed = true
-		conn.WriteError(fmt.Sprintf("ERR %v", err))
+		writeModelError(conn, err)
 		return
 	}
 
-	results, err := s.embedTexts(entry, modelName, texts)
+	// One deadline for the whole command: it bounds the wait for admission and
+	// lets work whose caller has gone away stop rather than run to completion.
+	ctx, cancel := s.admissionContext()
+	defer cancel()
+
+	results, err := s.embedTexts(ctx, entry, modelName, texts)
 	if err != nil {
 		failed = true
+		if msg, busy := admissionBusyMessage(err); busy {
+			s.busyRefusals.Add(1)
+			conn.WriteError(msg)
+			return
+		}
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
@@ -1130,7 +1191,7 @@ func (s *Server) handleMODELS(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteBulkString("dim")
 			conn.WriteInt(m.Dim)
 			conn.WriteBulkString("status")
-			conn.WriteBulkString("ready")
+			conn.WriteBulkString(m.Status())
 		}
 		return
 	}
@@ -1139,7 +1200,7 @@ func (s *Server) handleMODELS(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteArray(3)
 		conn.WriteBulkString(m.Name)
 		conn.WriteInt(m.Dim)
-		conn.WriteBulkString("ready")
+		conn.WriteBulkString(m.Status())
 	}
 }
 
@@ -1150,22 +1211,27 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	modelName := string(cmd.Args[1])
-	entry, err := s.reg.GetOrInit(modelName)
+	// Observation never initializes a model: an undecided layout reports its
+	// status and zeros instead of being loaded by a stats read.
+	entry, err := s.reg.Resolve(modelName)
 	if err != nil {
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
 	}
 
-	stats := entry.Pool.Stats()
+	stats := pipeline.Stats{}
+	if pool := entry.LoadedPool(); pool != nil {
+		stats = pool.Stats()
+	}
 	verdict, reason := entry.BatchDeterminism, entry.BatchDeterminismReason
 	if verdict == "" {
 		verdict, reason = "untested", "untested"
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 48)
+		writePairs(conn, 52)
 	} else {
-		writePairs(conn, 41)
+		writePairs(conn, 45)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1212,10 +1278,23 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(cpuBudget)
 	conn.WriteBulkString("cpu_thread_share")
 	conn.WriteInt(cpuShare)
+	conn.WriteBulkString("cpu_share_reclaimed")
+	conn.WriteInt(boolInt(entry.ShareReclaimed()))
 	conn.WriteBulkString("intra_op_threads")
 	conn.WriteInt(intraThreads)
 	conn.WriteBulkString("allow_spinning")
 	conn.WriteInt(boolInt(spinning))
+	// How the layout was chosen: a calibrated layout is distinguishable from a
+	// policy-derived, fallback or unresolved one, and an unresolved trial
+	// carries its reason. "none" until the model's layout is decided.
+	layoutSource, layoutReason := "none", ""
+	if outcome, ok := entry.Layout(); ok {
+		layoutSource, layoutReason = outcome.Source, outcome.Reason
+	}
+	conn.WriteBulkString("calibration_source")
+	conn.WriteBulkString(layoutSource)
+	conn.WriteBulkString("calibration_reason")
+	conn.WriteBulkString(layoutReason)
 	// Scripted-evaluation counters and resource footprint, distinct from the
 	// embedding pool's requests/errors above.
 	scriptReqs, scriptErrs := entry.ScriptStats()
@@ -1256,6 +1335,8 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(boolInt(scriptActive))
 	conn.WriteBulkString("embed_dispatch_wait_us")
 	conn.WriteInt(int(stats.DispatchWaitUs))
+	conn.WriteBulkString("embed_admission_wait_us")
+	conn.WriteInt(int(stats.AdmissionWaitUs))
 	conn.WriteBulkString("embed_run_us")
 	conn.WriteInt(int(stats.RunUs))
 	conn.WriteBulkString("embed_runs")
@@ -1322,10 +1403,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			// Always surface the verdict, reason, and effective timeout (0 when
 			// batching is off or degraded): the batch-determinism spec requires
 			// both in EMB.STATS regardless of gating outcome.
-			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus run=%dus runs=%d busy=%d/%d",
+			perModel = append(perModel, fmt.Sprintf("%s: req=%d avg=%dus tok=%d err=%d pool=%s norm=%t det=%s/%s timeout=%d%s wait=%dus admit=%dus run=%dus runs=%d busy=%d/%d",
 				m.Name, st.Requests, int(st.AvgLatency), st.Tokens, st.Errors, st.Pooling, st.Normalize,
 				det, m.BatchDeterminismReason, st.BatchingTimeout, batchInfo,
-				st.DispatchWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
+				st.DispatchWaitUs, st.AdmissionWaitUs, st.RunUs, st.Runs, st.SessionsBusy, st.SessionsTotal))
 		}
 	}
 
@@ -1350,7 +1431,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 58)
+	writePairs(conn, 67)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1389,6 +1470,10 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(s.maxConns)
 	conn.WriteBulkString("max_concurrent_requests")
 	conn.WriteInt(s.maxConcurrentReqs)
+	conn.WriteBulkString("admission_refusals")
+	conn.WriteInt64(s.busyRefusals.Load())
+	conn.WriteBulkString("admission_timeout_ms")
+	conn.WriteInt64(s.admissionTimeout.Milliseconds())
 	// Process resource usage: mem is process RSS in MB (heap fallback on
 	// platforms without RSS), and CPU/goroutines are live runtime values.
 	res := s.resourceStats()
@@ -1471,6 +1556,28 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(cpu.Active)
 	conn.WriteBulkString("cpu_peak_tokens")
 	conn.WriteInt(cpu.Peak)
+	// Admission pressure: what callers waited at the CPU gate, how many are
+	// waiting now, and the waits that ended without a grant. Separate from
+	// cpu_active_tokens/cpu_peak_tokens, which count admitted runs.
+	conn.WriteBulkString("cpu_admission_wait_us")
+	conn.WriteInt(int(cpu.AdmissionWaitUs))
+	conn.WriteBulkString("cpu_admission_waiters")
+	conn.WriteInt(cpu.AdmissionWaiters)
+	conn.WriteBulkString("cpu_admission_timeouts")
+	conn.WriteInt(cpu.AdmissionTimeouts)
+	// The kernel's own view of CPU we could not use: cgroup throttling and
+	// stolen time, cumulative. This is what separates "the budget is the limit"
+	// from "the host is starving us" — a throttled group cannot be fixed by
+	// tuning the layout, and the counters stay zero on an unthrottled host.
+	throttle := registry.ReadCPUThrottle()
+	conn.WriteBulkString("cpu_throttle_periods")
+	conn.WriteInt64(int64(throttle.Periods))
+	conn.WriteBulkString("cpu_throttled_periods")
+	conn.WriteInt64(int64(throttle.Throttled))
+	conn.WriteBulkString("cpu_throttle_usec")
+	conn.WriteInt64(int64(throttle.ThrottleUs))
+	conn.WriteBulkString("cpu_steal_usec")
+	conn.WriteInt64(int64(throttle.StealUs))
 }
 
 func boolInt(v bool) int {
@@ -1519,6 +1626,11 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 	// not O(N), preserving MGET semantics and result ordering (results written by
 	// index).
 	fanOut := s.multiPairFanOut(n)
+	// Bound the whole command's admission like EMB does: one deadline shared by
+	// every pair, so a pair that cannot be admitted in time fails its slot
+	// instead of waiting without limit at the CPU gate.
+	ctx, cancel := s.admissionContext()
+	defer cancel()
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for w := 0; w < fanOut; w++ {
@@ -1526,7 +1638,7 @@ func (s *Server) handleEMBMULTI(conn redcon.Conn, cmd redcon.Command) {
 		go func() {
 			defer wg.Done()
 			for idx := range jobs {
-				s.processMultiPair(pairs, results, idx)
+				s.processMultiPair(ctx, pairs, results, idx)
 			}
 		}()
 	}
@@ -1552,7 +1664,7 @@ func writeMultiResult(conn redcon.Conn, s *Server, format replyFormat, pairs [][
 				continue
 			}
 			model := string(pairs[i*2])
-			entry, err := s.reg.GetOrInit(model)
+			entry, err := s.reg.Resolve(model)
 			if err != nil {
 				conn.WriteNull()
 				continue
@@ -1603,7 +1715,7 @@ func (s *Server) multiPairFanOut(n int) int {
 	return cap
 }
 
-func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
+func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [][]byte, idx int) {
 	model := string(pairs[idx*2])
 	text := string(pairs[idx*2+1])
 
@@ -1627,7 +1739,7 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		}
 	}
 
-	entry, err := s.reg.GetOrInit(model)
+	entry, err := s.reg.ResolveReady(model)
 	if err != nil {
 		failed = true
 		return
@@ -1643,7 +1755,10 @@ func (s *Server) processMultiPair(pairs [][]byte, results [][]byte, idx int) {
 		}
 	}
 
-	resp, err := entry.Pool.Embed([]string{text})
+	// One admission deadline for the whole command, shared by every pair: the
+	// same bound EMB carries, so an EMB.MULTI pair waits at the CPU gate for no
+	// longer than admission_timeout instead of blocking on context.Background.
+	resp, err := entry.Pool.EmbedContext(ctx, []string{text})
 	if err != nil || resp.Err != nil {
 		failed = true
 		return

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
@@ -112,6 +113,12 @@ func calibrationCandidates(budget, maxWorkers, configuredThreads, configuredWork
 	seen := map[[2]int]bool{}
 	out := make([][2]int, 0, len(widths)*len(workers))
 	for _, width := range widths {
+		// An unbatched pool serves several runs at once, so a candidate whose
+		// width would fill the budget makes admission exclusive. Explicit
+		// widths are the operator's call and stay visible.
+		if !batched && configuredThreads <= 0 && 2*width > budget {
+			continue
+		}
 		for _, count := range workers {
 			candidate := [2]int{count, width}
 			if count*width > budget || seen[candidate] {
@@ -191,11 +198,18 @@ search:
 				truncated = true
 				break search
 			}
-			result, candidateRef, ok := runCalibrationCandidate(factory, inputs, dim, candidate[0], candidate[1], batch)
+			result, candidateRef, ok, cut := runCalibrationCandidate(factory, inputs, dim, candidate[0], candidate[1], batch, deadline)
+			if cut {
+				// The deadline was reached inside this candidate: it was not
+				// measured to completion, so its partial numbers are not scored
+				// and the search stops here.
+				truncated = true
+				break search
+			}
 			candidateCost = result.Elapsed
 			if i == 0 && round == 0 {
 				if !ok {
-					return finishCalibration(best, bestScore, fallback, "baseline_failed", started)
+					return finishCalibration(best, bestScore, fallback, "baseline_failed", started, false)
 				}
 				// The lowest-resource candidate is the serial baseline every other
 				// candidate is judged against (correctness and the p95 guard).
@@ -227,10 +241,10 @@ search:
 
 	reason := "no_valid_candidate"
 	if truncated {
-		reason = "calibration_deadline"
+		reason = "deadline"
 	}
 	best, bestScore = chooseCalibratedLayout(scores, candidates, batched, fallback)
-	return finishCalibration(best, bestScore, fallback, reason, started)
+	return finishCalibration(best, bestScore, fallback, reason, started, truncated)
 }
 
 // chooseCalibratedLayout picks a measured layout from its scores: the highest
@@ -264,15 +278,29 @@ func chooseCalibratedLayout(scores map[[2]int]float64, candidates [][2]int, batc
 	return best, bestScore
 }
 
-// finishCalibration returns the best validated candidate, or the safe
-// fallback carrying the most specific recorded reason when nothing was
-// validated in time.
-func finishCalibration(best calibratedLayout, bestScore float64, fallback calibratedLayout, reason string, started time.Time) calibratedLayout {
+// finishCalibration returns the winning layout, or the layout to serve with
+// when the search produced no calibrated choice. A search that ran out of
+// deadline is recorded as unresolved: the best measured layout is still served
+// (a truncated search must not throw away capacity it measured), but it is not
+// presented as calibrated. A search that ended without a measured winner is
+// unresolved with its reason.
+func finishCalibration(best calibratedLayout, bestScore float64, fallback calibratedLayout, reason string, started time.Time, truncated bool) calibratedLayout {
 	elapsed := calibrationNow().Sub(started)
+	if truncated {
+		chosen := best
+		if bestScore < 0 {
+			chosen = fallback
+		}
+		chosen.Source = "unresolved"
+		chosen.Reason = "deadline"
+		chosen.Elapsed = elapsed
+		return chosen
+	}
 	if bestScore >= 0 {
 		best.Elapsed = elapsed
 		return best
 	}
+	fallback.Source = "unresolved"
 	if fallback.Reason == "" || fallback.Reason == "no_valid_candidate" {
 		fallback.Reason = reason
 	}
@@ -343,7 +371,11 @@ func prepareInputs(inputs []calibrationInput, maxRows int) []calibrationPrepared
 	return prepared
 }
 
-func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []calibrationInput, dim, workers, threads, maxRows int) (calibrationResult, [][]float32, bool) {
+// runCalibrationCandidate measures one candidate: it opens the sessions, warms
+// them, then times repeated runs. It returns ok=false when the candidate could
+// not be measured, and cut=true when the deadline ended the trials inside this
+// candidate (so the caller stops the search rather than scoring partial work).
+func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []calibrationInput, dim, workers, threads, maxRows int, deadline time.Time) (calibrationResult, [][]float32, bool, bool) {
 	sessions := make([]onnx.Session, 0, workers)
 	for range workers {
 		sess, err := factory(threads)
@@ -351,7 +383,7 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 			for _, opened := range sessions {
 				_ = opened.Close()
 			}
-			return calibrationResult{}, nil, false
+			return calibrationResult{}, nil, false, false
 		}
 		sessions = append(sessions, sess)
 	}
@@ -368,14 +400,14 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 	for i, input := range prepared {
 		out, err := sessions[0].Run(input.ids, input.mask, input.batch, input.seqLen, dim)
 		if err != nil || len(out) == 0 {
-			return calibrationResult{}, nil, false
+			return calibrationResult{}, nil, false, false
 		}
 		reference[i] = append([]float32(nil), out...)
 	}
 	for _, sess := range sessions[1:] {
 		for _, input := range prepared {
 			if _, err := sess.Run(input.ids, input.mask, input.batch, input.seqLen, dim); err != nil {
-				return calibrationResult{}, nil, false
+				return calibrationResult{}, nil, false, false
 			}
 		}
 	}
@@ -385,13 +417,21 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 	var mu sync.Mutex
 	var latencies []time.Duration
 	var rows int64
+	var cut atomic.Bool
 	var wg sync.WaitGroup
 	for _, sess := range sessions {
 		wg.Add(1)
 		go func(sess onnx.Session) {
 			defer wg.Done()
-			for repeat := 0; repeat < 3; repeat++ {
+			for range 3 {
 				for _, input := range prepared {
+					// The deadline is checked inside the candidate too: a single
+					// slow candidate must not run to completion past it. The
+					// sessions stay open until every call returns.
+					if calibrationNow().After(deadline) {
+						cut.Store(true)
+						return
+					}
 					start := time.Now()
 					out, err := sess.Run(input.ids, input.mask, input.batch, input.seqLen, dim)
 					elapsed := time.Since(start)
@@ -408,8 +448,11 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 	}
 	wg.Wait()
 	userAfter, sysAfter := calibrationCPUTimes()
+	if cut.Load() {
+		return calibrationResult{}, nil, false, true
+	}
 	if len(latencies) != workers*len(prepared)*3 {
-		return calibrationResult{}, nil, false
+		return calibrationResult{}, nil, false, false
 	}
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	return calibrationResult{
@@ -417,7 +460,7 @@ func runCalibrationCandidate(factory func(int) (onnx.Session, error), inputs []c
 		CPUUsec: (userAfter - userBefore) + (sysAfter - sysBefore),
 		P95:     latencies[(len(latencies)*95-1)/100],
 		Elapsed: time.Since(started),
-	}, reference, true
+	}, reference, true, false
 }
 
 func calibrationOutputValid(out []float32) bool {

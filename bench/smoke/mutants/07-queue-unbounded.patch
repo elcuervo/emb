@@ -1,0 +1,13 @@
+# assertion: queue-bounded
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/registry/registry.go
++++ b/internal/registry/registry.go
+@@ -363,7 +363,7 @@
+ 		// provisional bound from the reproduction — the tier-2 gate asserts the
+ 		// queue respects it (refusals past it, depth within it), not that the
+ 		// value is right; re-deriving it needs the operator's latency SLO.
+-		plan.QueueBound = max(2, 2*plan.Budget)
++		plan.QueueBound = 0 // (mutant) the admission queue is never refused
+ 		r.cpuPlan = plan
+ 		r.cpuGate = permit.NewBudget(plan.Budget)
+ 		r.cpuGate.SetQueueBound(plan.QueueBound)

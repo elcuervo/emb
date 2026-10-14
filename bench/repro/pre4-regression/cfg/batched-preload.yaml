@@ -1,0 +1,10 @@
+# Cold/warm pair — `preload: true` moves model load (and in pre4, calibration)
+# to boot. Accepted by both revisions; compare with cfg/batched-default.yaml,
+# which leaves preload unset (false) so the first request pays for it.
+listen: "127.0.0.1:17006"
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    preload: true

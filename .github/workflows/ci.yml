@@ -479,6 +479,54 @@ jobs:
           go build -ldflags "-X main.version=$(cat VERSION)" -o bin/emb ./cmd/emb
           BASE=./bin/emb CAND=./bin/emb SAMPLES=3 bash bench/script/run.sh 2>&1 | tee bench-out/reference/ab.log
 
+      - name: Cache the minilm fixture
+        uses: actions/cache@v4
+        with:
+          path: models/minilm
+          key: minilm-v1
+
+      - name: Download the minilm fixture
+        run: |
+          # Mirrors `just download-model` (Xenova/all-MiniLM-L6-v2), the same
+          # fixture and cache key `test-cgo` uses; a hit makes this a no-op.
+          mkdir -p models/minilm
+          base=https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main
+          [ -s models/minilm/model.onnx ] || curl -fsSL "$base/onnx/model.onnx" -o models/minilm/model.onnx
+          [ -s models/minilm/tokenizer.json ] || curl -fsSL "$base/tokenizer.json" -o models/minilm/tokenizer.json
+          [ -s models/minilm/config.json ] || curl -fsSL "$base/config.json" -o models/minilm/config.json
+
+      # The evidence bundle: a recorded `bench/fargate` run on this qualified
+      # host, diffed against itself, so the reference record carries the
+      # fingerprint, the revision and model digests, the per-cell metrics and
+      # every assertion outcome — not just the host report and the logs. The
+      # same path reproduces locally as `just bench-reference-local`.
+      - name: Evidence bundle (same host, diffed against itself)
+        run: |
+          # A tier can only be emulated up to the CPUs the host presents: Docker
+          # refuses `--cpus` above them (exit 125), which would leave the matrix
+          # incomplete and the bundle's `cells-complete` assertion invalid — a
+          # bundle that is not a reference. Emulate the Fargate tiers this host
+          # can hold (all four on a host with eight or more CPUs).
+          tiers=""
+          for t in 1 2 4 8; do
+            [ "$t" -le "$(nproc)" ] && tiers="${tiers:+$tiers,}$t"
+          done
+          echo "emulating Fargate tiers: $tiers (host presents $(nproc) CPUs)"
+          go run ./bench/fargate -mode run -cpus "$tiers" -out bench-out/reference/bundles 2>&1 | tee bench-out/reference/bundle.log
+          bundle=$(find bench-out/reference/bundles -maxdepth 1 -name 'run.*.json' -print -quit)
+          [ -n "$bundle" ] || { echo "no benchmark bundle written" >&2; exit 1; }
+          go run ./bench/fargate -mode diff -before "$bundle" -after "$bundle" 2>&1 | tee -a bench-out/reference/bundle.log
+          # The record must be usable as a reference: only the host contract and
+          # a complete matrix, and nothing left invalid or failed. A green job
+          # with an invalid bundle is the failure this whole tier guards against.
+          jq -e '.host.gold == true
+                 and ([.assertions[] | select(.outcome == "fail" or .outcome == "invalid")] | length == 0)' \
+            "$bundle" >/dev/null || {
+              echo "the bundle is not a valid reference:" >&2
+              jq '.host.gold, .assertions' "$bundle" >&2
+              exit 1
+            }
+
       - name: Upload the reference record
         if: always()
         uses: actions/upload-artifact@v4

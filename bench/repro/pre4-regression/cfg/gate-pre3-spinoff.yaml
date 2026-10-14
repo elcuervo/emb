@@ -1,0 +1,14 @@
+# Arm G' (pre3) — identical layout to cfg/gate-pre3.yaml with ORT spinning
+# turned off, to measure how much of pre3's advantage is spinning rather than
+# the absence of the gate. pre4 forces spinning off under the CPU policy.
+listen: "127.0.0.1:17008"
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    workers: 4
+    intra_op_threads: 3
+    allow_spinning: false
+    batching:
+      timeout: 0

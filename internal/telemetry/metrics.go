@@ -208,4 +208,25 @@ var metricDefs = []metricDef{
 		desc:  "Scripted-evaluation inference runs, by model",
 		model: func(m ModelSnapshot) float64 { return float64(m.ScriptRuns) },
 	},
+	{
+		name: "emb.admission.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:      "Seconds embedding requests spent waiting for CPU admission, by model",
+		model:     func(m ModelSnapshot) float64 { return float64(m.AdmissionWaitUs) / 1e6 },
+		needsPool: true,
+	},
+	{
+		name: "emb.cpu.admission.wait", kind: Sum, unit: "s", num: DoubleNumber,
+		desc:   "Seconds all inference paths spent queueing at the process CPU admission gate",
+		global: func(s Snapshot) float64 { return float64(s.CPUAdmissionWaitUs) / 1e6 },
+	},
+	{
+		name: "emb.cpu.admission.waiters", kind: Gauge, unit: "{waiter}", num: IntNumber,
+		desc:   "Callers queueing for process CPU admission now",
+		global: func(s Snapshot) float64 { return float64(s.CPUAdmissionWaiters) },
+	},
+	{
+		name: "emb.cpu.admission.timeouts", kind: Sum, unit: "{wait}", num: IntNumber,
+		desc:   "Admission waits that ended without a grant (refused or abandoned)",
+		global: func(s Snapshot) float64 { return float64(s.CPUAdmissionTimeouts) },
+	},
 }

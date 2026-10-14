@@ -16,6 +16,24 @@ Emb.ready?  # => true
 Emb.ready   # => "ready"
 ```
 
+`EMB.READY` is the process state: "ready" once every model configured for
+preload has decided layout. It is not a per-model warranty — a model left lazy
+is laid out on first use, and `EMB.MODELS` reports each model's own answer:
+
+| Status | Meaning |
+|---|---|
+| `ready` | the embedding layout is decided; requests are served |
+| `loading` | the layout is being decided now, off the request path |
+| `uninitialized` | lazy and not yet asked for anything (never preloaded) |
+| `failed: …` | initialization failed; the reason follows |
+
+A request for a model whose layout is undecided is answered
+`ERR not ready: model "x" is initializing` instead of waiting for calibration, so
+a cold model cannot park the request path — the first requests after a cold boot
+of a lazy model are refusals, and they succeed once `EMB.MODELS` reports
+`ready`. Configure `preload: true` for a model on a serving path if you would
+rather pay that cost at boot.
+
 ## Connection lifecycle
 
 Three knobs bound the server's connection and request surface. `idle_timeout`
@@ -227,6 +245,32 @@ pool. In `-once` and `-frames` output every node section carries that node's own
 `cpu_budget_enabled`, plus each model's `workers`, `intra_op_threads` and
 `cpu_thread_share`. A server that predates these fields reports no plan and the
 line stays blank, rather than reading as `cpu_budget: off`.
+
+When the gate is the limit rather than the model, the same line grows
+`· queued <N> · timeouts <N>`, and `EMB.STATS` carries `cpu_admission_wait_us`
+(cumulative time callers spent queueing at the gate), `cpu_admission_waiters`
+(callers queueing now) and `cpu_admission_timeouts` (waits that ended without a
+grant — refused at the queue bound or expired). `admission_refusals` counts the
+commands the server declined with a busy reply.
+
+`EMB.STATS` also carries the kernel's own view of CPU the process could not use:
+`cpu_throttle_periods`, `cpu_throttled_periods`, `cpu_throttle_usec` (cgroup
+`cpu.stat`: how many periods the group was held off the CPU and for how long)
+and `cpu_steal_usec` (`/proc/stat`: stolen time). All are cumulative, so a reader
+diffs two samples. They stay zero on an unthrottled host and on a platform
+without cgroups, which is exactly why they matter during an incident: a
+throttled or starved group cannot be fixed by tuning the layout, and no amount
+of calibration will make the kernel give back the CPU it took.
+
+`cpu_active_tokens` and `cpu_peak_tokens` count *admitted* runs. A busy gate with
+those two low is queueing, not computing; if they sit at `cpu_peak_tokens ==
+cpu_budget` and throughput does not scale with concurrency, the admitted width
+fills the budget and runs are being served one at a time. `EMB.INFO` and the
+`per_model` line in `EMB.STATS` separate the same request into `wait` (local
+dispatch: waiting for a free worker or batch window), `admit`/`embed_admission_wait_us`
+(waiting at the CPU gate) and `run` (`embed_run_us`, the native inference). The
+run time excludes the gate wait, so `run` staying flat while `admit` grows means
+the budget is the constraint, and `run` growing instead points at the model.
 
 ### Watching a fleet
 

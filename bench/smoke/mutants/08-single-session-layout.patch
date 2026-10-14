@@ -1,0 +1,18 @@
+# assertion: layout-concurrency
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/registry/cpu_budget.go
++++ b/internal/registry/cpu_budget.go
+@@ -157,11 +157,8 @@
+ // has one run slot by construction and keeps the whole share. Explicit settings
+ // stay authoritative.
+ func policyPoolLayout(share, configuredWorkers, configuredThreads int, batched bool) (workers, threads int) {
+-	if batched {
+-		workers, threads = 1, max(1, share)
+-	} else {
+-		workers, threads = 2, max(1, share/2)
+-	}
++	// (mutant) one session holding the whole share: a run fills the budget.
++	workers, threads = 1, max(1, share)
+ 	if configuredWorkers > 0 {
+ 		workers = configuredWorkers
+ 	}

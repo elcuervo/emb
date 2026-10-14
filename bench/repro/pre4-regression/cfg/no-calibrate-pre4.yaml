@@ -1,0 +1,10 @@
+# Arm F (pre4) — planning and the gate kept, calibration removed. Isolates the
+# calibrated layout from the policy: with calibration off the width is the
+# model's raw admission share and workers stay at the policy default.
+listen: "127.0.0.1:17005"
+calibrate: false
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512

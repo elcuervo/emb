@@ -487,6 +487,25 @@ bench-host-check *args="":
 bench-smoke:
     @EMB_BENCH_SMOKE=1 {{ort_var}}="{{ort_lib}}:${{ort_var}}" go test ./internal/server/ -run Smoke -v -count=1 -timeout 600s
 
+# The plain-EMB gate: the embedding path's counterpart of bench-smoke, driven
+# through bulk `EMB` against the committed testdata/plain-emb miniature (no
+# download, no Docker). It runs serial -> burst -> drain on four in-process
+# arms and asserts: the pinned embeddings (dim + reply digest), a stated p99
+# bound for the batch-on burst, a bounded admission queue with counted
+# refusals, a reported admission wait, a wait that ends without a grant, the
+# drain after clients disconnect, health commands answering throughout, the
+# reply cache skipping inference, the request path staying off calibration, and
+# two concurrently admissible runs at the policy layout. Prints every
+# assertion's outcome, one `emb-smoke: assertions=pass=..` summary line and a
+# `failed=<assertion>` line when something fails. ~2 seconds.
+bench-plain-emb:
+    @EMB_BENCH_SMOKE=1 {{ort_var}}="{{ort_lib}}:${{ort_var}}" go test ./internal/server/ -run PlainEMB -v -count=1 -timeout 600s
+
+# Run the dispatched reference workflow locally, including a Fargate bundle
+# and same-host self-diff. See the script header for model/runtime prerequisites.
+bench-reference-local:
+    @bash bench/script/reference-local.sh
+
 # Fargate-shaped benchmark harness (linux/arm64, Graviton CPU). Requires Docker
 # and a model at ./models; redis-benchmark/redis-cli/ruby run from `nix develop`.
 # Emits bench/fargate/out/run.<sha>.<ts>.json

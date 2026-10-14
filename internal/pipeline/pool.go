@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/tokenizer"
 )
 
@@ -25,10 +27,13 @@ type Worker struct {
 	errors    atomic.Int64
 	runs      atomic.Int64
 	busy      atomic.Int64
-	stop      chan struct{}
-	done      chan struct{}
-	closeOnce sync.Once
-	closeErr  error
+	// admissionWaitUs accumulates the time this worker's requests spent at the
+	// process CPU gate, kept out of totalLat.
+	admissionWaitUs atomic.Int64
+	stop            chan struct{}
+	done            chan struct{}
+	closeOnce       sync.Once
+	closeErr        error
 }
 
 // NewWorker starts a worker reading from reqChan. The channel is shared by
@@ -61,11 +66,21 @@ func (w *Worker) run() {
 		}
 		start := time.Now()
 		w.busy.Add(1)
-		resp := w.process(req.Texts)
+		resp := w.process(req)
+		// The wait at the CPU gate is not run time: it is reported apart from it.
+		waited := takeAdmissionWait(w.session)
 		w.busy.Add(-1)
 
 		w.requests.Add(1)
-		w.totalLat.Add(time.Since(start).Microseconds())
+		// The wait is subtracted from the request's run time, never added to it.
+		run := time.Since(start) - waited
+		if run < 0 {
+			run = 0
+		}
+		w.totalLat.Add(run.Microseconds())
+		if waited > 0 {
+			w.admissionWaitUs.Add(waited.Microseconds())
+		}
 
 		req.Result <- resp
 	}
@@ -75,12 +90,26 @@ func (w *Worker) run() {
 // unbatched path (explicit timeout: 0, or degraded after a failed determinism
 // probe): co-batching a request's texts in one run would reintroduce exactly
 // the batch dependence the probe exists to reject.
-func (w *Worker) process(texts []string) Response {
-	embeddings := make([][]byte, 0, len(texts))
+func (w *Worker) process(req Request) Response {
+	ctx := req.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	embeddings := make([][]byte, 0, len(req.Texts))
 	var totalTokens int
-	for _, text := range texts {
-		emb, toks, err := processBatch(w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
-		w.runs.Add(1)
+	for _, text := range req.Texts {
+		// A request whose caller has gone away stops here instead of occupying a
+		// worker for the rest of its texts.
+		if err := ctx.Err(); err != nil {
+			w.tokens.Add(int64(totalTokens))
+			w.errors.Add(1)
+			return Response{Err: err}
+		}
+		emb, toks, err := processBatch(ctx, w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
+		// A run admission refused or abandoned is not a run.
+		if !permit.IsAdmissionError(err) {
+			w.runs.Add(1)
+		}
 		totalTokens += toks
 		if err != nil {
 			w.tokens.Add(int64(totalTokens))
@@ -205,6 +234,13 @@ func NewPool(sessionFactory func() (onnx.Session, error), tok tokenizer.Tokenize
 }
 
 func (p *Pool) Embed(texts []string) (Response, error) {
+	return p.EmbedContext(context.Background(), texts)
+}
+
+// EmbedContext embeds texts, abandoning the wait for a free worker or batch
+// window when ctx is done. Work already submitted runs to completion: the
+// caller stops waiting, the pipeline keeps its accounting.
+func (p *Pool) EmbedContext(ctx context.Context, texts []string) (Response, error) {
 	p.lifecycleMu.Lock()
 	if !p.accepting {
 		p.lifecycleMu.Unlock()
@@ -215,12 +251,21 @@ func (p *Pool) Embed(texts []string) (Response, error) {
 	defer p.active.Done()
 
 	if p.batcher != nil {
-		return p.batcher.Embed(texts)
+		return p.batcher.EmbedContext(ctx, texts)
 	}
 	result := make(chan Response, 1)
+	req := Request{Texts: texts, Result: result, Ctx: ctx, Deadline: DeadlineOf(ctx)}
 	waitStart := time.Now()
-	p.req <- Request{Texts: texts, Result: result}
+	select {
+	case p.req <- req:
+	case <-ctx.Done():
+		return Response{}, ctx.Err()
+	}
 	p.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
+	// Once a worker owns the request the deadline no longer applies: the run is
+	// in flight, and reporting busy would refuse work that is about to complete.
+	// Work whose caller gave up before admission is dropped by the worker's own
+	// context check and answered with its error.
 	return <-result, nil
 }
 
@@ -240,6 +285,7 @@ func (p *Pool) Stats() Stats {
 			BatchingMaxTokens: p.batcher.maxBatchTokens,
 			PaddingEfficiency: p.batcher.paddingEfficiency(),
 			DispatchWaitUs:    p.batcher.dispatchWaitUs.Load(),
+			AdmissionWaitUs:   p.batcher.admissionWaitUs.Load(),
 			RunUs:             p.batcher.totalLat.Load(),
 			Runs:              p.batcher.runs.Load(),
 			SessionsBusy:      p.batcher.busy.Load(),
@@ -248,6 +294,7 @@ func (p *Pool) Stats() Stats {
 	}
 	var totalReqs int64
 	var totalLat int64
+	var totalAdmissionWait int64
 	var totalTokens int64
 	var totalErrors int64
 	var totalRuns int64
@@ -255,6 +302,7 @@ func (p *Pool) Stats() Stats {
 	for _, w := range p.workers {
 		totalReqs += w.Requests()
 		totalLat += w.totalLat.Load()
+		totalAdmissionWait += w.admissionWaitUs.Load()
 		totalTokens += w.Tokens()
 		totalErrors += w.Errors()
 		totalRuns += w.runs.Load()
@@ -265,19 +313,20 @@ func (p *Pool) Stats() Stats {
 		avg = float64(totalLat) / float64(totalReqs)
 	}
 	return Stats{
-		Requests:       totalReqs,
-		AvgLatency:     avg,
-		NumWorkers:     len(p.workers),
-		Tokens:         totalTokens,
-		Errors:         totalErrors,
-		Pooling:        p.pooling,
-		Normalize:      p.normalize,
-		MaxLen:         p.maxLen,
-		DispatchWaitUs: p.dispatchWaitUs.Load(),
-		RunUs:          totalLat,
-		Runs:           totalRuns,
-		SessionsBusy:   busy,
-		SessionsTotal:  int64(len(p.workers)),
+		Requests:        totalReqs,
+		AvgLatency:      avg,
+		NumWorkers:      len(p.workers),
+		Tokens:          totalTokens,
+		Errors:          totalErrors,
+		Pooling:         p.pooling,
+		Normalize:       p.normalize,
+		MaxLen:          p.maxLen,
+		DispatchWaitUs:  p.dispatchWaitUs.Load(),
+		AdmissionWaitUs: totalAdmissionWait,
+		RunUs:           totalLat,
+		Runs:            totalRuns,
+		SessionsBusy:    busy,
+		SessionsTotal:   int64(len(p.workers)),
 	}
 }
 

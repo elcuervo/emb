@@ -1,0 +1,20 @@
+# assertion: calibration-off-request-path
+# Planted regression for `bench/smoke/verify-gate.sh`; apply with `git apply`.
+--- a/internal/registry/registry.go
++++ b/internal/registry/registry.go
+@@ -1340,13 +1340,8 @@
+ 	// requests spawns one background load instead of one goroutine (each holding
+ 	// the read lock) per request. The read lock is held for the load's duration
+ 	// so a concurrent Close waits for it instead of closing resources under it.
+-	entry.loadKick.Do(func() {
+-		go func() {
+-			r.mu.RLock()
+-			defer r.mu.RUnlock()
+-			entry.once.Do(entry.startLoad)
+-		}()
+-	})
++	// (mutant) the request waits for the load, calibration included.
++	entry.once.Do(entry.startLoad)
+ 
+ 	if entry.layoutDecided() {
+ 		return entry, nil

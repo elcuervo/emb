@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1" //nolint:gosec // script cache identity by SHA1, Redis semantics (not a security primitive)
 	"encoding/hex"
 	"errors"
@@ -385,17 +386,19 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 	}
 	// emb.embed is bound only for models that can produce embeddings, so a
 	// script targeting a non-embeddable graph leaves the function absent (the
-	// same gating style as emb.image). The pool loads lazily on first call.
+	// same gating style as emb.image). The pool is decided off the script's
+	// path: a call that meets an undecided layout reports it rather than
+	// running calibration inside the evaluation.
 	if entry.Embeddable() {
 		hosts.Embed = func(texts []string) ([][]byte, error) {
-			e, err := s.reg.GetOrInit(model)
+			e, err := s.reg.ResolveReady(model)
 			if err != nil {
 				return nil, err
 			}
 			if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
 				return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
 			}
-			return s.embedTexts(e, model, texts)
+			return s.embedTexts(context.Background(), e, model, texts)
 		}
 	}
 	// A model with an image surface also gets emb.image.preprocess / info /

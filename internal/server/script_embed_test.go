@@ -58,7 +58,10 @@ func TestEmbEmbedUnavailableForNonEmbeddableModel(t *testing.T) {
 // them instead of stranding them quarantined.
 func TestEmbEmbedAdmitsRestoredQuarantine(t *testing.T) {
 	addr, srv := serveScriptTest(t, "1GB")
-	entry, err := srv.reg.GetOrInit("test")
+	if err := srv.reg.Initialize("test"); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := srv.reg.Resolve("test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +103,10 @@ func TestEmbEmbedAdmitsRestoredQuarantine(t *testing.T) {
 // loads is served directly instead of triggering a redundant inference.
 func TestEmbMultiAdmitsRestoredQuarantine(t *testing.T) {
 	addr, srv := serveScriptTest(t, "1GB")
-	entry, err := srv.reg.GetOrInit("test")
+	if err := srv.reg.Initialize("test"); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := srv.reg.Resolve("test")
 	if err != nil {
 		t.Fatal(err)
 	}

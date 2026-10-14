@@ -192,16 +192,16 @@ func TestCalibrationRejectsP95Regression(t *testing.T) {
 func TestCalibrationFallsBackWhenBaselineFails(t *testing.T) {
 	withCalibrationSeams(t, liveCPU(), nil)
 	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{err: errors.New("run failed")} }, 4, 4, 0, 0, false, 1)
-	if layout.Source != "fallback" || layout.Reason != "baseline_failed" || layout.Workers != 1 || layout.Threads != 1 {
-		t.Fatalf("layout = %+v, want the 1-worker/1-thread fallback with baseline_failed", layout)
+	if layout.Source != "unresolved" || layout.Reason != "baseline_failed" || layout.Workers != 1 || layout.Threads != 1 {
+		t.Fatalf("layout = %+v, want the unresolved 1-worker/1-thread layout with baseline_failed", layout)
 	}
 }
 
 func TestCalibrationFallsBackWithoutCPUAccounting(t *testing.T) {
 	withCalibrationSeams(t, func() (uint64, uint64) { return 0, 0 }, nil)
 	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: time.Millisecond} }, 4, 4, 0, 0, false, 1)
-	if layout.Source != "fallback" || layout.Reason != "cpu_accounting_unavailable" || layout.Workers != 1 || layout.Threads != 1 {
-		t.Fatalf("layout = %+v, want the fallback reported for unavailable CPU accounting", layout)
+	if layout.Source != "unresolved" || layout.Reason != "cpu_accounting_unavailable" || layout.Workers != 1 || layout.Threads != 1 {
+		t.Fatalf("layout = %+v, want the unresolved layout reported for unavailable CPU accounting", layout)
 	}
 }
 
@@ -217,8 +217,31 @@ func TestCalibrationFallsBackOnDeadline(t *testing.T) {
 	}
 	withCalibrationSeams(t, liveCPU(), now)
 	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: time.Millisecond} }, 4, 4, 0, 0, false, 1)
-	if layout.Source != "fallback" || layout.Reason != "calibration_deadline" || layout.Workers != 1 || layout.Threads != 1 {
-		t.Fatalf("layout = %+v, want the deadline fallback", layout)
+	if layout.Source != "unresolved" || layout.Reason != "deadline" || layout.Workers != 1 || layout.Threads != 1 {
+		t.Fatalf("layout = %+v, want the unresolved layout with the deadline reason", layout)
+	}
+}
+
+// A search cut short inside a candidate is recorded as unresolved: the partial
+// trials are not scored, so the smallest measured layout is never reported as
+// the calibrated winner.
+func TestCalibrationDeadlineInsideACandidateLeavesTheOutcomeUnresolved(t *testing.T) {
+	base := time.Unix(0, 0)
+	calls := 0
+	now := func() time.Time {
+		calls++
+		if calls <= 4 {
+			return base // start, the between-candidate check, and two trial runs
+		}
+		return base.Add(time.Hour)
+	}
+	withCalibrationSeams(t, liveCPU(), now)
+	layout := runCalibration(t, func(int) calFakeSession { return calFakeSession{dur: time.Millisecond} }, 4, 4, 0, 0, false, 1)
+	if layout.Source != "unresolved" || layout.Reason != "deadline" {
+		t.Fatalf("layout = %+v, want unresolved:deadline", layout)
+	}
+	if layout.Source == "calibrated" {
+		t.Fatal("a truncated search reported the baseline as calibrated")
 	}
 }
 
@@ -352,8 +375,8 @@ func TestCalibrationCandidateCountsRowsPerBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	factory := func(int) (onnx.Session, error) { return calFakeSession{}, nil }
-	res, _, ok := runCalibrationCandidate(factory, inputs, 3, 1, 1, calibrationBatchRows)
-	if !ok {
+	res, _, ok, cut := runCalibrationCandidate(factory, inputs, 3, 1, 1, calibrationBatchRows, calibrationNow().Add(time.Minute))
+	if !ok || cut {
 		t.Fatal("candidate trial failed")
 	}
 	want := 0

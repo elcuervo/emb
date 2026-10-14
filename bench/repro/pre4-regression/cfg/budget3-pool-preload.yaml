@@ -1,0 +1,15 @@
+# Fix verification with the model loaded before serving: same shape as
+# cfg/budget3-pool.yaml (policy default, unbatched, no calibration) with
+# preload, so the measurement is steady state rather than the cold window that
+# the fixed build (correctly) answers not-ready.
+listen: "127.0.0.1:17011"
+cpu_budget: 3
+calibrate: false
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    preload: true
+    batching:
+      timeout: 0

@@ -1,8 +1,10 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/tokenizer"
@@ -15,6 +17,40 @@ var ErrClosed = errors.New("embedding pipeline is closed")
 type Request struct {
 	Texts  []string
 	Result chan<- Response
+	// Ctx bounds how long this request may wait for admission and lets a
+	// cancelled request be dropped instead of run. Nil means unbounded.
+	Ctx context.Context
+	// Deadline is Ctx's deadline, pre-computed so a batcher can pick the
+	// longest-deadline context for a coalesced batch without unwrapping each
+	// request's context. Zero means no deadline.
+	Deadline time.Time
+}
+
+// DeadlineOf reports a context's deadline as a zero time when it has none.
+func DeadlineOf(ctx context.Context) time.Time {
+	if ctx == nil {
+		return time.Time{}
+	}
+	if d, ok := ctx.Deadline(); ok {
+		return d
+	}
+	return time.Time{}
+}
+
+// DeadlineAfter returns the context with the latest deadline and a cancel
+// function; the whole caller's work may be abandoned only once every request it
+// carries has expired.
+func DeadlineAfter(deads ...time.Time) (context.Context, context.CancelFunc) {
+	var max time.Time
+	for _, d := range deads {
+		if d.After(max) {
+			max = d
+		}
+	}
+	if max.IsZero() {
+		return context.Background(), func() {}
+	}
+	return context.WithDeadline(context.Background(), max)
 }
 
 type Response struct {
@@ -36,13 +72,29 @@ type Stats struct {
 	BatchingMaxTokens int
 	PaddingEfficiency float64
 	// Dispatch/run observability (EMB.STATS/EMB.INFO): cumulative time waiting
-	// for a free worker or queue slot, cumulative inference time, the number of
-	// inference runs, and the live busy/total session gauges.
-	DispatchWaitUs int64
-	RunUs          int64
-	Runs           int64
-	SessionsBusy   int64
-	SessionsTotal  int64
+	// for a free worker or queue slot, cumulative time waiting at the process
+	// CPU gate, cumulative inference time, the number of inference runs, and the
+	// live busy/total session gauges. AdmissionWaitUs is kept out of RunUs: a
+	// run's reported duration is its own, not the queue's.
+	DispatchWaitUs  int64
+	AdmissionWaitUs int64
+	RunUs           int64
+	Runs            int64
+	SessionsBusy    int64
+	SessionsTotal   int64
+}
+
+// admissionTimed is implemented by sessions that record how long their last run
+// waited for CPU admission, so the time can be reported apart from the run.
+type admissionTimed interface{ TakeAdmissionWait() time.Duration }
+
+// takeAdmissionWait reports the admission wait the session accrued for the run
+// just executed, zero for sessions that do not observe admission.
+func takeAdmissionWait(sess onnx.Session) time.Duration {
+	if t, ok := sess.(admissionTimed); ok {
+		return t.TakeAdmissionWait()
+	}
+	return 0
 }
 
 // encodeTexts tokenizes texts into encodings and returns the real token total.
@@ -63,11 +115,11 @@ func encodeTexts(tok tokenizer.Tokenizer, texts []string, maxLen int) ([]Encodin
 // runEncodings pads the encodings, runs one batched inference, pools/normalizes,
 // and returns the embeddings plus the padded sequence length used (for padding
 // efficiency measurement).
-func runEncodings(sess onnx.Session, encs []Encoding, dim int, normalize bool, pooling string) ([][]byte, int, error) {
+func runEncodings(ctx context.Context, sess onnx.Session, encs []Encoding, dim int, normalize bool, pooling string) ([][]byte, int, error) {
 	inputIDs, attnMask, seqLen := PadEncodings(encs)
 	batchSize := len(encs)
 
-	hidden, err := sess.Run(inputIDs, attnMask, batchSize, seqLen, dim)
+	hidden, err := onnx.RunContext(ctx, sess, inputIDs, attnMask, batchSize, seqLen, dim)
 	if err != nil {
 		return nil, seqLen, fmt.Errorf("inference: %w", err)
 	}
@@ -85,12 +137,12 @@ func runEncodings(sess onnx.Session, encs []Encoding, dim int, normalize bool, p
 	return embeddings, seqLen, nil
 }
 
-func processBatch(sess onnx.Session, tok tokenizer.Tokenizer, texts []string, dim, maxLen int, normalize bool, pooling string) ([][]byte, int, error) {
+func processBatch(ctx context.Context, sess onnx.Session, tok tokenizer.Tokenizer, texts []string, dim, maxLen int, normalize bool, pooling string) ([][]byte, int, error) {
 	encs, totalTokens, err := encodeTexts(tok, texts, maxLen)
 	if err != nil {
 		return nil, 0, err
 	}
-	embeddings, _, err := runEncodings(sess, encs, dim, normalize, pooling)
+	embeddings, _, err := runEncodings(ctx, sess, encs, dim, normalize, pooling)
 	if err != nil {
 		return nil, totalTokens, err
 	}

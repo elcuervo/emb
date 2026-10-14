@@ -1,0 +1,9 @@
+# Arm E (pre4) — legacy policy family: no plan, no gate, no calibration,
+# pre3-style sizing. The control for "which policy family moved the number".
+listen: "127.0.0.1:17004"
+cpu_budget: "off"
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512

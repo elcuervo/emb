@@ -19,21 +19,26 @@ import (
 )
 
 type Config struct {
-	Listen              string `yaml:"listen"`
-	CPUBudget           string `yaml:"cpu_budget"`
-	CPUReserve          *int   `yaml:"cpu_reserve"`
-	Calibrate           *bool  `yaml:"calibrate"`
-	Password            string `yaml:"password"`
-	TLSCert             string `yaml:"tls_cert"`
-	TLSKey              string `yaml:"tls_key"`
-	Cache               string `yaml:"cache"`
-	CacheFile           string `yaml:"cache_file"`
-	CacheLoad           *bool  `yaml:"cache_load"`
-	CacheSave           string `yaml:"cache_save"`
-	CacheSaveOnShutdown *bool  `yaml:"cache_save_on_shutdown"`
-	CacheRestoreLimit   string `yaml:"cache_restore_limit"`
-	CacheRestoreReserve string `yaml:"cache_restore_reserve"`
-	CacheSaveRateLimit  string `yaml:"cache_save_rate_limit"`
+	Listen     string `yaml:"listen"`
+	CPUBudget  string `yaml:"cpu_budget"`
+	CPUReserve *int   `yaml:"cpu_reserve"`
+	Calibrate  *bool  `yaml:"calibrate"`
+	// AdmissionTimeout bounds how long an inference command may wait for
+	// admission before the server answers busy. nil = DefaultAdmissionTimeout;
+	// an explicit 0 leaves the wait unbounded (the admission queue bound still
+	// applies).
+	AdmissionTimeout    *Duration `yaml:"admission_timeout"`
+	Password            string    `yaml:"password"`
+	TLSCert             string    `yaml:"tls_cert"`
+	TLSKey              string    `yaml:"tls_key"`
+	Cache               string    `yaml:"cache"`
+	CacheFile           string    `yaml:"cache_file"`
+	CacheLoad           *bool     `yaml:"cache_load"`
+	CacheSave           string    `yaml:"cache_save"`
+	CacheSaveOnShutdown *bool     `yaml:"cache_save_on_shutdown"`
+	CacheRestoreLimit   string    `yaml:"cache_restore_limit"`
+	CacheRestoreReserve string    `yaml:"cache_restore_reserve"`
+	CacheSaveRateLimit  string    `yaml:"cache_save_rate_limit"`
 	// IdleTimeout closes connections that have not sent a command for the
 	// duration. nil (default) applies DefaultIdleTimeout; an explicit 0
 	// disables reaping entirely (strict Redis semantics).
@@ -148,6 +153,20 @@ func validateImageConfig(name string, img ImageConfig) error {
 // unset: generous enough not to surprise pooled clients, bounded enough to
 // reap zombie sockets and bound file descriptors.
 const DefaultIdleTimeout = 15 * time.Minute
+
+// DefaultAdmissionTimeout bounds how long an inference command waits for
+// admission before the server answers busy. The shipped client gives up after
+// ten seconds, so a longer server-side wait is work nobody is waiting for.
+const DefaultAdmissionTimeout = 10 * time.Second
+
+// AdmissionTimeoutOrDefault reports the admission bound: the configured value,
+// the default when unset, and no bound when explicitly zero.
+func (c Config) AdmissionTimeoutOrDefault() time.Duration {
+	if c.AdmissionTimeout == nil {
+		return DefaultAdmissionTimeout
+	}
+	return time.Duration(*c.AdmissionTimeout)
+}
 
 // Duration is time.Duration with lenient YAML decoding: string scalars parse
 // with time.ParseDuration ("5m", "90s"), and an integer 0 is accepted as
@@ -512,6 +531,9 @@ func (c *Config) validate() error {
 	}
 	if c.CPUReserve != nil && *c.CPUReserve < 0 {
 		return fmt.Errorf("cpu_reserve must be non-negative, got %d", *c.CPUReserve)
+	}
+	if c.AdmissionTimeout != nil && time.Duration(*c.AdmissionTimeout) < 0 {
+		return fmt.Errorf("admission_timeout must not be negative, got %s", time.Duration(*c.AdmissionTimeout))
 	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		return fmt.Errorf("both tls_cert and tls_key must be set together")

@@ -1,0 +1,18 @@
+# Corrected gate isolation — the layout FITS the budget and still runs
+# concurrently: three sessions of width one against a budget of three, so the
+# gate admits all three and only its own overhead (vs pre3's gate-free pool)
+# shows. Compare cfg/budget3-single.yaml (one session serial) and
+# cfg/gate-pre4.yaml (over-wide, admitted alone).
+listen: "127.0.0.1:17014"
+cpu_budget: 3
+calibrate: false
+models:
+  e5:
+    onnx: ./models/e5-small/model.onnx
+    tokenizer: ./models/e5-small/tokenizer.json
+    max_length: 512
+    preload: true
+    workers: 3
+    intra_op_threads: 1
+    batching:
+      timeout: 0

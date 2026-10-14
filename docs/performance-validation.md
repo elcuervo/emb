@@ -190,6 +190,30 @@ one-core arm (`saturation-enforced`) is where that assertion is enforced per
 change instead. Verified on the development machine: 16 pass, 1 skip, 0 fail,
 67 s.
 
+## Regression gate for the plain embedding path
+
+`just bench-plain-emb` (also selected by `-run Smoke`, so `just bench-smoke` and
+the sweep run both gates) drives the plain `EMB` path in-process against
+`testdata/plain-emb` — an in-repo miniature, so no model download — through
+serial → burst → recovery and six arms (twelve assertions):
+
+| Arm | What it drives | Assertions |
+|---|---|---|
+| `plain` | bulk `EMB`, batching on, an explicit `cpu_budget`, reply cache, preloaded | `plain-emb-pinned`, `plain-emb-latency`, `admission-wait-reported`, `drain-after-disconnect`, `health-answers`, `cache-idle` |
+| `pool` | batching off, several sessions at one thread against a small budget | `layout-concurrency`, `queue-bounded`, `admission-bounded` |
+| `deadline` | the same shape with the admission bound derived from the measured serial request | `admission-bounded` (expiry, not only latency) |
+| `layout` | the policy layout with calibration off | `calibration-off-request-path` |
+| `lazy` | no `preload`: the model is not ready at boot and the first request drives the off-request-path load | `calibration-off-request-path` (the load must not be on the request) |
+| `fair` | two models over one budget: a wide run holds the budget while a narrow probe arrives | `admission-fair` |
+
+Bounds are derived per host from a measured serial request rather than pinned to
+a constant (latency, admission and fairness each use their own multiple), so a
+faster or slower runner scales instead of flaking; a phase that cannot be
+exercised is reported as `skipped` with the host property, never as a pass.
+`plain-emb-pinned` compares digests of the returned embeddings and says which
+text took the looser per-component tolerance when a digest differs (the fixture
+README records how the pins are regenerated).
+
 ## Gate self-verification
 
 ```bash
@@ -200,8 +224,8 @@ A gate that cannot fail is not a gate. The sweep applies each committed
 regression under `bench/smoke/mutants/` to a scratch tree — a detached worktree
 at `HEAD` plus the current tree's changes, so the working tree is never touched
 — and requires the gate to go red **and name the assertion that caught it**.
-The catalogue is the four regressions named in the change, one patch each, with
-the assertion each one must trip:
+The catalogue is one patch per named regression, with the assertion each one
+must trip:
 
 | Mutant (`bench/smoke/mutants/`) | Planted regression | Assertion that must catch it |
 |---|---|---|
@@ -209,6 +233,15 @@ the assertion each one must trip:
 | `02-saturation-out-of-reach.patch` | the saturation threshold raised out of reach, so the class can never fire | `saturation-enforced` |
 | `03-cache-hits-count-as-traffic.patch` | a reply-cache hit counted as a run, so a cache-served window stops being idle | `cache-idle` |
 | `04-layout-reshape.patch` | the reported session count follows the live allowance: a runtime reshape of the layout | `layout-immutable` |
+| `05-fifo-head.patch` | admission considers only the head of the queue: no borrowing past a blocked wide waiter | `admission-fair` |
+| `06-admission-unbounded.patch` | the configured admission bound is ignored, so a command may wait forever | `admission-bounded` |
+| `07-queue-unbounded.patch` | the admission queue is never refused | `queue-bounded` |
+| `08-single-session-layout.patch` | one session holding the whole share, so a run fills the budget | `layout-concurrency` |
+| `09-calibration-on-request.patch` | the request path loads (and calibrates) a model synchronously | `calibration-off-request-path` (the `lazy` arm: a preloaded arm would never reach the load) |
+
+Mutants `05`–`09` are the plain-`EMB` tier-2 regressions: the scripted gate
+cannot see an admission stall, so they are caught by `TestPlainEMBSmoke`, which
+`-run Smoke` also selects.
 
 Recorded sweep on the development machine:
 
@@ -228,8 +261,40 @@ Recorded sweep on the development machine:
 == 04-layout-reshape.patch (must fail on: layout-immutable) ==
 ✓ 04-layout-reshape.patch: red, and named layout-immutable (emb-smoke: assertions=17 pass=15 fail=1 skipped=1)
 
+== 05-fifo-head.patch (must fail on: admission-fair) ==
+✓ 05-fifo-head.patch: red, and named admission-fair (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 06-admission-unbounded.patch (must fail on: admission-bounded) ==
+✓ 06-admission-unbounded.patch: red, and named admission-bounded (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 07-queue-unbounded.patch (must fail on: queue-bounded) ==
+✓ 07-queue-unbounded.patch: red, and named queue-bounded (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 08-single-session-layout.patch (must fail on: layout-concurrency) ==
+✓ 08-single-session-layout.patch: red, and named layout-concurrency (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
+== 09-calibration-on-request.patch (must fail on: calibration-off-request-path) ==
+✓ 09-calibration-on-request.patch: red, and named calibration-off-request-path (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+
 verify-gate: every mutant was caught and the clean tree passed
 ```
+
+The `assertions=17` in each line is the *scripted* gate's summary: `-run Smoke`
+runs both gates and `gate_summary` reads the last summary line. The plain gate's
+own count (twelve) is in the same log; only the exit status decides the sweep.
+
+Two things the sweep depends on that are easy to get wrong, both fixed here:
+
+- **The working tree's changes must survive the loop.** `verify-gate.sh` applies
+  each mutant to a tree that already carries the uncommitted working diff;
+  restoring with `git checkout -- .` between mutants reverts that diff too, so
+  the mutants are tested against `HEAD`. A mutant only the working tree's new
+  coverage can catch — `09-calibration-on-request`, reached by the `lazy` arm —
+  then falsely passes. The loop re-applies the diff after the restore.
+- **A mutant patch's context is the code it edits.** Mutants are commit-ready
+  unified diffs; editing the lines around one (e.g. a comment above
+  `plan.QueueBound`) invalidates its context and the patch stops applying. Keep
+  `07-queue-unbounded.patch` in step with `registry.go` when that region moves.
 
 The script exits non-zero when a mutant passes, when a mutant fails without
 naming its assertion, or when the clean tree is red, so a green sweep is the
@@ -252,11 +317,17 @@ A dispatch runs, in order:
 3. `bench/script/run.sh` with the same binary as both arms — the interleaved A/B
    harness against itself, which is how this host's noise floor is established
    before any baseline is recorded on it.
-4. `bench-out/reference/` is uploaded as an artifact even when the contract
+4. `bench/fargate -mode run` — the evidence bundle, diffed against itself: the
+   fingerprint, the revision and model digests, the per-cell metrics, and every
+   assertion outcome. The tiers are the Fargate ones this host presents, and the
+   step fails unless the bundle is a valid reference (`gold`, with nothing
+   `fail` or `invalid` among its assertions).
+5. `bench-out/reference/` is uploaded as an artifact even when the contract
    refuses the host, so the verdict is always inspectable.
 
-The scripted model set (`models/gliner2`) is cached with `actions/cache`, the
-same way `test-cgo` caches `models/minilm`.
+The scripted model set (`models/gliner2`) and the minilm fixture
+(`models/minilm`) are cached with `actions/cache`, the same way `test-cgo`
+caches `models/minilm`.
 
 ### The first qualified run
 
@@ -308,8 +379,40 @@ same-host baseline is worth recording against; the cross-host refusal itself is
 covered by the tooling's tests (`TestDiffRefusesDifferingFingerprintsAndPrintsBoth`,
 and the legacy baselines refused by `TestDiffRefusesTheCommittedLegacyBaselines`).
 
-A `bench/fargate` bundle from this host is not part of the dispatched record: the
-job uploads the fingerprint plus the shape and A/B logs, so the bundle-schema
-clause of the end-to-end verification has no bundle to inspect. The rule it
-checks — an unmet precondition is recorded `invalid` and never a pass — is
-covered by the tooling's own tests.
+### The recorded bundle
+
+The first dispatch that carried the bundle step (run `38434484120`, 13m26s,
+`reference-arm64` on `perf-regression`, revision `ee836da`) recorded host
+identity `8791c2cc689361fa`, 63 cells over tiers 1, 2 and 4, and a
+`bench/fargate -mode diff` of the bundle against itself of `63 pass, 0 fail`:
+
+```text
+host-contract   pass   qualified linux/arm64: 4.00 CPUs from scheduler/affinity, server budget 4
+cells-complete  pass   63 of 63 cells measured
+```
+
+No assertion is `fail` or `invalid`, so that bundle is usable as a reference.
+The dispatch before it (run `38432129052`) was green while its bundle was not:
+it asked for the harness's default tier list, so it requested eight CPUs from
+Docker on a four-vCPU host, and the matrix stopped there.
+
+```text
+cells-complete  invalid  the run could not finish the matrix: docker run: exit status 125
+                        docker: Error response from daemon: range of CPUs is from 0.01 to 4.00,
+                        as there are only 4 CPUs available (63 of 84 cells measured)
+```
+
+(That detail's trailing `Run 'docker run --help' for more information` line is
+elided.)
+
+`--cpus` above the CPUs the host presents is refused, so a tier can only be
+emulated up to that count: the four-vCPU rungs of the ladder (the free
+`ubuntu-24.04-arm` runner, Hetzner `CAX21`, the Fargate ARM task) record tiers
+1, 2 and 4, and tier 8 needs a host with eight or more CPUs. Emulating more
+vCPUs than the host has would not be the tier it claims to be, so the run
+records the tiers it measured and the step fails when the bundle it produced is
+not a valid reference — a green job may not carry an invalid matrix.
+
+The recorded bundle for that run is
+`bundles/run.ee836da.1791911348.json` in the `emb-reference-arm64` artifact
+(sha256 `9e0b04e0370ff3693a26fb722b8f272f137248ccd4ef9928c5f7605622f95d88`).

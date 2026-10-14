@@ -84,6 +84,11 @@ type PollResult struct {
 	CPUAllowanceKnown bool
 	CPUAllowanceSrc   string
 	CPUPlanKnown      bool // the node reported the EMB.STATS CPU plan fields
+	// Admission pressure at the CPU gate: cumulative wait, waiters now, and
+	// waits that ended without a grant. Absent from older servers, so zero.
+	CPUAdmissionWaitUs   int64
+	CPUAdmissionWaiters  int64
+	CPUAdmissionTimeouts int64
 
 	Models   []ModelListEntry // EMB.MODELS reply
 	PerModel map[string]*ModelStats
@@ -348,6 +353,10 @@ func parseStats(r Reply) *PollResult {
 		CPUActiveTokens:  intField(m, "cpu_active_tokens"),
 		CPUPeakTokens:    intField(m, "cpu_peak_tokens"),
 		CPUAllowanceSrc:  strField(m, "cpu_allowance_source"),
+
+		CPUAdmissionWaitUs:   intField(m, "cpu_admission_wait_us"),
+		CPUAdmissionWaiters:  intField(m, "cpu_admission_waiters"),
+		CPUAdmissionTimeouts: intField(m, "cpu_admission_timeouts"),
 	}
 	if _, ok := m["cpu_budget_enabled"]; ok {
 		res.CPUPlanKnown = true
