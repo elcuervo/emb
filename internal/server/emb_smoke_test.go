@@ -111,6 +111,14 @@ const (
 	// more than the pool can admit plus queue, so refusals are counted rather
 	// than raced.
 	embAdmissionCommands = embPoolWorkers + 16
+	// embAdmissionRunMultiple is how many serial runs the deadline arm's rail
+	// lets a wait span before it calls the wait a collapse. A waiter sits behind
+	// the pool arm's queue bound (two waiters per admission unit), then behind
+	// the runs in flight, then pays for its own run; the burst's runs cost more
+	// than the idle serial probe measured them at, so the shape is doubled for
+	// that headroom. It is a collapse detector, not a register of the measured
+	// value: `timeouts` is the tight term.
+	embAdmissionRunMultiple = 2 * (2*embBudget + embBudget + 1)
 )
 
 // ---- fixture ---------------------------------------------------------------
@@ -1313,9 +1321,9 @@ func embAdmissionBounded(t *testing.T, gate *embAssertions, fixture *embFixture,
 	waits := after.waits - before.waits
 	// timeouts > 0 is the deadline detector: an unbounded wait never ends, so it
 	// is never counted. The limit is the loose rail on how long a wait may
-	// outlive its deadline — a few runs behind the ones it queued behind — not a
-	// tight bound on a queue that is, by design, several deep.
-	limit := admission + 4*serial
+	// outlive its deadline — the runs it queued behind — not a tight bound on a
+	// queue that is, by design, several deep.
+	limit := admission + embAdmissionRunMultiple*serial
 
 	gate.check(t, "admission-bounded",
 		timeouts > 0 && refusals > 0 && burst.max() <= limit && burst.failed == 0,
