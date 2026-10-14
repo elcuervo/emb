@@ -1,10 +1,15 @@
 listen: "127.0.0.1:16379"
 
+# Serving fixture for `just all`, the verification harnesses and the Ruby suite:
+# they send their first request as soon as the port answers, so both models are
+# laid out at boot instead of refusing that request while a lazy load runs.
 models:
   minilm:
     model_repo: Xenova/all-MiniLM-L6-v2
+    preload: true
     scripts:
       - scripts/hello.lua
 
   bge:
     model_repo: Xenova/bge-small-en-v1.5
+    preload: true
