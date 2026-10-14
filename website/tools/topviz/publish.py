@@ -18,6 +18,16 @@ they cannot disagree:
         --samples samples.txt \\
         --version 0.4.0.pre5 --models 4 --addr 127.0.0.1:16379
 
+With `--fleet` the same run's *fleet* view is published instead: the take, its
+still frame, its caption and its figures go into the documentation page's fleet
+region (`<!-- fleetviz:begin -->`), its capture into `docs/operations.md`'s
+fleet block, and its served-set entry beside the single-node take's. The
+landing page carries one plate and is not touched.
+
+    python3 publish.py --fleet --frame cluster-frame.txt --cast cluster-take.cast \\
+        --gif cluster.gif --samples cluster-samples.txt \\
+        --version 0.4.3.pre5 --models 4 --addr 127.0.0.1:16379,127.0.0.1:16380
+
 What it rewrites, by marker, in `website/index.html` (relative cast URL) and in
 `website/docs/index.html` (the same file, spelled `../assets/cast/…` because the
 two pages live at different depths):
@@ -70,6 +80,20 @@ CAST_PREFIX = "emb-top-"
 CLUSTER_PREFIX = "emb-top-cluster-"
 BLOCK_BEGIN = "<!-- topviz:begin -->"
 BLOCK_END = "<!-- topviz:end -->"
+# The fleet capture's own block in `docs/operations.md`, written by the same
+# run that writes its take and its plate, so the reference cannot name a GIF
+# the rig no longer serves.
+CLUSTER_BLOCK_BEGIN = "<!-- clusterviz:begin -->"
+CLUSTER_BLOCK_END = "<!-- clusterviz:end -->"
+
+# The fleet plate's own region on the documentation surface. The landing page
+# carries one plate, so the fleet take is stamped only inside this slice -- and
+# sliced rather than passed whole because `stamp_text` and `stamp_attr` replace
+# the *first* match: with two plates on one page, the single-node plate's
+# helpers would rewrite the fleet's. The mount keeps the `data-topviz-*`
+# vocabulary, so the page's one script drives both plates.
+FLEET_BEGIN = "<!-- fleetviz:begin -->"
+FLEET_END = "<!-- fleetviz:end -->"
 
 
 def escape(text: str) -> str:
@@ -93,14 +117,13 @@ def stamp_text(html: str, marker: str, text: str, page: Path) -> str:
     )
 
 
-def stamp_block(markdown: str, body: str) -> str:
+def stamp_block(markdown: str, begin: str, end: str, body: str, page: Path) -> str:
     """Replace everything between the block markers, markers themselves kept."""
-    pattern = re.compile(
-        re.escape(BLOCK_BEGIN) + r".*?" + re.escape(BLOCK_END), re.DOTALL
-    )
+    pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.DOTALL)
     if not pattern.search(markdown):
-        raise SystemExit(f"publish: no {BLOCK_BEGIN} block in docs/operations.md")
-    return pattern.sub(f"{BLOCK_BEGIN}\n{body}\n{BLOCK_END}", markdown, count=1)
+        where = page.relative_to(REPO_ROOT)
+        raise SystemExit(f"publish: no {begin} block in {where}")
+    return pattern.sub(f"{begin}\n{body}\n{end}", markdown, count=1)
 
 
 def stamp_attr(html: str, marker: str, value: str, page: Path) -> str:
@@ -154,6 +177,52 @@ def stamp_served(source: str, name: str) -> str:
             "publish: published-tree.py has no assets/js/main.js entry to anchor the cast to"
         )
     return source.replace(anchor, anchor + line + "\n", 1)
+
+
+def stamp_served_fleet(source: str, name: str) -> str:
+    """Point the served set at the fleet take, beside the single-node entry.
+
+    Its own anchored stamp rather than the single-node pattern: that one is
+    deliberately narrow (`emb-top-[0-9a-f]+`), so it can never rewrite the
+    fleet's line — which is why the fleet take needs a writer of its own.
+    """
+    line = f'        "assets/cast/{name}",'
+    previous = re.compile(
+        r'^\s*"assets/cast/emb-top-cluster-[0-9a-f]+\.cast",$', re.MULTILINE
+    )
+    if previous.search(source):
+        return previous.sub(line, source, count=1)
+    single = re.compile(r'^\s*"assets/cast/emb-top-[0-9a-f]+\.cast",$', re.MULTILINE)
+    if not single.search(source):
+        raise SystemExit(
+            "publish: published-tree.py has no single-node cast entry to anchor the fleet take to"
+        )
+    return single.sub(lambda m: f"{m.group(0)}\n{line}", source, count=1)
+
+
+def stamp_region(
+    page: Path, begin: str, end: str, take: str, frame: str, label: str, figures: str
+) -> str:
+    """Return `page` with the plate inside its marked region rewritten.
+
+    Everything outside the region is returned untouched, so the page's other
+    plate keeps its own run's frame, cast, caption and figures.
+    """
+    html = page.read_text(encoding="utf-8")
+    region = re.compile(re.escape(begin) + r"(?P<body>.*?)" + re.escape(end), re.DOTALL)
+    found = region.search(html)
+    if not found:
+        where = page.relative_to(REPO_ROOT)
+        raise SystemExit(f"publish: no {begin} … {end} region in {where}")
+    body = found.group("body")
+    for marker, text in (
+        ("data-topviz-frame", escape(frame)),
+        ("data-topviz-run", escape(label)),
+        ("data-topviz-metrics", escape(figures)),
+    ):
+        body = stamp_text(body, marker, text, page)
+    body = stamp_attr(body, "data-topviz-cast", take, page)
+    return html[: found.start("body")] + body + html[found.end("body") :]
 
 
 # ---- the run's figures, as text ----
@@ -219,6 +288,50 @@ def busiest(samples: Path) -> str:
     return head + (" Per model: " + "; ".join(models) + "." if models else "")
 
 
+def fleet_figures(samples: Path) -> tuple[str, int]:
+    """Describe the busiest fleet poll: the aggregate, then each node's share.
+
+    `emb-top -once` with several nodes prints the summed fleet aggregate
+    followed by one `node:<label>` section per node (see `writeFleetOnceLine`),
+    so the aggregate fields live before the first `node:` and a node's own
+    fields before its first `model:`. Returns the sentence and the node count
+    the log itself reports, so neither the caption nor the figures are typed
+    into the page.
+    """
+    peak, best = None, (0, -1.0)
+    for line in samples.read_text(encoding="utf-8").splitlines():
+        if " node:" not in line:
+            continue
+        score = (len(line.split(" node:")) - 1, float(dict(PAIR.findall(line.split(" node:", 1)[0]))["req_rate"]))
+        if score > best:
+            best, peak = score, line
+    if peak is None:
+        raise SystemExit(f"publish: no fleet poll in {samples}")
+
+    aggregate = dict(PAIR.findall(peak.split(" node:", 1)[0]))
+    total = float(aggregate["req_rate"])
+
+    nodes = []
+    for chunk in peak.split(" node:")[1:]:
+        label, _, fields = chunk.partition(" ")
+        node = dict(PAIR.findall(fields.split(" model:", 1)[0]))
+        rate = float(node["req_rate"])
+        share = rate / total * 100 if total > 0 else 0.0
+        nodes.append(
+            f"{label} {rate:.0f}/s ({share:.0f}% of the fleet, "
+            f"p95 {ms(node['lat_p95_us'])}, CPU {float(node['cpu_pct']):.0f}%)"
+        )
+
+    head = (
+        f"Busiest poll of the recorded fleet run: {total:.0f} requests/s, "
+        f"{float(aggregate['tok_rate']) / 1000:.1f}k tokens/s, "
+        f"cache hit rate {float(aggregate['cache_hit_rate']):.0f}%, "
+        f"CPU {float(aggregate['cpu_pct']):.0f}%, {aggregate['mem_mb']}MB resident "
+        f"across {len(nodes)} nodes."
+    )
+    return head + " Per node: " + "; ".join(nodes) + ".", len(nodes)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--frame", type=Path, required=True, help="page's text frame")
@@ -230,6 +343,11 @@ def main() -> int:
     parser.add_argument("--addr", required=True, help="node the take came from")
     parser.add_argument("--date", default=date.today().isoformat())
     parser.add_argument("--commit", default="", help="commit the take was recorded at")
+    parser.add_argument(
+        "--fleet",
+        action="store_true",
+        help="publish the fleet take's plate and capture instead of the single node's",
+    )
     args = parser.parse_args()
 
     for path in (args.frame, args.cast, args.gif, args.samples):
@@ -247,56 +365,113 @@ def main() -> int:
         sys.exit(f"publish: {args.frame} has no frame in it")
 
     digest = hashlib.sha256(args.gif.read_bytes()).hexdigest()[:8]
-    capture_name = f"{CAPTURE_PREFIX}{digest}.gif"
-    cast_name = f"{CAST_PREFIX}{hashlib.sha256(args.cast.read_bytes()).hexdigest()[:8]}.cast"
+    # The fleet's names replace the single node's prefix: `emb-top-cluster-<sha8>`
+    # is the pair `website-clusterviz` already established for its GIF.
+    capture_name = f"{CLUSTER_PREFIX if args.fleet else CAPTURE_PREFIX}{digest}.gif"
+    cast_name = (
+        f"{CLUSTER_PREFIX if args.fleet else CAST_PREFIX}"
+        f"{hashlib.sha256(args.cast.read_bytes()).hexdigest()[:8]}.cast"
+    )
 
-    label = f"{args.date} · emb-top v{args.version} · {args.models} models · {args.addr}"
+    if args.fleet:
+        figures, nodes = fleet_figures(args.samples)
+        scope = f"{nodes} nodes · {args.models} models"
+    else:
+        figures, scope = busiest(args.samples), f"{args.models} models"
+
+    label = f"{args.date} · emb-top v{args.version} · {scope} · {args.addr}"
     if args.commit:
-        label = f"{args.date} · emb-top v{args.version} · {args.commit} · {args.models} models · {args.addr}"
-    figures = busiest(args.samples)
+        label = (
+            f"{args.date} · emb-top v{args.version} · {args.commit} · {scope} · {args.addr}"
+        )
 
-    # Both pages are stamped before anything is written, so a missing marker
-    # fails the run rather than leaving a new cast beside an old plate.
-    landing = stamp_plate(INDEX, f"assets/cast/{cast_name}", frame, label, figures)
-    documentation = stamp_plate(
-        DOC_PAGE, f"../assets/cast/{cast_name}", frame, label, figures
-    )
-    tree = stamp_served(TREE.read_text(encoding="utf-8"), cast_name)
+    operations = OPERATIONS.read_text(encoding="utf-8")
+    tree = TREE.read_text(encoding="utf-8")
+    if args.fleet:
+        # The landing page carries one plate, so the fleet take is stamped
+        # inside the documentation page's fleet region and nowhere else. Both
+        # regions are stamped before anything is written, so a missing marker
+        # fails the run rather than leaving a new cast beside an old plate.
+        documentation = stamp_region(
+            DOC_PAGE,
+            FLEET_BEGIN,
+            FLEET_END,
+            f"../assets/cast/{cast_name}",
+            frame,
+            label,
+            figures,
+        )
+        tree = stamp_served_fleet(tree, cast_name)
+        body = (
+            f"![The emb-top cluster view: a live traffic chart of inbound req/s per"
+            f" node above a fleet banner, totals, load-distribution bar, one ingress"
+            f" row per node — inbound req/s, share of the fleet, a proportional bar"
+            f" and a trend sparkline — and a cross-node imbalance panel]"
+            f"(assets/{capture_name})\n"
+            f"\n"
+            f"*Measured fleet run · {label}. The traffic chart streams each node's"
+            f" inbound rate in its row's colour; the load bar and ingress rows split"
+            f" the fleet's inbound traffic, and the imbalance panel checks it across"
+            f" nodes. Re-record with `just website-clusterviz`.*"
+        )
+        markdown = stamp_block(
+            operations, CLUSTER_BLOCK_BEGIN, CLUSTER_BLOCK_END, body, OPERATIONS
+        )
+        landing = None
+    else:
+        # Both pages that show the single-node take are stamped from the one
+        # run, so the landing page and the documentation cannot describe
+        # different recordings.
+        landing = stamp_plate(INDEX, f"assets/cast/{cast_name}", frame, label, figures)
+        documentation = stamp_plate(
+            DOC_PAGE, f"../assets/cast/{cast_name}", frame, label, figures
+        )
+        tree = stamp_served(tree, cast_name)
+        # One line for the image: markdown allows a wrapped link text, but a
+        # renderer that does not is a broken image in the repository's own
+        # documentation.
+        body = (
+            f"![The emb-top dashboard under load: one row per model with its request,"
+            f" token and latency rates beside an activity strip, request-rate and p95-"
+            f"latency streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
+            f"\n"
+            f"*Captured {label}.*"
+        )
+        markdown = stamp_block(
+            operations, BLOCK_BEGIN, BLOCK_END, body, OPERATIONS
+        )
 
-    # One line for the image: markdown allows a wrapped link text, but a renderer
-    # that does not is a broken image in the repository's own documentation.
-    body = (
-        f"![The emb-top dashboard under load: one row per model with its request,"
-        f" token and latency rates beside an activity strip, request-rate and p95-"
-        f"latency streams, and cache, CPU and memory gauges](assets/{capture_name})\n"
-        f"\n"
-        f"*Captured {label}.*"
-    )
-    markdown = stamp_block(OPERATIONS.read_text(encoding="utf-8"), body)
-
+    # One run owns one pair of files: a publish replaces its own take and
+    # capture and never the other rig's, whose names start with the cluster
+    # prefix.
     DOC_ASSETS.mkdir(parents=True, exist_ok=True)
     for previous in DOC_ASSETS.glob(f"{CAPTURE_PREFIX}*.gif"):
-        if not previous.name.startswith(CLUSTER_PREFIX):
+        if previous.name.startswith(CLUSTER_PREFIX) == args.fleet:
             previous.unlink()
     (DOC_ASSETS / capture_name).write_bytes(args.gif.read_bytes())
 
     CAST_DIR.mkdir(parents=True, exist_ok=True)
     for previous in CAST_DIR.glob(f"{CAST_PREFIX}*.cast"):
-        previous.unlink()
+        if previous.name.startswith(CLUSTER_PREFIX) == args.fleet:
+            previous.unlink()
     (CAST_DIR / cast_name).write_bytes(args.cast.read_bytes())
 
-    # The plate's image revision shipped its take in the served tree. Nothing
-    # references those files now, and leaving them would fail published-tree.py.
-    for orphan in IMG_DIR.glob(f"{CAPTURE_PREFIX}*"):
-        if not orphan.name.startswith(CLUSTER_PREFIX):
-            orphan.unlink()
+    if not args.fleet:
+        # The plate's image revision shipped its take in the served tree.
+        # Nothing references those files now, and leaving them would fail
+        # published-tree.py.
+        for orphan in IMG_DIR.glob(f"{CAPTURE_PREFIX}*"):
+            if not orphan.name.startswith(CLUSTER_PREFIX):
+                orphan.unlink()
 
-    INDEX.write_text(landing, encoding="utf-8")
+    if landing is not None:
+        INDEX.write_text(landing, encoding="utf-8")
     DOC_PAGE.write_text(documentation, encoding="utf-8")
     TREE.write_text(tree, encoding="utf-8")
     OPERATIONS.write_text(markdown, encoding="utf-8")
 
-    print(f"publish: {len(frame.splitlines())}-line frame into the landing page")
+    where = "documentation plate" if args.fleet else "landing page"
+    print(f"publish: {len(frame.splitlines())}-line frame into the {where}")
     print(f"publish: the same frame into {DOC_PAGE.relative_to(REPO_ROOT)}")
     print(
         f"publish: website/assets/cast/{cast_name}"

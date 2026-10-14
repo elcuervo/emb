@@ -99,7 +99,7 @@ website/
 │   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
 │   ├── dev-server.py       serves this tree with the console's module origin
 │   │                       pointed at a local bridge (`just website-dev`)
-│   ├── topviz/             the rig behind the emb-top plate: one command
+│   ├── topviz/             the rig behind the emb-top plates: one command
 │   │                       records a real dashboard and publishes three
 │   │                       things from that one take — the take itself into
 │   │                       the plate, where the vendored player replays it;
@@ -107,11 +107,23 @@ website/
 │   │                       plate, as the still state a reader with scripting
 │   │                       off or a reduced-motion preference keeps; and an
 │   │                       animated capture into `docs/assets/` for
-│   │                       `docs/operations.md`
-│   │                       (`just website-topviz`, see its README). Its
-│   │                       `runs/` hold the last take's recordings, frame and
-│   │                       logs — gitignored, and the only way to check what
-│   │                       the plate shows
+│   │                       `docs/operations.md`. The same rig records the
+│   │                       fleet view against two nodes
+│   │                       (`just website-clusterviz`, and `publish.py
+│   │                       --fleet`) into the documentation surface's own
+│   │                       region (`just website-topviz`, see its README).
+│   │                       Its `runs/` hold the last take's recordings,
+│   │                       frames and logs — gitignored, and the only way to
+│   │                       check what the plates show
+│   ├── stressviz/          the rig behind the docs surface's measured load
+│   │                       figure: one command brings up a two-node fleet,
+│   │                       drives it with a real `emb-stress` run, watches it
+│   │                       with `emb-top -frames`, and publishes the figure,
+│   │                       the capture `docs/operations.md` carries and the
+│   │                       record in `BENCHMARK.md` — every value read from
+│   │                       the run (`just website-stressviz`, see its
+│   │                       README). Its `runs/` hold the recording, the
+│   │                       run's own report and the frames
 ├── demos/                  the gallery: index + eleven plates, and the only
 │                           surface whose live part costs a download
 ├── repl/                   the sandbox: NOT the site (see § the sandbox)

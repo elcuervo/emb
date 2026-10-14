@@ -657,6 +657,44 @@ server, no emb model):
 The p90 now matches the 0.3.0 work-conserving baseline while keeping the
 connection-level load-balancer fan-out that motivated round-robin.
 
+## Fleet under load: `emb-stress` against two nodes
+
+One `emb-stress` run against a fleet of two `emb` nodes, with `emb-top` watching
+the same fleet. The figure on the documentation surface is drawn from this
+record, and every value it draws appears below with the machine, the fleet and
+the command that produced it. Re-record the whole thing with
+`just website-stressviz`.
+
+<!-- stressviz:begin -->
+**Machine.** Darwin 25.6.0 arm64, 10 CPUs, recorded 2026-10-14.
+
+**Fleet.** 2 endpoints from `website/tools/topviz/models.yaml` (minilm, bge-small, jina-small, e5-small), both loopback, one per address family of `localhost`, each preloaded with `cache: 256MB`.
+
+**Method.** One `emb-stress` run: closed-loop levels, 12s held per level with the leading 4s discarded, seed 3, generated word-length classes. An `emb-top -node localhost -frames -interval 1s` sidecar watched the same fleet for the run's duration; the sizing lines below are its own.
+
+**Invocation.** `./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3` (`just website-stressviz`), recorded 9334f4f.
+
+**Fleet, per level** — the table the figure draws:
+
+| level (workers per endpoint) | offered req/s | completed req/s | p50 | p95 | p99 | errors |
+|---|---|---|---|---|---|---|
+| 1 | 24.6 | 24.6 | 75.2ms | 162.6ms | 227.8ms | 0 |
+| 2 | 35.1 | 35.1 | 117.6ms | 219.9ms | 255.2ms | 0 |
+| 4 | 53.4 | 53.4 | 136.9ms | 278.8ms | 330.3ms | 0 |
+| 8 | 52.8 | 52.8 | 285.0ms | 480.9ms | 593.3ms | 0 |
+
+**[::1]:6379** — level 1 12.4 req/s, p95 156.3ms; level 2 17.6 req/s, p95 219.7ms; level 4 26.4 req/s, p95 275.3ms; level 8 26.0 req/s, p95 469.8ms
+
+**127.0.0.1:6379** — level 1 12.2 req/s, p95 168.9ms; level 2 17.5 req/s, p95 221.8ms; level 4 27.0 req/s, p95 282.9ms; level 8 26.8 req/s, p95 482.2ms
+
+**Shares.** [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%. The offered share is the run's own split (the endpoints are divided evenly, which is the point of the comparison); the served share is each endpoint's completed work of the fleet's.
+
+**`emb-top`'s sizing lines during the run.**
+- none — the sizing line is advisory and appears only when a rule fires
+
+**Capture.** `docs/assets/stressviz-f45ee7a7.gif` — the run's own output, rendered.
+<!-- stressviz:end -->
+
 ## Startup calibration and process budget
 
 With the default `cpu_budget: auto` and `calibrate: true`, each embedding model

@@ -823,33 +823,77 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
            Do not hand-edit the frame, the caption or the figures. -->
       <figure class="topviz topviz--doc">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-a5fe39e7.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre4 · 127.0.0.1:16379 · uptime 31s    ·  4 models · poll 1s
-● HEALTHY   connected │ err   0.0% │ p95 62.8ms  │ cpu  17% │ cache  49%
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-a149a337.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre5 · 127.0.0.1:16379 · uptime 26s    ·  4 models · poll 1s
+● HEALTHY   connected │ err   0.0% │ p95 33.6ms  │ cpu  22% │ cache  44%
+
 ╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
-│     │                              ╭╮  ╭╮╭──╯╰─╮ ╭╮    ││                                     ░░                 │
-│  107│                              │╰─╮│╰╯     ╰─╯╰─── ││                          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│     │                              │  ╰╯               ││    ███████████████████████████████████████████████████ │
-│ 53.6│                              │                   ││    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│     │                              │                   ││ ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  0.0│                             ─╯                   ││ p50–p99 ░  p95 █                                       │
+│     │                                   ╭╮  ╭─╮ │ ╰─╮╭ ││                                                   ░░   │
+│  123│                               ╭╮  │╰──╯ ╰─╯   ╰╯ ││                                     ░░░░░░░░██████████ │
+│     │                               │╰─╮│              ││                          ███████████████████░░░░░░░░░░ │
+│ 61.3│                               │  ╰╯              ││                  ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│     │                               │                  ││ █████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  0.0│                       ────────╯                  ││ p50–p99 ░  p95 █                                       │
 ╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
-● bge-small     384d·cls·fp32         8.0 r/s      272 t/s p50 3µs      p95 62.3ms↑  err 0       ███████████████████████
-● e5-small      384d·mean·fp32       39.0 r/s     1.1k t/s p50 32.7ms   p95 73.8ms   err 0       ███████████████████████
-● jina-small    512d·mean·fp32       20.0 r/s      983 t/s p50 37µs     p95 58.9ms   err 0       ███████████████████████
-● minilm        384d·mean·fp32       28.0 r/s      478 t/s p50 4µs      p95 39.9ms↑  err 0       ███████████████████████
+● bge-small     384d·cls·fp32        17.0 r/s      578 t/s p50 7µs      p95 32.3ms↑  err 0       ███████████████████████
+● e5-small      384d·mean·fp32       65.0 r/s     1.8k t/s p50 21.0ms   p95 44.9ms   err 0       ███████████████████████
+● jina-small    512d·mean·fp32       26.0 r/s     1.3k t/s p50 12.5ms   p95 29.0ms↑  err 0       ███████████████████████
+● minilm        384d·mean·fp32       41.0 r/s      703 t/s p50 5.1ms    p95 22.0ms↑  err 0       ███████████████████████
   rows 1–4 of 4 · req/s per model · older ████████ newer
-cache   49.5%                    cpu    167%                                                     mem  1.1kMB
+cache   43.7%                    cpu    219%                                                     mem  1.1kMB
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
   conns  2 · active  0 · goroutines  25 · truncated texts/pairs/images   0/  0/  0
   cpu budget 8 · tokens 0/8 · peak 6 · 10.00 cores (scheduler/affinity)
-  event e5-small ·   1 texts · 41.6ms  ✓
+  event e5-small ·   1 texts · 21.3ms  ✓
 q quit · p pause · r reset · j/k scroll · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-12 · emb-top v0.4.3.pre4 · 8ace286 · 4 models · 127.0.0.1:16379</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 158 requests/s, 4.7k tokens/s, p95 latency 42.9ms, cache hit rate 30%, CPU 312%, 1063MB resident. Per model: bge-small 27/s (avg 12.7ms, dim 384, cls, fp32); e5-small 47/s (avg 13.8ms, dim 384, mean, fp32); jina-small 34/s (avg 14.2ms, dim 512, mean, fp32); minilm 50/s (avg 3.9ms, dim 384, mean, fp32).</p>
+        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 4 models · 127.0.0.1:16379</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 181 requests/s, 5.5k tokens/s, p95 latency 24.6ms, cache hit rate 33%, CPU 281%, 1059MB resident. Per model: bge-small 21/s (avg 7.2ms, dim 384, cls, fp32); e5-small 73/s (avg 6.3ms, dim 384, mean, fp32); jina-small 42/s (avg 7.2ms, dim 512, mean, fp32); minilm 45/s (avg 2.4ms, dim 384, mean, fp32).</p>
       </figure>
+
+      <!-- The fleet run, on the same terms as the plate above and written by
+           the same script (`--fleet`): the cluster view's own characters, in
+           the dashboard's own colours, held at a frame until the reader asks
+           for it — this surface never starts a recording on its own. It sits
+           between its own markers because `publish.py`'s stampers replace the
+           first match on a page, so each plate is stamped inside its region.
+
+           Do not hand-edit the frame, the cast URL, the caption or the
+           figures: `just website-clusterviz` overwrites them. -->
+      <!-- fleetviz:begin -->
+      <figure class="topviz topviz--doc" id="fleetviz-plate">
+        <div class="topviz__play">
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-ed7eaaae.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre5 · 2 nodes · poll 1s
+● HEALTHY
+
+  discovered 2 · receiving traffic 2 · idle 0 · orphaned 0
+IN  206 req/s · OUT 6.2k tok/s · 5 active · 11 conns · err 0.0% · p95 37.9ms   trend ▁▁▁▁▁▁▁▁▁▄▃▄▃▅▅▅▅▆▆▆▆▇█▇
+  cpu budget 16 · tokens 6/16 · peak 12 · 20.00 cores (scheduler/affinity)
+TRAFFIC inbound req/s per node over the last polls · older ←  → newer
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│     │                                                             ╭─╮         ╭────────────────────────╯    ╰─────── │
+│ 85.1│                                      ╭────╮ ╭─────╮ ╭───────╯ ╰─────────╯      ╭─╮         ╭────────────────── │
+│     │                                   ╭─┬┴────┴─┴─────┴─┴──────────────────────────╯ ╰─────────╯                   │
+│  0.0│───────────────────────────────────┴─╯                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 65% · expected 50% each
+INGRESS  req/s into each node · bar scaled to the busiest · trend = recent polls
+▶ ● 127.0.0.1:16379             133 r/s   65% █████████████████ ▁▁▁▁▁▄▄▅▅▆▆▆█▇   p95 37.9ms  cpu 23%  cache 31% err 0.0%
+  ● 127.0.0.1:16380            73.0 r/s   35% █████████░░░░░░░░ ▁▁▁▁▁▃▃▅▅▆▆▆█▇   p95 36.7ms  cpu 12%  cache 17% err 0.0%
+  nodes 1–2 of 2 · share of fleet req/s · j/k select · enter detail
+IMBALANCE  ✓ all 4 pass
+  ✓ inbound  range 73.0–133 req/s
+  ✓ latency  worst 127.0.0.1:16379 p95 37.9ms (1.0× peers' median)
+  ✓ errors   max 0.0%
+  ✓ cpu      max 23%
+q quit · p pause · r reset · j/k select · enter detail · esc back · ? help</pre>
+        </div>
+        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 258 requests/s, 7.5k tokens/s, cache hit rate 22%, CPU 442%, 2126MB resident across 2 nodes. Per node: 127.0.0.1:16379 172/s (67% of the fleet, p95 28.9ms, CPU 292%); 127.0.0.1:16380 86/s (33% of the fleet, p95 30.7ms, CPU 151%).</p>
+      </figure>
+      <!-- fleetviz:end -->
 
       <p class="doc-prose">
         A live terminal dashboard for a running node. It connects over the Redis
@@ -862,6 +906,104 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
         ticker. It supports <code>AUTH</code> and TLS, reconnects automatically,
         and has a headless <code>-once</code> mode for scripts and CI.
       </p>
+
+      <h3 class="doc-h3">emb-stress</h3>
+      <p class="doc-prose">
+        <code>emb-top</code> observes a fleet; <code>emb-stress</code> drives one.
+        It takes the same server configuration the fleet was started with — so
+        the models it exercises, their dimensions and their maximum lengths come
+        from the fleet's own contract — and a <em>target</em> that is one
+        <code>host:port</code> or a DNS name, which it expands into one endpoint
+        per address record. It reconciles the configured models against what
+        each node reports, then offers closed-loop load to every node at each
+        level in turn, and reports per endpoint and for the fleet the offered
+        load, the completed requests per second, the p50/p95/p99 latency and the
+        error count. It is a pure RESP client — no model, no ONNX Runtime — so
+        it runs anywhere <code>emb-top</code> does.
+      </p>
+      <p class="doc-prose">
+        Read the two tools together and the pair separates the share a node was
+        <em>offered</em> from the share it <em>served</em>:
+        <code>emb-stress</code> counts what it offered and what was completed,
+        and <code>emb-top</code> observes each node's own share of the fleet. A
+        node offered its equal share that serves less is the node to look at
+        first, and the fleet's sizing line names the resource it is bound on.
+      </p>
+
+      <!-- The measured run, drawn and written by website/tools/stressviz/publish.py
+           from one `emb-stress` run and the `emb-top -frames` sidecar beside it:
+           the level curve, each endpoint's served share beside its offered mark,
+           and the sizing lines the frames carried. `just website-stressviz`
+           replaces everything between the markers below — do not hand-edit the
+           drawing, the caption or the figures. -->
+      <!-- stressviz:begin -->
+      <figure class="plate" id="plate-stressviz">
+        <div class="plate__wrap">
+        <svg class="plate__svg" viewBox="0 0 720 374" role="img" aria-labelledby="stressviz-t">
+          <title id="stressviz-t">One emb-stress run against a 2-node fleet: the fleet's completed requests per second and p95 latency at levels 1, 2, 4, 8, each endpoint's served share beside its offered share ([::1]:6379 served 50% of the fleet; 127.0.0.1:6379 served 50% of the fleet), and the sizing lines emb-top rendered during the run (none)</title>
+          <text class="plate__label plate__label--strong" x="64" y="20">completed req/s · fleet</text>
+          <line class="plate__grid" x1="64" y1="150.0" x2="356" y2="150.0"/>
+          <text class="plate__label" x="56" y="154.0" text-anchor="end">0</text>
+          <line class="plate__grid" x1="64" y1="92.0" x2="356" y2="92.0"/>
+          <text class="plate__label" x="56" y="96.0" text-anchor="end">27</text>
+          <line class="plate__grid" x1="64" y1="34.0" x2="356" y2="34.0"/>
+          <text class="plate__label" x="56" y="38.0" text-anchor="end">53</text>
+          <line class="plate__axis" x1="64" y1="34" x2="64" y2="150"/>
+          <line class="plate__axis" x1="64" y1="150" x2="356" y2="150"/>
+          <polyline class="plate__signal" points="64.0,96.6 161.3,73.8 258.7,34.0 356.0,35.3"/>
+          <circle class="plate__point plate__point--accent" cx="64.0" cy="96.6" r="3"/>
+          <text class="plate__label plate__label--strong" x="64.0" y="88.6" text-anchor="middle">24.6</text>
+          <circle class="plate__point plate__point--accent" cx="161.3" cy="73.8" r="3"/>
+          <text class="plate__label plate__label--strong" x="161.3" y="65.8" text-anchor="middle">35.1</text>
+          <circle class="plate__point plate__point--accent" cx="258.7" cy="34.0" r="3"/>
+          <text class="plate__label plate__label--strong" x="258.7" y="26.0" text-anchor="middle">53.4</text>
+          <circle class="plate__point plate__point--accent" cx="356.0" cy="35.3" r="3"/>
+          <text class="plate__label plate__label--strong" x="356.0" y="27.3" text-anchor="middle">52.8</text>
+          <text class="plate__label plate__label--strong" x="400" y="20">p95 latency · fleet (ms)</text>
+          <line class="plate__grid" x1="400" y1="150.0" x2="692" y2="150.0"/>
+          <text class="plate__label" x="392" y="154.0" text-anchor="end">0</text>
+          <line class="plate__grid" x1="400" y1="92.0" x2="692" y2="92.0"/>
+          <text class="plate__label" x="392" y="96.0" text-anchor="end">240</text>
+          <line class="plate__grid" x1="400" y1="34.0" x2="692" y2="34.0"/>
+          <text class="plate__label" x="392" y="38.0" text-anchor="end">481</text>
+          <line class="plate__axis" x1="400" y1="34" x2="400" y2="150"/>
+          <line class="plate__axis" x1="400" y1="150" x2="692" y2="150"/>
+          <polygon class="plate__area" points="400,150 400.0,110.8 497.3,97.0 594.7,82.7 692.0,34.0 692,150/>
+          <circle class="plate__point" cx="400.0" cy="110.8" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="400.0" y="102.8" text-anchor="middle">162.6ms</text>
+          <circle class="plate__point" cx="497.3" cy="97.0" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="497.3" y="89.0" text-anchor="middle">219.9ms</text>
+          <circle class="plate__point" cx="594.7" cy="82.7" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="594.7" y="74.7" text-anchor="middle">278.8ms</text>
+          <circle class="plate__point" cx="692.0" cy="34.0" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="692.0" y="26.0" text-anchor="middle">480.9ms</text>
+          <text class="plate__label" x="64.0" y="166" text-anchor="middle">1</text>
+          <text class="plate__label" x="161.3" y="166" text-anchor="middle">2</text>
+          <text class="plate__label" x="258.7" y="166" text-anchor="middle">4</text>
+          <text class="plate__label" x="356.0" y="166" text-anchor="middle">8</text>
+          <text class="plate__label" x="64" y="184">levels · workers per endpoint</text>
+          <text class="plate__label plate__label--strong" x="64" y="210">share of the fleet · served, beside the offered mark</text>
+          <text class="plate__label plate__label--strong" x="64" y="240">[::1]:6379</text>
+          <line class="plate__grid" x1="240" y1="236" x2="600" y2="236"/>
+          <rect class="plate__area" x="240" y="227" width="178.8" height="18"/>
+          <line class="plate__cap-line" x1="420.0" y1="221" x2="420.0" y2="251"/>
+          <text class="plate__label" x="610" y="240">50% → 50%</text>
+          <text class="plate__label plate__label--strong" x="64" y="280">127.0.0.1:6379</text>
+          <line class="plate__grid" x1="240" y1="276" x2="600" y2="276"/>
+          <rect class="plate__area" x="240" y="267" width="181.2" height="18"/>
+          <line class="plate__cap-line" x1="420.0" y1="261" x2="420.0" y2="291"/>
+          <text class="plate__label" x="610" y="280">50% → 50%</text>
+          <text class="plate__label plate__label--strong" x="64" y="326">emb-top's sizing lines during the run</text>
+          <text class="plate__label" x="64" y="346">none · nothing was near a threshold</text>
+        </svg>
+        </div>
+        <figcaption class="plate__cap"><strong>Drawn from the run's own output</strong> — one <code>emb-stress</code> run against 2 endpoints ([::1]:6379, 127.0.0.1:6379) of 4 models, seed 3, 12s held per level with the leading 4s discarded, watched by <code>emb-top -node localhost -frames</code>. Fleet: level 1 24.6 completed req/s, p50 75.2ms, p95 162.6ms, p99 227.8ms, 0 errors; level 2 35.1 completed req/s, p50 117.6ms, p95 219.9ms, p99 255.2ms, 0 errors; level 4 53.4 completed req/s, p50 136.9ms, p95 278.8ms, p99 330.3ms, 0 errors; level 8 52.8 completed req/s, p50 285.0ms, p95 480.9ms, p99 593.3ms, 0 errors. Shares: [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%. <code>emb-top</code>'s sizing lines during the run: none — the recommendation is reported only when something is near a threshold. <span data-stressviz-run>2026-10-14 · emb-stress v0.4.3.pre5 · 9334f4f · 2 endpoints · 4 models · localhost</span>. Reproduce with <code>just website-stressviz</code> — <code>./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3</code>.</figcaption>
+        <div class="plate__legend">
+          <span><i class="plate__swatch--area" aria-hidden="true"></i><b>served</b> — the endpoint's completed share of the fleet</span>
+          <span><i class="plate__swatch--cap" aria-hidden="true"></i><b>offered</b> — its even share of the run's workers</span>
+        </div>
+      </figure>
+<!-- stressviz:end -->
     </div>
   </div>
   </div>

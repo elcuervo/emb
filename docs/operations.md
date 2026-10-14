@@ -202,9 +202,9 @@ and renders:
   headless `-once` mode for scripts and CI.
 
 <!-- topviz:begin -->
-![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-bb0d714c.gif)
+![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-aa3504c0.gif)
 
-*Captured 2026-10-12 · emb-top v0.4.3.pre4 · 8ace286 · 4 models · 127.0.0.1:16379.*
+*Captured 2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 4 models · 127.0.0.1:16379.*
 <!-- topviz:end -->
 
 ```bash
@@ -325,13 +325,11 @@ and press enter to open that node's per-model dashboard; escape returns to the
 fleet. The single-node dashboard is unchanged when exactly one node is
 monitored.
 
-![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-04bf4380.gif)
+<!-- clusterviz:begin -->
+![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-d67d35a5.gif)
 
-*Two nodes under load · emb-top watching `127.0.0.1:16379` and
-`127.0.0.1:16380`. The traffic chart streams each node's inbound rate in its
-row's colour; the load bar and ingress rows split the fleet's inbound traffic,
-and the imbalance panel checks it across nodes. Re-record with
-`just website-clusterviz`.*
+*Measured fleet run · 2026-10-14 · emb-top v0.4.3.pre5 · 9334f4f · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380. The traffic chart streams each node's inbound rate in its row's colour; the load bar and ingress rows split the fleet's inbound traffic, and the imbalance panel checks it across nodes. Re-record with `just website-clusterviz`.*
+<!-- clusterviz:end -->
 
 - `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a
   compatibility alias for a single node, and the `localhost:6379` default
@@ -469,3 +467,12 @@ of budget will help; if it says `memory: cache-restore headroom`, the cache's
 restore limit is nearly spent. `emb-stress`'s own per-node latency percentiles
 say which node to look at first, and `emb-top`'s fleet sizing line says the same
 thing from the observed side.
+
+The measured figure this section's claims are drawn from is one such run against
+a two-node fleet, both tools on the same target:
+
+<!-- stressviz:begin -->
+![The emb-stress report of a 2-node fleet: the fleet and per-endpoint sections, one level line each with offered, completed, p50/p95/p99 and errors](assets/stressviz-f45ee7a7.gif)
+
+*Measured run · 2026-10-14 · emb-stress v0.4.3.pre5 · 9334f4f · 2 endpoints · 4 models · localhost. `emb-stress` offered the load to 2 endpoints at levels 1,2,4,8 (12s per level, leading 4s discarded, seed 3) and reported per level and per endpoint — level 1 24.6 req/s · p95 162.6ms; level 2 35.1 req/s · p95 219.9ms; level 4 53.4 req/s · p95 278.8ms; level 8 52.8 req/s · p95 480.9ms — while `emb-top` observed the same fleet: [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%; no sizing line — the recommendation is reported only when something is near a threshold. Re-record with `just website-stressviz`: `./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3`.*
+<!-- stressviz:end -->

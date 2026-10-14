@@ -286,3 +286,63 @@ frame, and the caption carries every value the scroll can hide on a phone.
 adaptive-capacity work as a whole, and the plate and prose both state that the
 controller's own effect against the fixed cap it replaced is parity — so the
 surface cannot be read as claiming the controller adds throughput it does not.
+
+---
+## Amendment — the fleet plate and the measured load plate (change `website-tooling-captures`)
+
+**Scope: section 06 Operations, and nothing else.** The nine sections, their
+order, their anchors, the `.plate` atom, the `emb-top` plate's own rules and
+every ledger, code specimen and prose block above are unchanged. Operations
+gains one `emb-stress` subsection beside the existing `emb-top` one, carrying
+two figures: the recorded **fleet** run (section 06's second `.topviz`) and the
+**measured `emb-stress` load** plate (a `.plate`). No new top-level section is
+introduced, and the landing page stays a one-plate poster.
+
+**Direction contract for the two figures**
+
+- *The run's own text, never a picture.* The fleet plate is the recorded fleet
+  dashboard's own characters, replayed by the same vendored player and with the
+  same `data-topviz-*` vocabulary the single-node plate uses, held at a frame
+  until the reader asks for it. The `emb-stress` plate is a drawing composed
+  only from this surface's existing plate atoms — ruled graticule, mono caps
+  labels, small filled marks, exactly one accent — and it is labelled and
+  captioned as a drawing of the run's measured values. Neither figure may be, or
+  contain, a raster or video of a dashboard: `docs/operations.md`, which cannot
+  replay a recording, keeps the animated capture instead.
+- *No unsolicited motion.* The fleet plate does not autoplay — it carries no
+  `data-topviz-autoplay`, so the player is created at its poster frame and the
+  reader starts it from the player's own control. Under
+  `prefers-reduced-motion: reduce` the player is not created at all and the
+  still frame stands; with scripting off both plates show their still frames,
+  their captions and their complete figures, so the surface stays complete.
+- *One accent signal.* The fleet plate adds no accent of its own: the recording
+  carries the dashboard's own colours, which the player's `plate` theme already
+  defines. The `emb-stress` plate spends its one accent on the measured level
+  curve and adds no second hue, gradient, radius, shadow or font.
+- *Every drawn value in the caption.* The `emb-stress` plate's caption states
+  every value it draws — the levels, the per-endpoint offered share and observed
+  share, and the percentiles — names the fleet and the models exercised, and
+  carries the command that reproduced the run. The fleet plate's screen-reader
+  figures state the aggregate rates and each node's share of the fleet, and
+  distinguish the offered share from the served one. Every value either figure
+  states also appears in `BENCHMARK.md` with that run's machine, fleet and
+  invocation, per the surface's provenance rule.
+
+**Where the values come from.** Both figures are written by their rig, not by
+hand: `website/tools/topviz/publish.py` stamps the fleet plate's frame, cast
+URL, caption and figures inside `<!-- fleetviz:begin -->` /
+`<!-- fleetviz:end -->`, and `website/tools/stressviz/publish.py` stamps the
+load plate's drawing, caption and figures inside its own markers. A hand-edited
+value in either region is overwritten by the next run.
+
+**Detector.** `impeccable detect --json` over `website/docs/index.html`,
+`website/index.html` and `website/assets/css/docs.css` finds **40 findings
+against 38 for the same run in a worktree at `HEAD`** — and the two are the fleet
+plate repeating the two findings the single-node plate already produces: one
+`cramped-padding` on the second `.topviz__play` (children flush against the
+frame's border, as the first plate's is) and one `tight-leading` for the
+player's own terminal leading (`terminalLineHeight` 1.05, which is what a
+terminal is). `website/index.html` is finding-for-finding identical to `HEAD`
+(19 → 19, the re-recorded take changes no finding), and `docs.css` adds none.
+Resolved as recorded rather than changed: the atoms and the player are the
+surface's, and the plate that repeats them is the same plate against a fleet.

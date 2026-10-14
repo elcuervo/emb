@@ -48,7 +48,13 @@ redis-cli -3 EMB minilm VALUES "hello world"
   tokenization, pooling, argmax/softmax, similarity, and more.
 - **Ops-ready** — Redis-style `INFO` and `CONFIG`, `EMB.READY` health checks,
   connection lifecycle knobs, full server stats, and the `emb-top` dashboard
-  (single node or a whole fleet, including DNS-resolved node sets).
+  (single node or a whole fleet, including DNS-resolved node sets). `emb-stress`
+  drives that fleet — it takes the same configuration the fleet was started
+  with, expands a target name into the node set behind it, and reports the
+  offered load, the completed requests per second and the p50/p95/p99 latency
+  per endpoint and for the fleet at each level — so the two tools together
+  separate the share a node was offered from the share it served. See
+  [Operations](docs/operations.md).
 
 ## Contents
 
@@ -57,7 +63,7 @@ redis-cli -3 EMB minilm VALUES "hello world"
 | [Commands](docs/commands.md) | Every command, reply formats (`BLOB` / `VALUES`), RESP3 negotiation |
 | [Configuration](docs/configuration.md) | Config file, model options, images, batching, cache, snapshots |
 | [Scripting](docs/scripting.md) | Lua `EMB.EVAL` / `EMB.EVSHA` surface and examples |
-| [Operations](docs/operations.md) | Health checks, limits, observability, `emb-top` |
+| [Operations](docs/operations.md) | Health checks, limits, observability, `emb-top`, and `emb-stress` against a fleet |
 | [Clients](docs/clients.md) | Ruby, Python, and Go recipes |
 | [The DNS zone](docs/dns.md) | `dns.emb.is`: the emoji query grammar, the `TXT` replies, the HTTP surface, deployment |
 | [Development](#development) | Build, test, and dev-shell commands |

@@ -837,15 +837,16 @@ website-topviz: build
       --commit "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; \
     python3 website/tools/published-tree.py
 
-# Record the fleet view's capture from a real two-node run (see
+# Record the fleet view's take from a real two-node run (see
 # website/tools/topviz/README.md).
 #
-# The same recorder as `website-topviz`, but the dashboard watches two nodes
-# (`-nodes a,b`) and the output is a single animated GIF for
-# docs/operations.md. It writes docs/assets/emb-top-cluster-<sha8>.gif and
-# prints the name; update the reference in docs/operations.md when the hash
-# changes. Needs the full dev shell and the four topviz models, like
-# `website-topviz`.
+# The same recorder as `website-topviz`, with the dashboard watching two nodes
+# (`-nodes a,b`), and the same three artifacts from one take: the trimmed take
+# the documentation surface plays inside its fleet region, its still frame, and
+# the animated GIF for docs/operations.md. `publish.py --fleet` names and places
+# all of them, writes the served set's entry for the fleet take, and rewrites
+# the GIF's reference in docs/operations.md, so nothing here is edited by hand.
+# Needs the full dev shell and the four topviz models, like `website-topviz`.
 website-clusterviz: build
     @set -eu; \
     cfg=website/tools/topviz/models.yaml; \
@@ -878,15 +879,66 @@ website-clusterviz: build
       done; \
     done; \
     echo "website-clusterviz: recording (about a minute)"; \
+    ./bin/emb-top -node 127.0.0.1:$portA -node 127.0.0.1:$portB -once -samples 44 -interval 1s > $runs/cluster-samples.txt 2>&1 & sampler=$!; \
     EMB_CLUSTERVIZ_A=127.0.0.1:$portA EMB_CLUSTERVIZ_B=127.0.0.1:$portB \
       asciinema record --headless --quiet --overwrite --window-size 120x32 \
       -c website/tools/topviz/run-cluster.sh $runs/cluster-raw.cast; \
+    kill $sampler 2>/dev/null || true; \
     python3 website/tools/topviz/trim.py $runs/cluster-raw.cast $runs/cluster-take.cast; \
+    python3 website/tools/topviz/trim.py --until-pct 65 $runs/cluster-raw.cast $runs/cluster-frame.cast; \
+    asciinema convert -f txt --overwrite $runs/cluster-frame.cast $runs/cluster-frame.txt >/dev/null; \
     agg --quiet --theme "$theme" --font-size 12 --line-height 1.4 \
       --fps-cap 10 --speed 1.8 --last-frame-duration 2 $runs/cluster-take.cast $tmp/cluster.gif; \
-    sha=$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()[:8])" $tmp/cluster.gif); \
-    cp $tmp/cluster.gif docs/assets/emb-top-cluster-$sha.gif; \
-    echo "website-clusterviz: wrote docs/assets/emb-top-cluster-$sha.gif"
+    python3 website/tools/topviz/publish.py --fleet \
+      --frame $runs/cluster-frame.txt --cast $runs/cluster-take.cast --gif $tmp/cluster.gif \
+      --samples $runs/cluster-samples.txt \
+      --version "$(cat VERSION)" --models "$(grep -cE '^  [a-zA-Z0-9_-]+:' $cfg)" \
+      --addr "127.0.0.1:$portA,127.0.0.1:$portB" \
+      --commit "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; \
+    python3 website/tools/published-tree.py
+
+# Record the `emb-stress` run behind the documentation surface's measured load
+# figure and the documentation's capture (see
+# website/tools/stressviz/README.md).
+#
+# Brings up the scenario's fleet -- two nodes, one per loopback family, one
+# port, from `topviz`'s models.yaml -- drives it with one real `emb-stress` run
+# while an `emb-top -frames` sidecar watches the same fleet, then publishes what
+# that run measured: the figure on the documentation surface, the capture for
+# docs/operations.md and the run's record in BENCHMARK.md. Every value on every
+# surface is read from the run, not typed into a page. Needs the full dev shell
+# and the four topviz models.
+website-stressviz: build
+    @set -eu; \
+    cfg=website/tools/topviz/models.yaml; \
+    runs=website/tools/stressviz/runs; \
+    port=6379; \
+    levels='1,2,4,8'; dwell=12s; warmup=4s; seed=3; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    for tool in redis-cli asciinema agg; do \
+      command -v $tool >/dev/null 2>&1 || { echo "website-stressviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
+    done; \
+    if [ -z "{{ort_lib}}" ]; then echo "website-stressviz: onnxruntime is not on the library path - run inside 'nix develop'"; exit 1; fi; \
+    mkdir -p $runs; \
+    tmp=$(mktemp -d /tmp/emb-stressviz.XXXXXX); \
+    trap 'kill $(cat $runs/node-v4.pid) $(cat $runs/node-v6.pid) 2>/dev/null || true; rm -rf $tmp' EXIT; \
+    EMB_STRESSVIZ_PORT=$port EMB_STRESSVIZ_CONFIG=$cfg EMB_STRESSVIZ_RUNS=$runs \
+      bash website/tools/stressviz/bringup.sh; \
+    echo "website-stressviz: recording (about a minute)"; \
+    ./bin/emb-top -node localhost -frames -interval 1s -window 60 > $runs/frames.jsonl 2>&1 & sampler=$!; \
+    EMB_STRESSVIZ_PORT=$port EMB_STRESSVIZ_CONFIG=$cfg EMB_STRESSVIZ_RUNS=$runs \
+      EMB_STRESSVIZ_LEVELS=$levels EMB_STRESSVIZ_DWELL=$dwell EMB_STRESSVIZ_WARMUP=$warmup EMB_STRESSVIZ_SEED=$seed \
+      asciinema record --headless --quiet --overwrite --window-size 140x30 \
+      -c website/tools/stressviz/run.sh $runs/stress-raw.cast; \
+    kill $sampler 2>/dev/null || true; \
+    agg --quiet --theme "$theme" --font-size 12 --line-height 1.4 \
+      --idle-time-limit 2 --last-frame-duration 10 $runs/stress-raw.cast $tmp/stressviz.gif; \
+    python3 website/tools/stressviz/publish.py \
+      --report $runs/stress.txt --frames $runs/frames.jsonl --capture $tmp/stressviz.gif \
+      --warmup $warmup --config $cfg \
+      --commit "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+      --machine "$(uname -srm), $(getconf _NPROCESSORS_ONLN) CPUs"; \
+    python3 website/tools/published-tree.py
 
 # `website/` is edited and `website/` is published, so `.assetsignore` is the
 # only thing between an authoring file and a public URL -- which makes this
