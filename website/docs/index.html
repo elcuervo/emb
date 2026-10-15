@@ -202,13 +202,13 @@
         <dd>List the loaded models with their dimensions and status.</dd>
 
         <dt>EMB.INFO &lt;model&gt;</dt>
-        <dd>Model details: dimension, workers, requests served, average latency, and live cache statistics.</dd>
+        <dd>Model details: dimension, workers, requests served, average latency, batch determinism, the CPU share, thread width and spinning the process granted this model, the embedding path's dispatch, admission and run timings and runs (<code>embed_dispatch_wait_us</code>, <code>embed_admission_wait_us</code>, <code>embed_run_us</code>, <code>embed_runs</code>), and that model's own cache counters — <code>cache_hits</code>, <code>cache_misses</code>, <code>cache_hit_rate</code>, <code>cache_evictions</code>, <code>cache_entries</code>, <code>cache_max_bytes</code>.</dd>
 
         <dt>EMB.STATS</dt>
         <dd>Server statistics: uptime, total requests, live connections, active requests, a per-model breakdown, and process resources — RSS in MB, CPU user/system microseconds, goroutines.</dd>
 
         <dt>MONITOR [seq] [limit]</dt>
-        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, text count, latency in µs, error. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
+        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, text count, latency in µs, error, then the request's own attribution — <code>cached_texts</code> (how many of its texts the reply cache answered), <code>attributed</code> (whether the server measured its phases at all), and <code>dispatch_us</code>, <code>admit_us</code>, <code>run_us</code>: the time its uncached texts spent waiting for a session or batch window, at the process CPU gate, and running. They follow <code>err</code>, so a client reading the original six positionally is unaffected. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
 
         <dt>EMB.READY</dt>
         <dd>Health check. <code>+OK</code> when ready, otherwise <code>-ERR</code> with a reason: <code>loading</code>, <code>draining</code>, <code>no models</code>.</dd>
@@ -865,34 +865,34 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
       <!-- fleetviz:begin -->
       <figure class="topviz topviz--doc" id="fleetviz-plate">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-29458d0f.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre5 · 2 nodes · poll 1s
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-b0476372.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre6 · 2 nodes · poll 1s
 ● HEALTHY
 
   discovered 2 · receiving traffic 2 · idle 0 · orphaned 0
-IN  186 req/s · OUT 5.5k tok/s · 8 active · 13 conns · err 0.0% · p95 39.7ms   trend ▁▁▁▁▁▄▄▃▄▆▆▅▅▅▇▆▆▅███▇▇▆
-  cpu budget 16 · tokens 9/16 · peak 12 · 20.00 cores (scheduler/affinity)
+IN  193 req/s · OUT 5.7k tok/s · 0 active · 4 conns · err 0.0% · p95 39.4ms   trend ▁▁▁▁▁▃▄▃▄▅▆▆▅▅▆▆▆▆████▇▆
+  cpu budget 16 · tokens 0/16 · peak 12 · 20.00 cores (scheduler/affinity)
 TRAFFIC inbound req/s per node over the last polls · older ←  → newer
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│     │                                      ╭───────────────╮ ╭────────────────────╮╭──╯                ╰──────────── │
-│ 76.5│                ╭──────────╮ ╭────────╯               ╰─╯   ╭────────────────┴┴──────────────────────────────── │
-│     │             ╭─┬┴─────────╮╰─╯╭─────────────────────────────╯                                                   │
-│  0.0│─────────────┴─╯          ╰───╯                                                                                 │
+│     │                                        ╭───────────────────────────────────────╯                         ╰──── │
+│ 72.4│                  ╭─────────────────────╯                   ╭────────────────────────────────────────────────── │
+│     │              ╭─┬─┴─────────────────────────────────────────╯                                                   │
+│  0.0│──────────────┴─╯                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 63% · expected 50% each
+LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 58% · expected 50% each
 INGRESS  req/s into each node · bar scaled to the busiest · trend = recent polls
-▶ ● 127.0.0.1:16379             117 r/s   63% █████████████████ ▁▁▄▄▄▆▆▇▆▅██▇▆   p95 39.7ms  cpu 18%  cache 37% err 0.0%
-  ● 127.0.0.1:16380            69.5 r/s   37% ██████████░░░░░░░ ▁▁▃▃▃▅▅▆▆▆██▇▇   p95 37.1ms  cpu 12%  cache 20% err 0.0%
+▶ ● 127.0.0.1:16379             111 r/s   58% █████████████████ ▁▁▃▅▄▅▆▇▇▆███▆   p95 38.7ms  cpu 19%  cache 35% err 0.0%
+  ● 127.0.0.1:16380            81.9 r/s   42% █████████████░░░░ ▁▁▃▄▃▅▅▆▆▆███▇   p95 39.4ms  cpu 15%  cache 17% err 0.0%
   nodes 1–2 of 2 · share of fleet req/s · j/k select · enter detail
 IMBALANCE  ✓ all 4 pass
-  ✓ inbound  range 69.5–117 req/s
-  ✓ latency  worst 127.0.0.1:16379 p95 39.7ms (1.1× peers' median)
+  ✓ inbound  range 81.9–111 req/s
+  ✓ latency  worst 127.0.0.1:16380 p95 39.4ms (1.0× peers' median)
   ✓ errors   max 0.0%
-  ✓ cpu      max 18%
+  ✓ cpu      max 19%
 q quit · p pause · r reset · j/k select · enter detail · esc back · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-14 · emb-top v0.4.3.pre5 · 38556b1 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 239 requests/s, 7.1k tokens/s, cache hit rate 22%, CPU 434%, 1988MB resident across 2 nodes. Per node: 127.0.0.1:16379 155/s (65% of the fleet, p95 26.7ms, CPU 279%); 127.0.0.1:16380 84/s (35% of the fleet, p95 29.1ms, CPU 155%).</p>
+        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-15 · emb-top v0.4.3.pre6 · ce6fda7 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 228 requests/s, 6.5k tokens/s, cache hit rate 22%, CPU 399%, 2127MB resident across 2 nodes. Per node: 127.0.0.1:16379 144/s (63% of the fleet, p95 29.3ms, CPU 244%); 127.0.0.1:16380 84/s (37% of the fleet, p95 29.1ms, CPU 154%).</p>
       </figure>
       <!-- fleetviz:end -->
 

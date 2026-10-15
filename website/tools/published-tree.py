@@ -17,6 +17,14 @@ neither is visible by reading the ignore file or the markup alone:
    that the addresses are absolute and that every page agrees on one origin.
    The value found is reported and, when `wrangler.jsonc` declares a custom
    domain, cross-checked against it with a warning rather than a failure.
+3. **The takes' agreement.** Two independent rigs record the dashboard, and each
+   publishes only its own plate: the single-node take on the landing page and
+   the documentation surface, the fleet take inside the documentation page's
+   fleet region. Nothing else compares them — a capture's recorded version is
+   frozen in its frames and is deliberately outside the stamped set the
+   `stamp-*.py` checks read — so a change can re-record one take, leave its
+   sibling at an older build, and still pass every gate in CI. Checked by
+   reading the recorded-run label beside each mount and requiring one version.
 
     python3 website/tools/published-tree.py
 
@@ -113,7 +121,7 @@ SERVED = frozenset(
         "assets/js/main.js",
         "assets/js/topviz.js",
         "assets/cast/emb-top-e348a08c.cast",
-        "assets/cast/emb-top-cluster-29458d0f.cast",
+        "assets/cast/emb-top-cluster-b0476372.cast",
         "assets/js/asciinema-player-3.17.0.min.js",
         "assets/fonts/archivo-var-latin.woff2",
         "assets/fonts/inter-900-latin.woff2",
@@ -393,6 +401,85 @@ EXTERNAL = ("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript
 SCRIPTING = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
 
 
+def served_pages() -> dict[str, str]:
+    """Every served page's source, with its `<script>`/`<style>` blocks removed.
+
+    Scripting is markup that can hold a string looking like a reference or a
+    hook, so it is stripped before either is read: what a page links and what it
+    records are properties of its markup, not of its script's own strings.
+    """
+    served = set(SERVED) | index_files()[0]
+    return {
+        page: SCRIPTING.sub("", (SITE_DIR / page).read_text(encoding="utf-8"))
+        for page in sorted(served)
+        if page.endswith(".html")
+    }
+
+
+# Every take the served pages play, and the recorded-run label that sits beside
+# it in the same plate. `website/tools/topviz/publish.py` writes both from the
+# run's own arguments, on the page the take is published to; the version a take
+# was recorded from is deliberately outside the stamped set, because a capture
+# freezes it in its frames where `stamp-version.py` cannot reach it.
+TOPOZ_MOUNT = re.compile(r"""\sdata-topviz-cast\s*=\s*["']([^"']+)["']""", re.I)
+TOPOZ_RUN = re.compile(r"""<span[^>]*\sdata-topviz-run[^>]*>(.*?)</span>""", re.S | re.I)
+TOPOZ_VERSION = re.compile(r"""\bemb-top\s+(v[0-9][\w.+-]*)""")
+
+
+def check_take_versions() -> list[str]:
+    """Assert every take on the served pages declares one `emb-top` version.
+
+    A plate's recorded-run label is the page's own statement of provenance: the
+    date, the version, the commit and the node the take came from, written by
+    the recorder from its arguments rather than typed. The plates come from two
+    independent rigs, so one can be re-recorded while its sibling is left at an
+    older build — which is exactly the defect this catches, and which nothing
+    else in this tree can see.
+
+    Only the pages and their labels are read: no model, no server and no
+    recorder, so the verdict holds wherever the tree is checked. A mount whose
+    take declares no version is a failure rather than a skip, because a rig that
+    stopped writing the label would otherwise make the check vacuous.
+    """
+    problems: list[str] = []
+    takes: list[tuple[str, str, str]] = []
+    for page, source in served_pages().items():
+        labels = [(found.start(), found.group(1)) for found in TOPOZ_RUN.finditer(source)]
+        for mount in TOPOZ_MOUNT.finditer(source):
+            take = mount.group(1)
+            # A plate's label follows its mount in the same `<figure>`, so the
+            # label to read is the next one — and a figure boundary in between
+            # means this take has none, rather than that the next plate's label
+            # belongs to it. Pairing by counting instead would report the wrong
+            # plate as soon as one label went missing.
+            beside = next(
+                ((start, text) for start, text in labels if start > mount.end()), None
+            )
+            if beside is None or "</figure>" in source[mount.end() : beside[0]]:
+                problems.append(
+                    f"unlabelled:   website/{page} plays {take} with no recorded-run label in its plate"
+                )
+                continue
+            declared = TOPOZ_VERSION.search(beside[1])
+            if not declared:
+                problems.append(
+                    f"unlabelled:   website/{page} plays {take}; the label beside it "
+                    f"names no emb-top version"
+                )
+                continue
+            takes.append((page, take, declared.group(1)))
+
+    versions = sorted({version for _, _, version in takes})
+    if len(versions) > 1:
+        problems += [
+            f"drifted:      website/{page} plays {take}, labelled emb-top {version}"
+            for page, take, version in takes
+        ]
+    elif takes:
+        print(f"published-tree: {len(takes)} takes agree on emb-top {versions[0]}")
+    return problems
+
+
 def check_internal_links() -> list[str]:
     """Assert every internal reference on a served page resolves to a served file.
 
@@ -407,11 +494,7 @@ def check_internal_links() -> list[str]:
     """
     problems: list[str] = []
     served = set(SERVED) | index_files()[0]
-    sources = {
-        page: SCRIPTING.sub("", (SITE_DIR / page).read_text(encoding="utf-8"))
-        for page in sorted(served)
-        if page.endswith(".html")
-    }
+    sources = served_pages()
     anchors = {page: set(ANCHOR.findall(text)) for page, text in sources.items()}
     for page, source in sources.items():
         base = posixpath.dirname(page)
@@ -553,6 +636,7 @@ def main() -> int:
     problems += check_wrangler_route(origin)
     problems += check_cache_rules()
     problems += check_internal_links()
+    problems += check_take_versions()
 
     if problems:
         print("published-tree: the published tree does not match what we mean", file=sys.stderr)
