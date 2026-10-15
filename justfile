@@ -112,11 +112,14 @@ validate-gems: build
     @echo "=== Validating emb-server gem ==="
     cp bin/emb gems/emb-server/lib/emb-server/emb-binary-arm64-darwin
     cp bin/emb-top gems/emb-server/lib/emb-server/emb-top-binary-arm64-darwin
+    cp bin/emb-stress gems/emb-server/lib/emb-server/emb-stress-binary-arm64-darwin
     cd gems/emb-server && gem build emb-server.gemspec && gem install --local emb-server-*.gem --no-doc 2>/dev/null
     @which emb || echo "WARNING: emb not on PATH (check GEM_HOME/bin)"
     @which emb-top || echo "WARNING: emb-top not on PATH (check GEM_HOME/bin)"
+    @if which emb-stress >/dev/null 2>&1; then emb-stress -version; else echo "WARNING: emb-stress not on PATH (check GEM_HOME/bin)"; fi
     rm gems/emb-server/lib/emb-server/emb-binary-arm64-darwin
     rm gems/emb-server/lib/emb-server/emb-top-binary-arm64-darwin
+    rm gems/emb-server/lib/emb-server/emb-stress-binary-arm64-darwin
     @echo "=== Both gems valid ==="
 
 # Build and run the server

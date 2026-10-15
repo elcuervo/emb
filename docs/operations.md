@@ -408,7 +408,9 @@ dimensions and their maximum lengths come from the fleet's own contract), a
 set behind it, reconciles the configured models against what each node reports,
 and then offers synthetic embedding load to every node at each level in turn. It
 is a pure RESP client — no model, no ONNX Runtime, `CGO_ENABLED=0` — so it runs
-from anywhere `emb-top` does.
+from anywhere `emb-top` does: it rides in the release tarball beside `emb` and
+`emb-top`, at `/usr/local/bin/emb-stress` in the Docker image, and as
+`bin/emb-stress` in the `emb-server` gem.
 
 ```bash
 # a local fleet, four levels of concurrency, 6s per level with a 2s warm-up

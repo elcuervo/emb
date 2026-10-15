@@ -124,12 +124,20 @@ jobs:
             CGO_LDFLAGS="-L/opt/libtokenizers" \
             go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb ./cmd/emb
           CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb-top ./cmd/emb-top
+          CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb-stress ./cmd/emb-stress
 
       - name: Package artifact
         run: |
           VNUM="${TAG_NAME#v}"
           cp /opt/onnxruntime/lib/libonnxruntime.so* dist/linux-amd64/
-          cd dist/linux-amd64 && tar czf "../emb_${VNUM}_linux_amd64.tar.gz" emb emb-top libonnxruntime.so*
+          cd dist/linux-amd64
+          tar czf "../emb_${VNUM}_linux_amd64.tar.gz" emb emb-top emb-stress libonnxruntime.so*
+          cd ../..
+          tarball="dist/emb_${VNUM}_linux_amd64.tar.gz"
+          tar tzf "$tarball" > /tmp/emb-members.txt
+          for member in emb emb-top emb-stress; do
+            grep -qx "$member" /tmp/emb-members.txt || { echo "::error::$tarball is missing $member"; exit 1; }
+          done
 
       - uses: softprops/action-gh-release@v2
         if: github.event_name != 'workflow_dispatch'
@@ -175,8 +183,16 @@ jobs:
           mkdir -p dist/linux-arm64-pkg
           cp dist/linux-arm64/usr/local/bin/emb dist/linux-arm64-pkg/
           cp dist/linux-arm64/usr/local/bin/emb-top dist/linux-arm64-pkg/
+          cp dist/linux-arm64/usr/local/bin/emb-stress dist/linux-arm64-pkg/
           cp dist/linux-arm64/usr/lib/libonnxruntime.so* dist/linux-arm64-pkg/
-          cd dist/linux-arm64-pkg && tar czf "../emb_${VNUM}_linux_arm64.tar.gz" emb emb-top libonnxruntime.so*
+          cd dist/linux-arm64-pkg
+          tar czf "../emb_${VNUM}_linux_arm64.tar.gz" emb emb-top emb-stress libonnxruntime.so*
+          cd ../..
+          tarball="dist/emb_${VNUM}_linux_arm64.tar.gz"
+          tar tzf "$tarball" > /tmp/emb-members.txt
+          for member in emb emb-top emb-stress; do
+            grep -qx "$member" /tmp/emb-members.txt || { echo "::error::$tarball is missing $member"; exit 1; }
+          done
 
       - uses: softprops/action-gh-release@v2
         if: github.event_name != 'workflow_dispatch'
@@ -225,12 +241,20 @@ jobs:
             CGO_LDFLAGS="-L./lib/libtokenizers" \
             go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb ./cmd/emb
           CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb-top ./cmd/emb-top
+          CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb-stress ./cmd/emb-stress
 
       - name: Package artifact
         run: |
           VNUM="${TAG_NAME#v}"
           cp -L /opt/homebrew/opt/onnxruntime/lib/libonnxruntime*.dylib dist/
-          cd dist && tar czf "emb_${VNUM}_darwin_arm64.tar.gz" emb emb-top libonnxruntime*.dylib
+          cd dist
+          tar czf "emb_${VNUM}_darwin_arm64.tar.gz" emb emb-top emb-stress libonnxruntime*.dylib
+          cd ..
+          tarball="dist/emb_${VNUM}_darwin_arm64.tar.gz"
+          tar tzf "$tarball" > /tmp/emb-members.txt
+          for member in emb emb-top emb-stress; do
+            grep -qx "$member" /tmp/emb-members.txt || { echo "::error::$tarball is missing $member"; exit 1; }
+          done
 
       - uses: softprops/action-gh-release@v2
         if: github.event_name != 'workflow_dispatch'
@@ -417,6 +441,7 @@ jobs:
             tar xzf "$tarball"
             cp emb "${{ github.workspace }}/gems/emb-server/lib/emb-server/$name"
             cp emb-top "${{ github.workspace }}/gems/emb-server/lib/emb-server/${name/emb-binary/emb-top-binary}"
+            cp emb-stress "${{ github.workspace }}/gems/emb-server/lib/emb-server/${name/emb-binary/emb-stress-binary}"
           done
 
       - name: Build gem
