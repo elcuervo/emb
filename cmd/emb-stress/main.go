@@ -40,6 +40,11 @@ import (
 // version is injected at build time via -ldflags "-X main.version=…".
 var version = "dev"
 
+// waitBudget is how long the target's records are waited for before the
+// resolution failure is reported: the built-in window, shortened by tests so
+// the unresolvable-target case does not spend it.
+var waitBudget = embtop.WaitBudget
+
 // Defaults for a run long enough for a level to settle. A level's numbers are
 // drawn from dwell-warmup, so three levels take dwell × 3.
 const (
@@ -182,7 +187,10 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	resolved, err := embtop.ResolveSpecs(ctx, embtop.NetResolver{}, o.specs)
+	// The fleet's records can appear after this run starts, so the target is
+	// waited for within the same built-in window `emb-top` uses; a name that
+	// never appears is still the resolution error it was.
+	resolved, err := embtop.WaitForSpecs(ctx, embtop.NetResolver{}, o.specs, waitBudget)
 	if err != nil {
 		fprintln(stderr, "emb-stress:", err)
 		return 1

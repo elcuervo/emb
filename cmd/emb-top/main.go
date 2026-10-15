@@ -157,7 +157,10 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	}
 
 	ctx := context.Background()
-	resolved, err := embtop.ResolveSpecs(ctx, embtop.NetResolver{}, o.specs)
+	// A fleet's records can appear after this process does (a rolling or
+	// autoscaling start), so the startup resolution waits within a built-in
+	// window before it gives up; an unresolved fleet is still an error.
+	resolved, err := embtop.WaitForSpecs(ctx, embtop.NetResolver{}, o.specs, embtop.WaitBudget)
 	if err != nil {
 		fprintln(stderr, "emb-top:", err)
 		return 1

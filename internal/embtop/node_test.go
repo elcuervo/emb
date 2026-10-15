@@ -3,8 +3,10 @@ package embtop
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseNodeSpecTable(t *testing.T) {
@@ -168,6 +170,81 @@ func TestResolveSpecsNamesExpandedRowsByAddress(t *testing.T) {
 	if len(nodes) != 1 || nodes[0].Name != "one.internal" || nodes[0].Key != "one.internal" {
 		t.Fatalf("a single-address name did not keep its identity: %+v", nodes)
 	}
+}
+
+// flakyResolver fails the first failN lookups, then answers: the DNS record
+// that appears while the fleet starts.
+type flakyResolver struct {
+	failN int
+	err   error
+	calls int
+}
+
+func (r *flakyResolver) LookupHost(_ context.Context, host string) ([]string, error) {
+	r.calls++
+	if r.calls <= r.failN {
+		return nil, r.err
+	}
+	return []string{"10.0.3.7"}, nil
+}
+
+func TestWaitForSpecsRetriesUntilResolved(t *testing.T) {
+	r := &flakyResolver{failN: 2, err: notFound("late.internal")}
+	specs, _ := BuildSpecs("", nil, "late.internal")
+	nodes, err := WaitForSpecs(context.Background(), r, specs, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.calls != 3 {
+		t.Errorf("calls = %d, want 3", r.calls)
+	}
+	if len(nodes) != 1 || nodes[0].Addr != "10.0.3.7:6379" {
+		t.Fatalf("nodes = %+v, want the resolved address", nodes)
+	}
+}
+
+// TestWaitForSpecsIsAllOrNothing guards the invariant the capability states:
+// a specification that stays unresolvable fails the call, and the addresses
+// its siblings produced are not presented as a fleet.
+func TestWaitForSpecsIsAllOrNothing(t *testing.T) {
+	r := &fakeResolver{
+		answers: map[string][]string{"early.internal": {"10.0.0.9"}},
+		errs:    map[string]error{"late.internal": notFound("late.internal")},
+	}
+	specs, _ := BuildSpecs("", nil, "late.internal,early.internal")
+	nodes, err := WaitForSpecs(context.Background(), r, specs, 2*time.Second)
+	if nodes != nil {
+		t.Errorf("nodes = %+v, want none: a name never resolved", nodes)
+	}
+	if err == nil || !strings.Contains(err.Error(), `node "late.internal"`) {
+		t.Fatalf("err = %v, want an error naming the failing specification", err)
+	}
+	var dnsErr *net.DNSError
+	if !errors.As(err, &dnsErr) || dnsErr.Name != "late.internal" {
+		t.Fatalf("err = %v, want the resolver's *net.DNSError reachable", err)
+	}
+	if r.calls != 2 {
+		t.Errorf("calls = %d, want 2: one attempt and one retry within the budget", r.calls)
+	}
+}
+
+// TestWaitForSpecsStopsAtBudget guards against a wait that outlives its
+// budget: a budget shorter than the spacing buys no retry.
+func TestWaitForSpecsStopsAtBudget(t *testing.T) {
+	r := &fakeResolver{errs: map[string]error{"late.internal": notFound("late.internal")}}
+	specs, _ := BuildSpecs("", nil, "late.internal")
+	nodes, err := WaitForSpecs(context.Background(), r, specs, 100*time.Millisecond)
+	if nodes != nil || err == nil {
+		t.Fatalf("nodes = %+v, err = %v, want no nodes and an error", nodes, err)
+	}
+	if r.calls != 1 {
+		t.Errorf("calls = %d, want 1", r.calls)
+	}
+}
+
+// notFound is the resolver failure a name that does not exist yet produces.
+func notFound(name string) error {
+	return &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 }
 
 // TestIsLoopbackAndAllLoopback covers the plaintext-AUTH guard both tools use.

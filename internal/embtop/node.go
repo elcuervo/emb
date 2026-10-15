@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
 // DefaultAddr is the node watched when no node flag is given. It carries a
@@ -140,6 +141,45 @@ func ResolveSpecs(ctx context.Context, r Resolver, specs []NodeSpec) ([]Resolved
 		return nil, fmt.Errorf("no nodes to monitor")
 	}
 	return out, nil
+}
+
+// WaitBudget is the built-in window the startup resolution waits for a name
+// that is not registered yet: the staleness the watch already tolerates
+// between refreshes. It is a default, not a flag.
+const WaitBudget = 30 * time.Second
+
+const (
+	// waitAttemptTimeout bounds one attempt, so an unresponsive resolver is
+	// retried within the budget instead of holding it.
+	waitAttemptTimeout = 5 * time.Second
+	// waitAttemptSpacing is the shortest gap between attempts.
+	waitAttemptSpacing = time.Second
+)
+
+// WaitForSpecs resolves the specifications like ResolveSpecs, retrying until
+// every one yields an address or budget expires: a name whose records have not
+// appeared yet is waited for rather than reported, so a watch or a run can
+// start before its fleet. It is all-or-nothing — a specification that never
+// resolves fails the whole call with the error ResolveSpecs returns for it, so
+// an unresolved fleet is never returned as a fleet.
+func WaitForSpecs(ctx context.Context, r Resolver, specs []NodeSpec, budget time.Duration) ([]ResolvedNode, error) {
+	deadline := time.Now().Add(budget)
+	for {
+		attemptCtx, cancel := context.WithTimeout(ctx, waitAttemptTimeout)
+		nodes, err := ResolveSpecs(attemptCtx, r, specs)
+		cancel()
+		if err == nil {
+			return nodes, nil
+		}
+		if ctx.Err() != nil || !time.Now().Add(waitAttemptSpacing).Before(deadline) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(waitAttemptSpacing):
+		}
+	}
 }
 
 func dedupeStrings(in []string) []string {

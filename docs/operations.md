@@ -232,6 +232,30 @@ emb-top -addr localhost:6379 -password secret -tls
 emb-top -nodes emb.internal -tls -tls-server-name emb.internal
 ```
 
+A `-nodes <name>` entry is resolved through the resolver the task was given, so
+what makes it resolve is the deployment, not the tool. In a Fargate fleet that
+means a Cloud Map **private** namespace whose hosted zone is associated with the
+**VPC the watching task runs in**: a private namespace resolves only through the
+VPC resolver the task was given, so a zone associated with some other VPC
+answers `NXDOMAIN` here exactly as an unregistered name does. The per-task
+addresses come from **Cloud Map DNS service discovery** (`serviceRegistries` on
+the service), which publishes one `A`/`AAAA` record per task — that is the name
+that expands into a fleet. A **Service Connect client alias** is not that name:
+it resolves to the proxy inside the **watching task's own task** rather than to
+the peers, so it is monitored as one node, not as the fleet.
+
+The error tells the two `NXDOMAIN` cases apart, because it carries the name as
+queried and the resolver that answered; `dig` settles it:
+
+```bash
+# the same query, at the resolver the error named
+dig @10.0.0.2 +noall +authority emb.internal
+# NXDOMAIN, AUTHORITY naming the namespace's own SOA
+#   → the zone is visible; the name is not registered yet, or is misspelled
+# NXDOMAIN, no such SOA
+#   → this VPC cannot see the zone: check the private hosted zone's VPC association
+```
+
 ### Reading the process CPU plan
 
 `emb-top` renders the CPU plan the server resolved at startup: a

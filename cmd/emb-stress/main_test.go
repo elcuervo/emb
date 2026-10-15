@@ -104,6 +104,8 @@ func TestMissingConfigFailsBeforeConnecting(t *testing.T) {
 // A target that resolves to nothing is an error naming it, not a run reported
 // against an empty fleet.
 func TestUnresolvableTargetFailsNamingIt(t *testing.T) {
+	defer func(d time.Duration) { waitBudget = d }(waitBudget)
+	waitBudget = 50 * time.Millisecond
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfg, []byte("models:\n  m:\n    model_repo: some/repo\n"), 0o600); err != nil {
