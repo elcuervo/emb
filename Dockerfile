@@ -53,7 +53,8 @@ RUN set -eux; \
     CGO_CFLAGS="-I${ORT_DIR}/include" \
     CGO_LDFLAGS="-L${ORT_DIR}/lib -lonnxruntime -L/opt/libtokenizers -Wl,-rpath,\$ORIGIN" \
     go build -ldflags="-X main.version=${EMB_VER}" -o /emb ./cmd/emb && \
-    CGO_ENABLED=0 go build -ldflags="-X main.version=${EMB_VER}" -o /emb-top ./cmd/emb-top
+    CGO_ENABLED=0 go build -ldflags="-X main.version=${EMB_VER}" -o /emb-top ./cmd/emb-top && \
+    CGO_ENABLED=0 go build -ldflags="-X main.version=${EMB_VER}" -o /emb-stress ./cmd/emb-stress
 
 # Copy ONNX libs to a version-independent path for the runtime stage
 RUN set -eux; \
@@ -73,6 +74,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/onnx-libs/libonnxruntime.so* /usr/lib/
 COPY --from=builder /emb /usr/local/bin/emb
 COPY --from=builder /emb-top /usr/local/bin/emb-top
+COPY --from=builder /emb-stress /usr/local/bin/emb-stress
 
 RUN ldconfig
 

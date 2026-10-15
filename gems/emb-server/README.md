@@ -26,7 +26,15 @@ gem install emb-server
 | Linux (x86_64) | ✓ |
 | Linux (aarch64) | ✓ |
 
-The gem ships a precompiled binary for each platform. See `bin/emb` for platform detection logic.
+The gem ships a precompiled binary for each platform. See `bin/emb`, `bin/emb-top` and `bin/emb-stress` for platform detection logic.
+
+## What it installs
+
+| Binary | What it is |
+|--------|------------|
+| `emb` | The embedding server (needs the `onnxruntime` gem) |
+| `emb-top` | Live terminal dashboard for a running node or a fleet — pure RESP client |
+| `emb-stress` | Synthetic load across a fleet, from the configuration the fleet was started with: it expands a target name into its node set and reports the offered and completed rates and latency per level — pure RESP client |
 
 ## Usage
 

@@ -26,8 +26,17 @@ URL="https://github.com/$REPO/releases/download/$VERSION/$TARBALL"
 echo "downloading emb $VERSION ($TARGET)..."
 curl -fsSL "$URL" | tar xz -C "$INSTALL_DIR"
 
+# Report what the tarball actually carried: the latest release may predate a
+# binary, and a fixed list would claim one that was never downloaded.
+placed=""
+for bin in emb emb-top emb-stress; do
+  if [ -x "$INSTALL_DIR/$bin" ]; then
+    placed="$placed $bin"
+  fi
+done
+
 echo ""
-echo "emb $VERSION installed to $INSTALL_DIR/emb"
+echo "emb $VERSION installed to $INSTALL_DIR:$placed"
 echo ""
 echo "Quick start:"
 echo "  emb -model-repo Xenova/all-MiniLM-L6-v2"
