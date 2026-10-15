@@ -98,10 +98,13 @@
       cache-scope change to `EMB.INFO`. Verify: every number quoted in the prose
       comes from a recorded run, and the docs introduce no field the server does
       not emit.
-- [x] 7.2 Re-record the takes so the plate, the still frame and the documented
-      capture show the new readout (`just website-topviz`, and the fleet take).
-      Verify: the published artifact names change, `docs/operations.md`'s
-      references are rewritten by the capture, and the served set's check passes.
+- [x] 7.2 Re-record the take so the plate, the still frame and the documented
+      capture show the new readout (`just website-topviz`). Verify: the published
+      artifact names change, `docs/operations.md`'s references are rewritten by
+      the capture, and the served set's check passes. Only the single-node take
+      was re-recorded here; the fleet take was left at `v0.4.3.pre5` and is
+      carried by `refresh-the-fleet-capture`, which re-records it and makes the
+      plates' recorded versions agree.
 - [x] 7.3 Note the cache-scope change and the event's new fields in the release
       notes for the next version. Verify: the note names both breaks and the
       server/dashboard compatibility in either order.
