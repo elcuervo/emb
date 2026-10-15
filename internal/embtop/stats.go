@@ -65,6 +65,13 @@ type Point struct {
 	// CacheBytes is the memory the model caches hold: the occupancy the
 	// growth check compares against.
 	CacheBytes int64
+
+	// CacheHits and CacheMisses are the cumulative cache counters, so a
+	// reader can take the window's cached share of the traffic: how much of
+	// the service's work the cache removed, which the hit rate alone does not
+	// say.
+	CacheHits   int64
+	CacheMisses int64
 }
 
 // CPUPlanText renders one node's (or an aggregate's) process CPU plan, or ""
@@ -95,7 +102,10 @@ func CPUPlanText(p Point) string {
 	return line
 }
 
-// ModelPoint is the per-model rate view of one poll.
+// ModelPoint is the per-model rate view of one poll. It carries the model's
+// cumulative cache counters and embedding phases beside its rates, so the
+// advice can read the window's path split and phase means without a second
+// request.
 type ModelPoint struct {
 	At           time.Time
 	ReqRate      float64
@@ -107,6 +117,19 @@ type ModelPoint struct {
 	Errors       int64
 	CacheHitRate float64 // cumulative %, 100 when no cache stats (-1 unknown)
 	Stale        bool    // no EMB.INFO reply this poll; values are last-known
+
+	// The embedding path, cumulative: the cache-served requests, the entries
+	// held and dropped, the runs that were admitted, the phases those runs
+	// paid, and the live session gauges.
+	CachedReqs      int64
+	CacheEvictions  int64
+	CacheEntries    int64
+	Runs            int64
+	DispatchWaitUs  int64
+	AdmissionWaitUs int64
+	RunUs           int64
+	SessionsBusy    int64
+	SessionsTotal   int64
 }
 
 // Sampler diffs cumulative counters between polls into rates and keeps a
@@ -239,6 +262,8 @@ func (s *Sampler) Push(res *PollResult) Point {
 	p.TotalRequests = res.TotalRequests
 	p.TotalTokens = res.TotalTokens
 	p.TotalErrors = res.TotalErrors
+	p.CacheHits = res.CacheHits
+	p.CacheMisses = res.CacheMisses
 
 	if s.havePrev {
 		dt := at.Sub(s.prevAt).Seconds()
@@ -282,6 +307,15 @@ func (s *Sampler) Push(res *PollResult) Point {
 		} else {
 			mpnt.CacheHitRate = -1
 		}
+		mpnt.CachedReqs = hits
+		mpnt.CacheEvictions = cur.CacheEvictions
+		mpnt.CacheEntries = cur.CacheEntries
+		mpnt.Runs = cur.EmbedRuns
+		mpnt.DispatchWaitUs = cur.EmbedDispatchWaitUs
+		mpnt.AdmissionWaitUs = cur.EmbedAdmissionWaitUs
+		mpnt.RunUs = cur.EmbedRunUs
+		mpnt.SessionsBusy = cur.EmbedSessionsBusy
+		mpnt.SessionsTotal = cur.EmbedSessionsTotal
 		mp[name] = mpnt
 	}
 
@@ -381,12 +415,19 @@ func (s *Sampler) percentiles(model string) (p50, p95, p99 int64, ok bool) {
 	if len(lats) == 0 {
 		return 0, 0, 0, false
 	}
-	sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
+	sortInt64s(lats)
 	n := len(lats)
 	return lats[percentileIdx(n, 0.50)], lats[percentileIdx(n, 0.95)], lats[percentileIdx(n, 0.99)], true
 }
 
 func (s *Sampler) latenciesLocked(model string) []int64 {
+	return s.latenciesLockedPath(model, false)
+}
+
+// latenciesLockedPath collects the window's successful latencies, optionally
+// restricted to the requests that ran (at least one text not cache-answered).
+// Oldest first. Caller holds s.mu.
+func (s *Sampler) latenciesLockedPath(model string, reranOnly bool) []int64 {
 	var lats []int64
 	for _, e := range s.Events {
 		if e.Err {
@@ -395,9 +436,17 @@ func (s *Sampler) latenciesLocked(model string) []int64 {
 		if model != "" && e.Model != model {
 			continue
 		}
+		if reranOnly && !e.Reran() {
+			continue
+		}
 		lats = append(lats, e.LatencyUs)
 	}
 	return lats
+}
+
+// sortInt64s sorts in place; the percentile computation is the only user.
+func sortInt64s(v []int64) {
+	sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
 }
 
 // percentileIdx maps a fraction to a sorted slice index using the

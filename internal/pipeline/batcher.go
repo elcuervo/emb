@@ -137,9 +137,11 @@ func (b *Batcher) EmbedContext(ctx context.Context, texts []string) (Response, e
 	case <-ctx.Done():
 		return Response{}, ctx.Err()
 	}
-	b.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
+	dispatchWait := time.Since(waitStart)
+	b.dispatchWaitUs.Add(dispatchWait.Microseconds())
 	select {
 	case resp := <-result:
+		resp.DispatchWait = dispatchWait
 		return resp, nil
 	case <-ctx.Done():
 		// The request is dropped out of the window before it consumes a run
@@ -215,15 +217,6 @@ func (b *Batcher) run() {
 			b.errors.Add(1)
 		}
 
-		for i, it := range batch {
-			n := len(it.encs)
-			if err != nil {
-				it.req.Result <- Response{Err: resp.Err}
-			} else {
-				it.req.Result <- Response{Embeddings: resp.Embeddings[offsets[i] : offsets[i]+n]}
-			}
-		}
-
 		b.requests.Add(int64(len(batch)))
 		// The wait is subtracted from the batch's run time, never added to it.
 		run := time.Since(start) - waited
@@ -233,6 +226,19 @@ func (b *Batcher) run() {
 		b.totalLat.Add(run.Microseconds())
 		if waited > 0 {
 			b.admissionWaitUs.Add(waited.Microseconds())
+		}
+
+		// Every item in the batch waited for and shared its run, so each
+		// carries the batch's own phases rather than the model's totals.
+		for i, it := range batch {
+			n := len(it.encs)
+			out := Response{AdmissionWait: waited, Run: run}
+			if err != nil {
+				out.Err = resp.Err
+			} else {
+				out.Embeddings = resp.Embeddings[offsets[i] : offsets[i]+n]
+			}
+			it.req.Result <- out
 		}
 
 		batch = batch[:0]

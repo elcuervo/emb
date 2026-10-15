@@ -47,7 +47,24 @@ type Event struct {
 	Texts     int
 	LatencyUs int64
 	Err       bool
+	// The request's attribution: how many of its texts the reply cache
+	// answered, whether the phases below were measured by the server, and the
+	// time its texts that were not cache-answered waited for a session or
+	// batch window, waited at the process CPU admission gate, and ran.
+	CachedTexts int
+	Attributed  bool
+	DispatchUs  int64
+	AdmitUs     int64
+	RunUs       int64
 }
+
+// CacheServed reports whether every text of this event was answered from the
+// reply cache, and Reran whether at least one text ran. Both require the
+// server's attribution: an event without it says nothing about the path, and
+// reading its absent counters as "nothing was cached" would count every request
+// on an older server as a run.
+func (e Event) CacheServed() bool { return e.Attributed && e.Texts > 0 && e.CachedTexts >= e.Texts }
+func (e Event) Reran() bool       { return e.Attributed && e.CachedTexts < e.Texts }
 
 // PollResult is one typed snapshot of EMB.MODELS + EMB.INFO + EMB.STATS.
 type PollResult struct {
@@ -149,6 +166,16 @@ type ModelStats struct {
 	CPUThreadShare   int
 	IntraOpThreads   int
 	AllowSpinning    bool
+
+	// The embedding path's cumulative phases and session gauges: what this
+	// model's requests waited for and spent running, and how many runs and
+	// sessions those were. Admission wait is kept out of the run time.
+	EmbedDispatchWaitUs  int64
+	EmbedAdmissionWaitUs int64
+	EmbedRunUs           int64
+	EmbedRuns            int64
+	EmbedSessionsBusy    int64
+	EmbedSessionsTotal   int64
 }
 
 // Poll runs one pipelined poll: EMB.MODELS, EMB.INFO for each known model,
@@ -227,7 +254,10 @@ func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
 }
 
 // parseEvents decodes the MONITOR reply: array of [seq, at_us, model,
-// texts, latency_us, err] arrays.
+// texts, latency_us, err, cached_texts, attributed, dispatch_us, admit_us,
+// run_us] arrays. A server predating the attribution sends the first six
+// fields only: such an event is read without an attribution rather than as a
+// run that spent no time.
 func parseEvents(r Reply) []Event {
 	if r.Type != '*' {
 		return nil
@@ -247,6 +277,13 @@ func parseEvents(r Reply) []Event {
 		e.Texts = int(row.Elems[3].Int)
 		e.LatencyUs = row.Elems[4].Int
 		e.Err = row.Elems[5].Int != 0
+		if len(row.Elems) >= 11 {
+			e.CachedTexts = int(row.Elems[6].Int)
+			e.Attributed = row.Elems[7].Int != 0
+			e.DispatchUs = row.Elems[8].Int
+			e.AdmitUs = row.Elems[9].Int
+			e.RunUs = row.Elems[10].Int
+		}
 		evs = append(evs, e)
 	}
 	return evs
@@ -491,6 +528,13 @@ func parseModelStats(r Reply) *ModelStats {
 		CPUThreadShare:   int(intField(m, "cpu_thread_share")),
 		IntraOpThreads:   int(intField(m, "intra_op_threads")),
 		AllowSpinning:    intField(m, "allow_spinning") != 0,
+
+		EmbedDispatchWaitUs:  int64(intField(m, "embed_dispatch_wait_us")),
+		EmbedAdmissionWaitUs: int64(intField(m, "embed_admission_wait_us")),
+		EmbedRunUs:           int64(intField(m, "embed_run_us")),
+		EmbedRuns:            int64(intField(m, "embed_runs")),
+		EmbedSessionsBusy:    int64(intField(m, "embed_sessions_busy")),
+		EmbedSessionsTotal:   int64(intField(m, "embed_sessions_total")),
 	}
 	return ms
 }

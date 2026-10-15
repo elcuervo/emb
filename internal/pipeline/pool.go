@@ -81,6 +81,9 @@ func (w *Worker) run() {
 		if waited > 0 {
 			w.admissionWaitUs.Add(waited.Microseconds())
 		}
+		// The request carries the time it paid, not just the model's total.
+		resp.AdmissionWait = waited
+		resp.Run = run
 
 		req.Result <- resp
 	}
@@ -261,12 +264,15 @@ func (p *Pool) EmbedContext(ctx context.Context, texts []string) (Response, erro
 	case <-ctx.Done():
 		return Response{}, ctx.Err()
 	}
-	p.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
+	dispatchWait := time.Since(waitStart)
+	p.dispatchWaitUs.Add(dispatchWait.Microseconds())
 	// Once a worker owns the request the deadline no longer applies: the run is
 	// in flight, and reporting busy would refuse work that is about to complete.
 	// Work whose caller gave up before admission is dropped by the worker's own
 	// context check and answered with its error.
-	return <-result, nil
+	resp := <-result
+	resp.DispatchWait = dispatchWait
+	return resp, nil
 }
 
 func (p *Pool) Stats() Stats {

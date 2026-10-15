@@ -93,6 +93,43 @@ func TestViewShowsDisabledCPUPlan(t *testing.T) {
 	}
 }
 
+// The banner and the gauge must read the same unit: the sampler reports
+// percent of one core, so a fully busy 4-core node is 100% of capacity, not
+// 400% — and the gauge, scaled to 100, would otherwise peg before the node is
+// actually busy.
+func TestViewNormalizesGaugeCPUByCores(t *testing.T) {
+	m := newSizedTUI(120, 30)
+	now := time.Unix(0, 0)
+	m.sampler.SetClock(func() time.Time { return now })
+
+	first := multiPoll([]string{"alpha"}, map[string]int64{"alpha": 10})
+	first.GoMaxProcs = 4
+	m.applyResult(first)
+
+	now = now.Add(time.Second)
+	second := multiPoll([]string{"alpha"}, map[string]int64{"alpha": 20})
+	second.GoMaxProcs = 4
+	second.CPUUserUsec = 4_000_000 // 4s of CPU in 1s wall = 400% of one core
+	m.applyResult(second)
+
+	view := m.View()
+	if !strings.Contains(view, "cpu 100%") {
+		t.Errorf("banner chip is not read as capacity:\n%s", view)
+	}
+	gauge := ""
+	for _, l := range strings.Split(view, "\n") {
+		if strings.Contains(l, "cache") && strings.Contains(l, "mem") {
+			gauge = l
+		}
+	}
+	if !strings.Contains(gauge, "cpu") || !strings.Contains(gauge, "100%") {
+		t.Errorf("gauge caption is not read as capacity: %q", gauge)
+	}
+	if strings.Contains(view, "400") {
+		t.Errorf("a surface still shows the per-core figure:\n%s", view)
+	}
+}
+
 func TestViewRendersWithTraffic(t *testing.T) {
 	m := newSizedTUI(100, 30)
 	for i := 1; i <= 30; i++ {

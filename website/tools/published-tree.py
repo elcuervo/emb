@@ -112,7 +112,7 @@ SERVED = frozenset(
         "assets/css/asciinema-player-3.17.0.css",
         "assets/js/main.js",
         "assets/js/topviz.js",
-        "assets/cast/emb-top-ac597a82.cast",
+        "assets/cast/emb-top-e348a08c.cast",
         "assets/cast/emb-top-cluster-29458d0f.cast",
         "assets/js/asciinema-player-3.17.0.min.js",
         "assets/fonts/archivo-var-latin.woff2",

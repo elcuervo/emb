@@ -92,10 +92,24 @@ at CPU contention (see the thread budget in
 
 `MONITOR [seq] [limit]` exposes the last completed-request events (up to 8192,
 oldest evicted) for per-request visibility: latency percentiles, error and
-volume attribution per model. It is named after Redis's `MONITOR` but is a
-bounded sequence-query rather than a long-lived stream — pass the last `seq`
-you saw to fetch only newer events, which is how [`emb-top`](#monitoring-emb-top)
-keeps its cost near zero. Request texts are never included.
+volume attribution per model, and each request's own path and phases. It is named
+after Redis's `MONITOR` but is a bounded sequence-query rather than a long-lived
+stream — pass the last `seq` you saw to fetch only newer events, which is how
+[`emb-top`](#monitoring-emb-top) keeps its cost near zero. Request texts are
+never included.
+
+Every event carries `cached_texts` (how many of its texts the reply cache
+answered) and, when the server measured them, `dispatch_us`, `admit_us` and
+`run_us`: the time that request's *uncached* texts spent waiting for a session or
+batch window, waiting at the process CPU gate, and running. `attributed` says
+whether those phases were measured at all — a request served outside the
+embedding pool (an image run on its own tensor sessions) reports `attributed 0`
+with zero phases, which is absent attribution, not a free run. The phases never
+sum to more than the request's `latency_us`: whatever the latency includes beyond
+them (protocol, tokenization, the cache lookup, encoding) stays unattributed
+rather than being assigned to a phase. On a server that predates these fields the
+event is the original six fields, which a reader must treat as "not measured"
+rather than as zero.
 
 `INFO [section...]` renders Redis-format sections; with no argument it returns
 all of them:
@@ -196,15 +210,20 @@ and renders:
 - a model-activity **heatmap** (rows = models, columns = recent polls, color = req/s),
 - per-model req/s, tok/s, err/s, **p50/p95/p99 latency** (from `MONITOR`
   events), and identity (dim, pooling, quantization, batching),
-- cache hit ratio and hit/miss/eviction rates, RSS memory, CPU %, connections,
-  active requests, goroutines, and a live event ticker,
+- cache hit ratio and hit/miss/eviction rates, RSS memory, CPU % (a share of the
+  node's own capacity), connections, active requests, goroutines, and a live
+  event ticker,
+- a latency band whose legend separates the tail every request produced from the
+  tail of the requests that actually ran (`runs p95 … · n=…`), so a window that
+  mixes microsecond cache answers with second-long inference says which
+  population its p95 came from,
 - `AUTH` / TLS support, auto-reconnect with a connection-lost banner, and a
   headless `-once` mode for scripts and CI.
 
 <!-- topviz:begin -->
-![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-993783cd.gif)
+![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-521dc32b.gif)
 
-*Captured 2026-10-14 · emb-top v0.4.3.pre5 · 38556b1 · 4 models · 127.0.0.1:16379.*
+*Captured 2026-10-15 · emb-top v0.4.3.pre6 · 70c7730 · 4 models · 127.0.0.1:16379.*
 <!-- topviz:end -->
 
 ```bash
@@ -298,29 +317,59 @@ the budget is the constraint, and `run` growing instead points at the model.
 
 ### Reading the sizing recommendation
 
-Under the verdict line, `emb-top` renders one advisory **sizing** line naming the
-resource to change and the counters it was derived from — `SIZING  …` in the node
-dashboard and in the cluster view. It is advice, not a verdict: it has no
-severity, it never raises or lowers the health status, and a node at 100% of its
-budget with no errors is simultaneously `HEALTHY` and "add CPU". Every rule has
-its own fixed thresholds (built-in defaults, no flags) and reads only counters
-the node already publishes.
+Under the verdict line, `emb-top` renders an advisory **sizing** panel — `SIZING  …`
+in the node dashboard and in the cluster view. Its first line names the resource
+to change *and the action that changes it*; its second names the action the same
+evidence rejects, with the counter that ruled it out, plus the cache's share of
+the window's traffic and the CPU each uncached run cost. It is advice, not a
+verdict: it has no severity, it never raises or lowers the health status, and a
+node at 100% of its budget with no errors is simultaneously `HEALTHY` and "raise
+cpu_budget". Every rule has its own fixed thresholds and magnitude floors
+(built-in defaults, no flags) and reads only counters the node already publishes.
 
-| Line | Fires when | Counters it names |
+| Action | Fires when | Counters it names |
 |---|---|---|
-| `cpu budget is the limit` | the node holds ≥95% of `cpu_budget` and `cpu_admission_timeouts` grew over the window | `cpu_active_tokens`/`cpu_budget`, the timeouts |
-| `host is the constraint` | `cpu_throttled_periods` or `cpu_steal_usec` grew while the node was *not* holding its budget | throttled/total periods, throttled and stolen time |
-| `memory: cache-restore headroom` | `cache_restore_headroom_bytes` is under 10% of `cache_restore_limit_bytes` and `cache_restore_skipped_memory` grew | the headroom and the limit, the skipped entries |
-| `memory rose … unexplained growth` | the window's second half sits at least 10% and at least 8 MB above its first, while `req_rate` and the caches' bytes stay flat | the RSS rise, the load, the cache bytes |
+| `raise cpu_budget` | the node holds ≥95% of `cpu_budget` and `cpu_admission_timeouts` grew over the window | `cpu_active_tokens`/`cpu_budget`, the timeouts |
+| `raise the node's CPU entitlement` | throttling or stolen time reached ≥1% of the capacity the node had over the window (or ≥10% of the cgroup's throttle periods) *and* the node was carrying work, while it was not holding its budget | throttled/total periods, throttled and stolen time, both as a share of the window |
+| `grow the cache` | a model's window evicted ≥5% of its lookups, with the window's cached share low | the model's evictions and its lookups, the cached share |
+| `lower intra_op_threads` | the CPU gate holds ≥50% of the uncached tail while the node holds its budget and refused nobody | the gate's share, its mean per run, `cpu_active_tokens`/`cpu_budget` |
+| `raise workers` / `widen the batch window` | session dispatch holds ≥50% of the uncached tail, at ≥1 ms per run | dispatch's share and mean per run; a model with a batch timeout is the batch window, a worker pool is the worker count |
+| `take work off the model` | runs hold ≥50% of the uncached tail: the time is inference, not queueing | the runs' share, the uncached p95, and the model whose runs dominate it |
+| `raise memory` | `cache_restore_headroom_bytes` is under 10% of `cache_restore_limit_bytes` and `cache_restore_skipped_memory` grew | the headroom and the limit, the skipped entries |
+| `debug the growth` | the window's second half sits at least 10% and at least 8 MB above its first, while `req_rate` and the caches' bytes stay flat | the RSS rise, the load, the cache bytes |
+
+The tail rules read the per-request phases the node now publishes: `dispatch_us`
+(waiting for a session or batch window), `admit_us` (waiting at the process CPU
+gate) and `run_us` (ORT), each attributable to the request that paid it. A
+scripted evaluation reports them only when exactly one run happened while it was
+in flight — its model's counters are the model's, so under concurrency the delta
+would be somebody else's work and the event stays unattributed instead. A rule
+fires only when one phase holds the majority of the measured time; otherwise the
+window is reported as spread. When the window is too small for the p95 to mean
+anything — fewer than eight events, or fewer than three that ran — the panel says
+so and recommends nothing, rather than reading one cold run as a capacity
+problem. The cache's share of the traffic is named beside the hit ratio because
+the two answer different questions: the ratio describes the entries, the share
+describes how much of the service's work the cache removed. That is also why the
+CPU readout is a share of the node's own capacity *and* a cost per uncached run:
+on a warm node a low CPU figure is a result, not an idle process.
+
+Repairs outrank capacity. A reservable fix — a bigger cache, a layout that stops
+serializing, a model whose runs hold the tail — is named instead of more CPU or
+another node, because capacity bought for work the cache can answer is capacity
+wasted. Only when nothing bit-specific is wrong does the fleet answer with
+capacity.
 
 The host rule deliberately excludes a held budget: widening a node's own budget
 cannot give back CPU the kernel refused, so a throttled or starved group is
-named as the host's fault rather than the node's. The memory rules are kept
-apart for the same reason — a spent cache-restore headroom is bought away, a
-monotonic RSS rise at flat load is a bug that no amount of memory fixes, so it
-is reported as unexplained rather than as a purchase. The memory line quotes the
-*server's own* cache-restore limit, never a percentage of the machine's RAM; a
-pod running several processes or a sidecar will therefore under-report.
+named as the host's fault rather than the node's. Its magnitude floor is what
+keeps an idle node with ten milliseconds of stolen time from reporting
+`host is the constraint`. The memory rules are kept apart for the same reason — a
+spent cache-restore headroom is bought away, a monotonic RSS rise at flat load is
+a bug that no amount of memory fixes, so it is reported as unexplained rather
+than as a purchase. The memory line quotes the *server's own* cache-restore
+limit, never a percentage of the machine's RAM; a pod running several processes
+or a sidecar will therefore under-report.
 
 With several nodes the cluster view renders one fleet sizing line: every
 resource a node binds on (a memory-limited node in a CPU-limited fleet is
@@ -329,13 +378,29 @@ to inspect first. The first node named is the one bound on a resource its peers
 are not, or failing that the one whose client-measured p95 is far above its
 peers' while it carries comparable load; a node-count recommendation is named
 last, so a node that does not look like its peers is inspected before the fleet
-is grown. In `-once` output each line carries the recommendation as single tokens:
+is grown. The named node's own action leads the line, with the phase behind its
+tail (its tail is 90% admission wait), and a repair it can make suppresses the
+fleet's capacity answer entirely.
+
+In `-once` output each line carries the recommendation as single tokens:
 `rec=cpu`, `rec=host`, `rec=memory`, `rec=growth` or `rec=nodes` beside the
 node's own fields, and on the fleet aggregate the binding resources joined into
 one (`rec=cpu+memory`) plus `rec_first=<node>` for the node to inspect first.
 The node gets its own field because a fleet can have nothing binding and still
 have a node worth looking at. Both are absent when there is nothing to
 recommend.
+
+The same lines carry the attribution as their own tokens, absent when there is
+nothing measured: `act=` the action (`cpu_budget`, `host_cpu`, `cache`,
+`intra_op_threads`, `workers`, `batch_window`, `model`, `memory`, `growth`,
+`nodes`) with `act_rejected=` for the action the same evidence rejects;
+`cached_pct=` the cache's share of the window's attributed traffic (an event the
+server did not attribute — an image run — is counted on neither side of it); `lat_p95_run_us=` and
+`lat_p95_run_n=` the p95 of the requests that ran and how many those are;
+`phase=`, `phase_share=`, `phase_wait_us=`, `phase_admit_us=` and `phase_run_us=`
+the window's dominant phase and its mean per run; and per model `runs=`,
+`wait_us=`, `admit_us=`, `run_us=` and `cache_served_reqs=` that model's own
+window. Every token the line already carried keeps its name.
 
 ### Watching a fleet
 
