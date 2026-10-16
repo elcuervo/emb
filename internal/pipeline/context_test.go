@@ -78,6 +78,13 @@ func TestBatcherEmbedContextAbandonsTheWait(t *testing.T) {
 
 // TestAbandonedRequestNeverRuns covers the abandonment half of the contract:
 // a request whose caller has gone away is not carried into inference.
+//
+// A cancelled caller is answered on whichever path it takes: the dispatch
+// select losing to ctx.Done() (an error), or the worker receiving the request
+// and dropping it on its own context check (the response carries the error and
+// the call returns nil — the shape the server checks). Both are "reported
+// cancelled, never run"; asserting on one of them alone is a coin flip, since
+// an idle worker parks in its receive and leaves both select cases ready.
 func TestAbandonedRequestNeverRuns(t *testing.T) {
 	var runs atomic.Int64
 	sess := &countingRunSession{runs: &runs}
@@ -89,8 +96,12 @@ func TestAbandonedRequestNeverRuns(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := p.EmbedContext(ctx, []string{"aa"}); err == nil {
-		t.Fatal("a cancelled request was served")
+	resp, err := p.EmbedContext(ctx, []string{"aa"})
+	if err == nil {
+		err = resp.Err
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled request was served: err=%v, resp.Err=%v", err, resp.Err)
 	}
 	if got := runs.Load(); got != 0 {
 		t.Fatalf("a cancelled request still reached inference: %d runs", got)
@@ -104,8 +115,12 @@ func TestAbandonedRequestNeverRuns(t *testing.T) {
 	defer func() { _ = b.Close() }()
 	bctx, bcancel := context.WithCancel(context.Background())
 	bcancel()
-	if _, err := b.EmbedContext(bctx, []string{"aa"}); err == nil {
-		t.Fatal("a cancelled request was served by the batcher")
+	bresp, err := b.EmbedContext(bctx, []string{"aa"})
+	if err == nil {
+		err = bresp.Err
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled request was served by the batcher: err=%v, resp.Err=%v", err, bresp.Err)
 	}
 	time.Sleep(50 * time.Millisecond) // let a window close if one was armed
 	if got := batchRuns.Load(); got != 0 {
