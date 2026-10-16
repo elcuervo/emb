@@ -666,33 +666,62 @@ the command that produced it. Re-record the whole thing with
 `just website-stressviz`.
 
 <!-- stressviz:begin -->
-**Machine.** Darwin 25.6.0 arm64, 10 CPUs, recorded 2026-10-14.
+**Machine.** Darwin 25.6.0 arm64, 10 CPUs, recorded 2026-10-16.
 
 **Fleet.** 2 endpoints from `website/tools/topviz/models.yaml` (minilm, bge-small, jina-small, e5-small), both loopback, one per address family of `localhost`, each preloaded with `cache: 256MB`.
 
 **Method.** One `emb-stress` run: closed-loop levels, 12s held per level with the leading 4s discarded, seed 3, generated word-length classes. An `emb-top -node localhost -frames -interval 1s` sidecar watched the same fleet for the run's duration; the sizing lines below are its own.
 
-**Invocation.** `./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3` (`just website-stressviz`), recorded 9334f4f.
+**Invocation.** `./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3` (`just website-stressviz`), recorded 1b14fc1.
 
 **Fleet, per level** — the table the figure draws:
 
 | level (workers per endpoint) | offered req/s | completed req/s | p50 | p95 | p99 | errors |
 |---|---|---|---|---|---|---|
-| 1 | 24.6 | 24.6 | 75.2ms | 162.6ms | 227.8ms | 0 |
-| 2 | 35.1 | 35.1 | 117.6ms | 219.9ms | 255.2ms | 0 |
-| 4 | 53.4 | 53.4 | 136.9ms | 278.8ms | 330.3ms | 0 |
-| 8 | 52.8 | 52.8 | 285.0ms | 480.9ms | 593.3ms | 0 |
+| 1 | 28.5 | 28.5 | 44.4ms | 136.7ms | 139.2ms | 0 |
+| 2 | 35.9 | 35.9 | 116.4ms | 214.9ms | 223.6ms | 0 |
+| 4 | 53.0 | 53.0 | 134.4ms | 283.4ms | 325.9ms | 0 |
+| 8 | 53.0 | 53.0 | 274.5ms | 509.0ms | 620.1ms | 0 |
 
-**[::1]:6379** — level 1 12.4 req/s, p95 156.3ms; level 2 17.6 req/s, p95 219.7ms; level 4 26.4 req/s, p95 275.3ms; level 8 26.0 req/s, p95 469.8ms
+**[::1]:6379** — level 1 14.2 req/s, p95 137.0ms; level 2 17.9 req/s, p95 212.2ms; level 4 26.4 req/s, p95 290.2ms; level 8 26.4 req/s, p95 467.8ms
 
-**127.0.0.1:6379** — level 1 12.2 req/s, p95 168.9ms; level 2 17.5 req/s, p95 221.8ms; level 4 27.0 req/s, p95 282.9ms; level 8 26.8 req/s, p95 482.2ms
+**127.0.0.1:6379** — level 1 14.2 req/s, p95 136.5ms; level 2 18.0 req/s, p95 214.9ms; level 4 26.6 req/s, p95 282.7ms; level 8 26.6 req/s, p95 565.5ms
 
 **Shares.** [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%. The offered share is the run's own split (the endpoints are divided evenly, which is the point of the comparison); the served share is each endpoint's completed work of the fleet's.
 
 **`emb-top`'s sizing lines during the run.**
-- none — the sizing line is advisory and appears only when a rule fires
+- poll 2: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 159.8ms) (its tail is`
+- poll 7: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 157.9ms) (its tail is`
+- poll 12: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 213.2ms) (its tail is`
+- poll 13: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.2ms) (its tail is`
+- poll 14: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.1ms) (its tail is`
+- poll 24: `[::1]:6379: take work off the model — bge-small: runs hold 99% of the uncached tail (p95 219.3ms) (its tail is 9`
+- poll 25: `[::1]:6379: take work off the model — bge-small: runs hold 94% of the uncached tail (p95 228.9ms) (its tail is 9`
+- poll 26: `[::1]:6379: take work off the model — bge-small: runs hold 90% of the uncached tail (p95 249.1ms) (its tail is 9`
+- poll 27: `[::1]:6379: take work off the model — bge-small: runs hold 87% of the uncached tail (p95 269.2ms) (its tail is 8`
+- poll 28: `[::1]:6379: take work off the model — bge-small: runs hold 84% of the uncached tail (p95 278.6ms) (its tail is 8`
+- poll 29: `[::1]:6379: take work off the model — bge-small: runs hold 82% of the uncached tail (p95 278.6ms) (its tail is 8`
+- poll 30: `[::1]:6379: take work off the model — bge-small: runs hold 79% of the uncached tail (p95 294.7ms) (its tail is 7`
+- poll 31: `[::1]:6379: take work off the model — bge-small: runs hold 78% of the uncached tail (p95 311.8ms) (its tail is 7`
+- poll 32: `[::1]:6379: take work off the model — bge-small: runs hold 76% of the uncached tail (p95 294.7ms) (its tail is 7`
+- poll 33: `[::1]:6379: take work off the model — bge-small: runs hold 75% of the uncached tail (p95 311.8ms) (its tail is 7`
+- poll 34: `[::1]:6379: take work off the model — bge-small: runs hold 74% of the uncached tail (p95 311.8ms) (its tail is 7`
+- poll 35: `[::1]:6379: take work off the model — bge-small: runs hold 72% of the uncached tail (p95 312.8ms) (its tail is 7`
+- poll 36: `[::1]:6379: take work off the model — bge-small: runs hold 71% of the uncached tail (p95 311.8ms) (its tail is 7`
+- poll 37: `[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 349.0ms) (its tail is 7`
+- poll 38: `[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 419.4ms) (its tail is 7`
+- poll 39: `[::1]:6379: take work off the model — runs hold 69% of the uncached tail (p95 427.6ms) (its tail is 69% run wait`
+- poll 40: `[::1]:6379: take work off the model — runs hold 68% of the uncached tail (p95 431.7ms) (its tail is 68% run wait`
+- poll 41: `[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 447.1ms) (its tail is 67% run wait`
+- poll 42: `[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 453.5ms) (its tail is 67% run wait`
+- poll 43: `[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 457.0ms) (its tail is 66% run wait`
+- poll 44: `[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 467.9ms) (its tail is 66% run wait`
+- poll 45: `[::1]:6379: take work off the model — runs hold 65% of the uncached tail (p95 474.7ms) (its tail is 65% run wait`
+- poll 46: `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 482.8ms) (its tail is 64% run wait`
+- poll 47: `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 481.5ms) (its tail is 64% run wait`
+- poll 48: `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 488.6ms) (its tail is 64% run wait`
 
-**Capture.** `docs/assets/stressviz-f45ee7a7.gif` — the run's own output, rendered.
+**Capture.** `docs/assets/stressviz-1576736f.gif` — the run's own output, rendered.
 <!-- stressviz:end -->
 
 ## Startup calibration and process budget

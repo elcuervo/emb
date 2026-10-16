@@ -825,34 +825,34 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
            Do not hand-edit the frame, the caption or the figures. -->
       <figure class="topviz topviz--doc">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-e348a08c.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre6 · 127.0.0.1:16379 · uptime 28s    ·  4 models · poll 1s
-● HEALTHY   connected │ err   0.0% │ p95 31.9ms  │ cpu  14% │ cache  49%
-SIZING  take work off the model — runs hold 96% of the uncached tail (p95 36.5ms)
-not more cpu: the time is inference, not queueing · served 96% from cache · 18.6ms cpu/run
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-bfa3f73e.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3 · 127.0.0.1:16379 · uptime 28s    ·  4 models · poll 1s
+● HEALTHY   connected │ err   0.0% │ p95 32.1ms  │ cpu  15% │ cache  49%
+SIZING  take work off the model — runs hold 95% of the uncached tail (p95 37.8ms)
+not more cpu: the time is inference, not queueing · served 97% from cache · 18.9ms cpu/run
 ╭────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
-│     │                                 ╭╮  ╭─╮ │ ╰──╮╭╮ ││                                       ░░            ░░ │
-│  124│                                 │╰──╯ ╰─╯    ╰╯╰ ││                       ░░░░░░░░░░░░░░██████████████████ │
-│     │                              ╭─╮│                ││                  ███████████████████░░░░░░░░░░░░░░░░░░ │
-│ 62.0│                             ╭╯ ╰╯                ││         █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│     │                                 ╭╮  ╭─╮ │  ╰╮    ││                                       ░░               │
+│  120│                                 │╰──╯ ╰─╯   ╰──╮ ││                           ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│     │                              ╭─╮│              ╰ ││                  █████████████████████████████████████ │
+│ 59.9│                             ╭╯ ╰╯                ││         █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
 │     │                             │                    ││ ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  0.0│                          ───╯                    ││ p50–p99 ░  p95 █  runs p95 36.5ms · n=1824             │
+│  0.0│                          ───╯                    ││ p50–p99 ░  p95 █  runs p95 37.8ms · n=1827             │
 ╰────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────╯
-● bge-small     384d·cls·fp32         8.0 r/s      272 t/s p50 3µs      p95 34.2ms↑  err 0       ███████████████████████
-● e5-small      384d·mean·fp32       39.9 r/s     1.1k t/s p50 20.7ms   p95 33.6ms↑  err 0       ███████████████████████
-● jina-small    512d·mean·fp32       16.0 r/s      784 t/s p50 6.5ms    p95 31.0ms   err 0       ███████████████████████
-● minilm        384d·mean·fp32       46.9 r/s      803 t/s p50 5µs      p95 22.4ms↑  err 0       ███████████████████████
+● bge-small     384d·cls·fp32        20.0 r/s      681 t/s p50 4µs      p95 35.2ms   err 0       ███████████████████████
+● e5-small      384d·mean·fp32       42.0 r/s     1.1k t/s p50 20.5ms   p95 37.9ms   err 0       ███████████████████████
+● jina-small    512d·mean·fp32       14.0 r/s      687 t/s p50 6.4ms    p95 26.1ms↑  err 0       ███████████████████████
+● minilm        384d·mean·fp32       28.0 r/s      477 t/s p50 5µs      p95 21.1ms   err 0       ███████████████████████
   rows 1–4 of 4 · req/s per model · older ████████ newer
-cache   48.9%                    cpu   14.4%                                                     mem  1.1kMB
+cache   49.2%                    cpu   15.1%                                                     mem  1.1kMB
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
 ████████████████████████████████ ██████████████████████████████████████████████████████████████  ███████████████████████
   conns  2 · active  0 · goroutines  25 · truncated texts/pairs/images   0/  0/  0
   cpu budget 8 · tokens 0/8 · peak 6 · 10.00 cores (scheduler/affinity)
-  event e5-small ·   1 texts · 13.7ms  ✓
+  event bge-small ·   1 texts · 15.2ms  ✓
 q quit · p pause · r reset · j/k scroll · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-15 · emb-top v0.4.3.pre6 · 70c7730 · 4 models · 127.0.0.1:16379</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 176 requests/s, 5.1k tokens/s, p95 latency 25.4ms, cache hit rate 37%, CPU 266%, 1062MB resident. Per model: bge-small 27/s (avg 7.5ms, dim 384, cls, fp32); e5-small 71/s (avg 5.9ms, dim 384, mean, fp32); jina-small 30/s (avg 7.3ms, dim 512, mean, fp32); minilm 48/s (avg 2.4ms, dim 384, mean, fp32).</p>
+        <figcaption class="topviz__src">Measured run · <span data-topviz-run>2026-10-16 · emb-top v0.4.3 · 1b14fc1 · 4 models · 127.0.0.1:16379</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded run: 178 requests/s, 5.3k tokens/s, p95 latency 25.8ms, cache hit rate 34%, CPU 275%, 1060MB resident. Per model: bge-small 29/s (avg 7.3ms, dim 384, cls, fp32); e5-small 68/s (avg 6.3ms, dim 384, mean, fp32); jina-small 35/s (avg 7.3ms, dim 512, mean, fp32); minilm 46/s (avg 2.5ms, dim 384, mean, fp32).</p>
       </figure>
 
       <!-- The fleet run, on the same terms as the plate above and written by
@@ -867,34 +867,34 @@ q quit · p pause · r reset · j/k scroll · ? help</pre>
       <!-- fleetviz:begin -->
       <figure class="topviz topviz--doc" id="fleetviz-plate">
         <div class="topviz__play">
-          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-b0476372.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
-          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3.pre6 · 2 nodes · poll 1s
+          <div class="topviz__live" data-topviz-cast="../assets/cast/emb-top-cluster-274cc752.cast" data-topviz-speed="1" data-topviz-poster="npt:0:20"></div>
+          <pre class="topviz__screen" data-topviz-frame>emb-top v0.4.3 · 2 nodes · poll 1s
 ● HEALTHY
-
+SIZING  127.0.0.1:16379: take work off the model — runs hold 95% of the uncached tail (p95 37.9ms) (its tail is 95% run
   discovered 2 · receiving traffic 2 · idle 0 · orphaned 0
-IN  193 req/s · OUT 5.7k tok/s · 0 active · 4 conns · err 0.0% · p95 39.4ms   trend ▁▁▁▁▁▃▄▃▄▅▆▆▅▅▆▆▆▆████▇▆
-  cpu budget 16 · tokens 0/16 · peak 12 · 20.00 cores (scheduler/affinity)
+IN  181 req/s · OUT 5.3k tok/s · 3 active · 8 conns · err 0.0% · p95 36.7ms   trend ▁▁▁▁▁▄▄▃▄▆▅▅▅▅▆▆▆▅██▇▇▇▆
+  cpu budget 16 · tokens 3/16 · peak 12 · 20.00 cores (scheduler/affinity)
 TRAFFIC inbound req/s per node over the last polls · older ←  → newer
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│     │                                        ╭───────────────────────────────────────╯                         ╰──── │
-│ 72.4│                  ╭─────────────────────╯                   ╭────────────────────────────────────────────────── │
-│     │              ╭─┬─┴─────────────────────────────────────────╯                                                   │
-│  0.0│──────────────┴─╯                                                                                               │
+│     │                                     ╭──────╮╭───────────────────────────────╮╭──╯          ╰────────────────── │
+│ 77.9│                ╭──────────╮   ╭─────╯      ╰╯             ╭───────────╮     ╰┼──────────────────────────────── │
+│     │             ╭─┬┴──────────┴───┴───────────────────────────╯           ╰──────╯                                 │
+│  0.0│─────────────┴─╯                                                                                                │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 58% · expected 50% each
+LOAD ████████████████████████████████████  busiest 127.0.0.1:16379 61% · expected 50% each
 INGRESS  req/s into each node · bar scaled to the busiest · trend = recent polls
-▶ ● 127.0.0.1:16379             111 r/s   58% █████████████████ ▁▁▃▅▄▅▆▇▇▆███▆   p95 38.7ms  cpu 19%  cache 35% err 0.0%
-  ● 127.0.0.1:16380            81.9 r/s   42% █████████████░░░░ ▁▁▃▄▃▅▅▆▆▆███▇   p95 39.4ms  cpu 15%  cache 17% err 0.0%
+▶ ● 127.0.0.1:16379             111 r/s   61% █████████████████ ▁▁▅▄▄▆▆▆▆▅█▇▇▆   p95 36.5ms  cpu 18%  cache 36% err 0.0%
+  ● 127.0.0.1:16380            69.9 r/s   39% ███████████░░░░░░ ▁▁▃▃▃▅▅▆▆▅█▇▇▇   p95 36.7ms  cpu 11%  cache 17% err 0.0%
   nodes 1–2 of 2 · share of fleet req/s · j/k select · enter detail
 IMBALANCE  ✓ all 4 pass
-  ✓ inbound  range 81.9–111 req/s
-  ✓ latency  worst 127.0.0.1:16380 p95 39.4ms (1.0× peers' median)
+  ✓ inbound  range 69.9–111 req/s
+  ✓ latency  worst 127.0.0.1:16380 p95 36.7ms (1.0× peers' median)
   ✓ errors   max 0.0%
-  ✓ cpu      max 19%
+  ✓ cpu      max 18%
 q quit · p pause · r reset · j/k select · enter detail · esc back · ? help</pre>
         </div>
-        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-15 · emb-top v0.4.3.pre6 · ce6fda7 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
-        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 228 requests/s, 6.5k tokens/s, cache hit rate 22%, CPU 399%, 2127MB resident across 2 nodes. Per node: 127.0.0.1:16379 144/s (63% of the fleet, p95 29.3ms, CPU 244%); 127.0.0.1:16380 84/s (37% of the fleet, p95 29.1ms, CPU 154%).</p>
+        <figcaption class="topviz__src">Measured fleet run · <span data-topviz-run>2026-10-16 · emb-top v0.4.3 · 1b14fc1 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380</span></figcaption>
+        <p class="sr-only topviz__metrics" data-topviz-metrics>Busiest poll of the recorded fleet run: 243 requests/s, 7.1k tokens/s, cache hit rate 20%, CPU 415%, 2125MB resident across 2 nodes. Per node: 127.0.0.1:16379 151/s (62% of the fleet, p95 26.4ms, CPU 248%); 127.0.0.1:16380 92/s (38% of the fleet, p95 28.6ms, CPU 167%).</p>
       </figure>
       <!-- fleetviz:end -->
 
@@ -942,44 +942,44 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
       <!-- stressviz:begin -->
       <figure class="plate" id="plate-stressviz">
         <div class="plate__wrap">
-        <svg class="plate__svg" viewBox="0 0 720 374" role="img" aria-labelledby="stressviz-t">
-          <title id="stressviz-t">One emb-stress run against a 2-node fleet: the fleet's completed requests per second and p95 latency at levels 1, 2, 4, 8, each endpoint's served share beside its offered share ([::1]:6379 served 50% of the fleet; 127.0.0.1:6379 served 50% of the fleet), and the sizing lines emb-top rendered during the run (none)</title>
+        <svg class="plate__svg" viewBox="0 0 720 896" role="img" aria-labelledby="stressviz-t">
+          <title id="stressviz-t">One emb-stress run against a 2-node fleet: the fleet's completed requests per second and p95 latency at levels 1, 2, 4, 8, each endpoint's served share beside its offered share ([::1]:6379 served 50% of the fleet; 127.0.0.1:6379 served 50% of the fleet), and the sizing lines emb-top rendered during the run (30 line(s))</title>
           <text class="plate__label plate__label--strong" x="64" y="20">completed req/s · fleet</text>
           <line class="plate__grid" x1="64" y1="150.0" x2="356" y2="150.0"/>
           <text class="plate__label" x="56" y="154.0" text-anchor="end">0</text>
           <line class="plate__grid" x1="64" y1="92.0" x2="356" y2="92.0"/>
-          <text class="plate__label" x="56" y="96.0" text-anchor="end">27</text>
+          <text class="plate__label" x="56" y="96.0" text-anchor="end">26</text>
           <line class="plate__grid" x1="64" y1="34.0" x2="356" y2="34.0"/>
           <text class="plate__label" x="56" y="38.0" text-anchor="end">53</text>
           <line class="plate__axis" x1="64" y1="34" x2="64" y2="150"/>
           <line class="plate__axis" x1="64" y1="150" x2="356" y2="150"/>
-          <polyline class="plate__signal" points="64.0,96.6 161.3,73.8 258.7,34.0 356.0,35.3"/>
-          <circle class="plate__point plate__point--accent" cx="64.0" cy="96.6" r="3"/>
-          <text class="plate__label plate__label--strong" x="64.0" y="88.6" text-anchor="middle">24.6</text>
-          <circle class="plate__point plate__point--accent" cx="161.3" cy="73.8" r="3"/>
-          <text class="plate__label plate__label--strong" x="161.3" y="65.8" text-anchor="middle">35.1</text>
+          <polyline class="plate__signal" points="64.0,87.6 161.3,71.4 258.7,34.0 356.0,34.0"/>
+          <circle class="plate__point plate__point--accent" cx="64.0" cy="87.6" r="3"/>
+          <text class="plate__label plate__label--strong" x="64.0" y="79.6" text-anchor="middle">28.5</text>
+          <circle class="plate__point plate__point--accent" cx="161.3" cy="71.4" r="3"/>
+          <text class="plate__label plate__label--strong" x="161.3" y="63.4" text-anchor="middle">35.9</text>
           <circle class="plate__point plate__point--accent" cx="258.7" cy="34.0" r="3"/>
-          <text class="plate__label plate__label--strong" x="258.7" y="26.0" text-anchor="middle">53.4</text>
-          <circle class="plate__point plate__point--accent" cx="356.0" cy="35.3" r="3"/>
-          <text class="plate__label plate__label--strong" x="356.0" y="27.3" text-anchor="middle">52.8</text>
+          <text class="plate__label plate__label--strong" x="258.7" y="26.0" text-anchor="middle">53.0</text>
+          <circle class="plate__point plate__point--accent" cx="356.0" cy="34.0" r="3"/>
+          <text class="plate__label plate__label--strong" x="356.0" y="26.0" text-anchor="middle">53.0</text>
           <text class="plate__label plate__label--strong" x="400" y="20">p95 latency · fleet (ms)</text>
           <line class="plate__grid" x1="400" y1="150.0" x2="692" y2="150.0"/>
           <text class="plate__label" x="392" y="154.0" text-anchor="end">0</text>
           <line class="plate__grid" x1="400" y1="92.0" x2="692" y2="92.0"/>
-          <text class="plate__label" x="392" y="96.0" text-anchor="end">240</text>
+          <text class="plate__label" x="392" y="96.0" text-anchor="end">254</text>
           <line class="plate__grid" x1="400" y1="34.0" x2="692" y2="34.0"/>
-          <text class="plate__label" x="392" y="38.0" text-anchor="end">481</text>
+          <text class="plate__label" x="392" y="38.0" text-anchor="end">509</text>
           <line class="plate__axis" x1="400" y1="34" x2="400" y2="150"/>
           <line class="plate__axis" x1="400" y1="150" x2="692" y2="150"/>
-          <polygon class="plate__area" points="400,150 400.0,110.8 497.3,97.0 594.7,82.7 692.0,34.0 692,150/>
-          <circle class="plate__point" cx="400.0" cy="110.8" r="2.5"/>
-          <text class="plate__label plate__label--strong" x="400.0" y="102.8" text-anchor="middle">162.6ms</text>
-          <circle class="plate__point" cx="497.3" cy="97.0" r="2.5"/>
-          <text class="plate__label plate__label--strong" x="497.3" y="89.0" text-anchor="middle">219.9ms</text>
-          <circle class="plate__point" cx="594.7" cy="82.7" r="2.5"/>
-          <text class="plate__label plate__label--strong" x="594.7" y="74.7" text-anchor="middle">278.8ms</text>
+          <polygon class="plate__area" points="400,150 400.0,118.8 497.3,101.0 594.7,85.4 692.0,34.0 692,150/>
+          <circle class="plate__point" cx="400.0" cy="118.8" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="400.0" y="110.8" text-anchor="middle">136.7ms</text>
+          <circle class="plate__point" cx="497.3" cy="101.0" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="497.3" y="93.0" text-anchor="middle">214.9ms</text>
+          <circle class="plate__point" cx="594.7" cy="85.4" r="2.5"/>
+          <text class="plate__label plate__label--strong" x="594.7" y="77.4" text-anchor="middle">283.4ms</text>
           <circle class="plate__point" cx="692.0" cy="34.0" r="2.5"/>
-          <text class="plate__label plate__label--strong" x="692.0" y="26.0" text-anchor="middle">480.9ms</text>
+          <text class="plate__label plate__label--strong" x="692.0" y="26.0" text-anchor="middle">509.0ms</text>
           <text class="plate__label" x="64.0" y="166" text-anchor="middle">1</text>
           <text class="plate__label" x="161.3" y="166" text-anchor="middle">2</text>
           <text class="plate__label" x="258.7" y="166" text-anchor="middle">4</text>
@@ -988,19 +988,78 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
           <text class="plate__label plate__label--strong" x="64" y="210">share of the fleet · served, beside the offered mark</text>
           <text class="plate__label plate__label--strong" x="64" y="240">[::1]:6379</text>
           <line class="plate__grid" x1="240" y1="236" x2="600" y2="236"/>
-          <rect class="plate__area" x="240" y="227" width="178.8" height="18"/>
+          <rect class="plate__area" x="240" y="227" width="179.4" height="18"/>
           <line class="plate__cap-line" x1="420.0" y1="221" x2="420.0" y2="251"/>
           <text class="plate__label" x="610" y="240">50% → 50%</text>
           <text class="plate__label plate__label--strong" x="64" y="280">127.0.0.1:6379</text>
           <line class="plate__grid" x1="240" y1="276" x2="600" y2="276"/>
-          <rect class="plate__area" x="240" y="267" width="181.2" height="18"/>
+          <rect class="plate__area" x="240" y="267" width="180.4" height="18"/>
           <line class="plate__cap-line" x1="420.0" y1="261" x2="420.0" y2="291"/>
           <text class="plate__label" x="610" y="280">50% → 50%</text>
           <text class="plate__label plate__label--strong" x="64" y="326">emb-top's sizing lines during the run</text>
-          <text class="plate__label" x="64" y="346">none · nothing was near a threshold</text>
+          <text class="plate__label" x="64" y="346">poll 2</text>
+          <text class="plate__label plate__label--strong" x="130" y="346">[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 159.8ms) (its tail is</text>
+          <text class="plate__label" x="64" y="364">poll 7</text>
+          <text class="plate__label plate__label--strong" x="130" y="364">[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 157.9ms) (its tail is</text>
+          <text class="plate__label" x="64" y="382">poll 12</text>
+          <text class="plate__label plate__label--strong" x="130" y="382">[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 213.2ms) (its tail is</text>
+          <text class="plate__label" x="64" y="400">poll 13</text>
+          <text class="plate__label plate__label--strong" x="130" y="400">[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.2ms) (its tail is</text>
+          <text class="plate__label" x="64" y="418">poll 14</text>
+          <text class="plate__label plate__label--strong" x="130" y="418">[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.1ms) (its tail is</text>
+          <text class="plate__label" x="64" y="436">poll 24</text>
+          <text class="plate__label plate__label--strong" x="130" y="436">[::1]:6379: take work off the model — bge-small: runs hold 99% of the uncached tail (p95 219.3ms) (its tail is 9</text>
+          <text class="plate__label" x="64" y="454">poll 25</text>
+          <text class="plate__label plate__label--strong" x="130" y="454">[::1]:6379: take work off the model — bge-small: runs hold 94% of the uncached tail (p95 228.9ms) (its tail is 9</text>
+          <text class="plate__label" x="64" y="472">poll 26</text>
+          <text class="plate__label plate__label--strong" x="130" y="472">[::1]:6379: take work off the model — bge-small: runs hold 90% of the uncached tail (p95 249.1ms) (its tail is 9</text>
+          <text class="plate__label" x="64" y="490">poll 27</text>
+          <text class="plate__label plate__label--strong" x="130" y="490">[::1]:6379: take work off the model — bge-small: runs hold 87% of the uncached tail (p95 269.2ms) (its tail is 8</text>
+          <text class="plate__label" x="64" y="508">poll 28</text>
+          <text class="plate__label plate__label--strong" x="130" y="508">[::1]:6379: take work off the model — bge-small: runs hold 84% of the uncached tail (p95 278.6ms) (its tail is 8</text>
+          <text class="plate__label" x="64" y="526">poll 29</text>
+          <text class="plate__label plate__label--strong" x="130" y="526">[::1]:6379: take work off the model — bge-small: runs hold 82% of the uncached tail (p95 278.6ms) (its tail is 8</text>
+          <text class="plate__label" x="64" y="544">poll 30</text>
+          <text class="plate__label plate__label--strong" x="130" y="544">[::1]:6379: take work off the model — bge-small: runs hold 79% of the uncached tail (p95 294.7ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="562">poll 31</text>
+          <text class="plate__label plate__label--strong" x="130" y="562">[::1]:6379: take work off the model — bge-small: runs hold 78% of the uncached tail (p95 311.8ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="580">poll 32</text>
+          <text class="plate__label plate__label--strong" x="130" y="580">[::1]:6379: take work off the model — bge-small: runs hold 76% of the uncached tail (p95 294.7ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="598">poll 33</text>
+          <text class="plate__label plate__label--strong" x="130" y="598">[::1]:6379: take work off the model — bge-small: runs hold 75% of the uncached tail (p95 311.8ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="616">poll 34</text>
+          <text class="plate__label plate__label--strong" x="130" y="616">[::1]:6379: take work off the model — bge-small: runs hold 74% of the uncached tail (p95 311.8ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="634">poll 35</text>
+          <text class="plate__label plate__label--strong" x="130" y="634">[::1]:6379: take work off the model — bge-small: runs hold 72% of the uncached tail (p95 312.8ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="652">poll 36</text>
+          <text class="plate__label plate__label--strong" x="130" y="652">[::1]:6379: take work off the model — bge-small: runs hold 71% of the uncached tail (p95 311.8ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="670">poll 37</text>
+          <text class="plate__label plate__label--strong" x="130" y="670">[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 349.0ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="688">poll 38</text>
+          <text class="plate__label plate__label--strong" x="130" y="688">[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 419.4ms) (its tail is 7</text>
+          <text class="plate__label" x="64" y="706">poll 39</text>
+          <text class="plate__label plate__label--strong" x="130" y="706">[::1]:6379: take work off the model — runs hold 69% of the uncached tail (p95 427.6ms) (its tail is 69% run wait</text>
+          <text class="plate__label" x="64" y="724">poll 40</text>
+          <text class="plate__label plate__label--strong" x="130" y="724">[::1]:6379: take work off the model — runs hold 68% of the uncached tail (p95 431.7ms) (its tail is 68% run wait</text>
+          <text class="plate__label" x="64" y="742">poll 41</text>
+          <text class="plate__label plate__label--strong" x="130" y="742">[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 447.1ms) (its tail is 67% run wait</text>
+          <text class="plate__label" x="64" y="760">poll 42</text>
+          <text class="plate__label plate__label--strong" x="130" y="760">[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 453.5ms) (its tail is 67% run wait</text>
+          <text class="plate__label" x="64" y="778">poll 43</text>
+          <text class="plate__label plate__label--strong" x="130" y="778">[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 457.0ms) (its tail is 66% run wait</text>
+          <text class="plate__label" x="64" y="796">poll 44</text>
+          <text class="plate__label plate__label--strong" x="130" y="796">[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 467.9ms) (its tail is 66% run wait</text>
+          <text class="plate__label" x="64" y="814">poll 45</text>
+          <text class="plate__label plate__label--strong" x="130" y="814">[::1]:6379: take work off the model — runs hold 65% of the uncached tail (p95 474.7ms) (its tail is 65% run wait</text>
+          <text class="plate__label" x="64" y="832">poll 46</text>
+          <text class="plate__label plate__label--strong" x="130" y="832">[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 482.8ms) (its tail is 64% run wait</text>
+          <text class="plate__label" x="64" y="850">poll 47</text>
+          <text class="plate__label plate__label--strong" x="130" y="850">[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 481.5ms) (its tail is 64% run wait</text>
+          <text class="plate__label" x="64" y="868">poll 48</text>
+          <text class="plate__label plate__label--strong" x="130" y="868">[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 488.6ms) (its tail is 64% run wait</text>
         </svg>
         </div>
-        <figcaption class="plate__cap"><strong>Drawn from the run's own output</strong> — one <code>emb-stress</code> run against 2 endpoints ([::1]:6379, 127.0.0.1:6379) of 4 models, seed 3, 12s held per level with the leading 4s discarded, watched by <code>emb-top -node localhost -frames</code>. Fleet: level 1 24.6 completed req/s, p50 75.2ms, p95 162.6ms, p99 227.8ms, 0 errors; level 2 35.1 completed req/s, p50 117.6ms, p95 219.9ms, p99 255.2ms, 0 errors; level 4 53.4 completed req/s, p50 136.9ms, p95 278.8ms, p99 330.3ms, 0 errors; level 8 52.8 completed req/s, p50 285.0ms, p95 480.9ms, p99 593.3ms, 0 errors. Shares: [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%. <code>emb-top</code>'s sizing lines during the run: none — the recommendation is reported only when something is near a threshold. <span data-stressviz-run>2026-10-14 · emb-stress v0.4.3.pre5 · 9334f4f · 2 endpoints · 4 models · localhost</span>. Reproduce with <code>just website-stressviz</code> — <code>./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3</code>.</figcaption>
+        <figcaption class="plate__cap"><strong>Drawn from the run's own output</strong> — one <code>emb-stress</code> run against 2 endpoints ([::1]:6379, 127.0.0.1:6379) of 4 models, seed 3, 12s held per level with the leading 4s discarded, watched by <code>emb-top -node localhost -frames</code>. Fleet: level 1 28.5 completed req/s, p50 44.4ms, p95 136.7ms, p99 139.2ms, 0 errors; level 2 35.9 completed req/s, p50 116.4ms, p95 214.9ms, p99 223.6ms, 0 errors; level 4 53.0 completed req/s, p50 134.4ms, p95 283.4ms, p99 325.9ms, 0 errors; level 8 53.0 completed req/s, p50 274.5ms, p95 509.0ms, p99 620.1ms, 0 errors. Shares: [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%. <code>emb-top</code>'s sizing lines during the run: poll 2: [::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 159.8ms) (its tail is; poll 7: [::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 157.9ms) (its tail is; poll 12: [::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 213.2ms) (its tail is; poll 13: [::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.2ms) (its tail is; poll 14: [::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.1ms) (its tail is; poll 24: [::1]:6379: take work off the model — bge-small: runs hold 99% of the uncached tail (p95 219.3ms) (its tail is 9; poll 25: [::1]:6379: take work off the model — bge-small: runs hold 94% of the uncached tail (p95 228.9ms) (its tail is 9; poll 26: [::1]:6379: take work off the model — bge-small: runs hold 90% of the uncached tail (p95 249.1ms) (its tail is 9; poll 27: [::1]:6379: take work off the model — bge-small: runs hold 87% of the uncached tail (p95 269.2ms) (its tail is 8; poll 28: [::1]:6379: take work off the model — bge-small: runs hold 84% of the uncached tail (p95 278.6ms) (its tail is 8; poll 29: [::1]:6379: take work off the model — bge-small: runs hold 82% of the uncached tail (p95 278.6ms) (its tail is 8; poll 30: [::1]:6379: take work off the model — bge-small: runs hold 79% of the uncached tail (p95 294.7ms) (its tail is 7; poll 31: [::1]:6379: take work off the model — bge-small: runs hold 78% of the uncached tail (p95 311.8ms) (its tail is 7; poll 32: [::1]:6379: take work off the model — bge-small: runs hold 76% of the uncached tail (p95 294.7ms) (its tail is 7; poll 33: [::1]:6379: take work off the model — bge-small: runs hold 75% of the uncached tail (p95 311.8ms) (its tail is 7; poll 34: [::1]:6379: take work off the model — bge-small: runs hold 74% of the uncached tail (p95 311.8ms) (its tail is 7; poll 35: [::1]:6379: take work off the model — bge-small: runs hold 72% of the uncached tail (p95 312.8ms) (its tail is 7; poll 36: [::1]:6379: take work off the model — bge-small: runs hold 71% of the uncached tail (p95 311.8ms) (its tail is 7; poll 37: [::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 349.0ms) (its tail is 7; poll 38: [::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 419.4ms) (its tail is 7; poll 39: [::1]:6379: take work off the model — runs hold 69% of the uncached tail (p95 427.6ms) (its tail is 69% run wait; poll 40: [::1]:6379: take work off the model — runs hold 68% of the uncached tail (p95 431.7ms) (its tail is 68% run wait; poll 41: [::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 447.1ms) (its tail is 67% run wait; poll 42: [::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 453.5ms) (its tail is 67% run wait; poll 43: [::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 457.0ms) (its tail is 66% run wait; poll 44: [::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 467.9ms) (its tail is 66% run wait; poll 45: [::1]:6379: take work off the model — runs hold 65% of the uncached tail (p95 474.7ms) (its tail is 65% run wait; poll 46: [::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 482.8ms) (its tail is 64% run wait; poll 47: [::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 481.5ms) (its tail is 64% run wait; poll 48: [::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 488.6ms) (its tail is 64% run wait. <span data-stressviz-run>2026-10-16 · emb-stress v0.4.3 · 1b14fc1 · 2 endpoints · 4 models · localhost</span>. Reproduce with <code>just website-stressviz</code> — <code>./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3</code>.</figcaption>
         <div class="plate__legend">
           <span><i class="plate__swatch--area" aria-hidden="true"></i><b>served</b> — the endpoint's completed share of the fleet</span>
           <span><i class="plate__swatch--cap" aria-hidden="true"></i><b>offered</b> — its even share of the run's workers</span>
