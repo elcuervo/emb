@@ -38,6 +38,18 @@ const (
 	// peerLoadFloor is the share of its peers' offered load a node must carry
 	// to be compared on tail latency at all.
 	peerLoadFloor = 0.5
+	// hostStarvedPct is the share of the window's CPU capacity the host must
+	// have throttled or stolen before it is named as the constraint, and
+	// hostBusyPct the CPU a node must have used for that claim when its
+	// attribution is unavailable (an older server). A few milliseconds of steal
+	// over an idle window is not starvation, and naming it as one is how advice
+	// stops being read.
+	hostStarvedPct = 1.0
+	hostBusyPct    = 5.0
+	// hostThrottledPct is the share of the cgroup's throttle periods that must
+	// have been held off the CPU, for a host whose throttling is visible as
+	// periods rather than as measured microseconds.
+	hostThrottledPct = 10.0
 )
 
 // Resource names a recommendation can name.
@@ -78,10 +90,15 @@ func RecommendNode(hist []Point) Recommendation {
 		float64(cur.CPUActiveTokens) >= float64(cur.CPUBudget)*budgetHeldPct/100
 
 	// The kernel refused CPU the process wanted. Widening the node's own budget
-	// cannot help: the host is the constraint.
-	if !budgetHeld && (throttledPeriods > 0 || stealUs > 0) {
-		text := fmt.Sprintf("host is the constraint: %d/%d periods throttled · %s throttled · %s stolen",
-			throttledPeriods, throttled, FormatLatency(throttleUs), FormatLatency(stealUs))
+	// cannot help: the host is the constraint. The loss has to matter against
+	// the capacity the node had over the window, and the node has to have been
+	// doing work: an idle node with a few milliseconds of steal is not starved.
+	starvedPct := hostStarvedShare(hist, throttleUs+stealUs)
+	throttledPct := hostThrottledShare(throttledPeriods, throttled)
+	starved := starvedPct >= hostStarvedPct || throttledPct >= hostThrottledPct
+	if !budgetHeld && starved && hostCarriedWork(hist) {
+		text := fmt.Sprintf("host is the constraint: %d/%d periods throttled · %s throttled · %s stolen (%.1f%% of the window's cpu)",
+			throttledPeriods, throttled, FormatLatency(throttleUs), FormatLatency(stealUs), starvedPct)
 		return Recommendation{Kind: ResourceHost, Text: text}
 	}
 
@@ -122,12 +139,61 @@ func RecommendNode(hist []Point) Recommendation {
 	return Recommendation{}
 }
 
+// hostStarvedShare is the lost CPU as a share of the capacity the node had over
+// the window (its own parallelism times the window's duration): the same
+// denominator the CPU readout uses, so the two agree.
+func hostStarvedShare(hist []Point, lostUs int64) float64 {
+	if lostUs <= 0 || len(hist) < 2 {
+		return 0
+	}
+	wall := hist[len(hist)-1].At.Sub(hist[0].At).Microseconds()
+	if wall <= 0 {
+		return 0
+	}
+	capacity := wall * int64(NodeParallelism(hist[len(hist)-1].GoMaxProcs))
+	if capacity <= 0 {
+		return 0
+	}
+	return float64(lostUs) / float64(capacity) * 100
+}
+
+// hostThrottledShare is the share of the window's throttle periods the node was
+// held off the CPU in, 0 when the platform reports none.
+func hostThrottledShare(throttled, periods int64) float64 {
+	if throttled <= 0 || periods <= 0 {
+		return 0
+	}
+	return float64(throttled) / float64(periods) * 100
+}
+
+// hostCarriedWork reports whether the window saw inference work at all: tokens
+// held, CPU used, or requests the cache did not answer. A host claim about an
+// idle node is a claim about nothing.
+func hostCarriedWork(hist []Point) bool {
+	if len(hist) < 2 {
+		return false
+	}
+	first, cur := hist[0], hist[len(hist)-1]
+	if cur.CPUActiveTokens > 0 || cur.CPUPercent >= hostBusyPct {
+		return true
+	}
+	requests := delta(first.TotalRequests, cur.TotalRequests)
+	if requests <= 0 {
+		return false
+	}
+	return delta(first.CacheHits, cur.CacheHits) < requests
+}
+
 // FleetNodeRecInput is one node's contribution to the fleet recommendation: its
 // display label, its Point series, and the tail latency the client measured.
 type FleetNodeRecInput struct {
 	Label string
 	Hist  []Point
 	P95Us int64
+	// Advice is the node's own advice evidence, when the caller has it. The
+	// fleet line uses it to name the action and the phase behind the first
+	// node's tail, instead of only naming the node.
+	Advice *AdviceInput
 }
 
 // FleetRecommendation is the advisory fleet-level recommendation: every
@@ -137,6 +203,14 @@ type FleetRecommendation struct {
 	Kinds []string // one entry per binding resource, first-seen order
 	Text  string   // one line naming the resources, the headroom and the first node
 	First string   // node to inspect or replace first, "" when none
+	// Action is what to change across the fleet: the first node's own action
+	// when it needs a repair, otherwise additions. Capacity is named only when
+	// no node's own evidence points at a cheaper fix.
+	Action string
+	// Phase and Share are the first node's attributed tail, so the fleet line
+	// points at a phase rather than only at a hostname.
+	Phase Phase
+	Share float64
 }
 
 // Empty reports whether there is nothing to recommend.
@@ -153,6 +227,7 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 
 	var kinds []string
 	byKind := map[string][]string{}
+	advice := map[string]Advice{}
 	for _, n := range nodes {
 		r := RecommendNode(n.Hist)
 		if r.Empty() {
@@ -162,6 +237,15 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 			kinds = append(kinds, r.Kind)
 		}
 		byKind[r.Kind] = append(byKind[r.Kind], n.Label)
+	}
+	// Every node's own course of action, when the caller supplied its evidence.
+	for _, n := range nodes {
+		if n.Advice == nil {
+			continue
+		}
+		if a := Advise(*n.Advice); !a.Empty() {
+			advice[n.Label] = a
+		}
 	}
 
 	first := minorityBoundNode(kinds, byKind)
@@ -180,10 +264,31 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 		// its peers is inspected before the fleet is grown.
 		parts = append(parts, "inspect "+first+" first")
 	}
+	// A node's own repair outranks capacity: entries the cache dropped, a
+	// layout that serializes or a model whose runs hold the tail are all
+	// cheaper than another node, and adding nodes would buy capacity for work
+	// that should not be done at all.
+	repairLabel, repairAction := "", ""
+	for _, n := range nodes {
+		a, ok := advice[n.Label]
+		if !ok || a.Action == ActionNone || isCapacity(a.Action) {
+			// Capacity answers — a wider budget, another node — do not stand in
+			// for each other: they are named together below.
+			continue
+		}
+		if repairLabel == "" || (first != "" && n.Label == first) {
+			repairLabel, repairAction = n.Label, a.Action
+			if first != "" && n.Label == first {
+				break
+			}
+		}
+	}
+
 	// A node-count recommendation is capacity, not a repair, and it is only
-	// justified when the headroom is uniformly small: one node binding on its
-	// own is named as that node's resource instead.
-	if uniform {
+	// justified when the headroom is uniformly small and no node's own
+	// evidence points at a repair: one node binding on its own is named as that
+	// node's resource instead.
+	if uniform && repairAction == "" {
 		if len(kinds) == 0 {
 			kinds = []string{ResourceNodes}
 		} else if !slices.Contains(kinds, ResourceNodes) {
@@ -201,7 +306,21 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 		parts = append(parts, fmt.Sprintf("fleet cpu headroom %.0f%%", headroom))
 	}
 
-	return FleetRecommendation{Kinds: kinds, Text: strings.Join(parts, " · "), First: first}
+	rec := FleetRecommendation{Kinds: kinds, Text: strings.Join(parts, " · "), First: first}
+	if repairAction != "" {
+		// The named node's action, with the phase behind its tail.
+		a := advice[repairLabel]
+		rec.Action = repairAction
+		rec.Phase, rec.Share = a.Phase, a.Share
+		clause := repairLabel + ": " + a.Text
+		if a.Phase != PhaseNone && a.Share > 0 {
+			clause += fmt.Sprintf(" (its tail is %.0f%% %s wait)", a.Share*100, a.Phase)
+		}
+		rec.Text = clause + " · " + rec.Text
+	} else if uniform {
+		rec.Action = ActionNodes
+	}
+	return rec
 }
 
 // minorityBoundNode picks the node bound on a resource its peers are not: the

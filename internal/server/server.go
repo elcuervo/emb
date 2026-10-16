@@ -882,22 +882,45 @@ func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
 	}
 }
 
+// requestAttribution is what one command's texts cost: how many were answered
+// from the reply cache, and what the rest waited for and spent running. Paths
+// that infer outside the embedding pool leave attributed false.
+type requestAttribution struct {
+	cachedTexts   int
+	attributed    bool
+	dispatchWait  time.Duration
+	admissionWait time.Duration
+	run           time.Duration
+}
+
+// fromResponse returns the phases one pool or batcher response carried.
+func fromResponse(cachedTexts int, resp pipeline.Response) requestAttribution {
+	return requestAttribution{
+		cachedTexts:   cachedTexts,
+		attributed:    true,
+		dispatchWait:  resp.DispatchWait,
+		admissionWait: resp.AdmissionWait,
+		run:           resp.Run,
+	}
+}
+
 // embedTexts resolves embeddings for `texts` against `model` through the
 // shared embedding path: cache lookups, one batched inference for the misses,
 // and cache writes. It is the single entry point used by both the EMB command
 // and the scripted `emb.embed` host, so embeddings produced by either path
 // share cache entries and batcher admission. entry.Pool must already be
-// resolved (see Registry.GetOrInit).
-func (s *Server) embedTexts(ctx context.Context, entry *registry.ModelEntry, model string, texts []string) ([][]byte, error) {
+// resolved (see Registry.GetOrInit). The returned attribution describes this
+// command's own texts: how many the cache answered, and what the rest paid.
+func (s *Server) embedTexts(ctx context.Context, entry *registry.ModelEntry, model string, texts []string) ([][]byte, requestAttribution, error) {
 	if s.cache == nil {
 		resp, err := entry.Pool.EmbedContext(ctx, texts)
 		if err != nil {
-			return nil, err
+			return nil, requestAttribution{}, err
 		}
 		if resp.Err != nil {
-			return nil, resp.Err
+			return nil, requestAttribution{}, resp.Err
 		}
-		return resp.Embeddings, nil
+		return resp.Embeddings, fromResponse(0, resp), nil
 	}
 
 	results := make([][]byte, len(texts))
@@ -913,8 +936,10 @@ func (s *Server) embedTexts(ctx context.Context, entry *registry.ModelEntry, mod
 			missIdxs = append(missIdxs, i)
 		}
 	}
+	cached := len(texts) - len(missIdxs)
 	if len(missIdxs) == 0 {
-		return results, nil
+		// Every text was cache-answered: an attributed request with no phases.
+		return results, requestAttribution{cachedTexts: cached, attributed: true}, nil
 	}
 
 	missTexts := make([]string, len(missIdxs))
@@ -923,16 +948,16 @@ func (s *Server) embedTexts(ctx context.Context, entry *registry.ModelEntry, mod
 	}
 	resp, err := entry.Pool.EmbedContext(ctx, missTexts)
 	if err != nil {
-		return nil, err
+		return nil, requestAttribution{}, err
 	}
 	if resp.Err != nil {
-		return nil, resp.Err
+		return nil, requestAttribution{}, resp.Err
 	}
 	for j, idx := range missIdxs {
 		results[idx] = resp.Embeddings[j]
 		s.cache.Set(textCacheKey(model, texts[idx]), resp.Embeddings[j])
 	}
-	return results, nil
+	return results, fromResponse(cached, resp), nil
 }
 
 // admissionContext bounds how long an inference command may wait for admission.
@@ -997,6 +1022,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	// Record the request completion for MONITOR (bounded ring, no text
 	// payloads). Latency spans argument parsing through reply writing.
 	failed := false
+	var attribution requestAttribution
 	defer func() {
 		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
@@ -1004,7 +1030,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 			Texts:     total,
 			LatencyUs: time.Since(started).Microseconds(),
 			Err:       failed,
-		})
+		}.attributed(attribution))
 	}()
 
 	// Truncate oversized commands: process only the first maxTexts texts and
@@ -1027,7 +1053,7 @@ func (s *Server) handleEMB(conn redcon.Conn, cmd redcon.Command) {
 	ctx, cancel := s.admissionContext()
 	defer cancel()
 
-	results, err := s.embedTexts(ctx, entry, modelName, texts)
+	results, attribution, err := s.embedTexts(ctx, entry, modelName, texts)
 	if err != nil {
 		failed = true
 		if msg, busy := admissionBusyMessage(err); busy {
@@ -1090,7 +1116,7 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 		if conn.ProtocolVersion() == 3 {
 			// RESP3: a map per event, with the same field names as the
 			// RESP2 flat array (see the resp3-protocol spec).
-			conn.WriteMap(6)
+			conn.WriteMap(11)
 			conn.WriteBulkString("seq")
 			conn.WriteInt(int(e.Seq))
 			conn.WriteBulkString("at_us")
@@ -1107,9 +1133,25 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 			} else {
 				conn.WriteInt(0)
 			}
+			conn.WriteBulkString("cached_texts")
+			conn.WriteInt(e.CachedTexts)
+			conn.WriteBulkString("attributed")
+			if e.Attributed {
+				conn.WriteInt(1)
+			} else {
+				conn.WriteInt(0)
+			}
+			conn.WriteBulkString("dispatch_us")
+			conn.WriteInt(int(e.DispatchUs))
+			conn.WriteBulkString("admit_us")
+			conn.WriteInt(int(e.AdmitUs))
+			conn.WriteBulkString("run_us")
+			conn.WriteInt(int(e.RunUs))
 			continue
 		}
-		conn.WriteArray(6)
+		// The first six elements keep their order: a client reading the
+		// original event positionally is unaffected by the appended fields.
+		conn.WriteArray(11)
 		conn.WriteInt(int(e.Seq))
 		conn.WriteInt(int(e.AtUs))
 		conn.WriteBulkString(e.Model)
@@ -1120,7 +1162,15 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 		} else {
 			conn.WriteInt(0)
 		}
-
+		conn.WriteInt(e.CachedTexts)
+		if e.Attributed {
+			conn.WriteInt(1)
+		} else {
+			conn.WriteInt(0)
+		}
+		conn.WriteInt(int(e.DispatchUs))
+		conn.WriteInt(int(e.AdmitUs))
+		conn.WriteInt(int(e.RunUs))
 	}
 }
 
@@ -1346,26 +1396,31 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteBulkString("embed_sessions_total")
 	conn.WriteInt(int(stats.SessionsTotal))
 	if s.cache != nil {
+		// The counters are the requested model's own entries, so two models
+		// render their own cache behaviour instead of the process's. The byte
+		// budget belongs to the cache and is reported as the limit the model's
+		// entries share.
 		cs := s.cache.Stats()
+		modelCache := cs.ByModel[modelName]
 		hitRate := 0.0
-		total := cs.Hits + cs.Misses
+		total := modelCache.Hits + modelCache.Misses
 		if total > 0 {
-			hitRate = float64(cs.Hits) / float64(total) * 100
+			hitRate = float64(modelCache.Hits) / float64(total) * 100
 		}
 		conn.WriteBulkString("cache_hits")
-		conn.WriteInt(int(cs.Hits))
+		conn.WriteInt(int(modelCache.Hits))
 		conn.WriteBulkString("cache_misses")
-		conn.WriteInt(int(cs.Misses))
+		conn.WriteInt(int(modelCache.Misses))
 		conn.WriteBulkString("cache_hit_rate")
 		conn.WriteBulkString(fmt.Sprintf("%.1f%%", hitRate))
 		conn.WriteBulkString("cache_evictions")
-		conn.WriteInt(int(cs.Evictions))
+		conn.WriteInt(int(modelCache.Evictions))
 		conn.WriteBulkString("cache_entries")
-		conn.WriteInt(cs.Entries)
+		conn.WriteInt(int(modelCache.Entries))
 		conn.WriteBulkString("cache_max_bytes")
 		conn.WriteInt(int(cs.MaxBytes))
 		conn.WriteBulkString("cache_memory_bytes")
-		conn.WriteInt(int(cs.CurBytes))
+		conn.WriteInt(int(modelCache.Bytes))
 	}
 }
 
@@ -1721,6 +1776,7 @@ func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [
 
 	started := time.Now()
 	failed := false
+	var attribution requestAttribution
 	defer func() {
 		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
@@ -1728,13 +1784,16 @@ func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [
 			Texts:     1,
 			LatencyUs: time.Since(started).Microseconds(),
 			Err:       failed,
-		})
+		}.attributed(attribution))
 	}()
 
 	if s.cache != nil {
 		key := textCacheKey(model, text)
 		if emb, ok := s.cache.Get(key); ok {
 			results[idx] = emb
+			// A pair answered from the cache is attributed to the cache: no
+			// phases, and the hit is counted.
+			attribution = requestAttribution{cachedTexts: 1, attributed: true}
 			return
 		}
 	}
@@ -1751,6 +1810,7 @@ func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [
 		key := textCacheKey(model, text)
 		if emb, ok := s.cache.Get(key); ok {
 			results[idx] = emb
+			attribution = requestAttribution{cachedTexts: 1, attributed: true}
 			return
 		}
 	}
@@ -1763,6 +1823,7 @@ func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [
 		failed = true
 		return
 	}
+	attribution = fromResponse(0, resp)
 
 	if s.cache != nil {
 		s.cache.Set(textCacheKey(model, text), resp.Embeddings[0])

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/elcuervo/emb/internal/embtop"
 )
 
 // latSample is one poll's latency percentiles (µs); zero when no events.
@@ -42,7 +45,7 @@ const (
 // column is a poll, cells between p50 and p99 are shaded, and p95 is a bright
 // rune. It always returns h lines (blank grid plus a legend) so the panel
 // keeps its height when there is no data yet.
-func latBand(hist []latSample, w, h int) []string {
+func latBand(hist []latSample, w, h int, tail string) []string {
 	body := h - 1
 	withLegend := true
 	if body < 1 {
@@ -112,6 +115,11 @@ func latBand(hist []latSample, w, h int) []string {
 	if withLegend {
 		legend := dimStyle.Render("p50–p99 ") + latBandStyle.Render(latBandCell) +
 			dimStyle.Render("  p95 ") + latP95Style.Render(latP95Cell)
+		if tail != "" {
+			// The band's own p95 describes every request, cache answers
+			// included; the tail names what the requests that ran did.
+			legend += dimStyle.Render("  " + tail)
+		}
 		if w > 0 {
 			legend = lipgloss.NewStyle().MaxWidth(w).Render(legend)
 		}
@@ -121,8 +129,17 @@ func latBand(hist []latSample, w, h int) []string {
 }
 
 // latBandView renders the band panel's content; the caller wraps it in the
-// shared panel border.
+// shared panel border. The legend carries the uncached tail and the cached
+// share, so a window that mixes microsecond cache answers with second-long runs
+// says which population the band's p95 came from.
 func (m tuiModel) latBandView() string {
 	w, h := streamDims(m.width, m.height)
-	return strings.Join(latBand(m.latHist, w, h), "\n")
+	tail := ""
+	counts := m.sampler.PathCounts()
+	if _, _, p95, n, ok := m.sampler.UncachedLatency(); ok && counts.Reran > 0 {
+		tail = fmt.Sprintf("runs p95 %s · n=%d", embtop.FormatLatency(p95), n)
+	} else if counts.Attributed > 0 && counts.Cached == counts.Total {
+		tail = fmt.Sprintf("all %d served from cache", counts.Total)
+	}
+	return strings.Join(latBand(m.latHist, w, h, tail), "\n")
 }

@@ -10,9 +10,9 @@ Full reference for the `emb` command surface. See the
 | `EMB.IMG <model> [BLOB\|VALUES] <bytes> [<bytes>...]` | Embed one or more images from raw JPEG/PNG/GIF/WebP bytes (each a binary-safe bulk). `BLOB`: single image → bulk, multiple → array with nulls for failed/truncated slots; `VALUES`: one `[m, dim]` envelope over processed images. URLs are rejected |
 | `EMB.IMGMULTI [BLOB\|VALUES] <model> <bytes> [<model> <bytes>...]` | Embed images across different models in one call; MGET-style per-pair nulls, per-pair `VALUES` envelopes (with `model`) |
 | `EMB.MODELS` | List loaded models with dimensions and status |
-| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, live cache stats |
+| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, the embedding path's dispatch/admission/run timings and runs, and that model's own cache stats (hits, misses, rate, evictions, entries, bytes) |
 | `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown, CPU allowance/budget/active peak, cache/connection limits, mem (RSS MB), CPU user/sys usec, goroutines |
-| `MONITOR [seq] [limit]` | Recent completed-request events (`seq`, timestamp µs, model, texts, latency µs, error) from a bounded ring. Incremental (`seq`) fetch; no text payloads |
+| `MONITOR [seq] [limit]` | Recent completed-request events from a bounded ring: `seq`, timestamp µs, model, texts, latency µs, error, then the request's own attribution — `cached_texts` (how many of its texts the reply cache answered), `attributed` (whether the server measured its phases), `dispatch_us`, `admit_us`, `run_us`. Incremental (`seq`) fetch; no text payloads. The four attribution fields are appended after `err`, so a client reading the original six positionally is unaffected |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
 | `EMB.EVAL <model> <script> <numtexts> <text...> <arg...>` | Evaluate a Lua script once against a model (KEYS=texts, ARGV=args) |
 | `EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>` | Evaluate a cached script by SHA (see `EMB.SCRIPT LOAD`) |

@@ -181,6 +181,7 @@ func TestCacheAdmissionBudget(t *testing.T) {
 			}
 			var total int64
 			counts := map[string]int64{}
+			bytesByModel := map[string]int64{}
 			for i, e := range snap.Entries {
 				want := []byte{1}
 				if e.Key == tc.key && !tc.rejected {
@@ -189,17 +190,24 @@ func TestCacheAdmissionBudget(t *testing.T) {
 				if e.Key != tc.keys[i] || !bytes.Equal(e.Value, want) {
 					t.Fatalf("entry %d = %v, want %s/%v", i, e, tc.keys[i], want)
 				}
-				total += int64(len(e.Key) + len(e.Value) + 48)
+				size := int64(len(e.Key) + len(e.Value) + 48)
+				total += size
 				counts[modelOf(e.Key)]++
+				bytesByModel[modelOf(e.Key)] += size
 			}
 			if st.CurBytes != total || total > st.MaxBytes || st.Entries != len(tc.keys) || st.Evictions != tc.evictions || st.Generation != tc.generation || st.Hits != 0 || st.Misses != 0 {
 				t.Fatalf("bad accounting: %+v", st)
 			}
+			var modelBytes int64
 			for model, ms := range st.ByModel {
 				evicted := max(before.ByModel[model].Entries-counts[model], 0)
-				if ms != (CacheModelStats{Entries: counts[model], Evictions: evicted}) {
+				if ms != (CacheModelStats{Entries: counts[model], Evictions: evicted, Bytes: bytesByModel[model]}) {
 					t.Fatalf("model %s: %+v", model, ms)
 				}
+				modelBytes += ms.Bytes
+			}
+			if modelBytes != total {
+				t.Fatalf("per-model bytes %d, cache holds %d: %+v", modelBytes, total, st.ByModel)
 			}
 			for _, e := range old.Entries {
 				if !bytes.Equal(e.Value, []byte{1}) {

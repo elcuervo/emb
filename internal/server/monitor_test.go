@@ -155,23 +155,34 @@ func TestMonitorRESP3MapEvents(t *testing.T) {
 	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$1\r\nx\r\n"))
 	readRESP(t, c)
 
-	// Under RESP3 each event is a map with the RESP2 field names.
+	// Under RESP3 each event is a map with the RESP2 field names, the original
+	// six plus this request's attribution.
 	c.Write([]byte("*1\r\n$7\r\nMONITOR\r\n"))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "*1\r\n%6\r\n") {
-		t.Fatalf("RESP3 MONITOR should be an array of 6-field maps, got %q", resp)
+	if !strings.HasPrefix(resp, "*1\r\n%11\r\n") {
+		t.Fatalf("RESP3 MONITOR should be an array of 11-field maps, got %q", resp)
 	}
-	for _, key := range []string{"seq", "at_us", "model", "texts", "latency_us", "err"} {
+	for _, key := range []string{"seq", "at_us", "model", "texts", "latency_us", "err",
+		"cached_texts", "attributed", "dispatch_us", "admit_us", "run_us"} {
 		want := "$" + itoa(len(key)) + "\r\n" + key + "\r\n"
 		if !strings.Contains(resp, want) {
 			t.Fatalf("missing key %q in %q", key, resp)
 		}
 	}
 
-	// RESP2 connections keep the flat per-event array.
-	c2 := dial(t, addr)
-	c2.Write([]byte("*1\r\n$7\r\nMONITOR\r\n"))
-	if resp2 := readRESP(t, c2); !strings.HasPrefix(resp2, "*1\r\n*6\r\n") {
-		t.Fatalf("RESP2 MONITOR should be flat 6-element arrays, got %q", resp2)
+	// RESP2 connections keep the flat per-event array, its first six elements
+	// in the order they have always had.
+	events := monitorEvents(t, addr)
+	if len(events) != 1 {
+		t.Fatalf("want one event, got %d", len(events))
+	}
+	if got := bulkOf(t, events[0]["model"]); got != "test" {
+		t.Fatalf("model = %q, want test", got)
+	}
+	if got := intOf(t, events[0]["texts"]); got != 1 {
+		t.Fatalf("texts = %d, want 1", got)
+	}
+	if got := intOf(t, events[0]["seq"]); got != 1 {
+		t.Fatalf("seq = %d, want 1", got)
 	}
 }

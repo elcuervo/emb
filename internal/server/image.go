@@ -70,6 +70,10 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	total := len(imgArgs)
 
 	failed := false
+	// An image request's inference runs on its own named-tensor sessions, which
+	// keep no dispatch or run accounting, so its event carries the cache-served
+	// count and no phases: absent attribution, not a claim of a free run.
+	var attribution requestAttribution
 	defer func() {
 		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
@@ -77,7 +81,7 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 			Texts:     total,
 			LatencyUs: time.Since(started).Microseconds(),
 			Err:       failed,
-		})
+		}.attributed(attribution))
 	}()
 
 	for _, arg := range imgArgs {
@@ -116,7 +120,8 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	}
 	images := imgArgs[:n]
 
-	results, errs := s.embedImages(modelName, res, images)
+	results, cached, errs := s.embedImages(modelName, res, images)
+	attribution.cachedTexts = cached
 	for _, e := range errs {
 		if e != nil {
 			failed = true
@@ -164,7 +169,8 @@ func writeIMGResult(conn redcon.Conn, format replyFormat, results [][]byte, n, t
 // embedImages resolves raw image bytes to embeddings for one model: cache
 // hits are returned directly, misses are preprocessed (in parallel) and run in
 // bounded batched inferences. results[i] is nil when images[i] failed and errs[i]
-// carries its error. A single bad image never fails the others.
+// carries its error. A single bad image never fails the others. The returned
+// count is how many of the images the reply cache answered.
 //
 // Work is chunked by a fixed tensor budget: an image expands to exactly
 // 3*size*size float32 values regardless of its encoded size, so a command
@@ -172,11 +178,11 @@ func writeIMGResult(conn redcon.Conn, format replyFormat, results [][]byte, n, t
 // decoded tensors (plus one equally large contiguous batch) before any inference
 // runs. Chunking keeps peak memory proportional to the budget, not to the number
 // of images.
-func (s *Server) embedImages(modelName string, res *registry.ImageResources, images [][]byte) ([][]byte, []error) {
+func (s *Server) embedImages(modelName string, res *registry.ImageResources, images [][]byte) ([][]byte, int, []error) {
 	results := make([][]byte, len(images))
 	errs := make([]error, len(images))
 	if len(images) == 0 {
-		return results, errs
+		return results, 0, errs
 	}
 
 	misses := make([]int, 0, len(images))
@@ -189,8 +195,9 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, ima
 		}
 		misses = append(misses, i)
 	}
+	cached := len(images) - len(misses)
 	if len(misses) == 0 {
-		return results, errs
+		return results, cached, errs
 	}
 
 	// Per-request plan copy carries the server's live byte/pixel caps without
@@ -270,7 +277,7 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, ima
 			}
 		}
 	}
-	return results, errs
+	return results, cached, errs
 }
 
 // handleIMGMULTI implements EMB.IMGMULTI [BLOB|VALUES] <model> <bytes> ... with
@@ -330,6 +337,8 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, results [][]byte, idx int) 
 	started := time.Now()
 	s.imageRequests.Add(1)
 	failed := false
+	// See handleIMG: the image path reports its cache-served count only.
+	var attribution requestAttribution
 	defer func() {
 		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
@@ -337,7 +346,7 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, results [][]byte, idx int) 
 			Texts:     1,
 			LatencyUs: time.Since(started).Microseconds(),
 			Err:       failed,
-		})
+		}.attributed(attribution))
 	}()
 
 	entry, err := s.reg.Resolve(model)
@@ -350,7 +359,8 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, results [][]byte, idx int) 
 		failed = true
 		return
 	}
-	embeddings, errs := s.embedImages(model, res, [][]byte{data})
+	embeddings, cached, errs := s.embedImages(model, res, [][]byte{data})
+	attribution.cachedTexts = cached
 	if len(errs) == 1 && errs[0] != nil {
 		failed = true
 		return

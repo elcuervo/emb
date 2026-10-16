@@ -347,3 +347,102 @@ func TestRecommendNodeSeesALeakThroughASawtooth(t *testing.T) {
 		t.Fatalf("a sawtoothing leak was not reported: %+v", got)
 	}
 }
+
+// TestRecommendFleetPrefersARepairOverCapacity covers the ordering the fleet
+// line has to get right: entries the cache dropped are work no amount of
+// capacity has to buy, so a reservable fix is named instead of more nodes or a
+// wider budget.
+func TestRecommendFleetPrefersARepairOverCapacity(t *testing.T) {
+	// Both nodes hold their whole budget, so the fleet's headroom is spent and
+	// capacity is the standing answer.
+	// Both nodes hold their whole budget with nobody refused: the fleet's
+	// standing answer is capacity.
+	held := func(i int, p *Point) {
+		p.CPUActiveTokens = 8
+		p.TotalRequests = int64(i) * 80
+		p.CacheHits = int64(i) * 16
+	}
+	hist := recSeries(6, held)
+
+	// b's window also shows its cache dropping entries it should have served.
+	bHist := recSeries(6, held)
+	cacheEvidence := &AdviceInput{
+		Window: bHist,
+		Split:  PhaseSplit{RunUs: 900_000, Runs: 8},
+		Paths:  PathCounts{Total: 40, Cached: 8, Reran: 32, Attributed: 40},
+		Models: map[string][]ModelPoint{"b": {
+			{At: time.Unix(0, 0), Runs: 1},
+			{At: time.Unix(5, 0), Runs: 9, Requests: 400, CachedReqs: 80, CacheEvictions: 90},
+		}},
+	}
+
+	got := RecommendFleet([]FleetNodeRecInput{
+		{Label: "a", Hist: hist},
+		{Label: "b", Hist: bHist, Advice: cacheEvidence},
+	})
+	if got.Action != ActionCache {
+		t.Fatalf("fleet action = %q, want %q: %s", got.Action, ActionCache, got.Text)
+	}
+	if strings.Contains(got.Text, "add nodes") {
+		t.Errorf("a reservable fix did not outrank capacity: %q", got.Text)
+	}
+	if !strings.Contains(got.Text, "b:") {
+		t.Errorf("the fleet line does not name the node to fix: %q", got.Text)
+	}
+	if strings.Contains(got.Text, ResourceNodes) {
+		t.Errorf("the fleet still named node capacity beside a reservable fix: %q", got.Text)
+	}
+}
+
+// The same fleet without the cache evidence keeps its capacity answer.
+func TestRecommendFleetStillNamesCapacityWithoutARepair(t *testing.T) {
+	held := func(_ int, p *Point) { p.CPUActiveTokens = 8 }
+	got := RecommendFleet([]FleetNodeRecInput{
+		{Label: "a", Hist: recSeries(6, held)},
+		{Label: "b", Hist: recSeries(6, held)},
+	})
+	if got.Action != ActionNodes {
+		t.Fatalf("fleet action = %q, want %q: %s", got.Action, ActionNodes, got.Text)
+	}
+	if !strings.Contains(got.Text, "add nodes") {
+		t.Errorf("a uniformly spent fleet did not name capacity: %q", got.Text)
+	}
+}
+
+// TestRecommendFleetNamesTheFirstNodesPhase points the fleet line at a phase
+// rather than only at a hostname.
+func TestRecommendFleetNamesTheFirstNodesPhase(t *testing.T) {
+	quiet := recSeries(6, nil)
+	slow := recSeries(6, func(_ int, p *Point) {
+		p.CPUActiveTokens = 8
+		p.GoMaxProcs = 4
+	})
+	got := RecommendFleet([]FleetNodeRecInput{
+		{Label: "a", Hist: quiet, P95Us: 1000},
+		{
+			Label: "b", Hist: slow, P95Us: 9000,
+			Advice: &AdviceInput{
+				Window: slow,
+				Split:  PhaseSplit{AdmissionWaitUs: 1_800_000, RunUs: 200_000, Runs: 8},
+				Paths:  PathCounts{Total: 40, Cached: 32, Reran: 8, Attributed: 40},
+				Models: map[string][]ModelPoint{"m": {
+					{At: time.Unix(0, 0), Runs: 1},
+					{At: time.Unix(5, 0), Runs: 9, RunUs: 200_000, AdmissionWaitUs: 1_800_000},
+				}},
+			},
+		},
+		{Label: "c", Hist: quiet, P95Us: 1000},
+	})
+	if got.First != "b" {
+		t.Fatalf("First = %q, want the slow peer b", got.First)
+	}
+	if got.Phase != PhaseAdmission || got.Share < 0.5 {
+		t.Fatalf("fleet phase = %q at %.2f, want the gate wait behind b", got.Phase, got.Share)
+	}
+	if !strings.Contains(got.Text, "admission wait") {
+		t.Errorf("the fleet line does not name the phase behind b: %q", got.Text)
+	}
+	if got.Action != ActionThreads {
+		t.Errorf("fleet action = %q, want the node's own %q", got.Action, ActionThreads)
+	}
+}

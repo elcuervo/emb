@@ -391,9 +391,11 @@ func streamDims(width, height int) (int, int) {
 const minStrip = 8
 
 // modelChrome is the number of non-model rows the dashboard always spends:
-// header, banner, the sizing line, the two stream charts, gauges, ticker,
-// footer and the model-list range line.
-const modelChrome = 19
+// header, banner, the two sizing lines (the action, then the action it rejects
+// with the window's own facts), the two stream charts, gauges, ticker, footer
+// and the model-list range line. Both sizing lines are always spent, so the
+// budget stays exact whether or not there is anything to advise.
+const modelChrome = 20
 
 // visibleRows is how many single-line model rows fit below the chrome.
 func (m tuiModel) visibleRows() int {
@@ -548,7 +550,7 @@ func (m *tuiModel) applyResult(res *embtop.PollResult) {
 	m.cacheBar.Push(barchart.BarData{Label: "cache", Values: []barchart.BarValue{
 		{Name: "hit", Value: p.CacheHitRate, Style: chartBars[0]}}})
 	m.cpuBar.Push(barchart.BarData{Label: "cpu", Values: []barchart.BarValue{
-		{Name: "cpu", Value: p.CPUPercent, Style: chartBars[1]}}})
+		{Name: "cpu", Value: nodeCPUPct(p), Style: chartBars[1]}}})
 	m.memBar.Push(barchart.BarData{Label: "mem", Values: []barchart.BarValue{
 		{Name: "mem", Value: float64(p.MemMB), Style: chartBars[2]}}})
 	m.cacheBar.Draw()
@@ -959,7 +961,7 @@ func (m tuiModel) gaugesView() []string {
 	barLine := lipgloss.JoinHorizontal(lipgloss.Top,
 		caption("cache", m.cacheBar.View(), p.CacheHitRate, "%", idW),
 		" ",
-		caption("cpu", m.cpuBar.View(), p.CPUPercent, "%", numW),
+		caption("cpu", m.cpuBar.View(), nodeCPUPct(p), "%", numW),
 		"  ",
 		caption("mem", m.memBar.View(), float64(p.MemMB), "MB", stripW),
 	)

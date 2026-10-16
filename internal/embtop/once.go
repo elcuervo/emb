@@ -152,6 +152,7 @@ func writeOnceLine(out io.Writer, p Point, res *PollResult, order []string, s *S
 	// sections: a reader that takes the aggregate as everything before the
 	// first ` model:` would otherwise never see it.
 	b = appendRec(b, RecommendNode(s.Window).Kind)
+	b = appendAttribution(b, s)
 	if p50, p95, p99, ok := s.Latency(); ok {
 		b = appendF(b, "lat_p50_us", p50)
 		b = appendF(b, "lat_p95_us", p95)
@@ -197,6 +198,7 @@ func writeFleetOnceLine(out io.Writer, states []*onceNode) error {
 		b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
 		b = appendCPUPlanFields(b, &p)
 		b = appendRec(b, RecommendNode(st.sampler.Window).Kind)
+		b = appendAttribution(b, st.sampler)
 		if p50, p95, p99, ok := st.sampler.Latency(); ok {
 			b = appendF(b, "lat_p50_us", p50)
 			b = appendF(b, "lat_p95_us", p95)
@@ -361,6 +363,68 @@ func appendModelSections(b []byte, order []string, res *PollResult, s *Sampler) 
 			b = appendF(b, "intra_op_threads", int64(ms.IntraOpThreads))
 			b = appendF(b, "cpu_thread_share", int64(ms.CPUThreadShare))
 		}
+		b = appendF(b, "cache_served_reqs", mp.CachedReqs)
+		if split := ModelPhaseSplit(s.ModHist[name]); !split.Empty() {
+			// This model's own window: what its requests waited for and spent
+			// running, and how many runs that covers.
+			b = appendF(b, "runs", split.Runs)
+			b = appendF(b, "wait_us", split.MeanUs(PhaseDispatch).Microseconds())
+			b = appendF(b, "admit_us", split.MeanUs(PhaseAdmission).Microseconds())
+			b = appendF(b, "run_us", split.MeanUs(PhaseRun).Microseconds())
+		}
+	}
+	return b
+}
+
+// SamplerAdviceInput gathers one node's advice evidence from its sampler: its
+// series, its models' phases, its event window by path and the tail of the
+// requests that ran. Both the dashboard and the headless output read the node
+// through it, so the two cannot disagree about the same poll.
+func SamplerAdviceInput(s *Sampler) AdviceInput {
+	in := AdviceInput{
+		Window: s.Window,
+		Models: s.ModHist,
+		Raw:    s.RawModels(),
+		Split:  NodePhaseSplit(s.ModHist),
+		Paths:  s.PathCounts(),
+	}
+	if _, _, p95, n, ok := s.UncachedLatency(); ok {
+		in.UncachedP95Us = p95
+		in.UncachedN = n
+	}
+	return in
+}
+
+// appendAttribution writes the node's course of action and the evidence behind
+// it: the action and the action it rejects, the cache's share of the window's
+// traffic, the p95 of the requests that ran and the phases they spent it in.
+// Every token the line already carried keeps its name; these are additions.
+func appendAttribution(b []byte, s *Sampler) []byte {
+	counts := s.PathCounts()
+	in := SamplerAdviceInput(s)
+	adv := Advise(in)
+	if !adv.Empty() {
+		b = append(b, " act="...)
+		b = append(b, adv.Action...)
+		if adv.Rejected != "" {
+			b = append(b, " act_rejected="...)
+			b = append(b, adv.Rejected...)
+		}
+	}
+	if counts.Total > 0 {
+		b = appendRate(b, "cached_pct", counts.Share())
+	}
+	if in.UncachedP95Us > 0 {
+		b = appendF(b, "lat_p95_run_us", in.UncachedP95Us)
+		b = appendF(b, "lat_p95_run_n", int64(in.UncachedN))
+	}
+	if !adv.Phases.Empty() {
+		b = append(b, " phase="...)
+		b = append(b, string(adv.Phase)...)
+		b = appendRate(b, "phase_share", adv.Share*100)
+		b = appendF(b, "phase_wait_us", adv.Phases.MeanUs(PhaseDispatch).Microseconds())
+		b = appendF(b, "phase_admit_us", adv.Phases.MeanUs(PhaseAdmission).Microseconds())
+		b = appendF(b, "phase_run_us", adv.Phases.MeanUs(PhaseRun).Microseconds())
 	}
 	return b
 }
@@ -388,6 +452,10 @@ func appendFleetRec(b []byte, rec FleetRecommendation) []byte {
 		b = append(b, " rec_first="...)
 		b = append(b, rec.First...)
 	}
+	if rec.Action != "" && rec.Action != ActionNone {
+		b = append(b, " act="...)
+		b = append(b, rec.Action...)
+	}
 	return b
 }
 
@@ -400,7 +468,11 @@ func fleetRecommendation(states []*onceNode) FleetRecommendation {
 			continue
 		}
 		_, _, p95, _ := st.sampler.Latency()
-		in = append(in, FleetNodeRecInput{Label: st.label, Hist: st.sampler.Window, P95Us: p95})
+		advice := SamplerAdviceInput(st.sampler)
+		in = append(in, FleetNodeRecInput{
+			Label: st.label, Hist: st.sampler.Window, P95Us: p95,
+			Advice: &advice,
+		})
 	}
 	return RecommendFleet(in)
 }

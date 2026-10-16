@@ -56,6 +56,14 @@ func DeadlineAfter(deads ...time.Time) (context.Context, context.CancelFunc) {
 type Response struct {
 	Embeddings [][]byte
 	Err        error
+	// The request's own attribution, filled by the pool or batcher that served
+	// it: how long it waited to be handed to a session or batch window, how long
+	// its runs waited at the process CPU gate, and how long they ran. Admission
+	// wait is kept out of Run, like the cumulative counters. A request that was
+	// abandoned before it ran carries zeroes.
+	DispatchWait  time.Duration
+	AdmissionWait time.Duration
+	Run           time.Duration
 }
 
 type Stats struct {

@@ -255,6 +255,14 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 	// covers parsing through reply writing, mirroring EMB.
 	started := time.Now()
 	failed := false
+	// The scripted path reports its dispatch and run through the model's
+	// cumulative counters, which are the model's and not this request's. A delta
+	// is therefore this request's time only when exactly one run happened while
+	// it was in flight; under any concurrency the delta is somebody else's work
+	// too, and the event says so by staying unattributed. That path takes no
+	// process CPU gate, so its admission wait is zero.
+	beforeWait, beforeRun, beforeRuns, _ := s.scriptDispatchCounters(model)
+	var attribution requestAttribution
 	defer func() {
 		latency := time.Since(started)
 		s.scriptRequests.Add(1)
@@ -265,16 +273,22 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 		if entry, err := s.reg.Resolve(model); err == nil {
 			entry.RecordScriptedEvaluation(failed)
 		}
+		if waitUs, runUs, runs, _ := s.scriptDispatchCounters(model); runs-beforeRuns == 1 {
+			attribution.dispatchWait = time.Duration(waitUs-beforeWait) * time.Microsecond
+			attribution.run = time.Duration(runUs-beforeRun) * time.Microsecond
+			attribution.attributed = true
+		}
 		s.recordRequest(MonitorEvent{
 			AtUs:      started.UnixMicro(),
 			Model:     model,
 			Texts:     len(texts),
 			LatencyUs: latency.Microseconds(),
 			Err:       failed,
-		})
+		}.attributed(attribution))
 	}()
 
-	replies, err := s.evalScripted(model, src, sha, config, digest, texts, args)
+	replies, hits, err := s.evalScripted(model, src, sha, config, digest, texts, args)
+	attribution.cachedTexts = hits
 	if err != nil {
 		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
@@ -283,18 +297,29 @@ func (s *Server) runScripted(conn redcon.Conn, model, src, sha string, config ma
 	s.writeScriptReply(conn, replies)
 }
 
+// scriptDispatchCounters reads the scripted path's cumulative dispatch and run
+// counters for one model, all zero when its script resources are not open.
+func (s *Server) scriptDispatchCounters(model string) (waitUs, runUs, runs, busy int64) {
+	entry, err := s.reg.Resolve(model)
+	if err != nil {
+		return 0, 0, 0, 0
+	}
+	return entry.ScriptDispatch()
+}
+
 // evalScripted computes one reply per text — from cache when every text hits,
 // otherwise by evaluating the script once and storing each reply — without
 // writing to a connection, so boot-time warm payloads fill exactly the entries
-// a client call reads. Errors are returned for the caller to render.
-func (s *Server) evalScripted(model, src, sha string, config map[string]any, digest string, texts, args []string) ([][]byte, error) {
+// a client call reads. The returned count is how many texts the reply cache
+// answered. Errors are returned for the caller to render.
+func (s *Server) evalScripted(model, src, sha string, config map[string]any, digest string, texts, args []string) ([][]byte, int, error) {
 	if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
-		return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
+		return nil, 0, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
 	}
 
 	entry, err := s.reg.Resolve(model)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Publish any restored snapshot entries now that the model is resolved and
@@ -398,7 +423,8 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 			if limit := s.maxTexts.Load(); limit > 0 && int64(len(texts)) > limit {
 				return nil, fmt.Errorf("too many texts: %d (max %d)", len(texts), limit)
 			}
-			return s.embedTexts(context.Background(), e, model, texts)
+			results, _, err := s.embedTexts(context.Background(), e, model, texts)
+			return results, err
 		}
 	}
 	// A model with an image surface also gets emb.image.preprocess / info /
@@ -438,7 +464,7 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 				if limit := s.maxImages.Load(); limit > 0 && int64(len(images)) > limit {
 					return nil, fmt.Errorf("too many images: %d (max %d)", len(images), limit)
 				}
-				results, errs := s.embedImages(model, r, images)
+				results, _, errs := s.embedImages(model, r, images)
 				for i, e := range errs {
 					if e != nil {
 						return nil, fmt.Errorf("image %d: %w", i, e)
@@ -455,17 +481,19 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 	// skipped (see hasDuplicateTexts).
 	cacheable := s.cache != nil && !hasDuplicateTexts(texts)
 	replies := make([][]byte, len(texts))
+	hits := 0
 	if cacheable {
 		allHit := true
 		for i, text := range texts {
 			if hit, ok := s.cache.Get(script.CacheKeyConfig(model, sha, args, len(texts), text, digest)); ok {
 				replies[i] = hit
+				hits++
 			} else {
 				allHit = false
 			}
 		}
 		if allHit {
-			return replies, nil
+			return replies, hits, nil
 		}
 	}
 
@@ -474,7 +502,7 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 	// text returns the value itself.
 	v, err := s.compiler.Eval(model, src, texts, args, hosts, script.EvalOptions{Deadline: s.scriptDeadline})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var values []lua.LValue
@@ -483,7 +511,7 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 	} else {
 		tbl, ok := v.(*lua.LTable)
 		if !ok || tbl.Len() != len(texts) {
-			return nil, fmt.Errorf("script must return one value per text (%d texts)", len(texts))
+			return nil, 0, fmt.Errorf("script must return one value per text (%d texts)", len(texts))
 		}
 		values = make([]lua.LValue, len(texts))
 		for j := 0; j < len(texts); j++ {
@@ -494,14 +522,14 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 	for i := range values {
 		encoded, err := script.EncodeReply(values[i])
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		replies[i] = encoded
 		if cacheable {
 			s.cache.Set(script.CacheKeyConfig(model, sha, args, len(texts), texts[i], digest), encoded)
 		}
 	}
-	return replies, nil
+	return replies, hits, nil
 }
 
 // WarmPayload is one text to evaluate once at boot under an argument set.
@@ -562,7 +590,7 @@ func (s *Server) warmScripts(warmups []ScriptWarmup, served func(model string) i
 				log.Printf("warm: %q stopped after %d payload(s): a client request was served", w.Model, i)
 				break
 			}
-			if _, err := s.evalScripted(w.Model, entry.src, w.SHA, entry.config, entry.digest, []string{p.Text}, p.Args); err != nil {
+			if _, _, err := s.evalScripted(w.Model, entry.src, w.SHA, entry.config, entry.digest, []string{p.Text}, p.Args); err != nil {
 				log.Printf("warm: %q payload %d failed: %v", w.Model, i, err)
 			}
 		}

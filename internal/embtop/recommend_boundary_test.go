@@ -36,7 +36,12 @@ func TestRecommendationLeavesTheVerdictAlone(t *testing.T) {
 			p.CPUAdmissionTimeouts = int64(i * 4)
 		})},
 		{"host", recSeries(6, func(i int, p *Point) {
-			p.CPUThrottledPeriods = int64(i * 30)
+			// Throttled for a material share of the window: the host is the
+			// constraint, not the node's own budget.
+			p.GoMaxProcs = 8
+			p.CPUThrottlePeriods = int64(i * 100)
+			p.CPUThrottledPeriods = int64(i * 40)
+			p.CPUThrottleUsec = int64(i) * 1_000_000
 		})},
 		{"memory", recSeries(6, func(i int, p *Point) {
 			p.CacheRestoreLimitBytes = 1 << 30

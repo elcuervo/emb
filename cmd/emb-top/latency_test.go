@@ -23,7 +23,7 @@ func TestLatHistRingBounds(t *testing.T) {
 
 func TestLatBand(t *testing.T) {
 	// Empty history still returns a full-height panel with a legend.
-	lines := latBand(nil, 20, 4)
+	lines := latBand(nil, 20, 4, "")
 	if len(lines) != 4 {
 		t.Fatalf("empty band height = %d, want 4", len(lines))
 	}
@@ -36,7 +36,7 @@ func TestLatBand(t *testing.T) {
 		{p50: 100, p95: 500, p99: 1000},
 		{p50: 200, p95: 600, p99: 2000},
 	}
-	lines = latBand(hist, 20, 4)
+	lines = latBand(hist, 20, 4, "")
 	if len(lines) != 4 {
 		t.Fatalf("band height = %d, want 4", len(lines))
 	}
@@ -46,7 +46,7 @@ func TestLatBand(t *testing.T) {
 	}
 
 	// All-zero samples do not panic and still render at full height.
-	if got := latBand([]latSample{{}}, 10, 3); len(got) != 3 {
+	if got := latBand([]latSample{{}}, 10, 3, ""); len(got) != 3 {
 		t.Fatalf("zero band height = %d, want 3", len(got))
 	}
 }

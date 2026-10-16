@@ -21,10 +21,14 @@ type cacheEntry struct {
 	value []byte
 }
 
-// cacheModelStats tracks per-model cache activity for INFO's Keyspace section.
-// Guarded by Cache.mu like the entry map.
+// cacheModelStats tracks per-model cache activity for INFO's Keyspace section
+// and for EMB.INFO's per-model counters. Guarded by Cache.mu like the entry map.
 type cacheModelStats struct {
 	hits, misses, evictions, entries int64
+	// bytes is what this model's entries occupy of the budget. The budget
+	// itself belongs to the cache, so a model reads its own bytes and the
+	// cache's limit.
+	bytes int64
 }
 
 type CacheModelStats struct {
@@ -32,6 +36,7 @@ type CacheModelStats struct {
 	Misses    int64
 	Evictions int64
 	Entries   int64
+	Bytes     int64
 }
 
 type Cache struct {
@@ -207,8 +212,9 @@ func (c *Cache) Set(key string, value []byte) {
 	if elem, ok := c.entries[key]; ok {
 		c.ll.MoveToFront(elem)
 		entry := elem.Value.(*cacheEntry)
-		c.curBytes -= int64(len(entry.value))
-		c.curBytes += int64(len(value))
+		delta := int64(len(value) - len(entry.value))
+		c.curBytes += delta
+		c.perModel(modelOf(key)).bytes += delta
 		entry.value = value
 		c.generation++
 		for c.maxBytes > 0 && c.curBytes > c.maxBytes {
@@ -226,7 +232,9 @@ func (c *Cache) Set(key string, value []byte) {
 	elem := c.ll.PushFront(&cacheEntry{key: key, value: value})
 	c.entries[key] = elem
 	c.curBytes += entryBytes
-	c.perModel(modelOf(key)).entries++
+	ms := c.perModel(modelOf(key))
+	ms.entries++
+	ms.bytes += entryBytes
 	c.generation++
 }
 
@@ -239,13 +247,15 @@ func (c *Cache) evictTailLocked() *cacheEntry {
 		return nil
 	}
 	removed := back.Value.(*cacheEntry)
-	c.curBytes -= int64(len(removed.key) + len(removed.value) + 48)
+	removedBytes := int64(len(removed.key) + len(removed.value) + 48)
+	c.curBytes -= removedBytes
 	delete(c.entries, removed.key)
 	c.ll.Remove(back)
 	c.evictions.Add(1)
 	ms := c.perModel(modelOf(removed.key))
 	ms.evictions++
 	ms.entries--
+	ms.bytes -= removedBytes
 	c.generation++
 	return removed
 }
@@ -274,7 +284,10 @@ func (c *Cache) Stats() CacheStats {
 	lastFlushDuration := c.lastFlushDuration
 	byModel := make(map[string]CacheModelStats, len(c.byModel))
 	for m, ms := range c.byModel {
-		byModel[m] = CacheModelStats{Hits: ms.hits, Misses: ms.misses, Evictions: ms.evictions, Entries: ms.entries}
+		byModel[m] = CacheModelStats{
+			Hits: ms.hits, Misses: ms.misses, Evictions: ms.evictions,
+			Entries: ms.entries, Bytes: ms.bytes,
+		}
 	}
 	c.mu.Unlock()
 	return CacheStats{
@@ -303,6 +316,7 @@ func (c *Cache) Flush() int {
 	c.curBytes = 0
 	for _, ms := range c.byModel {
 		ms.entries = 0
+		ms.bytes = 0
 	}
 	if n > 0 {
 		c.generation++
@@ -324,7 +338,11 @@ func (c *Cache) FlushModel(model string) int {
 		next := elem.Next()
 		entry := elem.Value.(*cacheEntry)
 		if modelOf(entry.key) == model {
-			c.curBytes -= int64(len(entry.key) + len(entry.value) + 48)
+			removedBytes := int64(len(entry.key) + len(entry.value) + 48)
+			c.curBytes -= removedBytes
+			if ms := c.byModel[model]; ms != nil {
+				ms.bytes -= removedBytes
+			}
 			delete(c.entries, entry.key)
 			c.ll.Remove(elem)
 			n++

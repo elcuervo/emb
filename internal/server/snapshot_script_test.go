@@ -138,7 +138,7 @@ func TestScriptEvaluationAdmitsQuarantineBeforeLookup(t *testing.T) {
 	}
 	srv.cache, srv.quarantine, srv.quarantineBytes = result.Cache, result.Quarantine, result.QuarantineBytes
 
-	replies, err := srv.evalScripted("m", src, sha, loaded.config, loaded.digest, []string{"state"}, nil)
+	replies, _, err := srv.evalScripted("m", src, sha, loaded.config, loaded.digest, []string{"state"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestScriptEvaluationWithoutPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	replies, err := srv.evalScripted("m", `return "fresh"`, sha, nil, "", []string{"state"}, nil)
+	replies, _, err := srv.evalScripted("m", `return "fresh"`, sha, nil, "", []string{"state"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

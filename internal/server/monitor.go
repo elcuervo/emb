@@ -15,6 +15,33 @@ type MonitorEvent struct {
 	Texts     int
 	LatencyUs int64
 	Err       bool
+
+	// CachedTexts is how many of Texts the reply cache answered without
+	// inference. Always measured.
+	CachedTexts int
+	// Attributed reports whether the phases below were measured for this
+	// request. A request served outside the embedding pool (an image run on its
+	// own tensor sessions) keeps no dispatch or run accounting, so it carries
+	// Attributed false with zero phases — absent attribution, never a claim
+	// that its run cost nothing.
+	Attributed bool
+	// DispatchUs, AdmitUs and RunUs are the time this request's texts that were
+	// not cache-answered spent waiting for a session or batch window, waiting at
+	// the process CPU admission gate, and running. AdmitUs is kept out of RunUs.
+	DispatchUs int64
+	AdmitUs    int64
+	RunUs      int64
+}
+
+// attributed returns e with one request's path and phases attached, so a record
+// site does not repeat the field mapping.
+func (e MonitorEvent) attributed(a requestAttribution) MonitorEvent {
+	e.CachedTexts = a.cachedTexts
+	e.Attributed = a.attributed
+	e.DispatchUs = a.dispatchWait.Microseconds()
+	e.AdmitUs = a.admissionWait.Microseconds()
+	e.RunUs = a.run.Microseconds()
+	return e
 }
 
 // Monitor is a bounded, seq-numbered ring buffer of recent request events.

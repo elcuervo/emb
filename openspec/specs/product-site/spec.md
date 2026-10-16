@@ -974,7 +974,10 @@ rules the single-node plate already obeys: the recording replayed as text in the
 dashboard's own colours, held at a frame until the reader asks for it, with the
 still frame painting before any script and a caption written by the capture. It
 MUST NOT autoplay, MUST NOT serve an image or video of a dashboard, and MUST NOT
-be an element carrying the site's current version.
+be an element carrying the site's current version. The fleet run SHALL be
+recorded from the same dashboard the single-node plate was recorded from, so the
+two plates show one build's output rather than two, and each plate SHALL declare
+the `emb-top` version it was recorded from.
 
 #### Scenario: The fleet plate is the recording, in colour
 
@@ -999,7 +1002,12 @@ be an element carrying the site's current version.
 #### Scenario: The two plates cannot disagree about their runs
 
 - **WHEN** the single-node plate and the fleet plate are compared
-- **THEN** each names its own recorded run and its own figures, and neither presents the other's numbers
+- **THEN** each names its own recorded run and its own figures, neither presents the other's numbers, and the `emb-top` version both declare is the same one
+
+#### Scenario: A dashboard change reaches both plates
+
+- **WHEN** a change alters what the dashboard renders and the fleet plate still shows the dashboard as it was before that change
+- **THEN** the surface SHALL NOT present the two plates as the same dashboard until the fleet run has been re-recorded
 
 ### Requirement: The measured load figure is a drawing, and it says so
 
