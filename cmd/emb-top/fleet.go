@@ -732,20 +732,17 @@ func (f *fleet) fleetRecommendView() string {
 	return lipgloss.NewStyle().MaxWidth(widthOr(f.width, 120)).Render(line)
 }
 
-// fleetRecInputs gathers each reachable node's Point series and tail latency
-// for the fleet recommendation. An unreachable node has no signals to offer.
+// fleetRecInputs gathers each reachable node's record input for the fleet
+// recommendation through the same builder the headless fleet line uses, so the
+// node's own advice — the cache, the layout, the worker pool — is what the
+// fleet line names for it. An unreachable node has no signals to offer.
 func (f *fleet) fleetRecInputs() []embtop.FleetNodeRecInput {
 	out := make([]embtop.FleetNodeRecInput, 0, len(f.nodes))
 	for _, n := range f.nodes {
 		if !n.reachable {
 			continue
 		}
-		_, _, p95, _ := n.tui.sampler.Latency()
-		out = append(out, embtop.FleetNodeRecInput{
-			Label: n.displayName(),
-			Hist:  n.tui.sampler.Window,
-			P95Us: p95,
-		})
+		out = append(out, embtop.SamplerFleetRecInput(n.displayName(), n.tui.sampler))
 	}
 	return out
 }

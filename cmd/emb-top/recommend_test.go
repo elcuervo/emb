@@ -181,3 +181,83 @@ func seedSizing(n *fleetNode, mutate func(int, *embtop.PollResult)) {
 	n.tui.connected = true
 	n.reachable = true
 }
+
+// seedTightCPU pushes a window of polls for a node that sits just under its CPU
+// budget: it holds no whole budget, holds nothing else near a threshold, and
+// the fleet's CPU headroom therefore reads as uniformly small. dispatched adds
+// the per-model phases of a node whose session dispatch holds its tail, which is
+// the node's own repair.
+func seedTightCPU(n *fleetNode, dispatched bool) {
+	at := time.Unix(0, 0)
+	n.tui.sampler.SetClock(func() time.Time { return at })
+	for i := range 6 {
+		res := multiPoll([]string{"m"}, map[string]int64{"m": int64(100 + i)})
+		res.CPUPlanKnown = true
+		res.CPUBudgetEnabled = true
+		res.CPUBudget = 8
+		res.CPUActiveTokens = 7
+		res.CPUPeakTokens = 8
+		if ms := res.PerModel["m"]; dispatched && ms != nil {
+			ms.EmbedRuns = int64(50 + i)
+			ms.EmbedDispatchWaitUs = int64(i) * 200_000
+			ms.EmbedAdmissionWaitUs = int64(i) * 20_000
+			ms.EmbedRunUs = int64(i) * 20_000
+		}
+		n.tui.applyResult(res)
+		at = at.Add(time.Second)
+	}
+	n.tui.connected = true
+	n.reachable = true
+}
+
+// The fleet line must carry its own node's reservable repair. Every node here is
+// near its CPU budget, so the standing answer would be another node; one node's
+// own advice names a cheaper fix, and the fleet line has to name that instead —
+// the same line the headless aggregate derives, since both build their per-node
+// inputs through the same builder.
+func TestFleetLineNamesTheNodesOwnRepair(t *testing.T) {
+	a, b, c := "10.0.0.1:6379", "10.0.0.2:6379", "10.0.0.3:6379"
+	f := fakeFleet(nil, map[string]dashboardClient{
+		a: &fakeNodeClient{addr: a}, b: &fakeNodeClient{addr: b}, c: &fakeNodeClient{addr: c},
+	}, rn(a), rn(b), rn(c))
+	f.width, f.height = 200, 60
+	seedTightCPU(f.nodes[0], false)
+	seedTightCPU(f.nodes[1], true)
+	seedTightCPU(f.nodes[2], false)
+
+	// The node's own advice is the repair the fleet has to carry.
+	own := embtop.Advise(embtop.SamplerAdviceInput(f.nodes[1].tui.sampler))
+	if own.Action != embtop.ActionWorkers {
+		t.Fatalf("the fixture node's own advice = %q (%s), want %q",
+			own.Action, own.Text, embtop.ActionWorkers)
+	}
+
+	line := f.fleetRecommendView()
+	if line == "" {
+		t.Fatal("a fleet whose own node names a repair rendered no recommendation")
+	}
+	if !strings.Contains(line, "raise workers") {
+		t.Errorf("the fleet line does not name the node's own repair: %q", line)
+	}
+	if strings.Contains(line, "add nodes") {
+		t.Errorf("the fleet line bought capacity beside a reservable repair: %q", line)
+	}
+
+	// The headless fleet line builds the same recommendation from the same
+	// builder, so the two cannot name different repairs for one poll. The
+	// per-node input is where a narrower builder would drop the node's advice.
+	inputs := f.fleetRecInputs()
+	if len(inputs) != len(f.nodes) {
+		t.Fatalf("fleet inputs = %d, want %d", len(inputs), len(f.nodes))
+	}
+	if inputs[1].Advice == nil || embtop.Advise(*inputs[1].Advice).Action != own.Action {
+		t.Errorf("the fleet's per-node input dropped node b's own advice: %+v", inputs[1].Advice)
+	}
+	rec := embtop.RecommendFleet(inputs)
+	if rec.Action != own.Action {
+		t.Errorf("the fleet recommendation's action = %q, want the node's own %q", rec.Action, own.Action)
+	}
+	if !strings.Contains(line, rec.Text) {
+		t.Errorf("the panel does not render the recommendation's own line:\npanel %q\nrec   %q", line, rec.Text)
+	}
+}

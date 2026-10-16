@@ -114,8 +114,11 @@ func TestRunOnceCarriesTheAttribution(t *testing.T) {
 	if got, ok := parseKV(line, "act"); !ok || got == "" {
 		t.Errorf("no action token: %q", line)
 	}
-	if got, ok := parseKV(line, "cached_pct"); !ok || got == "" {
-		t.Errorf("no cached share: %q", line)
+	// The cached share is the window's, the same one the dashboard states
+	// beside the advice: this fixture's event ring holds 5 cache answers of 8
+	// (62.5%), while the window served 32 of 80 requests (40%).
+	if got, ok := parseKV(line, "cached_pct"); !ok || got != "40.0" {
+		t.Errorf("cached share = %q (ok=%v), want the window's 40.0:\n%s", got, ok, line)
 	}
 	if got, ok := parseKV(line, "lat_p95_run_us"); !ok || got != "1900000" {
 		t.Errorf("uncached p95 = %q (ok=%v), want the runs' 1900000", got, ok)
@@ -179,6 +182,58 @@ func TestRunOnceWithoutAttributionKeepsItsTokens(t *testing.T) {
 	}
 	if got, ok := parseKV(line, "phase"); ok {
 		t.Errorf("an unattributed window reported a phase: %q", got)
+	}
+}
+
+// A poll whose event ring and whose counter window disagree must still be
+// attributed one way: -once writes the share the dashboard states beside the
+// advice — the window's — so the two surfaces cannot report a different cache
+// share for the same poll.
+func TestOnceCacheShareFollowsTheWindowThePanelRenders(t *testing.T) {
+	s := NewSampler(4)
+	at := time.Unix(0, 0)
+	s.SetClock(func() time.Time { return at })
+
+	// The window served 10 of every 100 requests from the cache ...
+	var last *PollResult
+	for i := range 2 {
+		last = &PollResult{
+			UptimeSecs: 1, TotalRequests: int64(100 * (i + 1)),
+			CacheHits: int64(10 * (i + 1)), CacheMisses: int64(90 * (i + 1)),
+			ModelsLoaded: 1,
+		}
+		s.Push(last)
+		at = at.Add(time.Second)
+	}
+	// ... while the ring happens to hold only requests it answered entirely.
+	s.PushEvents([]Event{
+		{Seq: 1, Model: "m", Texts: 1, CachedTexts: 1, Attributed: true, LatencyUs: 5},
+		{Seq: 2, Model: "m", Texts: 1, CachedTexts: 1, Attributed: true, LatencyUs: 6},
+	})
+
+	ring := s.PathCounts().Share()
+	if ring == 10 {
+		t.Fatalf("the fixture's ring and window agree at %.1f%%, so it cannot show which one is read", ring)
+	}
+
+	// What the dashboard states beside the advice for the same sampler.
+	panel := Advise(SamplerAdviceInput(s)).CachedPct
+	if panel != 10 {
+		t.Fatalf("the dashboard's cached share = %v, want the window's 10", panel)
+	}
+
+	var out bytes.Buffer
+	if err := writeOnceLine(&out, s.Latest, last, nil, s); err != nil {
+		t.Fatalf("writeOnceLine: %v", err)
+	}
+	line := strings.TrimSpace(out.String())
+	got, ok := parseKV(line, "cached_pct")
+	if !ok {
+		t.Fatalf("no cached share on the line: %q", line)
+	}
+	if got != "10.0" {
+		t.Errorf("cached_pct = %q, want the window's 10.0 (the ring's share is %.1f%%):\n%s",
+			got, ring, line)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/registry"
 )
 
@@ -268,6 +269,77 @@ func TestScriptedEvaluationsNoLeak(t *testing.T) {
 	}
 	if growth := int64(gotHeap) - int64(baseHeap); growth > 8<<20 {
 		t.Errorf("heap grew %d bytes across %d scripted evaluations (leak?)", growth, reqs)
+	}
+}
+
+// runMissingInputScript runs the graph with the first two inputs only, so
+// input assembly fails on the graph input the caller left out after the earlier
+// inputs' ORT values already exist.
+const runMissingInputScript = `return emb.run({input_ids = {shape = {1, 4}, fill = 0, dtype = "i64"},
+  attention_mask = {shape = {1, 4}, fill = 0, dtype = "i64"}})`
+
+// TestScriptedInputAssemblyFailureNoLeak is the failed-input-assembly arm of
+// the scripted leak gate: thousands of evaluations that fail while building
+// their inputs leave goroutines at baseline (the same +3 tolerance as
+// TestScriptedEvaluationsNoLeak), heap flat after GC (the same 8 MiB cap, and
+// only a coarse backstop here), and — the sharp assertion — the named path's
+// created and released ORT value counts equal. An abandoned value is owned by
+// the native allocator, so the Go heap cannot see it and the design records
+// that an RSS sample cannot separate its cost from allocator churn; the counts
+// are exact instead, zero tolerance by construction.
+//
+// The script-reachable failure is a missing input: a Lua table cannot name one
+// input twice, and the host rejects a spec whose element count disagrees with
+// its shape before the run, so neither the duplicate nor the invalid-spec arm
+// reaches input assembly from a script (both are covered in internal/onnx).
+func TestScriptedInputAssemblyFailureNoLeak(t *testing.T) {
+	addr, _ := serveScriptTest(t, "")
+	c := dial(t, addr)
+	defer c.Close()
+
+	eval := func() {
+		t.Helper()
+		got := doCmd(t, c, "EMB.EVAL", "test", runMissingInputScript, "1", "leak-probe")
+		if !strings.HasPrefix(got, "-ERR") {
+			t.Fatalf("evaluation = %q, want an input-assembly error", got)
+		}
+		if !strings.Contains(got, "missing input") || !strings.Contains(got, "token_type_ids") {
+			t.Fatalf("evaluation = %q, want a missing-input error naming the omitted input", got)
+		}
+	}
+
+	eval() // warm the lazy script resources before the baseline is read
+	runtime.GC()
+	baseGoroutines := runtime.NumGoroutine()
+	baseHeap := registry.HeapInUseBytes()
+	createdBefore, releasedBefore := onnx.NamedInputValueCounts()
+
+	const reqs = 2000
+	for range reqs {
+		eval()
+	}
+
+	created, released := onnx.NamedInputValueCounts()
+	created -= createdBefore
+	released -= releasedBefore
+	if created < reqs {
+		t.Fatalf("failing evaluations built %d input values across %d runs: the arm did not build a value before the failure", created, reqs)
+	}
+	if rem := created % reqs; rem != 0 {
+		t.Fatalf("failing evaluations built %d input values across %d runs, which is not a whole number per run", created, reqs)
+	}
+	if released != created {
+		t.Errorf("input assembly created %d ORT values (%d per run) and released %d across %d failing runs: %d leaked", created, created/reqs, released, reqs, created-released)
+	}
+
+	runtime.GC()
+	gotGoroutines := runtime.NumGoroutine()
+	gotHeap := registry.HeapInUseBytes()
+	if gotGoroutines > baseGoroutines+3 {
+		t.Errorf("goroutines grew across %d failing input assemblies: %d -> %d", reqs, baseGoroutines, gotGoroutines)
+	}
+	if growth := int64(gotHeap) - int64(baseHeap); growth > 8<<20 {
+		t.Errorf("heap grew %d bytes across %d failing input assemblies (leak?)", growth, reqs)
 	}
 }
 

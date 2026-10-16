@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
@@ -25,6 +26,10 @@ type fakeImageSession struct {
 	shapes    [][]int64
 	dim       int
 	err       error
+	// outBatch, when > 0, overrides the batch dimension of the returned output
+	// (shape[0] and row count) so a test can model a graph whose output batch
+	// disagrees with the images it was run with. 0 returns the requested batch.
+	outBatch int
 }
 
 func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
@@ -47,6 +52,9 @@ func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.
 	}
 	// n is the tensor element count; batch is shape[0].
 	batch := int(shape[0])
+	if f.outBatch > 0 {
+		batch = f.outBatch
+	}
 	out := make([]float32, batch*f.dim)
 	for i := range out {
 		out[i] = float32(i%f.dim) + 0.5
@@ -292,6 +300,67 @@ func TestEMBIMGBoundedBatchedRuns(t *testing.T) {
 		if len(shape) != 4 || shape[0] < 1 || shape[0] > maxImageBatchImages {
 			t.Fatalf("run %d shape = %v, want batch within [1 %d]", i, shape, maxImageBatchImages)
 		}
+	}
+}
+
+// TestEMBIMGBatchDimensionMismatch proves an output whose batch dimension
+// disagrees with the images in the chunk is refused, naming both dimensions,
+// before any row is pooled: a short output previously read past the tensor.
+func TestEMBIMGBatchDimensionMismatch(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		outBatch int
+		images   int
+	}{
+		{"short output", 1, 2},
+		{"long output", 3, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := registry.New()
+			fake := &fakeImageSession{dim: testImageDim, outBatch: tc.outBatch}
+			reg.Add("imgA", &registry.ModelEntry{
+				Name: "imgA",
+				Dim:  testImageDim,
+				ImageRes: &registry.ImageResources{
+					Sessions:     []onnx.NamedSession{fake},
+					Plan:         testImagePlan(4),
+					OutputTensor: "image_embeds",
+					Pooling:      "none",
+					Dim:          testImageDim,
+				},
+			})
+			entry, err := reg.Resolve("imgA")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			ir, err := entry.ImageResources()
+			if err != nil || ir == nil {
+				t.Fatalf("ImageResources = %v, %v", ir, err)
+			}
+			images := make([][]byte, tc.images)
+			for i := range images {
+				images[i] = []byte(solidImagePNG(t, color.NRGBA{R: uint8(i + 1), A: 255}))
+			}
+
+			srv := New(getFreeAddr(), reg, "", "", nil)
+			results, _, errs := srv.embedImages("imgA", ir, images)
+
+			want := fmt.Sprintf("image output %q has batch dimension %d, want %d",
+				"image_embeds", tc.outBatch, tc.images)
+			for i, e := range errs {
+				if e == nil {
+					t.Fatalf("slot %d: no error, want %q", i, want)
+				}
+				if e.Error() != want {
+					t.Fatalf("slot %d error = %q, want %q", i, e.Error(), want)
+				}
+			}
+			for i, r := range results {
+				if r != nil {
+					t.Fatalf("slot %d returned an embedding despite the refusal", i)
+				}
+			}
+		})
 	}
 }
 

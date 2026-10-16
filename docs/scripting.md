@@ -52,7 +52,7 @@ value per text. The whitelisted host blocks:
 | `emb.math.float32_bytes(vals)` | Pack numbers into ONE little-endian float32 bulk (`unpack('e*')`) |
 | `emb.image.preprocess(bytes)` | Decode and preprocess raw image bytes with the model's `image:` plan → `{shape, bytes, dtype, input}` ready for `emb.run` |
 | `emb.image.info()` | The model's configured image preprocessing parameters (`input`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`) |
-| `emb.API_VERSION` | Host-surface version string, for scripts that must detect an older server |
+| `emb.API_VERSION` | The server's version — the release's `VERSION`, the same value `INFO` reports as `emb_version` — for scripts that must detect an older server |
 | `json.{encode, decode, null}` | Structured replies / parsing; `json.null` is the unique null sentinel (arrays round-trip) |
 
 `emb.embed` and `emb.image.embed` are available only for models that configure
@@ -209,8 +209,10 @@ requires in practice:
   separately in `EMB.STATS` (`script_requests`, `script_errors`,
   `script_avg_latency_us`, `per_model_scripts`); `EMB.INFO <model>` reports the
   model's open script session count.
-- **Version.** `emb.API_VERSION` identifies the host surface; a script that
-  needs a newer function can detect an older server and report its own error.
+- **Version.** `emb.API_VERSION` is the server's version — the same value
+  `INFO` reports as `emb_version`, not a separate script-surface version — so a
+  script that needs a newer function can detect an older server and report its
+  own error.
 
 ## Example 1 — vector embeddings (`model(input) → output`)
 

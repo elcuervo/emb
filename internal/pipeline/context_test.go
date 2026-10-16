@@ -113,14 +113,28 @@ func TestAbandonedRequestNeverRuns(t *testing.T) {
 	}
 }
 
-// admittingSession stands in for the CPU-gate wrapper: it reports a fixed
-// admission wait once per run, and optionally fails the run with err.
+// admittingSession stands in for the CPU-gate wrapper: the wait it reports
+// travels back with the run's own result, and it optionally fails the run with
+// err so a refused admission can be exercised.
 type admittingSession struct {
 	wait time.Duration
 	err  error
 }
 
 func (s *admittingSession) Run(_, _ []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	return s.result(batchSize, seqLen, dim)
+}
+
+func (s *admittingSession) RunContext(_ context.Context, _, _ []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	return s.result(batchSize, seqLen, dim)
+}
+
+func (s *admittingSession) RunContextAdmitted(_ context.Context, _, _ []int64, batchSize, seqLen, dim int) ([]float32, time.Duration, error) {
+	out, err := s.result(batchSize, seqLen, dim)
+	return out, s.wait, err
+}
+
+func (s *admittingSession) result(batchSize, seqLen, dim int) ([]float32, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -128,12 +142,6 @@ func (s *admittingSession) Run(_, _ []int64, batchSize, seqLen, dim int) ([]floa
 }
 
 func (s *admittingSession) Close() error { return nil }
-
-func (s *admittingSession) TakeAdmissionWait() time.Duration {
-	wait := s.wait
-	s.wait = 0
-	return wait
-}
 
 // TestRunTimeExcludesAdmissionWait covers the attribution contract on both
 // inference paths: the time a run spent queueing at the CPU gate is reported on

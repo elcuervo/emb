@@ -367,8 +367,10 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
 
       <p class="doc-prose">
         Settings live in a YAML file passed with <code>-config</code>, or as the
-        equivalent inline flags. Model names are declared here; a model is loaded
-        lazily on first request unless it is marked to preload.
+        equivalent inline flags. Model names are declared here; a model's layout
+        is decided lazily on first use unless it is marked to preload, and the
+        first requests after a cold start are refused with
+        <code>ERR not ready</code> while it lays out in the background.
       </p>
 
       <figure class="code">
@@ -401,7 +403,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <dt>output_tensor</dt>
         <dd>Auto-detected from the graph when omitted.</dd>
         <dt>preload</dt>
-        <dd>Default <code>false</code>. Load at startup instead of on first request.</dd>
+        <dd>Default <code>false</code>. Decide the layout at startup instead of on first use; a lazy model refuses the first requests after a cold start with <code>ERR not ready</code> while it lays out in the background.</dd>
         <dt>pad_output</dt>
         <dd>Default <code>false</code>. Pads sequences to <code>max_length</code> with trailing zeros, for legacy implementations that do not pass an attention mask.</dd>
         <dt>workers</dt>

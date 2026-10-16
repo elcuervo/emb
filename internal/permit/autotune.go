@@ -46,13 +46,17 @@ func Classify(prev, cur Sample, window time.Duration, cores int, cpuHigh, waitRa
 	}
 	waitPerRun := float64(cur.DispatchWaitUs-prev.DispatchWaitUs) / float64(runs)
 	runPerRun := float64(cur.RunUs-prev.RunUs) / float64(runs)
+	if runPerRun <= 0 {
+		// A window that ran work but measured no run time per run is not
+		// evidence of a latency-sensitive workload: a mis-attributed or
+		// inverted counter would otherwise classify as latency, which is the
+		// class that shrinks the allowance. Hold instead.
+		return ClassIdle
+	}
 	if cur.InFlight > cur.Sessions {
 		return ClassThroughput
 	}
-	if runPerRun > 0 && waitPerRun/runPerRun >= waitRatio {
-		return ClassThroughput
-	}
-	if runPerRun == 0 && waitPerRun > 0 {
+	if waitPerRun/runPerRun >= waitRatio {
 		return ClassThroughput
 	}
 	return ClassLatency

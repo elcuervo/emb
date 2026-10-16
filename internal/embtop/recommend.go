@@ -213,8 +213,13 @@ type FleetRecommendation struct {
 	Share float64
 }
 
-// Empty reports whether there is nothing to recommend.
-func (f FleetRecommendation) Empty() bool { return len(f.Kinds) == 0 && f.First == "" }
+// Empty reports whether there is nothing to recommend. A named action is a
+// recommendation even when nothing binds and no node stands out: a node's own
+// repair is what the fleet line says to do, and the panel renders the same line
+// the headless aggregate writes.
+func (f FleetRecommendation) Empty() bool {
+	return len(f.Kinds) == 0 && f.First == "" && (f.Action == "" || f.Action == ActionNone)
+}
 
 // RecommendFleet derives the fleet-level advisory recommendation. It reports
 // each node's binding resource separately rather than averaging one node's
@@ -308,15 +313,22 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 
 	rec := FleetRecommendation{Kinds: kinds, Text: strings.Join(parts, " · "), First: first}
 	if repairAction != "" {
-		// The named node's action, with the phase behind its tail.
+		// The named node's own action, exactly as the node's own line states
+		// it, with the phase behind its tail. It is the whole line when nothing
+		// binds and no node stands out, so it must not read as a dangling
+		// separator.
 		a := advice[repairLabel]
 		rec.Action = repairAction
 		rec.Phase, rec.Share = a.Phase, a.Share
-		clause := repairLabel + ": " + a.Text
+		clause := repairLabel + ": " + AdviceHead(a)
 		if a.Phase != PhaseNone && a.Share > 0 {
 			clause += fmt.Sprintf(" (its tail is %.0f%% %s wait)", a.Share*100, a.Phase)
 		}
-		rec.Text = clause + " · " + rec.Text
+		if rec.Text == "" {
+			rec.Text = clause
+		} else {
+			rec.Text = clause + " · " + rec.Text
+		}
 	} else if uniform {
 		rec.Action = ActionNodes
 	}

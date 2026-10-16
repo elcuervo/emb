@@ -101,36 +101,42 @@ func TestBudgetedSessionReleasesOnError(t *testing.T) {
 
 // TestBudgetedSessionReportsItsQueuedWait covers the attribution wiring: a run
 // admitted on the spot reports no wait, a run that queued reports how long, and
-// taking the value clears it.
+// the wait travels with that run's own result rather than staying on the
+// session for a later caller to read.
 func TestBudgetedSessionReportsItsQueuedWait(t *testing.T) {
 	gate := permit.NewBudget(1)
 	sess := &budgetedSession{Session: budgetTestSession{}, gate: gate, width: 1}
-	if _, err := sess.Run(nil, nil, 0, 0, 0); err != nil {
+	if _, waited, err := sess.RunContextAdmitted(context.Background(), nil, nil, 0, 0, 0); err != nil {
 		t.Fatalf("uncontended run: %v", err)
-	}
-	if waited := sess.TakeAdmissionWait(); waited != 0 {
+	} else if waited != 0 {
 		t.Fatalf("a run admitted on the spot reported a wait of %s", waited)
 	}
 
 	release := mustHoldGate(t, gate)
-	done := make(chan error, 1)
+	type runResult struct {
+		waited time.Duration
+		err    error
+	}
+	done := make(chan runResult, 1)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_, err := sess.RunContext(ctx, nil, nil, 0, 0, 0)
-		done <- err
+		_, waited, err := sess.RunContextAdmitted(ctx, nil, nil, 0, 0, 0)
+		done <- runResult{waited, err}
 	}()
 	waitGateQueued(t, gate, 1)
 	time.Sleep(30 * time.Millisecond)
 	release()
-	if err := <-done; err != nil {
-		t.Fatalf("queued run: %v", err)
+	got := <-done
+	if got.err != nil {
+		t.Fatalf("queued run: %v", got.err)
 	}
-	if waited := sess.TakeAdmissionWait(); waited < 25*time.Millisecond {
-		t.Fatalf("a run that queued ~30ms reported %s", waited)
+	if got.waited < 25*time.Millisecond {
+		t.Fatalf("a run that queued ~30ms reported %s", got.waited)
 	}
-	if waited := sess.TakeAdmissionWait(); waited != 0 {
-		t.Fatalf("the wait was reported twice: %s", waited)
+	// The wait was claimed by the run that paid it: a later run reads its own.
+	if _, waited, err := sess.RunContextAdmitted(context.Background(), nil, nil, 0, 0, 0); err != nil || waited != 0 {
+		t.Fatalf("a later uncontended run reported %s (err %v)", waited, err)
 	}
 }
 

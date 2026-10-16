@@ -394,8 +394,9 @@ The same lines carry the attribution as their own tokens, absent when there is
 nothing measured: `act=` the action (`cpu_budget`, `host_cpu`, `cache`,
 `intra_op_threads`, `workers`, `batch_window`, `model`, `memory`, `growth`,
 `nodes`) with `act_rejected=` for the action the same evidence rejects;
-`cached_pct=` the cache's share of the window's attributed traffic (an event the
-server did not attribute — an image run — is counted on neither side of it); `lat_p95_run_us=` and
+`cached_pct=` the cache's share of the window's traffic — the measurement the
+dashboard states beside the advice, from the window's own counters rather than
+the event ring's split by path; `lat_p95_run_us=` and
 `lat_p95_run_n=` the p95 of the requests that ran and how many those are;
 `phase=`, `phase_share=`, `phase_wait_us=`, `phase_admit_us=` and `phase_run_us=`
 the window's dominant phase and its mean per run; and per model `runs=`,

@@ -106,6 +106,13 @@ func (r *ImageResources) pool(out onnx.NamedTensor, batch int) ([][]byte, error)
 	if rank < 2 {
 		return nil, fmt.Errorf("image output %q has rank %d, want >= 2", r.OutputTensor, rank)
 	}
+	// The graph must return exactly one row per image. A batch that disagrees
+	// is a configuration error, not a bad image: the extraction below would
+	// read rows the tensor does not have (fewer) or silently drop them (more),
+	// so refuse it before any row is read.
+	if got := int(out.Shape[0]); got != batch {
+		return nil, fmt.Errorf("image output %q has batch dimension %d, want %d", r.OutputTensor, got, batch)
+	}
 	dim := int(out.Shape[rank-1])
 	if r.Dim > 0 && dim != r.Dim {
 		return nil, fmt.Errorf("image output %q dim %d does not match model dim %d", r.OutputTensor, dim, r.Dim)

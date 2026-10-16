@@ -3,6 +3,7 @@ package onnx
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -88,9 +89,10 @@ func NewNamedRuntimeSessionFromBytes(data []byte, inputNames, outputNames []stri
 
 // RunNamed runs the session with the given named inputs (matched by name
 // against the graph's registered inputs, order-independent) and returns every
-// registered output keyed by name. Missing or unknown inputs are errors, as
-// are duplicate names. Outputs are allocated per call, so concurrent callers
-// do not share buffers.
+// registered output keyed by name. An input the graph declares that the caller
+// does not supply is an error, as is a duplicated name; a name the graph does
+// not declare is ignored, so it surfaces as the missing input it displaced.
+// Outputs are allocated per call, so concurrent callers do not share buffers.
 func (s *NamedRuntimeSession) RunNamed(inputs []NamedTensor) (map[string]NamedTensor, error) {
 	byName := make(map[string]NamedTensor, len(inputs))
 	for _, in := range inputs {
@@ -101,6 +103,13 @@ func (s *NamedRuntimeSession) RunNamed(inputs []NamedTensor) (map[string]NamedTe
 	}
 
 	values := make([]ort.Value, len(s.inputNames))
+	// Registered before the first value is built so every early return below
+	// releases what the earlier iterations created: a duplicate input name, an
+	// input the graph declares but the caller did not supply, or a spec that
+	// fails namedTensorValue validation. Slots the loop never filled stay nil
+	// and the release path skips them.
+	defer releaseNamedInputValues(values)
+
 	for i, name := range s.inputNames {
 		in, ok := byName[name]
 		if !ok {
@@ -111,14 +120,8 @@ func (s *NamedRuntimeSession) RunNamed(inputs []NamedTensor) (map[string]NamedTe
 			return nil, err
 		}
 		values[i] = v
+		namedInputValuesCreated.Add(1)
 	}
-	defer func() {
-		for _, v := range values {
-			if v != nil {
-				_ = v.Destroy()
-			}
-		}
-	}()
 
 	outputs := make([]ort.Value, len(s.outNames))
 	if err := s.session.Run(values, outputs); err != nil {
@@ -146,6 +149,34 @@ func destroyValues(values []ort.Value) {
 	for _, v := range values {
 		if v != nil {
 			destroyValue(v)
+		}
+	}
+}
+
+// Named-input value accounting. A run that fails while assembling its inputs
+// abandons ORT-owned allocations, which a Go heap probe cannot see and an RSS
+// sample cannot separate from allocator churn; the scripted leak gate asserts
+// instead that the input path released exactly what it created.
+var (
+	namedInputValuesCreated  atomic.Int64
+	namedInputValuesReleased atomic.Int64
+)
+
+// NamedInputValueCounts reports how many ORT input values the named path has
+// created and released since process start. It is a test-only seam — the
+// scripted leak gate counts created-but-never-released values with it, which is
+// exactly the leak — and production never calls it.
+func NamedInputValueCounts() (created, released int64) {
+	return namedInputValuesCreated.Load(), namedInputValuesReleased.Load()
+}
+
+// releaseNamedInputValues releases the values one run's input assembly built,
+// counting them so the leak gate can prove a failed run destroyed what it made.
+func releaseNamedInputValues(values []ort.Value) {
+	for _, v := range values {
+		if v != nil {
+			destroyValue(v)
+			namedInputValuesReleased.Add(1)
 		}
 	}
 }

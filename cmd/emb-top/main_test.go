@@ -635,3 +635,38 @@ func TestStableModelListReachesEveryModel(t *testing.T) {
 		t.Fatalf("scrolling reached %d of %d models: %v", len(seen), len(names), seen)
 	}
 }
+
+// Every mode inherits the flag check: a window below one poll cannot bound the
+// rings it trims, so it is refused before any mode takes the screen or dials.
+func TestRunRejectsAWindowBelowOne(t *testing.T) {
+	for _, args := range [][]string{
+		{"-window", "0"},
+		{"-window", "-1"},
+		{"-frames", "-samples", "4", "-window", "-1"},
+		{"-once", "-samples", "4", "-window", "-1", "-addr", "127.0.0.1:1"},
+	} {
+		var out, errOut bytes.Buffer
+		code := run(args, func(string) string { return "" }, &out, &errOut)
+		if code == 0 {
+			t.Errorf("run(%v) = 0, want a non-zero exit", args)
+		}
+		if !strings.Contains(errOut.String(), "-window") {
+			t.Errorf("run(%v) stderr = %q, want a message naming -window", args, errOut.String())
+		}
+		if out.Len() != 0 {
+			t.Errorf("run(%v) wrote to stdout: %q", args, out.String())
+		}
+	}
+}
+
+// A window of one poll is valid in every mode.
+func TestParseFlagsAcceptsAWindowOfOne(t *testing.T) {
+	o, err := parseFlags([]string{"-window", "1", "-interval", "1s", "-addr", "127.0.0.1:1"},
+		func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if o.window != 1 {
+		t.Fatalf("window = %d, want 1", o.window)
+	}
+}

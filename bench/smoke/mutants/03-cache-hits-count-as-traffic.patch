@@ -3,7 +3,7 @@
 diff --git a/internal/registry/sampler.go b/internal/registry/sampler.go
 --- a/internal/registry/sampler.go
 +++ b/internal/registry/sampler.go
-@@ -70,6 +70,12 @@
+@@ -70,6 +70,12 @@ func (r *ScriptResources) runSampler(cores int) {
  	}
  }
  
@@ -19,13 +19,13 @@ diff --git a/internal/registry/sampler.go b/internal/registry/sampler.go
 diff --git a/internal/server/script.go b/internal/server/script.go
 --- a/internal/server/script.go
 +++ b/internal/server/script.go
-@@ -462,6 +462,9 @@
+@@ -493,6 +493,9 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
  			}
  		}
  		if allHit {
 +			if res, err := entry.ScriptResources(); err == nil && res != nil {
 +				res.NoteCacheHit()
 +			}
- 			return replies, nil
+ 			return replies, hits, nil
  		}
  	}
