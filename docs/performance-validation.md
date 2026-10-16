@@ -176,14 +176,16 @@ What it asserts, and the regression each assertion catches:
 | `control-arm` | a throughput collapse: the adaptive arm is gated against a fixed-concurrency control arm measured in the same run, medians over three rounds with the warmup excluded, at a 15% floor |
 | `partition-reported` | the gate no longer reporting the CPU partition it ran under |
 
-The gate prints every outcome and one summary line:
+The gate prints every outcome and one summary line per arm, each naming the arm
+it summarizes:
 
 ```text
-emb-smoke: assertions=17 pass=16 fail=0 skipped=1
+emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1
+emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0
 ```
 
-`lint`, `test`, and the CGo CI job fail when that line is missing, so a green
-run cannot mean the gate skipped. An assertion the host cannot exercise is
+`lint`, `test`, and the CGo CI job fail when an arm's own line is missing, so a
+green run cannot mean the gate skipped. An assertion the host cannot exercise is
 reported as `skipped` with the host property that prevented it — the saturating
 burst above is skipped on a host whose CPU fraction cannot reach 0.90 — and the
 one-core arm (`saturation-enforced`) is where that assertion is enforced per
@@ -247,41 +249,43 @@ Recorded sweep on the development machine:
 
 ```text
 == clean tree (must pass) ==
-✓ clean tree: gate green (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+✓ clean tree: gate green (emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1 emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0)
 
 == 01-eager-shrink.patch (must fail on: allowance-halved) ==
-✓ 01-eager-shrink.patch: red, and named allowance-halved (emb-smoke: assertions=17 pass=15 fail=1 skipped=1)
+✓ 01-eager-shrink.patch: red, and named allowance-halved (emb-smoke: arm=autotune assertions=17 pass=15 fail=1 skipped=1 emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0)
 
 == 02-saturation-out-of-reach.patch (must fail on: saturation-enforced) ==
-✓ 02-saturation-out-of-reach.patch: red, and named saturation-enforced (emb-smoke: assertions=17 pass=15 fail=1 skipped=1)
+✓ 02-saturation-out-of-reach.patch: red, and named saturation-enforced (emb-smoke: arm=autotune assertions=17 pass=15 fail=1 skipped=1 emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0)
 
 == 03-cache-hits-count-as-traffic.patch (must fail on: cache-idle) ==
-✓ 03-cache-hits-count-as-traffic.patch: red, and named cache-idle (emb-smoke: assertions=17 pass=15 fail=1 skipped=1)
+✓ 03-cache-hits-count-as-traffic.patch: red, and named cache-idle (emb-smoke: arm=autotune assertions=17 pass=15 fail=1 skipped=1 emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0)
 
 == 04-layout-reshape.patch (must fail on: layout-immutable) ==
-✓ 04-layout-reshape.patch: red, and named layout-immutable (emb-smoke: assertions=17 pass=15 fail=1 skipped=1)
+✓ 04-layout-reshape.patch: red, and named layout-immutable (emb-smoke: arm=autotune assertions=17 pass=15 fail=1 skipped=1 emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0)
 
 == 05-fifo-head.patch (must fail on: admission-fair) ==
-✓ 05-fifo-head.patch: red, and named admission-fair (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+✓ 05-fifo-head.patch: red, and named admission-fair (emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1 emb-smoke: arm=control assertions=12 pass=11 fail=1 skipped=0)
 
 == 06-admission-unbounded.patch (must fail on: admission-bounded) ==
-✓ 06-admission-unbounded.patch: red, and named admission-bounded (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+✓ 06-admission-unbounded.patch: red, and named admission-bounded (emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1 emb-smoke: arm=control assertions=12 pass=11 fail=1 skipped=0)
 
 == 07-queue-unbounded.patch (must fail on: queue-bounded) ==
-✓ 07-queue-unbounded.patch: red, and named queue-bounded (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+✓ 07-queue-unbounded.patch: red, and named queue-bounded (emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1 emb-smoke: arm=control assertions=12 pass=11 fail=1 skipped=0)
 
 == 08-single-session-layout.patch (must fail on: layout-concurrency) ==
-✓ 08-single-session-layout.patch: red, and named layout-concurrency (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+✓ 08-single-session-layout.patch: red, and named layout-concurrency (emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1 emb-smoke: arm=control assertions=12 pass=11 fail=1 skipped=0)
 
 == 09-calibration-on-request.patch (must fail on: calibration-off-request-path) ==
-✓ 09-calibration-on-request.patch: red, and named calibration-off-request-path (emb-smoke: assertions=17 pass=16 fail=0 skipped=1)
+✓ 09-calibration-on-request.patch: red, and named calibration-off-request-path (emb-smoke: arm=autotune assertions=17 pass=16 fail=0 skipped=1 emb-smoke: arm=control assertions=12 pass=11 fail=1 skipped=0)
 
 verify-gate: every mutant was caught and the clean tree passed
 ```
 
 The `assertions=17` in each line is the *scripted* gate's summary: `-run Smoke`
-runs both gates and `gate_summary` reads the last summary line. The plain gate's
-own count (twelve) is in the same log; only the exit status decides the sweep.
+runs both gates, each writing its own `emb-smoke: arm=<arm> …` line, and
+`gate_summary` prints every arm's line (de-duplicated, sorted) rather than the
+last match. The plain gate's own count (twelve) is in the same log; only the
+exit status decides the sweep.
 
 Two things the sweep depends on that are easy to get wrong, both fixed here:
 

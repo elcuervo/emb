@@ -8,7 +8,7 @@ Adapts per-model inference concurrency to the observed traffic shape, so default
 
 ### Requirement: Per-model traffic classification
 
-Each model's recent inference traffic SHALL be classified as `idle`, `latency`, `throughput`, or `saturated`, from per-model in-flight concurrency, dispatch-wait over run-time, and process CPU utilization, sampled at the inference boundary over a rolling window. Reply-cache hits SHALL NOT contribute.
+Each model's recent inference traffic SHALL be classified as `idle`, `latency`, `throughput`, or `saturated`, from per-model in-flight concurrency, dispatch-wait over run-time, and process CPU utilization, sampled at the inference boundary over a rolling window. Reply-cache hits SHALL NOT contribute. The run time and wait time a window is classified on SHALL come from counters that cannot decrease, and SHALL be read as one consistent sample of one model: a window whose run time per run is zero or negative SHALL NOT be classified as `latency`, because a latency classification is what shrinks the allowance.
 
 #### Scenario: Serial traffic is classified latency
 
@@ -29,6 +29,11 @@ Each model's recent inference traffic SHALL be classified as `idle`, `latency`, 
 
 - **WHEN** in-flight concurrency is high and process CPU utilization is at or above the saturation threshold
 - **THEN** the class SHALL be `saturated`
+
+#### Scenario: A mis-attributed window cannot shrink the allowance
+
+- **WHEN** a window's run time per run is zero or negative (for example because a wait was subtracted from a run that did not pay it)
+- **THEN** the window SHALL NOT be classified as `latency`, and the allowance SHALL NOT be reduced on the strength of it
 
 ### Requirement: Adaptive per-session concurrency
 

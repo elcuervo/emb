@@ -430,3 +430,74 @@ func TestRunOnceFleetNamesTheNodeWhenNothingBinds(t *testing.T) {
 		t.Fatalf("rec_first = %q (ok=%v), want b:\n%s", got, ok, line)
 	}
 }
+
+// tightNodeSampler is one node that sits just under its CPU budget, so no
+// node's own sizing rule fires and the fleet's headroom reads as uniformly
+// small. dispatched gives it the per-model phases of a node whose session
+// dispatch holds its tail; otherwise its phases say nothing.
+func tightNodeSampler(dispatched bool) *Sampler {
+	s := NewSampler(4)
+	at := time.Unix(0, 0)
+	s.SetClock(func() time.Time { return at })
+	for i := range 4 {
+		res := &PollResult{
+			UptimeSecs: 100, TotalRequests: int64(100 * (i + 1)),
+			Connections: 3, MemMB: 512, ModelsLoaded: 1,
+			CPUPlanKnown: true, CPUBudgetEnabled: true,
+			CPUBudget: 8, CPUActiveTokens: 7, CPUPeakTokens: 8,
+			Models:   []ModelListEntry{{Name: "m", Dim: 384, Status: "ready"}},
+			PerModel: map[string]*ModelStats{"m": {Dim: 384, Requests: int64(100 * (i + 1))}},
+		}
+		if dispatched {
+			ms := res.PerModel["m"]
+			ms.EmbedRuns = int64(50 * (i + 1))
+			ms.EmbedDispatchWaitUs = int64(i) * 200_000
+			ms.EmbedAdmissionWaitUs = int64(i) * 20_000
+			ms.EmbedRunUs = int64(i) * 20_000
+		}
+		s.Push(res)
+		at = at.Add(time.Second)
+	}
+	return s
+}
+
+// The fleet line carries its node's own reservable repair: with every node's
+// CPU headroom small, the standing answer would be capacity, but a node whose
+// advice names a cheap repair must be named instead — as the recommendation the
+// panel renders and the token the headless aggregate writes.
+func TestFleetLineCarriesTheNodesOwnRepair(t *testing.T) {
+	states := []*onceNode{
+		{label: "a", sampler: tightNodeSampler(false), res: &PollResult{}, sampled: true},
+		{label: "b", sampler: tightNodeSampler(true), res: &PollResult{}, sampled: true},
+		{label: "c", sampler: tightNodeSampler(false), res: &PollResult{}, sampled: true},
+	}
+	own := Advise(SamplerAdviceInput(states[1].sampler))
+	if own.Action != ActionWorkers {
+		t.Fatalf("the fixture node's own advice = %q (%s), want %q", own.Action, own.Text, ActionWorkers)
+	}
+
+	rec := fleetRecommendation(states)
+	if rec.Empty() {
+		t.Fatalf("a fleet whose node names a repair recommended nothing: %+v", rec)
+	}
+	if rec.Action != own.Action {
+		t.Errorf("fleet action = %q, want the node's own %q: %s", rec.Action, own.Action, rec.Text)
+	}
+	if strings.Contains(rec.Text, "add nodes") {
+		t.Errorf("the fleet bought capacity beside a reservable repair: %q", rec.Text)
+	}
+	if !strings.Contains(rec.Text, "b: raise workers") {
+		t.Errorf("the fleet line does not lead with the node's own action: %q", rec.Text)
+	}
+
+	line := string(appendFleetAggregate(nil, states, rec))
+	if got, ok := parseKV(line, "act"); !ok || got != ActionWorkers {
+		t.Fatalf("fleet aggregate act = %q (ok=%v), want %q:\n%s", got, ok, ActionWorkers, line)
+	}
+	if got, ok := parseKV(line, "rec"); ok {
+		t.Errorf("the fleet aggregate named the binding resource %q beside a repair", got)
+	}
+	if got, ok := parseKV(string(appendAttribution(nil, states[1].sampler)), "act"); !ok || got != own.Action {
+		t.Errorf("node b's own act = %q (ok=%v), want %q", got, ok, own.Action)
+	}
+}

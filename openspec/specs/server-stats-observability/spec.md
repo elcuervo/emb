@@ -149,6 +149,8 @@ Scripted evaluations SHALL be first-class in the server's observability surface,
 
 Counter reads SHALL be atomic. Collecting the counters SHALL NOT allocate on the request path. The RESP array count SHALL match the emitted fields.
 
+The attribution SHALL be per run, not per session: the wait a run paid at the gate SHALL travel with that run — returned to the caller that paid it — and SHALL NOT be read from a slot several callers of one session share, since a concurrent run can overwrite it. A request SHALL account for every text it ran, not only the last. The per-model counters SHALL be monotonic: `run_us` and `admission_wait_us` SHALL NOT decrease over the life of the process, and no counter SHALL account for a wait a different caller paid.
+
 The same three phases SHALL be attributable to the individual completed request that paid them, rather than only to the model's cumulative totals: a `MONITOR` event SHALL carry the request's own `dispatch_us`, `admit_us` and `run_us`, measured where they are incurred — by the pool or batcher that handed the request to a session, and by the run itself — and carried out on the response value rather than reconstructed by the reader. A request answered entirely from the reply cache SHALL be attributable to the cache path, and the attribution SHALL be collected for every inference command that records an event, not only `EMB`.
 
 #### Scenario: Serial traffic has no dispatch wait
@@ -165,6 +167,16 @@ The same three phases SHALL be attributable to the individual completed request 
 
 - **WHEN** a model's runs wait at the CPU admission gate
 - **THEN** `admission_wait_us` SHALL increase while `run_us` accounts only for the run, and the two SHALL be reported separately from `dispatch_wait_us`
+
+#### Scenario: Counters never run backwards under shared sessions
+
+- **WHEN** callers run concurrently on a session leased to more than one caller, some of them waiting at the gate
+- **THEN** `run_us` SHALL NOT decrease between two reads, and the wait each caller paid SHALL be attributed to that caller rather than to whichever run reads the slot first
+
+#### Scenario: Every text of a request is attributed
+
+- **WHEN** one `EMB`/`EMB.MULTI` request carries several texts that each run and each wait at the gate
+- **THEN** the request SHALL account for the claims of all of them, so `run_us` reflects every run and `admission_wait_us` every wait it paid
 
 #### Scenario: A completed request carries its own phases
 

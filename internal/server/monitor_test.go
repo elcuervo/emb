@@ -143,7 +143,7 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-func TestMonitorRESP3MapEvents(t *testing.T) {
+func TestMonitorEventShape(t *testing.T) {
 	addr := serveTest(t)
 
 	// Upgrade to RESP3 and issue one request.
@@ -155,34 +155,47 @@ func TestMonitorRESP3MapEvents(t *testing.T) {
 	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$1\r\nx\r\n"))
 	readRESP(t, c)
 
-	// Under RESP3 each event is a map with the RESP2 field names, the original
-	// six plus this request's attribution.
+	// Under RESP3 each event is a map carrying the same eleven field names the
+	// RESP2 array does, the original six plus this request's attribution.
 	c.Write([]byte("*1\r\n$7\r\nMONITOR\r\n"))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "*1\r\n%11\r\n") {
-		t.Fatalf("RESP3 MONITOR should be an array of 11-field maps, got %q", resp)
+	if want := "*1\r\n%" + itoa(len(monitorFieldNames)) + "\r\n"; !strings.HasPrefix(resp, want) {
+		t.Fatalf("RESP3 MONITOR should be an array of %d-field maps, got %q", len(monitorFieldNames), resp)
 	}
-	for _, key := range []string{"seq", "at_us", "model", "texts", "latency_us", "err",
-		"cached_texts", "attributed", "dispatch_us", "admit_us", "run_us"} {
+	for _, key := range monitorFieldNames {
 		want := "$" + itoa(len(key)) + "\r\n" + key + "\r\n"
 		if !strings.Contains(resp, want) {
 			t.Fatalf("missing key %q in %q", key, resp)
 		}
 	}
 
-	// RESP2 connections keep the flat per-event array, its first six elements
-	// in the order they have always had.
-	events := monitorEvents(t, addr)
+	// RESP2 connections keep the flat per-event array: exactly one element per
+	// field, with the original six first so a positional read still finds them
+	// where they have always been.
+	events := arrayOf(t, redisCmd(t, addr, "MONITOR"))
 	if len(events) != 1 {
 		t.Fatalf("want one event, got %d", len(events))
 	}
-	if got := bulkOf(t, events[0]["model"]); got != "test" {
-		t.Fatalf("model = %q, want test", got)
+	fields := arrayOf(t, events[0])
+	if len(fields) != len(monitorFieldNames) {
+		t.Fatalf("RESP2 event declares %d elements, want %d: %#v", len(fields), len(monitorFieldNames), fields)
 	}
-	if got := intOf(t, events[0]["texts"]); got != 1 {
-		t.Fatalf("texts = %d, want 1", got)
+	if got := intOf(t, fields[0]); got != 1 {
+		t.Fatalf("position 0 (seq) = %d, want 1", got)
 	}
-	if got := intOf(t, events[0]["seq"]); got != 1 {
-		t.Fatalf("seq = %d, want 1", got)
+	if fields[1].kind != "int" {
+		t.Fatalf("position 1 (at_us) is %s, want int", fields[1].kind)
+	}
+	if got := bulkOf(t, fields[2]); got != "test" {
+		t.Fatalf("position 2 (model) = %q, want test", got)
+	}
+	if got := intOf(t, fields[3]); got != 1 {
+		t.Fatalf("position 3 (texts) = %d, want 1", got)
+	}
+	if fields[4].kind != "int" {
+		t.Fatalf("position 4 (latency_us) is %s, want int", fields[4].kind)
+	}
+	if got := intOf(t, fields[5]); got != 0 {
+		t.Fatalf("position 5 (err) = %d, want 0", got)
 	}
 }

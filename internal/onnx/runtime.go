@@ -103,6 +103,11 @@ func newRuntimeSession(session *ort.DynamicAdvancedSession, inputNames []string,
 	}
 }
 
+// newEmptyTensor allocates the session's reused output tensor. It is a package
+// var so a failed creation — the path the reused-buffer requirement guards — is
+// testable without exhausting host memory.
+var newEmptyTensor = ort.NewEmptyTensor[float32]
+
 func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, error) {
 	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(seqLen)), inputIDs)
 	if err != nil {
@@ -139,10 +144,17 @@ func (s *RuntimeSession) Run(inputIDs, attnMask []int64, batchSize, seqLen, dim 
 	}
 
 	if s.outTensor == nil || !slices.Equal(s.outShape, outputShape) || s.outFlat != flatSize {
+		// Forget the old tensor before its replacement exists: if the creation
+		// fails, the session must re-create on the next run instead of matching
+		// this shape against a buffer that has already been destroyed.
 		if s.outTensor != nil {
 			_ = s.outTensor.Destroy()
 		}
-		tensor, err := ort.NewEmptyTensor[float32](ort.NewShape(outputShape...))
+		s.outTensor = nil
+		s.outShape = nil
+		s.outFlat = 0
+
+		tensor, err := newEmptyTensor(ort.NewShape(outputShape...))
 		if err != nil {
 			return nil, fmt.Errorf("creating output tensor: %w", err)
 		}

@@ -109,12 +109,17 @@ Live terminal dashboard for a running `emb` node: real-time throughput, per-mode
 
 CPU usage SHALL be read as a share of the node's own capacity — the same unit as the health banner's CPU chip — and the dashboard SHALL additionally state the CPU the window spent per uncached request, so a node whose traffic is mostly cache-served is not read as idle: the denominator of the CPU readout SHALL be the work that actually ran, not the requests that arrived.
 
-The cache readout SHALL state the cached share of the window's traffic (the portion of requests and texts answered without inference) beside the hit ratio, since the two answer different questions: the ratio describes the entries, the share describes how much of the service's work the cache removed.
+The cache readout SHALL state the share of the window's cache lookups the cache answered (the answered over the answered plus the missed, 0–100) beside the hit ratio: the ratio is the node's own cumulative one and the share is the window's. Both SHALL be counted over the cache's lookups, never over the requests that ran (`total_requests` counts only the work that reached a session, and a cache hit reaches none): dividing by it reports more cache-served work than the window carried, which reads as a share above 100%.
 
 #### Scenario: Cache gauges
 
 - **WHEN** the server has a cache configured
-- **THEN** the dashboard shows cache hit ratio, the cached share of the window's traffic, and recent hit/miss/eviction rates
+- **THEN** the dashboard shows cache hit ratio, the share of the window's cache lookups the cache answered, and recent hit/miss/eviction rates
+
+#### Scenario: The stated share cannot exceed the window's lookups
+
+- **WHEN** a warm window answers far more cache lookups than the requests that ran through a session (one text repeated reads as hundreds of hits against one run)
+- **THEN** the stated share SHALL stay within 0-100%, because its denominator is the cache's own lookups and not `total_requests`
 
 #### Scenario: CPU gauge
 
@@ -371,7 +376,7 @@ The band's primary series SHALL remain every completed request — the latency t
 #### Scenario: The uncached tail is separable from the service tail
 
 - **WHEN** a window contains both cache-answered and uncached requests with different latencies
-- **THEN** the dashboard SHALL render the uncached requests' p95 as its own marked level beside the band, and SHALL state the cached share of the same window beside the advice
+- **THEN** the dashboard SHALL render the uncached requests' p95 as its own marked level beside the band, and SHALL state the same window's share of its cache lookups beside the advice
 
 #### Scenario: A window with nothing uncached
 
@@ -498,7 +503,7 @@ model's `p50` label.
 
 ### Requirement: emb-top recommends the resource a node needs
 
-Alongside a node's health status, `emb-top` SHALL render an advisory recommendation naming both the resource to change and the action that changes it, derived from that node's own reported CPU budget and admission pressure, its host's CPU throttling and stolen time, its memory and cache-restore headroom, its per-model dispatch, admission and run phases, and the cached share of its traffic. The recommendation SHALL state the counters it is derived from. It SHALL name at most one primary action, and where the evidence also supports a second action it SHALL name the one it rejected and the counter that ruled it out, so the operator sees why not. It SHALL NOT drive the health status, and its thresholds SHALL be built-in defaults introducing no new flags.
+Alongside a node's health status, `emb-top` SHALL render an advisory recommendation naming both the resource to change and the action that changes it, derived from that node's own reported CPU budget and admission pressure, its host's CPU throttling and stolen time, its memory and cache-restore headroom, its per-model dispatch, admission and run phases, and the share of its cache lookups the cache answered. The recommendation SHALL state the counters it is derived from. It SHALL name at most one primary action, and where the evidence also supports a second action it SHALL name the one it rejected and the counter that ruled it out, so the operator sees why not. It SHALL NOT drive the health status, and its thresholds SHALL be built-in defaults introducing no new flags.
 
 Every rule SHALL have a magnitude floor: a claim about the host SHALL require throttling or stolen time that is a material share of the window, measured against the window's own wall time, and SHALL NOT fire while the node carries no inference load, so an idle node with a few milliseconds of steal reports nothing. A node that is holding its whole budget with no caller refused SHALL NOT be told to add CPU.
 
@@ -593,3 +598,18 @@ The `-once` and `-frames` outputs SHALL carry the same attribution per node and 
 
 - **WHEN** `-once` output is compared with the previous release's
 - **THEN** every token it already carried SHALL still be present under the same name, with the new attribution added beside it
+
+### Requirement: emb-top validates its own flag values
+
+`emb-top` SHALL reject a flag value it cannot honor, before it takes the terminal's screen, with a message on stderr and a non-zero exit. A history window SHALL be at least one poll, in every mode of the program, rather than a slice bound that can fall below the ring it trims.
+
+#### Scenario: A window below one is rejected
+
+- **WHEN** user runs `emb-top -window 0`, or `emb-top -window -1`, in the TUI, `-once` or `-frames` mode
+- **THEN** `emb-top` SHALL exit non-zero with a message naming `-window`
+- **AND** it SHALL NOT panic, and SHALL NOT leave the alternate screen occupied
+
+#### Scenario: Valid values are unaffected
+
+- **WHEN** user runs `emb-top -window 1 -interval 1s -once -samples 2 -addr host:port`
+- **THEN** it SHALL sample and print as before

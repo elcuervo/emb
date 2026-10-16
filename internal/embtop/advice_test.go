@@ -89,18 +89,21 @@ func TestAdviseThinTailStatesItsSampleCount(t *testing.T) {
 }
 
 // TestCacheUndersizedCountsLookupsOnce covers the share the cache rule is
-// graded on: a hit is a request too, so the requests served are the lookups.
+// graded on: a model's evictions over the lookups the cache saw (answered plus
+// missed), each counted once. The requests that ran are not that denominator —
+// a hit never reaches a session, so they undercount the lookups and inflate the
+// share.
 func TestCacheUndersizedCountsLookupsOnce(t *testing.T) {
 	models := map[string][]ModelPoint{"m": {
-		{At: time.Unix(0, 0), Requests: 0, CachedReqs: 0, CacheEvictions: 0},
-		{At: time.Unix(5, 0), Requests: 400, CachedReqs: 80, CacheEvictions: 25},
+		{At: time.Unix(0, 0), Runs: 0, CachedReqs: 0, CacheMisses: 0, CacheEvictions: 0},
+		{At: time.Unix(5, 0), Runs: 400, CachedReqs: 80, CacheMisses: 320, CacheEvictions: 25},
 	}}
 	pct, model := cacheUndersized(models, adviceWindow(2, nil))
 	if model != "m" {
 		t.Fatalf("model = %q, want m", model)
 	}
 	if pct != 6.25 {
-		t.Errorf("evicted share = %v%%, want 25 of the 400 requests served (6.25%%)", pct)
+		t.Errorf("evicted share = %v%%, want 25 of the 400 lookups (6.25%%)", pct)
 	}
 }
 
@@ -176,15 +179,16 @@ func TestAdviseNamesWorkersOrTheBatchWindow(t *testing.T) {
 func TestAdviseNamesTheCacheWhenEntriesAreDropped(t *testing.T) {
 	hist := adviceWindow(6, func(i int, p *Point) {
 		p.TotalRequests = int64(i * 100)
-		p.CacheHits = int64(i * 20) // 20% of the traffic never reaches a session
+		p.CacheHits = int64(i * 20)   // 20% of the lookups the cache saw
+		p.CacheMisses = int64(i * 80) // ... and 80% it had to run
 	})
 	in := AdviceInput{
 		Window: hist,
 		Split:  PhaseSplit{RunUs: 900_000, Runs: 8},
 		Paths:  PathCounts{Total: 40, Cached: 8, Reran: 32, Attributed: 40},
 		Models: map[string][]ModelPoint{"m": {
-			{At: time.Unix(0, 0), Runs: 1, Requests: 0, CachedReqs: 0},
-			{At: time.Unix(5, 0), Runs: 9, Requests: 400, CachedReqs: 80, CacheEvictions: 90},
+			{At: time.Unix(0, 0), Runs: 1, Requests: 0, CachedReqs: 0, CacheMisses: 0},
+			{At: time.Unix(5, 0), Runs: 9, Requests: 400, CachedReqs: 80, CacheMisses: 350, CacheEvictions: 90},
 		}},
 	}
 	adv := Advise(in)

@@ -199,10 +199,7 @@ func (b *Batcher) run() {
 		// A coalesced batch is abandoned only once every request in it has
 		// expired, so the latest deadline is what bounds its wait for admission.
 		runCtx, cancelRun := DeadlineAfter(deads...)
-		resp, seqLen, err := b.process(runCtx, all)
-		// The wait at the CPU gate is not run time, and a batch admission never
-		// admitted is not a run.
-		waited := takeAdmissionWait(b.session)
+		resp, seqLen, waited, err := b.process(runCtx, all)
 		cancelRun()
 		b.busy.Add(-1)
 		if !permit.IsAdmissionError(err) {
@@ -344,12 +341,12 @@ func (b *Batcher) run() {
 	}
 }
 
-func (b *Batcher) process(ctx context.Context, encs []Encoding) (Response, int, error) {
-	embeddings, seqLen, err := runEncodings(ctx, b.session, encs, b.dim, b.normalize, b.pooling)
+func (b *Batcher) process(ctx context.Context, encs []Encoding) (Response, int, time.Duration, error) {
+	embeddings, seqLen, waited, err := runEncodings(ctx, b.session, encs, b.dim, b.normalize, b.pooling)
 	if err != nil {
-		return Response{Err: err}, seqLen, err
+		return Response{Err: err}, seqLen, waited, err
 	}
-	return Response{Embeddings: embeddings}, seqLen, nil
+	return Response{Embeddings: embeddings}, seqLen, waited, nil
 }
 
 func (b *Batcher) paddingEfficiency() float64 {

@@ -55,11 +55,19 @@ import (
 //
 // Assertion names are an interface: `bench/smoke/verify-gate.sh` plants
 // regressions that must turn this gate red *naming* the assertion they broke.
-// The machine-readable contract is the summary line:
+// The machine-readable contract is one summary line per arm, naming the arm it
+// summarizes (see embArmName):
 //
-//	emb-smoke: assertions=11 pass=11 fail=0 skipped=0
+//	emb-smoke: arm=control assertions=12 pass=12 fail=0 skipped=0
 //	emb-smoke: failed=<assertion>          (one line per failure)
 const (
+	// embArmName is this gate's arm name in its summary line. `-run Smoke` selects
+	// two arms — this fixed-concurrency control arm (explicit workers and
+	// threads, no autotuning) and the adaptive autotune arm in
+	// script_smoke_test.go — so the summary names the arm it summarizes and a
+	// check can require proof from the arm it is checking rather than any
+	// summary the run happened to print.
+	embArmName = "control"
 	// embModelName is the fixture model's name in the server config.
 	embModelName = "plain"
 	// embBudget is the explicit process CPU budget every arm runs under: small
@@ -303,13 +311,18 @@ func (g *embAssertions) report(t *testing.T) {
 			fail++
 			failed = append(failed, o.name)
 		default:
+			// A skip stays a skip, naming the host property that prevented the
+			// assertion: it is never a pass, and never dropped from the counts
+			// (so an assertion that did not run cannot hide in this arm's total).
 			skipped++
 		}
 	}
-	t.Logf("emb-smoke: assertions=%d pass=%d fail=%d skipped=%d", len(g.outcomes), pass, fail, skipped)
+	summary := fmt.Sprintf("emb-smoke: arm=%s assertions=%d pass=%d fail=%d skipped=%d",
+		embArmName, len(g.outcomes), pass, fail, skipped)
+	t.Logf("%s", summary)
 	// Also on stderr, unprefixed: the summary is the machine-readable contract
 	// the sweep and the CI job read, and it must not depend on -v being passed.
-	fmt.Fprintf(os.Stderr, "emb-smoke: assertions=%d pass=%d fail=%d skipped=%d\n", len(g.outcomes), pass, fail, skipped)
+	fmt.Fprintln(os.Stderr, summary)
 	if len(failed) > 0 {
 		t.Logf("emb-smoke: failed=%s", strings.Join(failed, ","))
 		fmt.Fprintf(os.Stderr, "emb-smoke: failed=%s\n", strings.Join(failed, ","))

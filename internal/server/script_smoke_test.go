@@ -29,6 +29,12 @@ import (
 // tests; this gate exists for the wiring those tests cannot reach: sampler ->
 // pool capacity -> counters -> EMB.INFO.
 const (
+	// smokeArm is this gate's arm name in its summary line. `-run Smoke`
+	// selects two arms — this adaptive autotune arm and the fixed-concurrency
+	// control arm in emb_smoke_test.go — so the summary names the arm it
+	// summarizes and a check can require proof from the arm it is checking
+	// rather than any summary the run happened to print.
+	smokeArm = "autotune"
 	// smokeModel is the fixture model name; the preset reads fixed inputs, so
 	// every request in every arm produces the same reply.
 	smokeModel = "smoke"
@@ -562,7 +568,7 @@ func smokeSaturationVerdict(saturated bool, peakCPU float64, cores int) (result,
 // smokeOutcome is one assertion's recorded result.
 type smokeOutcome struct {
 	name   string
-	result string // pass | fail | invalid | skipped
+	result string // pass | fail | skipped
 	detail string
 }
 
@@ -603,11 +609,15 @@ func (g *smokeGate) report(t *testing.T) {
 			pass++
 		case "fail":
 			fail++
-		case "skipped":
+		default:
+			// A skip stays a skip, naming the host property that prevented the
+			// assertion: it is never a pass, and never dropped from the counts
+			// (so an assertion that did not run cannot hide in this arm's total).
 			skipped++
 		}
 	}
-	t.Logf("emb-smoke: assertions=%d pass=%d fail=%d skipped=%d", len(g.outcomes), pass, fail, skipped)
+	t.Logf("emb-smoke: arm=%s assertions=%d pass=%d fail=%d skipped=%d",
+		smokeArm, len(g.outcomes), pass, fail, skipped)
 	if fail > 0 {
 		t.Fatalf("emb-smoke: %d assertion(s) failed", fail)
 	}
@@ -789,7 +799,12 @@ func smokeUnreachableArm(t *testing.T, g *smokeGate) {
 	withGOMAXPROCS(t, smokeCoresUnreachable)
 	s := smokeStart(t, nil, "")
 	if s.cores != smokeCoresUnreachable {
-		t.Skipf("a cgroup quota of %d cores overrides the pinned budget", s.cores)
+		// A reported skip rather than a test-level one, for symmetry with the
+		// saturating arm: the assertion still belongs to this arm's counts, with
+		// the host property that put it out of reach.
+		g.skip("unreachable-reported-skipped", "a cgroup quota of "+strconv.Itoa(s.cores)+
+			" cores overrides the pinned budget, so an unreachable saturating phase is not the gate's to control")
+		return
 	}
 	smokeSerialPhase(t, s, 2*time.Second, 20*time.Millisecond)
 	burst, peakCPU, _ := smokeBurstPhase(t, s, 8, 4*time.Second)

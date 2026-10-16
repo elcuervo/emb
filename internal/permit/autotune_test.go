@@ -56,6 +56,38 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// TestInvertedWindowDoesNotShrinkTheAllowance covers the classifier's guard on a
+// window that ran work but measured no run time per run — the shape a
+// mis-attributed wait produces when it is subtracted from a run that did not pay
+// it. A latency classification is what shrinks the allowance, so such a window
+// must not produce one, and a controller folding it in must hold.
+func TestInvertedWindowDoesNotShrinkTheAllowance(t *testing.T) {
+	const window = time.Second
+	const cores = 10
+	prev := Sample{Runs: 100, DispatchWaitUs: 1000, RunUs: 10_000, InFlight: 1, Sessions: 2, CPUUserUsec: 100}
+	// runPerRun is negative: the run counters moved backwards, which a wait
+	// subtracted from a run that did not pay it produces.
+	inverted := Sample{Runs: 101, DispatchWaitUs: 1010, RunUs: 9_000, InFlight: 1, Sessions: 2, CPUUserUsec: 200}
+	// runPerRun is zero: work ran and no run time was measured for it.
+	flat := Sample{Runs: 101, DispatchWaitUs: 1010, RunUs: 10_000, InFlight: 1, Sessions: 2, CPUUserUsec: 200}
+	for _, tc := range []struct {
+		name string
+		cur  Sample
+	}{{"inverted", inverted}, {"flat", flat}} {
+		class := Classify(prev, tc.cur, window, cores, 0.9, 0.25)
+		if class == ClassLatency {
+			t.Fatalf("%s window classified as latency", tc.name)
+		}
+		// Consecutive windows: no class here may shrink a fresh controller.
+		c := NewController(4, 3, 2, 3)
+		for i := range 5 {
+			if a, changed, _ := c.Observe(class); changed || a != 3 {
+				t.Fatalf("%s window %d changed the allowance to %d (changed=%v)", tc.name, i, a, changed)
+			}
+		}
+	}
+}
+
 func TestControllerGrowsUnderBurst(t *testing.T) {
 	c := NewController(4, 1, 2, 10)
 	if a, changed, _ := c.Observe(ClassThroughput); changed || a != 1 {

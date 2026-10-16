@@ -20,8 +20,10 @@ import (
 // serveLaya starts a server with the vendored tiny Laya export (ruby-laya's
 // test/fixtures/tiny), mounted like any scripted model. The model and
 // tokenizer are committed under testdata, so unlike the GLiNER testbed this
-// never needs a download.
-func serveLaya(t *testing.T, cacheCfg string) (string, *Server) {
+// never needs a download. Options are the server's own, so an episode test can
+// take the test-only script deadline (layaEpisodeDeadline) instead of the
+// production default.
+func serveLaya(t *testing.T, cacheCfg string, opts ...Option) (string, *Server) {
 	t.Helper()
 	if !ortOK {
 		t.Skip("onnx runtime unavailable (run inside nix develop)")
@@ -38,7 +40,7 @@ func serveLaya(t *testing.T, cacheCfg string) (string, *Server) {
 	reg.Add("laya-tiny", entry)
 
 	addr := getFreeAddr()
-	srv := New(addr, reg, "", cacheCfg, nil)
+	srv := New(addr, reg, "", cacheCfg, nil, opts...)
 	go srv.ListenAndServe()
 	t.Cleanup(func() { _ = srv.Close() })
 	time.Sleep(50 * time.Millisecond)
@@ -499,13 +501,22 @@ func assertLayaFrames(t *testing.T, frames []any, reads ...string) {
 	}
 }
 
+// layaEpisodeDeadline bounds each episode's evaluation. Every frame of an
+// episode is a model call in the same EMB.EVSHA, and the clamped unbounded
+// request is 200 snake frames or 400 pacman frames in one evaluation: the
+// production 30 s default is generous for an optimized build, but a
+// race-instrumented one pays for every interpreted instruction of the preset,
+// so the two episode tests take the test-only seam rather than let the race
+// pass be decided by a bound the instrumentation cannot meet.
+const layaEpisodeDeadline = 5 * time.Minute
+
 // TestLayaSnakeEpisode pins the task preset's loop: one call returns a bounded
 // episode of frames, each carrying the model's probabilities and the shield's
 // result, and the returned board chains into the next episode. The envelope
 // rides on the model entry, so the calls carry no config argument -- the wire
 // the decision plate uses.
 func TestLayaSnakeEpisode(t *testing.T) {
-	addr, srv := serveLaya(t, "")
+	addr, srv := serveLaya(t, "", WithScriptDeadline(layaEpisodeDeadline))
 	sha := layaPreload(t, srv, "../../scripts/snake.lua")
 	episode := func(ticks int, board any) map[string]any {
 		return layaEpisode(t, addr, sha, map[string]any{
@@ -561,7 +572,7 @@ func TestLayaSnakeEpisode(t *testing.T) {
 // contract above; the preset is not snake's: the readouts are danger/clear and
 // the chained state is a game, not a board.
 func TestLayaPacmanEpisode(t *testing.T) {
-	addr, srv := serveLaya(t, "")
+	addr, srv := serveLaya(t, "", WithScriptDeadline(layaEpisodeDeadline))
 	sha := layaPreload(t, srv, "../../scripts/pacman.lua")
 	episode := func(ticks int, game any) map[string]any {
 		return layaEpisode(t, addr, sha, map[string]any{"ticks": ticks, "game": game, "seed": 7})

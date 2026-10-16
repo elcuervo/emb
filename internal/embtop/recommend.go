@@ -213,8 +213,13 @@ type FleetRecommendation struct {
 	Share float64
 }
 
-// Empty reports whether there is nothing to recommend.
-func (f FleetRecommendation) Empty() bool { return len(f.Kinds) == 0 && f.First == "" }
+// Empty reports whether there is nothing to recommend. A named action is a
+// recommendation even when nothing binds and no node stands out: a node's own
+// repair is what the fleet line says to do, and the panel renders the same line
+// the headless aggregate writes.
+func (f FleetRecommendation) Empty() bool {
+	return len(f.Kinds) == 0 && f.First == "" && (f.Action == "" || f.Action == ActionNone)
+}
 
 // RecommendFleet derives the fleet-level advisory recommendation. It reports
 // each node's binding resource separately rather than averaging one node's
@@ -254,20 +259,12 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 	}
 	headroom, uniform, headroomKnown := fleetCPUHeadroom(nodes)
 
-	if len(kinds) == 0 && !uniform && first == "" {
-		return FleetRecommendation{}
-	}
-
-	var parts []string
-	if first != "" {
-		// Named ahead of any node-count advice: a node that does not look like
-		// its peers is inspected before the fleet is grown.
-		parts = append(parts, "inspect "+first+" first")
-	}
 	// A node's own repair outranks capacity: entries the cache dropped, a
 	// layout that serializes or a model whose runs hold the tail are all
 	// cheaper than another node, and adding nodes would buy capacity for work
-	// that should not be done at all.
+	// that should not be done at all. Selected before the quiet exit below: a
+	// node's own action is a recommendation even when nothing binds and no node
+	// stands out.
 	repairLabel, repairAction := "", ""
 	for _, n := range nodes {
 		a, ok := advice[n.Label]
@@ -282,6 +279,20 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 				break
 			}
 		}
+	}
+
+	// Nothing binds, the headroom is not uniformly small, no node stands out and
+	// no node's own advice names a repair: there is nothing to say at fleet
+	// level.
+	if len(kinds) == 0 && !uniform && first == "" && repairAction == "" {
+		return FleetRecommendation{}
+	}
+
+	var parts []string
+	if first != "" {
+		// Named ahead of any node-count advice: a node that does not look like
+		// its peers is inspected before the fleet is grown.
+		parts = append(parts, "inspect "+first+" first")
 	}
 
 	// A node-count recommendation is capacity, not a repair, and it is only
@@ -308,15 +319,22 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 
 	rec := FleetRecommendation{Kinds: kinds, Text: strings.Join(parts, " · "), First: first}
 	if repairAction != "" {
-		// The named node's action, with the phase behind its tail.
+		// The named node's own action, exactly as the node's own line states
+		// it, with the phase behind its tail. It is the whole line when nothing
+		// binds and no node stands out, so it must not read as a dangling
+		// separator.
 		a := advice[repairLabel]
 		rec.Action = repairAction
 		rec.Phase, rec.Share = a.Phase, a.Share
-		clause := repairLabel + ": " + a.Text
+		clause := repairLabel + ": " + AdviceHead(a)
 		if a.Phase != PhaseNone && a.Share > 0 {
 			clause += fmt.Sprintf(" (its tail is %.0f%% %s wait)", a.Share*100, a.Phase)
 		}
-		rec.Text = clause + " · " + rec.Text
+		if rec.Text == "" {
+			rec.Text = clause
+		} else {
+			rec.Text = clause + " · " + rec.Text
+		}
 	} else if uniform {
 		rec.Action = ActionNodes
 	}

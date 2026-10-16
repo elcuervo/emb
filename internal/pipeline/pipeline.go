@@ -92,17 +92,26 @@ type Stats struct {
 	SessionsTotal   int64
 }
 
-// admissionTimed is implemented by sessions that record how long their last run
-// waited for CPU admission, so the time can be reported apart from the run.
-type admissionTimed interface{ TakeAdmissionWait() time.Duration }
+// admittedContextSession is implemented by gate-wrapped sessions: the wait a run
+// paid at the process CPU admission gate travels back with that run's own
+// result. A session is leased to several callers, so a wait read from the
+// session — rather than from the run that paid it — could belong to whichever
+// concurrent run wrote it last.
+type admittedContextSession interface {
+	RunContextAdmitted(ctx context.Context, inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, time.Duration, error)
+}
 
-// takeAdmissionWait reports the admission wait the session accrued for the run
-// just executed, zero for sessions that do not observe admission.
-func takeAdmissionWait(sess onnx.Session) time.Duration {
-	if t, ok := sess.(admissionTimed); ok {
-		return t.TakeAdmissionWait()
+// runAdmitted runs one inference and reports the wait the run paid at the CPU
+// gate, zero for sessions that do not pass through the gate.
+func runAdmitted(ctx context.Context, sess onnx.Session, inputIDs, attnMask []int64, batchSize, seqLen, dim int) ([]float32, time.Duration, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
 	}
-	return 0
+	if a, ok := sess.(admittedContextSession); ok {
+		return a.RunContextAdmitted(ctx, inputIDs, attnMask, batchSize, seqLen, dim)
+	}
+	hidden, err := onnx.RunContext(ctx, sess, inputIDs, attnMask, batchSize, seqLen, dim)
+	return hidden, 0, err
 }
 
 // encodeTexts tokenizes texts into encodings and returns the real token total.
@@ -121,15 +130,15 @@ func encodeTexts(tok tokenizer.Tokenizer, texts []string, maxLen int) ([]Encodin
 }
 
 // runEncodings pads the encodings, runs one batched inference, pools/normalizes,
-// and returns the embeddings plus the padded sequence length used (for padding
-// efficiency measurement).
-func runEncodings(ctx context.Context, sess onnx.Session, encs []Encoding, dim int, normalize bool, pooling string) ([][]byte, int, error) {
+// and returns the embeddings, the padded sequence length used (for padding
+// efficiency measurement), and the wait the run paid at the CPU gate.
+func runEncodings(ctx context.Context, sess onnx.Session, encs []Encoding, dim int, normalize bool, pooling string) ([][]byte, int, time.Duration, error) {
 	inputIDs, attnMask, seqLen := PadEncodings(encs)
 	batchSize := len(encs)
 
-	hidden, err := onnx.RunContext(ctx, sess, inputIDs, attnMask, batchSize, seqLen, dim)
+	hidden, waited, err := runAdmitted(ctx, sess, inputIDs, attnMask, batchSize, seqLen, dim)
 	if err != nil {
-		return nil, seqLen, fmt.Errorf("inference: %w", err)
+		return nil, seqLen, waited, fmt.Errorf("inference: %w", err)
 	}
 
 	var embeddings [][]byte
@@ -142,17 +151,17 @@ func runEncodings(ctx context.Context, sess onnx.Session, encs []Encoding, dim i
 		embeddings = MeanPoolAndNormalize(hidden, attnMask, dim, seqLen, batchSize, normalize)
 	}
 
-	return embeddings, seqLen, nil
+	return embeddings, seqLen, waited, nil
 }
 
-func processBatch(ctx context.Context, sess onnx.Session, tok tokenizer.Tokenizer, texts []string, dim, maxLen int, normalize bool, pooling string) ([][]byte, int, error) {
+func processBatch(ctx context.Context, sess onnx.Session, tok tokenizer.Tokenizer, texts []string, dim, maxLen int, normalize bool, pooling string) ([][]byte, int, time.Duration, error) {
 	encs, totalTokens, err := encodeTexts(tok, texts, maxLen)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
-	embeddings, _, err := runEncodings(ctx, sess, encs, dim, normalize, pooling)
+	embeddings, _, waited, err := runEncodings(ctx, sess, encs, dim, normalize, pooling)
 	if err != nil {
-		return nil, totalTokens, err
+		return nil, totalTokens, waited, err
 	}
-	return embeddings, totalTokens, nil
+	return embeddings, totalTokens, waited, nil
 }

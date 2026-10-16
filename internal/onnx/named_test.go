@@ -3,7 +3,11 @@ package onnx
 import (
 	"math"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
+
+	ort "github.com/yalue/onnxruntime_go"
 )
 
 func namedTestModel(t *testing.T) []byte {
@@ -147,6 +151,101 @@ func TestRunNamedErrors(t *testing.T) {
 	}
 	if _, err := named.RunNamed(wrong); err == nil {
 		t.Fatal("expected error for shape/data mismatch")
+	}
+}
+
+// TestRunNamedInputFailuresReleaseBuiltValues proves the obligation the
+// resource-lifecycle spec states for input assembly: an unknown, duplicated or
+// missing input name, and a spec that fails validation, release the values
+// created for the earlier inputs before the error is returned. The leak was a
+// fixed-size abandonment of ORT values per failed run, invisible to a Go heap
+// probe, so the release path is counted through the destroyValue seam named.go
+// exposes for exactly this.
+func TestRunNamedInputFailuresReleaseBuiltValues(t *testing.T) {
+	if err := InitEnvironment(""); err != nil {
+		t.Skipf("onnx runtime unavailable: %v", err)
+	}
+	defer func() { _ = DestroyEnvironment() }()
+
+	// Counting fake: the values stay real (so ort.NewTensor is what is being
+	// exercised) but every release is recorded.
+	realDestroy := destroyValue
+	var destroyed atomic.Int64
+	destroyValue = func(v ort.Value) {
+		destroyed.Add(1)
+		realDestroy(v)
+	}
+	t.Cleanup(func() { destroyValue = realDestroy })
+
+	// The graph declares two inputs, so every failure below except the
+	// duplicate happens after the first input's value already exists. The
+	// session is never run: all four failures return from input assembly.
+	sess := &NamedRuntimeSession{inputNames: []string{"a", "b"}}
+	valid := func(name string) NamedTensor {
+		return NamedTensor{Name: name, Shape: []int64{1}, DType: TensorInt64, Int64: []int64{7}}
+	}
+
+	cases := []struct {
+		name      string
+		inputs    []NamedTensor
+		wantErr   string
+		wantBuilt int64
+	}{
+		{
+			name:      "missing input after a valid one",
+			inputs:    []NamedTensor{valid("a")},
+			wantErr:   `missing input "b"`,
+			wantBuilt: 1,
+		},
+		{
+			// An unknown name is not an error by itself (RunNamed matches by
+			// name and ignores the rest); the failure is the graph input the
+			// caller's set no longer covers, and it must release "a" too.
+			name:      "unknown input name in place of a declared one",
+			inputs:    []NamedTensor{valid("a"), valid("bogus")},
+			wantErr:   `missing input "b"`,
+			wantBuilt: 1,
+		},
+		{
+			// The duplicate scan runs before any value is allocated, so this
+			// path has nothing to release — asserted rather than assumed.
+			name:      "duplicate input name",
+			inputs:    []NamedTensor{valid("a"), valid("a")},
+			wantErr:   `duplicate input "a"`,
+			wantBuilt: 0,
+		},
+		{
+			name: "invalid input spec after a valid one",
+			inputs: []NamedTensor{
+				valid("a"),
+				{Name: "b", Shape: []int64{1, 2}, DType: TensorInt64, Int64: []int64{1}},
+			},
+			wantErr:   `input "b": expected 2 int64 elements, got 1`,
+			wantBuilt: 1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			createdBefore := namedInputValuesCreated.Load()
+			destroyed.Store(0)
+
+			_, err := sess.RunNamed(tc.inputs)
+
+			if err == nil {
+				t.Fatalf("RunNamed: got no error, want one containing %q", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("RunNamed error = %q, want it to contain %q", err, tc.wantErr)
+			}
+			created := namedInputValuesCreated.Load() - createdBefore
+			if created != tc.wantBuilt {
+				t.Fatalf("created %d input values before the failure, want %d", created, tc.wantBuilt)
+			}
+			if released := destroyed.Load(); released != created {
+				t.Errorf("input assembly created %d values and released %d: %d leaked", created, released, created-released)
+			}
+		})
 	}
 }
 

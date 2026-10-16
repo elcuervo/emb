@@ -886,19 +886,127 @@ func parseRESPArrayCount(resp string) (declared, actual int) {
 	return declared, actual
 }
 
+// infoModelFields names the fields EMB.INFO emits for the model itself,
+// whether or not a cache is configured. Naming the group keeps the shape check
+// honest without pinning a total: equality between the declared count and the
+// elements parsed catches a truncated reply, and these names catch a field that
+// stopped being written at all.
+var infoModelFields = []string{
+	"dim", "max_length", "workers", "requests", "avg_latency_us", "tokens",
+	"errors", "pooling", "normalize", "batching_timeout_ms",
+	"batching_max_batch", "batching_max_tokens", "batch_determinism",
+	"batch_determinism_reason", "padding_efficiency", "quantization",
+	"model_bytes", "cpu_budget_enabled", "cpu_budget", "cpu_thread_share",
+	"cpu_share_reclaimed", "intra_op_threads", "allow_spinning",
+	"calibration_source", "calibration_reason", "script_requests",
+	"script_errors", "script_sessions", "script_tokenizer", "image_sessions",
+	"script_dispatch_wait_us", "script_run_us", "script_runs",
+	"script_sessions_busy", "script_traffic_class", "script_inflight",
+	"script_concurrency_current", "script_concurrency_target",
+	"script_autotune_active", "embed_dispatch_wait_us",
+	"embed_admission_wait_us", "embed_run_us", "embed_runs",
+	"embed_sessions_busy", "embed_sessions_total",
+}
+
+// infoCacheFields is the group EMB.INFO appends only when a cache is
+// configured. The emb-info-array-count spec requires it present in full.
+var infoCacheFields = []string{
+	"cache_hits", "cache_misses", "cache_hit_rate", "cache_evictions",
+	"cache_entries", "cache_max_bytes", "cache_memory_bytes",
+}
+
+// parseRESPFlatArray decodes a RESP2 flat array of bulk strings and integers
+// into its elements (keys and values alike), returning the count the reply
+// declares alongside what it actually carried. A caller compares the two, so
+// the shape check asserts the reply's own contract instead of a remembered
+// total that a new field would invalidate.
+func parseRESPFlatArray(t *testing.T, resp string) (declared int, elements []string) {
+	t.Helper()
+	if len(resp) == 0 || resp[0] != '*' {
+		t.Fatalf("expected an array reply, got %q", resp)
+	}
+	i := 1
+	for i < len(resp) && resp[i] >= '0' && resp[i] <= '9' {
+		i++
+	}
+	n, err := strconv.Atoi(resp[1:i])
+	if err != nil {
+		t.Fatalf("malformed array length in %q", resp)
+	}
+	declared = n
+	if i+2 > len(resp) || resp[i:i+2] != "\r\n" {
+		t.Fatalf("malformed array header in %q", resp)
+	}
+	i += 2
+
+	for i < len(resp) {
+		switch resp[i] {
+		case '$':
+			j := i + 1
+			for j < len(resp) && resp[j] >= '0' && resp[j] <= '9' {
+				j++
+			}
+			strlen, err := strconv.Atoi(resp[i+1 : j])
+			if err != nil || j+2+strlen+2 > len(resp) {
+				t.Fatalf("malformed bulk string at %d in %q", i, resp)
+			}
+			elements = append(elements, resp[j+2:j+2+strlen])
+			i = j + 2 + strlen + 2
+		case ':':
+			j := i + 1
+			for j < len(resp) && resp[j] != '\r' {
+				j++
+			}
+			if j+2 > len(resp) {
+				t.Fatalf("malformed integer at %d in %q", i, resp)
+			}
+			elements = append(elements, resp[i+1:j])
+			i = j + 2
+		default:
+			t.Fatalf("unexpected RESP type %q at %d in %q", resp[i], i, resp)
+		}
+	}
+
+	return declared, elements
+}
+
+// infoElementKeys turns a flat key/value array into the set of keys it carried.
+func infoElementKeys(t *testing.T, elements []string) map[string]bool {
+	t.Helper()
+	if len(elements)%2 != 0 {
+		t.Fatalf("EMB.INFO is key/value pairs, got %d elements", len(elements))
+	}
+	keys := make(map[string]bool, len(elements)/2)
+	for i := 0; i < len(elements); i += 2 {
+		if keys[elements[i]] {
+			t.Fatalf("EMB.INFO repeated the key %q", elements[i])
+		}
+		keys[elements[i]] = true
+	}
+	return keys
+}
+
 func TestServerINFOArrayCount(t *testing.T) {
 	addr := serveTest(t)
 	c := dial(t, addr)
 
 	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$4\r\ntest\r\n"))
-	resp := readRESP(t, c)
+	resp := readRESPComplete(t, c)
 
-	declared, actual := parseRESPArrayCount(resp)
-	if declared != 90 {
-		t.Fatalf("expected 90 declared elements, got %d: %q", declared, resp)
+	declared, elements := parseRESPFlatArray(t, resp)
+	if declared != len(elements) {
+		t.Fatalf("EMB.INFO declared %d elements but carried %d: %q", declared, len(elements), resp)
 	}
-	if actual != 90 {
-		t.Fatalf("expected 90 actual elements, got %d: %q", actual, resp)
+	keys := infoElementKeys(t, elements)
+	for _, f := range infoModelFields {
+		if !keys[f] {
+			t.Fatalf("EMB.INFO without a cache is missing the model field %q: %q", f, resp)
+		}
+	}
+	for _, f := range infoCacheFields {
+		if keys[f] {
+			t.Fatalf("EMB.INFO without a cache unexpectedly carries %q: %q", f, resp)
+		}
 	}
 
 	c.Close()
@@ -909,14 +1017,17 @@ func TestCacheInfoArrayCount(t *testing.T) {
 	c := dial(t, addr)
 
 	c.Write([]byte("*2\r\n$8\r\nEMB.INFO\r\n$4\r\ntest\r\n"))
-	resp := readRESP(t, c)
+	resp := readRESPComplete(t, c)
 
-	declared, actual := parseRESPArrayCount(resp)
-	if declared != 104 {
-		t.Fatalf("expected 104 declared elements, got %d: %q", declared, resp)
+	declared, elements := parseRESPFlatArray(t, resp)
+	if declared != len(elements) {
+		t.Fatalf("EMB.INFO declared %d elements but carried %d: %q", declared, len(elements), resp)
 	}
-	if actual != 104 {
-		t.Fatalf("expected 104 actual elements, got %d: %q", actual, resp)
+	keys := infoElementKeys(t, elements)
+	for _, f := range append(append([]string{}, infoModelFields...), infoCacheFields...) {
+		if !keys[f] {
+			t.Fatalf("EMB.INFO with a cache is missing %q: %q", f, resp)
+		}
 	}
 
 	c.Close()
@@ -1664,17 +1775,32 @@ func TestConfigRuntimeMaxPairs(t *testing.T) {
 	c.Close()
 }
 
+// readRespDeadline bounds readRESPComplete. A reply the server declares but
+// never finishes — a count larger than the elements it sends — would otherwise
+// block this read until the package timeout; the deadline makes the test that
+// read it fail, naming the incomplete reply instead.
+const readRespDeadline = 30 * time.Second
+
 // readRESPComplete reads bytes until the buffer holds one complete top-level
 // RESP value (a 2000-element array reply is ~1MB, far beyond readRESP's single
 // 4KB read). Returns the raw reply; the caller parses it.
 func readRESPComplete(t *testing.T, c net.Conn) string {
 	t.Helper()
+	if err := c.SetReadDeadline(time.Now().Add(readRespDeadline)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	defer func() { _ = c.SetReadDeadline(time.Time{}) }()
 	buf := make([]byte, 0, 1<<20)
 	tmp := make([]byte, 64*1024)
 	for {
 		n, err := c.Read(tmp)
 		if err != nil {
-			t.Fatal(err)
+			head := string(buf)
+			if len(head) > 512 {
+				head = head[:512] + "..."
+			}
+			t.Fatalf("incomplete reply after %s (%d bytes read): %v\n%q",
+				readRespDeadline, len(buf), err, head)
 		}
 		buf = append(buf, tmp[:n]...)
 		if consumed, ok := respValueLen(buf); ok && consumed == len(buf) {

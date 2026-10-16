@@ -514,8 +514,8 @@ bench-smoke:
 # drain after clients disconnect, health commands answering throughout, the
 # reply cache skipping inference, the request path staying off calibration, and
 # two concurrently admissible runs at the policy layout. Prints every
-# assertion's outcome, one `emb-smoke: assertions=pass=..` summary line and a
-# `failed=<assertion>` line when something fails. ~2 seconds.
+# assertion's outcome, one `emb-smoke: arm=control assertions=.. pass=..` summary
+# line and a `failed=<assertion>` line when something fails. ~2 seconds.
 bench-plain-emb:
     @EMB_BENCH_SMOKE=1 {{ort_var}}="{{ort_lib}}:${{ort_var}}" go test ./internal/server/ -run PlainEMB -v -count=1 -timeout 600s
 

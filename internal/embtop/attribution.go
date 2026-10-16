@@ -94,34 +94,41 @@ func NodePhaseSplit(hist map[string][]ModelPoint) PhaseSplit {
 }
 
 // ModelCachedShare is the share of one model's window that the reply cache
-// answered, in percent, plus the counts it was taken from.
-func ModelCachedShare(hist []ModelPoint) (pct float64, cached, requests int64) {
+// answered, in percent, plus the counts it was taken from: the lookups the
+// cache answered over the lookups it saw. Both counters are the cache's own,
+// so the share is bounded by 100 and is a share of the lookups rather than of
+// the requests that ran — a hit never reaches a session, so a run count is not
+// a lookup count.
+func ModelCachedShare(hist []ModelPoint) (pct float64, cached, lookups int64) {
 	if len(hist) < 2 {
 		return 0, 0, 0
 	}
 	first, last := hist[0], hist[len(hist)-1]
 	cached = delta(first.CachedReqs, last.CachedReqs)
-	requests = delta(first.Requests, last.Requests)
-	if requests <= 0 {
-		return 0, cached, requests
+	lookups = cached + delta(first.CacheMisses, last.CacheMisses)
+	if lookups <= 0 {
+		return 0, cached, 0
 	}
-	return float64(cached) / float64(requests) * 100, cached, requests
+	return float64(cached) / float64(lookups) * 100, cached, lookups
 }
 
-// CachedShare is the window's cached share of the node's traffic in percent,
-// with the counts behind it. The hit rate describes the entries; this
-// describes how much of the service's work the cache removed.
-func CachedShare(hist []Point) (pct float64, cached, requests int64) {
+// CachedShare is the window's share of its cache lookups that the cache
+// answered, in percent, with the counts behind it: the hit rate this window
+// saw, from the node's own cumulative counters. It is a share of the lookups,
+// never of the requests that ran — a cache-answered request reaches no session,
+// so `total_requests` counts only the work that ran and dividing by it would
+// report more than 100% of the traffic.
+func CachedShare(hist []Point) (pct float64, cached, lookups int64) {
 	if len(hist) < 2 {
 		return 0, 0, 0
 	}
 	first, last := hist[0], hist[len(hist)-1]
 	cached = delta(first.CacheHits, last.CacheHits)
-	requests = delta(first.TotalRequests, last.TotalRequests)
-	if requests <= 0 {
-		return 0, cached, requests
+	lookups = cached + delta(first.CacheMisses, last.CacheMisses)
+	if lookups <= 0 {
+		return 0, cached, 0
 	}
-	return float64(cached) / float64(requests) * 100, cached, requests
+	return float64(cached) / float64(lookups) * 100, cached, lookups
 }
 
 // CPUUsPerRun is the CPU a node's window spent per uncached run: the cost of

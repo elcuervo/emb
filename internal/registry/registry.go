@@ -252,10 +252,9 @@ func (r *ScriptResources) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.N
 	sess := r.pool.Acquire()
 	r.dispatchWaitUs.Add(time.Since(waitStart).Microseconds())
 	runStart := time.Now()
-	out, err := sess.RunNamed(inputs)
+	out, waited, err := runNamedAdmitted(sess, inputs)
 	// The wait at the CPU gate is not run time, and a run admission never
 	// admitted is not a run. The wait stays visible in the gate's own pressure.
-	waited := takeAdmissionWait(sess)
 	if !permit.IsAdmissionError(err) {
 		r.runs.Add(1)
 	}

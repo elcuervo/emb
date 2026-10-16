@@ -78,6 +78,13 @@ func TestBatcherEmbedContextAbandonsTheWait(t *testing.T) {
 
 // TestAbandonedRequestNeverRuns covers the abandonment half of the contract:
 // a request whose caller has gone away is not carried into inference.
+//
+// A cancelled caller is answered on whichever path it takes: the dispatch
+// select losing to ctx.Done() (an error), or the worker receiving the request
+// and dropping it on its own context check (the response carries the error and
+// the call returns nil — the shape the server checks). Both are "reported
+// cancelled, never run"; asserting on one of them alone is a coin flip, since
+// an idle worker parks in its receive and leaves both select cases ready.
 func TestAbandonedRequestNeverRuns(t *testing.T) {
 	var runs atomic.Int64
 	sess := &countingRunSession{runs: &runs}
@@ -89,8 +96,12 @@ func TestAbandonedRequestNeverRuns(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := p.EmbedContext(ctx, []string{"aa"}); err == nil {
-		t.Fatal("a cancelled request was served")
+	resp, err := p.EmbedContext(ctx, []string{"aa"})
+	if err == nil {
+		err = resp.Err
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled request was served: err=%v, resp.Err=%v", err, resp.Err)
 	}
 	if got := runs.Load(); got != 0 {
 		t.Fatalf("a cancelled request still reached inference: %d runs", got)
@@ -104,8 +115,12 @@ func TestAbandonedRequestNeverRuns(t *testing.T) {
 	defer func() { _ = b.Close() }()
 	bctx, bcancel := context.WithCancel(context.Background())
 	bcancel()
-	if _, err := b.EmbedContext(bctx, []string{"aa"}); err == nil {
-		t.Fatal("a cancelled request was served by the batcher")
+	bresp, err := b.EmbedContext(bctx, []string{"aa"})
+	if err == nil {
+		err = bresp.Err
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled request was served by the batcher: err=%v, resp.Err=%v", err, bresp.Err)
 	}
 	time.Sleep(50 * time.Millisecond) // let a window close if one was armed
 	if got := batchRuns.Load(); got != 0 {
@@ -113,14 +128,28 @@ func TestAbandonedRequestNeverRuns(t *testing.T) {
 	}
 }
 
-// admittingSession stands in for the CPU-gate wrapper: it reports a fixed
-// admission wait once per run, and optionally fails the run with err.
+// admittingSession stands in for the CPU-gate wrapper: the wait it reports
+// travels back with the run's own result, and it optionally fails the run with
+// err so a refused admission can be exercised.
 type admittingSession struct {
 	wait time.Duration
 	err  error
 }
 
 func (s *admittingSession) Run(_, _ []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	return s.result(batchSize, seqLen, dim)
+}
+
+func (s *admittingSession) RunContext(_ context.Context, _, _ []int64, batchSize, seqLen, dim int) ([]float32, error) {
+	return s.result(batchSize, seqLen, dim)
+}
+
+func (s *admittingSession) RunContextAdmitted(_ context.Context, _, _ []int64, batchSize, seqLen, dim int) ([]float32, time.Duration, error) {
+	out, err := s.result(batchSize, seqLen, dim)
+	return out, s.wait, err
+}
+
+func (s *admittingSession) result(batchSize, seqLen, dim int) ([]float32, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -128,12 +157,6 @@ func (s *admittingSession) Run(_, _ []int64, batchSize, seqLen, dim int) ([]floa
 }
 
 func (s *admittingSession) Close() error { return nil }
-
-func (s *admittingSession) TakeAdmissionWait() time.Duration {
-	wait := s.wait
-	s.wait = 0
-	return wait
-}
 
 // TestRunTimeExcludesAdmissionWait covers the attribution contract on both
 // inference paths: the time a run spent queueing at the CPU gate is reported on

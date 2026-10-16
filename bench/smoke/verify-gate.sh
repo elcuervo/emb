@@ -71,11 +71,16 @@ run_gate() {
   echo $?
 }
 
-# gate_summary prints the gate's machine-readable summary line, if it got far
-# enough to write one. The test framework's file:line prefix is stripped so a
-# recorded sweep stays comparable as the test file grows.
+# gate_summary prints the gate's machine-readable summary lines — one per arm —
+# when the run got far enough to write them. The test framework's file:line
+# prefix is stripped so a recorded sweep stays comparable as the test file
+# grows, and every arm is kept, de-duplicated (the control arm writes its line
+# to the test log and to stderr): a run missing an arm's summary says so here
+# instead of hiding behind whichever line matched last.
 gate_summary() {
-  grep -h 'emb-smoke: assertions=' "$log" | tail -1 | sed -E 's/^[[:space:]]*[A-Za-z0-9_]+_test\.go:[0-9]+: //'
+  grep -h 'emb-smoke: arm=' "$log" \
+    | sed -E 's/^[[:space:]]*[A-Za-z0-9_]+_test\.go:[0-9]+: //' \
+    | sort -u | tr '\n' ' ' | sed -E 's/ +$//'
 }
 
 echo

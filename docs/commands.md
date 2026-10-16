@@ -12,7 +12,7 @@ Full reference for the `emb` command surface. See the
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, the embedding path's dispatch/admission/run timings and runs, and that model's own cache stats (hits, misses, rate, evictions, entries, bytes) |
 | `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown, CPU allowance/budget/active peak, cache/connection limits, mem (RSS MB), CPU user/sys usec, goroutines |
-| `MONITOR [seq] [limit]` | Recent completed-request events from a bounded ring: `seq`, timestamp µs, model, texts, latency µs, error, then the request's own attribution — `cached_texts` (how many of its texts the reply cache answered), `attributed` (whether the server measured its phases), `dispatch_us`, `admit_us`, `run_us`. Incremental (`seq`) fetch; no text payloads. The four attribution fields are appended after `err`, so a client reading the original six positionally is unaffected |
+| `MONITOR [seq] [limit]` | Recent completed-request events from a bounded ring: `seq`, `at_us` (µs), `model`, `texts`, `latency_us`, `err`, then the request's own attribution — `cached_texts` (how many of its texts the reply cache answered), `attributed` (whether the server measured its phases), `dispatch_us`, `admit_us`, `run_us`. Eleven fields in that closed order, a flat array under RESP2 and a map with the same names under RESP3; the five attribution fields are appended after `err`, so a client reading the original six positionally is unaffected. Incremental (`seq`) fetch; no text payloads |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
 | `EMB.EVAL <model> <script> <numtexts> <text...> <arg...>` | Evaluate a Lua script once against a model (KEYS=texts, ARGV=args) |
 | `EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>` | Evaluate a cached script by SHA (see `EMB.SCRIPT LOAD`) |
@@ -39,7 +39,14 @@ also reports the kernel's CPU we could not use: `cpu_throttle_periods`,
 `cpu_thread_share`, `cpu_share_reclaimed`, `allow_spinning`, and the
 `embed_dispatch_wait_us` /
 `embed_admission_wait_us` / `embed_run_us` split of the embedding path — the
-calibrated layout when calibration selected it. `cpu_share_reclaimed` is 1 when
+calibrated layout when calibration selected it. Those three timings — and the
+`dispatch_us`, `admit_us`, `run_us` a `MONITOR` event carries — are attributed
+per run: a request accounts for every run it made (one per text on the
+worker-pool path, one per batch window on the batched path) rather than only the
+last, and the wait a run paid at the gate is credited to that run instead of
+being read from the session that served it, so one caller's wait is never
+charged to another's run and the cumulative `embed_run_us` and
+`embed_admission_wait_us` never decrease. `cpu_share_reclaimed` is 1 when
 the configured weights over-allocated the process budget and this model gave up
 its reservation (it then runs on capacity its peers leave idle). `calibration_source` reports how
 the layout was chosen (`calibrated`, `unresolved`, `fallback`, `policy`,
@@ -96,7 +103,11 @@ Image limits are configurable and enforced before decode/inference:
 `max_image_pixels` (default 33.5 MP, checked from the header), and the
 command-wide `max_command_bytes` (default 64 MiB). A single bad or oversized
 image fails only its own slot; overflow images past `max_images` are truncated
-to null slots without being decoded. See [Configuration](configuration.md).
+to null slots without being decoded. The command's one batched run must return
+one output row per image; an output whose batch dimension disagrees is refused
+(the server never pools or reads past the tensor) with
+`image output "<tensor>" has batch dimension <received>, want <expected>`.
+See [Configuration](configuration.md).
 
 ## Reply formats: BLOB and VALUES
 

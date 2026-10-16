@@ -151,6 +151,13 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		fprintln(stderr, "emb-top: -samples must be at least 1")
 		return 2
 	}
+	// A history window is a count of polls: below one it cannot trim the rings
+	// it bounds, and the slice arithmetic in pushLat panics on a negative one
+	// after the alternate screen is already occupied.
+	if o.window < 1 {
+		fprintln(stderr, "emb-top: -window must be at least 1 poll")
+		return 2
+	}
 	if o.password != "" && !o.useTLS && !embtop.AllLoopback(o.specs) {
 		fprintln(stderr,
 			"emb-top: warning: sending an AUTH password to a non-loopback address without -tls")

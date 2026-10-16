@@ -66,13 +66,11 @@ func (w *Worker) run() {
 		}
 		start := time.Now()
 		w.busy.Add(1)
-		resp := w.process(req)
-		// The wait at the CPU gate is not run time: it is reported apart from it.
-		waited := takeAdmissionWait(w.session)
+		resp, waited := w.process(req)
 		w.busy.Add(-1)
 
 		w.requests.Add(1)
-		// The wait is subtracted from the request's run time, never added to it.
+		// The wait at the CPU gate is not run time: it is reported apart from it.
 		run := time.Since(start) - waited
 		if run < 0 {
 			run = 0
@@ -92,23 +90,28 @@ func (w *Worker) run() {
 // process runs one single-row inference per text. A worker-pool model is the
 // unbatched path (explicit timeout: 0, or degraded after a failed determinism
 // probe): co-batching a request's texts in one run would reintroduce exactly
-// the batch dependence the probe exists to reject.
-func (w *Worker) process(req Request) Response {
+// the batch dependence the probe exists to reject. It returns the response with
+// the wait every text of the request paid at the CPU gate summed in: a session
+// is leased to several callers, so the request can only be credited with the
+// runs it made itself.
+func (w *Worker) process(req Request) (Response, time.Duration) {
 	ctx := req.Ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	embeddings := make([][]byte, 0, len(req.Texts))
 	var totalTokens int
+	var gateWait time.Duration
 	for _, text := range req.Texts {
 		// A request whose caller has gone away stops here instead of occupying a
 		// worker for the rest of its texts.
 		if err := ctx.Err(); err != nil {
 			w.tokens.Add(int64(totalTokens))
 			w.errors.Add(1)
-			return Response{Err: err}
+			return Response{Err: err}, gateWait
 		}
-		emb, toks, err := processBatch(ctx, w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
+		emb, toks, waited, err := processBatch(ctx, w.session, w.tokenizer, []string{text}, w.dim, w.maxLen, w.normalize, w.pooling)
+		gateWait += waited
 		// A run admission refused or abandoned is not a run.
 		if !permit.IsAdmissionError(err) {
 			w.runs.Add(1)
@@ -117,12 +120,12 @@ func (w *Worker) process(req Request) Response {
 		if err != nil {
 			w.tokens.Add(int64(totalTokens))
 			w.errors.Add(1)
-			return Response{Err: err}
+			return Response{Err: err}, gateWait
 		}
 		embeddings = append(embeddings, emb...)
 	}
 	w.tokens.Add(int64(totalTokens))
-	return Response{Embeddings: embeddings}
+	return Response{Embeddings: embeddings}, gateWait
 }
 
 func (w *Worker) Requests() int64 {

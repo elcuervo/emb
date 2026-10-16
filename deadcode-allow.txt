@@ -29,3 +29,11 @@ unreachable func: CacheKey
 #   the global logger.
 unreachable func: WithSender
 unreachable func: WithLogger
+
+# unreachable func: NamedInputValueCounts
+#   The named path's created/released ORT value counts, read only by the
+#   scripted leak gate in internal/server/script_runtime_parity_test.go, which
+#   asserts a failed input assembly released every value it built. An abandoned
+#   value is ORT-owned, so the Go heap cannot see it and an RSS sample cannot
+#   separate it from allocator churn.
+unreachable func: NamedInputValueCounts

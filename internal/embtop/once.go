@@ -395,12 +395,24 @@ func SamplerAdviceInput(s *Sampler) AdviceInput {
 	return in
 }
 
+// SamplerFleetRecInput is one node's contribution to the fleet
+// recommendation, gathered from the sampler both surfaces read: its series, the
+// tail its client measured and its own advice. The fleet view and the headless
+// fleet line both build their record inputs through it, so one poll cannot be
+// attributed two ways and a node's reservable repair cannot be lost between
+// them.
+func SamplerFleetRecInput(label string, s *Sampler) FleetNodeRecInput {
+	_, _, p95, _ := s.Latency()
+	advice := SamplerAdviceInput(s)
+	return FleetNodeRecInput{Label: label, Hist: s.Window, P95Us: p95, Advice: &advice}
+}
+
 // appendAttribution writes the node's course of action and the evidence behind
-// it: the action and the action it rejects, the cache's share of the window's
-// traffic, the p95 of the requests that ran and the phases they spent it in.
-// Every token the line already carried keeps its name; these are additions.
+// it: the action and the action it rejects, the share of the window's cache
+// lookups the cache answered, the p95 of the requests that ran and the phases
+// they spent it in. Every token the line already carried keeps its name; these
+// are additions.
 func appendAttribution(b []byte, s *Sampler) []byte {
-	counts := s.PathCounts()
 	in := SamplerAdviceInput(s)
 	adv := Advise(in)
 	if !adv.Empty() {
@@ -411,8 +423,12 @@ func appendAttribution(b []byte, s *Sampler) []byte {
 			b = append(b, adv.Rejected...)
 		}
 	}
-	if counts.Total > 0 {
-		b = appendRate(b, "cached_pct", counts.Share())
+	// The share the dashboard states beside the advice, from the same window
+	// function it renders: the event ring's own share describes the band's
+	// legend, and reading it here would let the two surfaces disagree about one
+	// poll. Absent exactly where the panel states nothing.
+	if adv.CachedPct > 0 {
+		b = appendRate(b, "cached_pct", adv.CachedPct)
 	}
 	if in.UncachedP95Us > 0 {
 		b = appendF(b, "lat_p95_run_us", in.UncachedP95Us)
@@ -467,12 +483,7 @@ func fleetRecommendation(states []*onceNode) FleetRecommendation {
 		if !st.sampled {
 			continue
 		}
-		_, _, p95, _ := st.sampler.Latency()
-		advice := SamplerAdviceInput(st.sampler)
-		in = append(in, FleetNodeRecInput{
-			Label: st.label, Hist: st.sampler.Window, P95Us: p95,
-			Advice: &advice,
-		})
+		in = append(in, SamplerFleetRecInput(st.label, st.sampler))
 	}
 	return RecommendFleet(in)
 }

@@ -115,7 +115,7 @@ models:
 | `normalize` | `false` | L2-normalize the output |
 | `quantize` | `auto` | Weight precision. `auto` prefers a pre-quantized artifact beside `onnx` when the directory has one and falls back to fp32 otherwise; `on` requires one (load fails without it); `off` keeps fp32. Accepted names, in priority order: `onnx/model_quantized.onnx`, `model_quantized.onnx`, `onnx/quantized/model.onnx`, `model_int8.onnx`, `onnx/model_int8.onnx` — the same names a `model_repo` download resolves. Boot names the resolved file, so a fallback to fp32 is visible rather than silent, and `EMB.INFO` reports `quantization` and `model_bytes` |
 | `output_tensor` | auto-detected | ONNX output tensor name |
-| `preload` | `false` | Load model at startup instead of on first request |
+| `preload` | `false` | Decide the model's layout at startup instead of on first use. A lazy (default) model answers the first requests after a cold start with `ERR not ready: model "x" is initializing` while it lays out in the background; `preload: true` moves that work to boot, where readiness waits for it |
 | `pad_output` | `false` | Pad sequences to `max_length` with trailing zeros (compatibility with legacy implementations that don't pass attention mask) |
 | `workers` | calibrated when unset with `cpu_budget: auto`; legacy auto-tuning with `off` | Embedding sessions for the unbatched path; explicit values remain honored |
 | `script_workers` | `1` with `cpu_budget: auto`; legacy auto-tuning with `off` | Named-tensor sessions for scripted models (`EMB.EVAL`/`EMB.EVSHA`); explicit values remain honored |
@@ -264,14 +264,15 @@ instead of overrunning. The deadline also stops a candidate in flight, so one
 slow candidate cannot run past it.
 
 **Where calibration runs.** Off the request path, always. `preload: true`
-decides the layout during boot (readiness waits for it); a model left lazy is
-laid out in the background on its first use, and requests that arrive while its
-layout is undecided are answered `ERR not ready: model "x" is initializing`
-rather than waiting for calibration. `EMB.MODELS` reports each model's state
-(`ready`, `loading`, `uninitialized`, or `failed: <reason>`), so a lazy path is
-observable instead of just slow. For a model on a serving path, set
-`preload: true`: it turns an unbounded first-request stall into a documented
-boot cost.
+decides the layout during boot (readiness waits for it); a model left lazy
+starts its layout in the background when its first request arrives
+(single-flight, so concurrent refusals start no second load), and requests that
+arrive while its layout is undecided are answered `ERR not ready: model "x" is
+initializing` rather than waiting for calibration. `EMB.MODELS` reports each
+model's state (`ready`, `loading`, `uninitialized`, or `failed: <reason>`), so a
+lazy path is observable instead of just slow. For a model on a serving path, set
+`preload: true`: readiness then waits for the layout at boot instead of the
+first requests after a cold start being refused.
 
 **Fallback and unresolved outcomes.** Invalid fixtures, an unusable tokenizer, or
 an explicit width wider than the model's share keep the policy-derived layout and
