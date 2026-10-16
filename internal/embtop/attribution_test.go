@@ -130,8 +130,8 @@ func TestUncachedPercentilesWhenEverythingIsCached(t *testing.T) {
 func TestModelPhaseSplitAndDominance(t *testing.T) {
 	base := time.Unix(0, 0)
 	hist := []ModelPoint{
-		{At: base, Requests: 10, Runs: 4, CachedReqs: 6, AdmissionWaitUs: 100, RunUs: 400},
-		{At: base.Add(time.Second), Requests: 30, Runs: 12, CachedReqs: 18,
+		{At: base, Requests: 10, Runs: 4, CachedReqs: 6, CacheMisses: 2, AdmissionWaitUs: 100, RunUs: 400},
+		{At: base.Add(time.Second), Requests: 30, Runs: 12, CachedReqs: 18, CacheMisses: 10,
 			DispatchWaitUs: 20_000, AdmissionWaitUs: 1_800_000, RunUs: 380_000},
 	}
 	split := ModelPhaseSplit(hist)
@@ -152,10 +152,10 @@ func TestModelPhaseSplitAndDominance(t *testing.T) {
 		t.Errorf("mean admission wait = %s", got)
 	}
 
-	// The cached share of the same window: 12 of the 20 requests it added.
-	pct, cached, requests := ModelCachedShare(hist)
-	if cached != 12 || requests != 20 || pct != 60 {
-		t.Errorf("cached share = %v%% of %d/%d, want 60%%", pct, cached, requests)
+	// The cached share of the same window: 12 of the 20 lookups it saw.
+	pct, cached, lookups := ModelCachedShare(hist)
+	if cached != 12 || lookups != 20 || pct != 60 {
+		t.Errorf("cached share = %v%% of %d/%d, want 60%%", pct, cached, lookups)
 	}
 }
 
@@ -195,18 +195,30 @@ func TestEmptyPhaseSplitDominatesNothing(t *testing.T) {
 func TestCachedShareOfTheNode(t *testing.T) {
 	base := time.Unix(0, 0)
 	hist := []Point{
-		{At: base, TotalRequests: 100, CacheHits: 70},
-		{At: base.Add(time.Second), TotalRequests: 200, CacheHits: 170},
+		{At: base, TotalRequests: 100, CacheHits: 70, CacheMisses: 30},
+		{At: base.Add(time.Second), TotalRequests: 200, CacheHits: 170, CacheMisses: 30},
 	}
-	pct, cached, requests := CachedShare(hist)
-	if cached != 100 || requests != 100 || pct != 100 {
-		t.Fatalf("cached share = %v%% of %d/%d, want 100%% of 100/100", pct, cached, requests)
+	pct, cached, lookups := CachedShare(hist)
+	if cached != 100 || lookups != 100 || pct != 100 {
+		t.Fatalf("cached share = %v%% of %d/%d, want 100%% of 100/100", pct, cached, lookups)
 	}
+
+	// The share is of the cache's own lookups, not of the requests that ran: a
+	// warm window answers many lookups per run, and dividing by the runs reads
+	// as 29900% of the traffic rather than as the 99.7% of lookups it is.
+	warm := []Point{
+		{At: base, TotalRequests: 0, CacheHits: 0, CacheMisses: 0},
+		{At: base.Add(time.Second), TotalRequests: 1, CacheHits: 299, CacheMisses: 1},
+	}
+	if pct, cached, lookups := CachedShare(warm); pct > 100 || cached != 299 || lookups != 300 {
+		t.Fatalf("warm window = %v%% of %d/%d, want 99.7%% of 299/300 lookups (a share, not a ratio)", pct, cached, lookups)
+	}
+
 	// A window that answered nothing from the cache reads as 0, not as unknown.
-	hist[0] = Point{At: base, TotalRequests: 0, CacheHits: 0}
-	hist[1] = Point{At: base.Add(time.Second), TotalRequests: 50, CacheHits: 0}
-	if pct, _, requests := CachedShare(hist); pct != 0 || requests != 50 {
-		t.Errorf("uncached window = %v%% of %d, want 0%% of 50", pct, requests)
+	hist[0] = Point{At: base, TotalRequests: 0, CacheHits: 0, CacheMisses: 0}
+	hist[1] = Point{At: base.Add(time.Second), TotalRequests: 50, CacheHits: 0, CacheMisses: 0}
+	if pct, _, lookups := CachedShare(hist); pct != 0 || lookups != 0 {
+		t.Errorf("uncached window = %v%% of %d lookups, want 0%% of 0", pct, lookups)
 	}
 }
 

@@ -221,9 +221,9 @@ and renders:
   headless `-once` mode for scripts and CI.
 
 <!-- topviz:begin -->
-![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-65bed54f.gif)
+![The emb-top dashboard under load: one row per model with its request, token and latency rates beside an activity strip, request-rate and p95-latency streams, and cache, CPU and memory gauges](assets/emb-top-0bceca6b.gif)
 
-*Captured 2026-10-16 · emb-top v0.4.3 · 1b14fc1 · 4 models · 127.0.0.1:16379.*
+*Captured 2026-10-16 · emb-top v0.4.3 · f08391a · 4 models · 127.0.0.1:16379.*
 <!-- topviz:end -->
 
 ```bash
@@ -320,8 +320,9 @@ the budget is the constraint, and `run` growing instead points at the model.
 Under the verdict line, `emb-top` renders an advisory **sizing** panel — `SIZING  …`
 in the node dashboard and in the cluster view. Its first line names the resource
 to change *and the action that changes it*; its second names the action the same
-evidence rejects, with the counter that ruled it out, plus the cache's share of
-the window's traffic and the CPU each uncached run cost. It is advice, not a
+evidence rejects, with the counter that ruled it out, plus the share of the
+window's cache lookups the cache answered and the CPU each uncached run cost. It
+is advice, not a
 verdict: it has no severity, it never raises or lowers the health status, and a
 node at 100% of its budget with no errors is simultaneously `HEALTHY` and "raise
 cpu_budget". Every rule has its own fixed thresholds and magnitude floors
@@ -348,9 +349,14 @@ fires only when one phase holds the majority of the measured time; otherwise the
 window is reported as spread. When the window is too small for the p95 to mean
 anything — fewer than eight events, or fewer than three that ran — the panel says
 so and recommends nothing, rather than reading one cold run as a capacity
-problem. The cache's share of the traffic is named beside the hit ratio because
-the two answer different questions: the ratio describes the entries, the share
-describes how much of the service's work the cache removed. That is also why the
+problem. The cache's share is a share of the cache's own lookups — the answered
+over the answered plus the missed — and it is named beside the hit ratio because
+the ratio is the node's cumulative one while this is the window's own, so a node
+whose traffic is mostly cache-served reads as busy rather than idle without the
+two disagreeing about the same poll. Both are bounded by 100 because both are
+counted over the lookups: a hit never reaches a session, so the requests that
+ran (`total_requests`) are the smaller count and dividing by them would report
+more cache-served work than the window carried. That is also why the
 CPU readout is a share of the node's own capacity *and* a cost per uncached run:
 on a warm node a low CPU figure is a result, not an idle process.
 
@@ -394,7 +400,8 @@ The same lines carry the attribution as their own tokens, absent when there is
 nothing measured: `act=` the action (`cpu_budget`, `host_cpu`, `cache`,
 `intra_op_threads`, `workers`, `batch_window`, `model`, `memory`, `growth`,
 `nodes`) with `act_rejected=` for the action the same evidence rejects;
-`cached_pct=` the cache's share of the window's traffic — the measurement the
+`cached_pct=` the share of the window's cache lookups the cache answered (0–100,
+the answered over the answered plus the missed) — the measurement the
 dashboard states beside the advice, from the window's own counters rather than
 the event ring's split by path; `lat_p95_run_us=` and
 `lat_p95_run_n=` the p95 of the requests that ran and how many those are;
@@ -416,9 +423,9 @@ fleet. The single-node dashboard is unchanged when exactly one node is
 monitored.
 
 <!-- clusterviz:begin -->
-![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-ab349a54.gif)
+![The emb-top cluster view: a live traffic chart of inbound req/s per node above a fleet banner, totals, load-distribution bar, one ingress row per node — inbound req/s, share of the fleet, a proportional bar and a trend sparkline — and a cross-node imbalance panel](assets/emb-top-cluster-98e79503.gif)
 
-*Measured fleet run · 2026-10-16 · emb-top v0.4.3 · 1b14fc1 · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380. The traffic chart streams each node's inbound rate in its row's colour; the load bar and ingress rows split the fleet's inbound traffic, and the imbalance panel checks it across nodes. Re-record with `just website-clusterviz`.*
+*Measured fleet run · 2026-10-16 · emb-top v0.4.3 · f08391a · 2 nodes · 4 models · 127.0.0.1:16379,127.0.0.1:16380. The traffic chart streams each node's inbound rate in its row's colour; the load bar and ingress rows split the fleet's inbound traffic, and the imbalance panel checks it across nodes. Re-record with `just website-clusterviz`.*
 <!-- clusterviz:end -->
 
 - `-node` is repeatable and `-nodes` is comma-separated; `-addr` stays a
@@ -564,7 +571,7 @@ The measured figure this section's claims are drawn from is one such run against
 a two-node fleet, both tools on the same target:
 
 <!-- stressviz:begin -->
-![The emb-stress report of a 2-node fleet: the fleet and per-endpoint sections, one level line each with offered, completed, p50/p95/p99 and errors](assets/stressviz-1576736f.gif)
+![The emb-stress report of a 2-node fleet: the fleet and per-endpoint sections, one level line each with offered, completed, p50/p95/p99 and errors](assets/stressviz-1261d8dd.gif)
 
-*Measured run · 2026-10-16 · emb-stress v0.4.3 · 1b14fc1 · 2 endpoints · 4 models · localhost. `emb-stress` offered the load to 2 endpoints at levels 1,2,4,8 (12s per level, leading 4s discarded, seed 3) and reported per level and per endpoint — level 1 28.5 req/s · p95 136.7ms; level 2 35.9 req/s · p95 214.9ms; level 4 53.0 req/s · p95 283.4ms; level 8 53.0 req/s · p95 509.0ms — while `emb-top` observed the same fleet: [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%; the fleet's own sizing advice during the run: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 159.8ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 157.9ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 213.2ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.2ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 218.1ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 99% of the uncached tail (p95 219.3ms) (its tail is 9`; `[::1]:6379: take work off the model — bge-small: runs hold 94% of the uncached tail (p95 228.9ms) (its tail is 9`; `[::1]:6379: take work off the model — bge-small: runs hold 90% of the uncached tail (p95 249.1ms) (its tail is 9`; `[::1]:6379: take work off the model — bge-small: runs hold 87% of the uncached tail (p95 269.2ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 84% of the uncached tail (p95 278.6ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 82% of the uncached tail (p95 278.6ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 79% of the uncached tail (p95 294.7ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 78% of the uncached tail (p95 311.8ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 76% of the uncached tail (p95 294.7ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 75% of the uncached tail (p95 311.8ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 74% of the uncached tail (p95 311.8ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 72% of the uncached tail (p95 312.8ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 71% of the uncached tail (p95 311.8ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 349.0ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 419.4ms) (its tail is 7`; `[::1]:6379: take work off the model — runs hold 69% of the uncached tail (p95 427.6ms) (its tail is 69% run wait`; `[::1]:6379: take work off the model — runs hold 68% of the uncached tail (p95 431.7ms) (its tail is 68% run wait`; `[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 447.1ms) (its tail is 67% run wait`; `[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 453.5ms) (its tail is 67% run wait`; `[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 457.0ms) (its tail is 66% run wait`; `[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 467.9ms) (its tail is 66% run wait`; `[::1]:6379: take work off the model — runs hold 65% of the uncached tail (p95 474.7ms) (its tail is 65% run wait`; `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 482.8ms) (its tail is 64% run wait`; `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 481.5ms) (its tail is 64% run wait`; `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 488.6ms) (its tail is 64% run wait`. Re-record with `just website-stressviz`: `./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3`.*
+*Measured run · 2026-10-16 · emb-stress v0.4.3 · f08391a · 2 endpoints · 4 models · localhost. `emb-stress` offered the load to 2 endpoints at levels 1,2,4,8 (12s per level, leading 4s discarded, seed 3) and reported per level and per endpoint — level 1 28.5 req/s · p95 137.7ms; level 2 36.1 req/s · p95 213.9ms; level 4 53.1 req/s · p95 280.1ms; level 8 53.9 req/s · p95 490.3ms — while `emb-top` observed the same fleet: [::1]:6379 offered 50%, served 50%; 127.0.0.1:6379 offered 50%, served 50%; the fleet's own sizing advice during the run: `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 138.5ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 138.8ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 141.2ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 138.9ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 216.4ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 100% of the uncached tail (p95 219.7ms) (its tail is`; `[::1]:6379: take work off the model — bge-small: runs hold 99% of the uncached tail (p95 217.7ms) (its tail is 9`; `[::1]:6379: take work off the model — bge-small: runs hold 95% of the uncached tail (p95 279.9ms) (its tail is 9`; `[::1]:6379: take work off the model — bge-small: runs hold 90% of the uncached tail (p95 317.1ms) (its tail is 9`; `[::1]:6379: take work off the model — bge-small: runs hold 87% of the uncached tail (p95 317.1ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 84% of the uncached tail (p95 295.3ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 82% of the uncached tail (p95 324.2ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 80% of the uncached tail (p95 324.2ms) (its tail is 8`; `[::1]:6379: take work off the model — bge-small: runs hold 78% of the uncached tail (p95 324.2ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 76% of the uncached tail (p95 317.1ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 75% of the uncached tail (p95 317.1ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 74% of the uncached tail (p95 317.1ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 72% of the uncached tail (p95 324.2ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 72% of the uncached tail (p95 322.1ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 345.8ms) (its tail is 7`; `[::1]:6379: take work off the model — bge-small: runs hold 70% of the uncached tail (p95 388.0ms) (its tail is 7`; `[::1]:6379: take work off the model — runs hold 69% of the uncached tail (p95 413.1ms) (its tail is 69% run wait`; `[::1]:6379: take work off the model — runs hold 68% of the uncached tail (p95 507.6ms) (its tail is 68% run wait`; `[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 507.6ms) (its tail is 67% run wait`; `[::1]:6379: take work off the model — runs hold 67% of the uncached tail (p95 523.2ms) (its tail is 67% run wait`; `[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 523.2ms) (its tail is 66% run wait`; `[::1]:6379: take work off the model — runs hold 66% of the uncached tail (p95 523.5ms) (its tail is 66% run wait`; `[::1]:6379: take work off the model — runs hold 65% of the uncached tail (p95 523.5ms) (its tail is 65% run wait`; `[::1]:6379: take work off the model — runs hold 65% of the uncached tail (p95 526.0ms) (its tail is 65% run wait`; `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 526.0ms) (its tail is 64% run wait`; `[::1]:6379: take work off the model — runs hold 64% of the uncached tail (p95 527.0ms) (its tail is 64% run wait`. Re-record with `just website-stressviz`: `./bin/emb-stress -config website/tools/topviz/models.yaml -target localhost -levels 1,2,4,8 -dwell 12s -warmup 4s -seed 3`.*
 <!-- stressviz:end -->

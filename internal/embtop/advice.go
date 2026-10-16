@@ -36,7 +36,9 @@ type Advice struct {
 	Phases PhaseSplit
 	Phase  Phase
 	Share  float64
-	// CachedPct is the share of the window's requests the cache answered.
+	// CachedPct is the share of the window's cache lookups the cache
+	// answered, 0-100. A cache hit reaches no session, so it is a share of the
+	// lookups and not of the requests that ran.
 	CachedPct float64
 	// CPUPerRun is the CPU the window spent per uncached run.
 	CPUPerRun time.Duration
@@ -248,13 +250,15 @@ func cacheUndersized(models map[string][]ModelPoint, window []Point) (float64, s
 			continue
 		}
 		first, last := hist[0], hist[len(hist)-1]
-		// A hit is a request too, so the requests served are the lookups: adding
-		// the hits again would halve the share the rule is graded on.
-		lookups := delta(first.Requests, last.Requests)
+		// The share is graded against the model's lookups, which is what the
+		// rule and its rendered sentence name: the cache's own answered-plus-
+		// missed count. A model's `requests` is the runs that reached a
+		// session, and a hit never does, so it is not a lookup count.
+		_, _, lookups := ModelCachedShare(hist)
 		if lookups <= 0 {
 			continue
 		}
-		pct := float64(delta(first.CacheEvictions, last.CacheEvictions)) / float64(lookups) * 100
+		pct := shareOf(delta(first.CacheEvictions, last.CacheEvictions), lookups)
 		if pct > worstPct {
 			worstPct, worstModel = pct, name
 		}
@@ -271,7 +275,10 @@ func shareOf(part, whole int64) float64 {
 }
 
 // cachedShareOfWindow is the share of the window's cache lookups the cache
-// answered, from the node's own cumulative counters.
+// answered, from the node's own cumulative counters. A window too short to take
+// a delta falls back to the event ring's own share, which counts commands where
+// the counters count lookups: the same number when a command carries one text,
+// and the ring's own filter either way.
 func cachedShareOfWindow(in AdviceInput) float64 {
 	if len(in.Window) < 2 {
 		return in.Paths.Share()

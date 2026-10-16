@@ -408,9 +408,10 @@ func SamplerFleetRecInput(label string, s *Sampler) FleetNodeRecInput {
 }
 
 // appendAttribution writes the node's course of action and the evidence behind
-// it: the action and the action it rejects, the cache's share of the window's
-// traffic, the p95 of the requests that ran and the phases they spent it in.
-// Every token the line already carried keeps its name; these are additions.
+// it: the action and the action it rejects, the share of the window's cache
+// lookups the cache answered, the p95 of the requests that ran and the phases
+// they spent it in. Every token the line already carried keeps its name; these
+// are additions.
 func appendAttribution(b []byte, s *Sampler) []byte {
 	in := SamplerAdviceInput(s)
 	adv := Advise(in)

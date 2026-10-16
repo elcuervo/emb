@@ -67,9 +67,9 @@ type Point struct {
 	CacheBytes int64
 
 	// CacheHits and CacheMisses are the cumulative cache counters, so a
-	// reader can take the window's cached share of the traffic: how much of
-	// the service's work the cache removed, which the hit rate alone does not
-	// say.
+	// reader can take the window's cached share of its lookups: the share of
+	// the cache's work the cache answered, which the requests that ran cannot
+	// express (a hit reaches no session and is not counted there).
 	CacheHits   int64
 	CacheMisses int64
 }
@@ -118,10 +118,11 @@ type ModelPoint struct {
 	CacheHitRate float64 // cumulative %, 100 when no cache stats (-1 unknown)
 	Stale        bool    // no EMB.INFO reply this poll; values are last-known
 
-	// The embedding path, cumulative: the cache-served requests, the entries
-	// held and dropped, the runs that were admitted, the phases those runs
-	// paid, and the live session gauges.
+	// The embedding path, cumulative: the cache-served requests, the cache
+	// lookups the model missed, the entries held and dropped, the runs that
+	// were admitted, the phases those runs paid, and the live session gauges.
 	CachedReqs      int64
+	CacheMisses     int64
 	CacheEvictions  int64
 	CacheEntries    int64
 	Runs            int64
@@ -308,6 +309,7 @@ func (s *Sampler) Push(res *PollResult) Point {
 			mpnt.CacheHitRate = -1
 		}
 		mpnt.CachedReqs = hits
+		mpnt.CacheMisses = misses
 		mpnt.CacheEvictions = cur.CacheEvictions
 		mpnt.CacheEntries = cur.CacheEntries
 		mpnt.Runs = cur.EmbedRuns
