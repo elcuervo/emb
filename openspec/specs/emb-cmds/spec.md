@@ -55,19 +55,20 @@ The server SHALL respond to `EMB.MODELS` by listing available models. When the c
 
 The server SHALL respond to `MONITOR` — named after Redis's MONITOR, but a bounded sequence-query rather than a long-lived stream — with the most recent completed-request events from a bounded, seq-numbered ring buffer. Each event SHALL carry a monotonically increasing sequence number, a unix-microsecond timestamp, the model, the number of texts requested, the latency in microseconds, and an error flag. Request text payloads SHALL NOT be included. Clients SHALL be able to fetch only events after a given sequence number, and the buffer SHALL be bounded (old events may be dropped under sustained load).
 
-Each event SHALL additionally carry the request's attribution: `cached_texts`, the number of its texts the embedding cache answered; and `dispatch_us`, `admit_us` and `run_us`, the time its texts that were *not* cache-answered spent waiting for a session or batch window, waiting at the process CPU admission gate, and running in ORT. The three phases SHALL describe the request's own texts and SHALL NOT exceed its `latency_us`; whatever the latency includes beyond them (protocol, tokenization, cache lookup, encoding) SHALL stay unattributed rather than assigned to a phase. An event whose texts were all cache-answered SHALL report zero for all three phases. Attribution SHALL be collected without allocating on the request path and without adding a clock read to the cache-hit path.
+Each event SHALL additionally carry the request's attribution: `cached_texts`, the number of its texts the embedding cache answered; `attributed`, which reports whether the server measured the request's phases at all; and `dispatch_us`, `admit_us` and `run_us`, the time its texts that were *not* cache-answered spent waiting for a session or batch window, waiting at the process CPU admission gate, and running in ORT. The three phases SHALL describe the request's own texts and SHALL NOT exceed its `latency_us`; whatever the latency includes beyond them (protocol, tokenization, cache lookup, encoding) SHALL stay unattributed rather than assigned to a phase. An event whose texts were all cache-answered SHALL report zero for all three phases. Attribution SHALL be collected without allocating on the request path and without adding a clock read to the cache-hit path.
 
-When the connection negotiated RESP3, each event SHALL be a map with the RESP2 field names; under RESP2 each event SHALL be a flat array in the same field order, with the attribution fields appended after `err` so that a client reading the original six fields positionally is unaffected.
+When the connection negotiated RESP3, each event SHALL be a map with the RESP2 field names; under RESP2 each event SHALL be a flat array in the same field order, with the attribution fields appended after `err` so that a client reading the original six fields positionally is unaffected. The attribution field list is closed and ordered: RESP2 events SHALL declare eleven elements and RESP3 events SHALL carry the same eleven names, so a client can read by position or by name and get the same field either way. A reader that does not know `attributed` SHALL still find the fields it does know at the names it knows them by.
 
 #### Scenario: RESP3 reply is an array of maps
 
 - **WHEN** a client that negotiated RESP3 with `HELLO 3` sends `MONITOR` after one completed request
-- **THEN** the reply SHALL be an array whose elements are maps keyed `seq`, `at_us`, `model`, `texts`, `latency_us`, `err`, `cached_texts`, `dispatch_us`, `admit_us`, `run_us`
+- **THEN** the reply SHALL be an array whose elements are maps keyed `seq`, `at_us`, `model`, `texts`, `latency_us`, `err`, `cached_texts`, `attributed`, `dispatch_us`, `admit_us`, `run_us`
 
 #### Scenario: RESP2 reply is unchanged
 
 - **WHEN** a RESP2 client sends `MONITOR` after one completed request
-- **THEN** the reply SHALL be an array of flat arrays whose first six elements are `seq`, `at_us`, `model`, `texts`, `latency_us`, `err` in the order they have today, with `cached_texts`, `dispatch_us`, `admit_us` and `run_us` appended after them
+- **THEN** the reply SHALL be an array of flat arrays whose first six elements are `seq`, `at_us`, `model`, `texts`, `latency_us`, `err` in the order they have today, with `cached_texts`, `attributed`, `dispatch_us`, `admit_us` and `run_us` appended after them
+- **THEN** each event SHALL declare exactly eleven elements
 
 #### Scenario: Empty monitor before any traffic
 
@@ -115,6 +116,11 @@ When the connection negotiated RESP3, each event SHALL be a map with the RESP2 f
 
 - **WHEN** an event carries `dispatch_us`, `admit_us` and `run_us`
 - **THEN** their sum SHALL NOT exceed its `latency_us`
+
+#### Scenario: A consumer that predates the attribution reads positionally
+
+- **WHEN** a 0.4.2-era client reads an event's first six elements by position, or a RESP3 client looks up the names it knew
+- **THEN** each SHALL find the same field it found before the attribution was appended
 
 ### Requirement: EMB.MODELS returns a deterministic order
 
