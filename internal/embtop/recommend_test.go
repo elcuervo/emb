@@ -394,6 +394,48 @@ func TestRecommendFleetPrefersARepairOverCapacity(t *testing.T) {
 	}
 }
 
+// A fleet with room to spare and no node standing out still carries the one
+// node whose own advice names a repair: the action is that node's, not a fleet
+// capacity claim, so the quiet exit must not swallow it.
+func TestRecommendFleetCarriesARepairWithNothingBinding(t *testing.T) {
+	// Every node holds the plan and leaves most of its budget free, so the
+	// fleet's headroom is not uniformly small and no capacity answer applies.
+	roomy := func(i int, p *Point) {
+		p.CPUPlanKnown = true
+		p.CPUBudget = 8
+		p.CPUActiveTokens = 1
+		p.TotalRequests = int64(i) * 80
+		p.CacheHits = int64(i) * 16
+	}
+	hist := recSeries(6, roomy)
+	cacheEvidence := &AdviceInput{
+		Window: hist,
+		Split:  PhaseSplit{RunUs: 900_000, Runs: 8},
+		Paths:  PathCounts{Total: 40, Cached: 8, Reran: 32, Attributed: 40},
+		Models: map[string][]ModelPoint{"b": {
+			{At: time.Unix(0, 0), Runs: 1},
+			{At: time.Unix(5, 0), Runs: 9, Requests: 400, CachedReqs: 80, CacheEvictions: 90},
+		}},
+	}
+	if a := Advise(*cacheEvidence); a.Action != ActionCache {
+		t.Fatalf("the fixture's own advice = %q, want %q", a.Action, ActionCache)
+	}
+
+	got := RecommendFleet([]FleetNodeRecInput{
+		{Label: "a", Hist: hist},
+		{Label: "b", Hist: hist, Advice: cacheEvidence},
+	})
+	if len(got.Kinds) != 0 || got.First != "" {
+		t.Fatalf("the fixture binds a resource or names a peer, so it cannot show what the quiet exit drops: %+v", got)
+	}
+	if got.Action != ActionCache {
+		t.Fatalf("fleet action = %q, want the node's own %q: %q", got.Action, ActionCache, got.Text)
+	}
+	if !strings.Contains(got.Text, "b:") {
+		t.Errorf("the fleet line does not name the node to fix: %q", got.Text)
+	}
+}
+
 // The same fleet without the cache evidence keeps its capacity answer.
 func TestRecommendFleetStillNamesCapacityWithoutARepair(t *testing.T) {
 	held := func(_ int, p *Point) { p.CPUActiveTokens = 8 }

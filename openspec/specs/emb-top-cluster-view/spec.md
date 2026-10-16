@@ -221,8 +221,13 @@ Every aggregate the fleet renders SHALL be computed from the same per-node advic
 
 #### Scenario: A quiet fleet recommends nothing
 
-- **WHEN** no node binds on a resource and no node's tail stands out
+- **WHEN** no node binds on a resource, no node's tail stands out and no node's own advice names a repair
 - **THEN** no fleet recommendation is rendered
+
+#### Scenario: A node's own repair survives a fleet with room
+
+- **WHEN** no node binds on a resource, the fleet's headroom is not uniformly small and one node's own advice names a repair
+- **THEN** the fleet recommendation names that node's repair rather than rendering nothing
 
 #### Scenario: A reservable fix outranks capacity
 

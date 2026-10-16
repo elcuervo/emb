@@ -1775,17 +1775,32 @@ func TestConfigRuntimeMaxPairs(t *testing.T) {
 	c.Close()
 }
 
+// readRespDeadline bounds readRESPComplete. A reply the server declares but
+// never finishes — a count larger than the elements it sends — would otherwise
+// block this read until the package timeout; the deadline makes the test that
+// read it fail, naming the incomplete reply instead.
+const readRespDeadline = 30 * time.Second
+
 // readRESPComplete reads bytes until the buffer holds one complete top-level
 // RESP value (a 2000-element array reply is ~1MB, far beyond readRESP's single
 // 4KB read). Returns the raw reply; the caller parses it.
 func readRESPComplete(t *testing.T, c net.Conn) string {
 	t.Helper()
+	if err := c.SetReadDeadline(time.Now().Add(readRespDeadline)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	defer func() { _ = c.SetReadDeadline(time.Time{}) }()
 	buf := make([]byte, 0, 1<<20)
 	tmp := make([]byte, 64*1024)
 	for {
 		n, err := c.Read(tmp)
 		if err != nil {
-			t.Fatal(err)
+			head := string(buf)
+			if len(head) > 512 {
+				head = head[:512] + "..."
+			}
+			t.Fatalf("incomplete reply after %s (%d bytes read): %v\n%q",
+				readRespDeadline, len(buf), err, head)
 		}
 		buf = append(buf, tmp[:n]...)
 		if consumed, ok := respValueLen(buf); ok && consumed == len(buf) {

@@ -259,20 +259,12 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 	}
 	headroom, uniform, headroomKnown := fleetCPUHeadroom(nodes)
 
-	if len(kinds) == 0 && !uniform && first == "" {
-		return FleetRecommendation{}
-	}
-
-	var parts []string
-	if first != "" {
-		// Named ahead of any node-count advice: a node that does not look like
-		// its peers is inspected before the fleet is grown.
-		parts = append(parts, "inspect "+first+" first")
-	}
 	// A node's own repair outranks capacity: entries the cache dropped, a
 	// layout that serializes or a model whose runs hold the tail are all
 	// cheaper than another node, and adding nodes would buy capacity for work
-	// that should not be done at all.
+	// that should not be done at all. Selected before the quiet exit below: a
+	// node's own action is a recommendation even when nothing binds and no node
+	// stands out.
 	repairLabel, repairAction := "", ""
 	for _, n := range nodes {
 		a, ok := advice[n.Label]
@@ -287,6 +279,20 @@ func RecommendFleet(nodes []FleetNodeRecInput) FleetRecommendation {
 				break
 			}
 		}
+	}
+
+	// Nothing binds, the headroom is not uniformly small, no node stands out and
+	// no node's own advice names a repair: there is nothing to say at fleet
+	// level.
+	if len(kinds) == 0 && !uniform && first == "" && repairAction == "" {
+		return FleetRecommendation{}
+	}
+
+	var parts []string
+	if first != "" {
+		// Named ahead of any node-count advice: a node that does not look like
+		// its peers is inspected before the fleet is grown.
+		parts = append(parts, "inspect "+first+" first")
 	}
 
 	// A node-count recommendation is capacity, not a repair, and it is only
