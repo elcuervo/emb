@@ -814,7 +814,7 @@ website-topviz: build
     cfg=website/tools/topviz/models.yaml; \
     runs=website/tools/topviz/runs; \
     port=16379; \
-    theme='111110,EDF0F8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,848991,EDF0F8,67696F,C23D00,7FA37A,C9A227,6B7F8C,BFC5D0,8FA9A0,EDF0F8'; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
     rec='env -u CI -u NO_COLOR TERM=xterm-256color COLORTERM=truecolor asciinema'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-topviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
@@ -871,7 +871,7 @@ website-clusterviz: build
     cfg=website/tools/topviz/models.yaml; \
     runs=website/tools/topviz/runs; \
     portA=16379; portB=16380; \
-    theme='111110,EDF0F8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,848991,EDF0F8,67696F,C23D00,7FA37A,C9A227,6B7F8C,BFC5D0,8FA9A0,EDF0F8'; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
     rec='env -u CI -u NO_COLOR TERM=xterm-256color COLORTERM=truecolor asciinema'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-clusterviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
@@ -935,7 +935,7 @@ website-stressviz: build
     runs=website/tools/stressviz/runs; \
     port=6379; \
     levels='1,2,4,8'; dwell=12s; warmup=4s; seed=3; \
-    theme='111110,EDF0F8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,848991,EDF0F8,67696F,C23D00,7FA37A,C9A227,6B7F8C,BFC5D0,8FA9A0,EDF0F8'; \
+    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-stressviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
     done; \

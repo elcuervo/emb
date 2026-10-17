@@ -45,8 +45,8 @@ def slab(i, name, label):
     out.append('')
     out.append('      <!-- ── %02d %s -->' % (i + 1, name.upper()))
     out.append('      <g class="slab" data-slab="%s" data-depth="%d" filter="url(#plate-grain)">' % (name, len(labels) - i))
-    out.append('        <path d="%s" fill="%s"/>' % (face_r, "#292823" if name == "serve" else "#C3C6CF"))
-    out.append('        <path d="%s" fill="%s"/>' % (face_l, "#171714" if name == "serve" else "#B7BAC3"))
+    out.append('        <path d="%s" fill="%s"/>' % (face_r, "#292823" if name == "serve" else "#C9C6BD"))
+    out.append('        <path d="%s" fill="%s"/>' % (face_l, "#171714" if name == "serve" else "#BDBAB1"))
     for face in (face_l, face_r):
         out.append('        <path d="%s" fill="url(#edge-lines)" opacity=".3"/>' % face)
     out.append('        <path d="%s" fill="%s"/>' % (face_t, label["plate"]))
@@ -128,9 +128,9 @@ parts.append(DEFS.format(k=KS, vw=2 * HW, h=round(H)))
 # its partners at the same L* and chroma with the cast mirrored (DESIGN.md,
 # "Palette"). The SERVE plate is the dark ground and keeps its own values.
 labels = [
-    ("input",     "TEXT",    {"plate": "#E9ECF5"}),
-    ("inference", "MODEL",   {"plate": "#E3E6F0"}),
-    ("embedding", "VECTORS", {"plate": "#E3E6F0"}),
+    ("input",     "TEXT",    {"plate": "#EFECE3"}),
+    ("inference", "MODEL",   {"plate": "#E9E6DC"}),
+    ("embedding", "VECTORS", {"plate": "#E9E6DC"}),
     ("serve",     "REDIS",   {"plate": "#111110"}),
 ]
 spans = {}

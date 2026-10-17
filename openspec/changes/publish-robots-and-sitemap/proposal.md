@@ -51,28 +51,30 @@ compares the copies.
   from the descriptor and the palette tokens; the font preloads, stylesheets and
   scripts that genuinely differ per surface stay where they are, after the
   fragment.
-- **The detector's 199 warnings are repaired, not suppressed.** The paper ground
-  moves off cream with the new tokens (and off the favicon data URI, the terrain
-  matte, and the `og.png` card, which all carry it), `Inter` leaves in favour of
-  a self-hosted face that is not on the overused list (the display voice stays
-  `Archivo`, which is not flagged), full-bleed blocks gain their insets, the
-  sub-floor 10px and 10.5px labels rise to the site's own 12px floor, the
-  all-caps body runs and the flat type steps are repaired, and the `<img>` with
-  no `src` on `demos/image.html` is fixed.
-- **The world's records move with it.** `DESIGN.md` carries the new palette,
-  faces and measures; the seven surface briefs are updated where they pinned
-  what changed; `website/README.md` describes the generator and the crawl
-  surface; and `product-site` gains the requirement the detector made concrete —
-  every surface meets the type floor and AA contrast on its own ground, not only
-  the dark console.
+- **The detector's 199 warnings are repaired, not suppressed — except the ground
+  the world keeps.** `Inter` leaves in favour of a self-hosted face that is not on
+  the overused list (the display voice stays `Archivo`, which is not flagged),
+  full-bleed blocks gain their insets, the sub-floor 10px and 10.5px labels rise
+  to the site's own 12px floor, the all-caps body runs and the flat type steps
+  are repaired, and the `<img>` with no `src` on `demos/image.html` is fixed. The
+  paper ground **stays the beige** it has always been: the palette work mirrored
+  it to a cool neutral at the same lightness band and that was overruled, so the
+  two `cream-palette` notes the ground earns — on the two files that declare a
+  page background — remain, deliberately, and every other rule is at zero.
+- **The world's records move with it.** `DESIGN.md` carries the faces and
+  measures; the seven surface briefs are updated where they pinned what changed;
+  `website/README.md` describes the generator, the crawl surface and the
+  detector's verdict; and `product-site` gains the requirement the detector made
+  concrete — every surface meets the type floor and AA contrast on its own
+  ground, not only the dark console.
 - **Not changed:** the composition and its atoms (rules, ledgers, plates, the
   signal axis, the annotation form), the banned devices (no cards, gradients,
-  radii, glass, second accent), the wordmark's shape, scale and place, the
-  claim, the six-row feature list, the pipeline artwork, the dark console
-  ground, and the twelve advisory em-dash notes — advisory findings are not
-  failures, and the house voice is not a defect. The wordmark's *face* follows
-  the display voice, because the detector cannot clear while `Inter` ships in any
-  element.
+  radii, glass, second accent), the paper ground and the palette that sits on it,
+  the wordmark's shape, scale and place, the claim, the six-row feature list, the
+  pipeline artwork, the dark console ground, and the twelve advisory em-dash
+  notes — advisory findings are not failures, and the house voice is not a
+  defect. The wordmark's *face* follows the display voice, because the detector
+  cannot clear while `Inter` ships in any element.
 - No **BREAKING** changes to the server, the protocol, the client gems, or any
   on-disk format, and no new runtime dependency for the site.
 

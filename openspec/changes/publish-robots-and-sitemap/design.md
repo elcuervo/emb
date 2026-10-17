@@ -37,8 +37,9 @@
   palette tokens, the favicon.
 - Both a missing page and a drifted one fail a check before a reader or a
   crawler can see them, with no build step and no tooling at request time.
-- `impeccable detect website` reports zero warnings, so it becomes a gate that
-  can be trusted instead of a report that argues with the world.
+- `impeccable detect website` reports every rule at zero except the ground's own
+  two `cream-palette` notes, so the audit becomes a gate that can be trusted
+  instead of a report that argues with the world (D4).
 - The world the detector measures and the world the repository documents are the
   same world — `DESIGN.md`, the briefs and the spec agree with the CSS.
 
@@ -92,19 +93,28 @@ generated file against generated heads, which is the strongest form of the
 assertion the change already had. The `robots.txt` reference and the served-set
 membership are asserted as they are today.
 
-**D4 — The paper ground moves to a cool neutral, and the tokens carry the
-contrast.** `#F3F0E8` (warm cream, hue ≈41°) becomes a cool paper at the same
-lightness band, and the warm cast leaves the favicon data URI, the terrain matte
-and the social card, all of which are regenerated from the tools that own them
-(`tools/gen-terrain-matte.py`, `tools/og-card.html` → `assets/img/og.png`).
-Because the tokens now have one source, `stamp-pages.py` also computes WCAG
-contrast for every text/ground pair and fails below AA (4.5:1 body, 3:1 large) —
-which is what makes the new `product-site` requirement checkable rather than
-declared.
+**D4 — The paper ground stays the beige, and the tokens carry the contrast.**
+The palette work began by mirroring the ground to a cool neutral at the same
+lightness band (hue +180°, same L\* and chroma, so every luminance relationship
+survived by construction) — and the maintainer overruled it: `#F3F0E8` is the
+world's ground and it stays. The consequence is recorded rather than hidden:
+`impeccable detect website` keeps the two `cream-palette` notes the ground earns
+on the two files that declare a page background (`tools/ink-probe.html`,
+`tools/og-card.html`), so this change's detector target is **every other rule at
+zero**, not zero findings.
 
-Alternative considered: inverting the whole site to the dark ground (rejected:
+What survives from the palette work is the mechanism, which is the part that
+scales: the tokens have one source (`pages.json`), `stamp-pages.py` emits them
+into `:root` and into every page's theme colour and favicon, and it computes
+WCAG contrast for every declared text/ground pair and fails below AA — which is
+what makes the new `product-site` requirement checkable rather than declared.
+The beige passes those pairs (17.28:1 ink, 4.82:1 muted, 4.66:1 accent-ink).
+
+Alternatives considered: inverting the whole site to the dark ground (rejected —
 the poster's paper/dark alternation is compositional, and the spec's dark ground
-belongs to the console block).
+belongs to the console block); suppressing the two `cream-palette` notes with an
+`impeccable ignores` rule (not taken — the ground is a decision, and an ignore
+rule would also hide the next real finding on those two files).
 
 **D5 — `Inter` leaves; the body face is a self-hosted, not-overused grotesque,
 and the display voice stays `Archivo`.** `Inter` is the one face the detector
@@ -189,9 +199,11 @@ gate and must still PASS at all 24 widths after every inset and type change.
    `published-tree.py`'s crawl assertions pointed at the emitted files.
    `--check` must be clean and `just website-published` must exit 0 before any
    visual work starts, because every later step edits what this emits.
-2. Move the world: tokens (paper, type scale, leading), the favicon and the
-   regenerated assets, then the body face and the removal of `Inter`; re-run ink
-   at 24 widths after the type work, not before.
+2. Move the world: the type scale and the leading, then the body face and the
+   removal of `Inter`; the paper ground stays the beige (D4), so the favicon, the
+   terrain matte, the pipeline SVG and the social card are regenerated only if a
+   token they read moves. Re-run ink at 24 widths after the type work, not
+   before.
 3. Repair the detector findings in CSS order — insets, sub-floor type, caps,
    leading, hierarchy — and the `<img>` defect.
 4. Update the records: `DESIGN.md`, the seven briefs, `website/README.md`,
