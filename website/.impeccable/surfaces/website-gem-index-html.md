@@ -145,7 +145,7 @@ rather than as four code samples with prose between them. It refuses the categor
 default of a README restated as a webpage, and it refuses the gallery's own idiom
 of a measured bar, because there is nothing here to measure.
 
-OWN-WORLD: Identical to the rest of the site and nothing added — `#EDF0F8` paper,
+OWN-WORLD: Identical to the rest of the site and nothing added — `#F3F0E8` paper,
 `#0B0B0B` ink, `#FF5A1F` only as a surface and only on the call that carries
 every text, `#C23D00` as accent ink, the three self-hosted families, hairline
 rules, tracked mono labels, and the `#111110` / `#292823` inversion. With all

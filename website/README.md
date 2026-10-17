@@ -362,18 +362,27 @@ than enforced by a job. On the tree this change ships:
 
 ```bash
 ~/.pi/agent/skills/impeccable/scripts/impeccable detect website
-# 0 anti-patterns found.
+# 2 anti-patterns found.
 # 12 advisory notes (not counted).
 ```
 
-The twelve are `em-dash-overuse`, advisory by the tool's own contract and a
-deliberate house voice. Two conventions exist because of how the rules read the
-sheet: a component states its **inset floor as a plain length before** the
-responsive logical shorthand that supersedes it (`padding-block`/`padding-inline`
-and `clamp()`/`var()` are not read, so the floor is what the rule can see), and
-the `emb-top` frame's cell height is the named token `--frame-cell: 1.05` rather
-than a literal, since JetBrains Mono draws its box characters 1.23em tall and a
-1.3 cell would leave a sub-pixel seam every row.
+Every rule is at zero except the two `cream-palette` warnings, and they are the
+world's own ground rather than a defect: `#F3F0E8` is the beige the site is built
+on, and the rule fires on the two files that declare a *page* background
+(`tools/ink-probe.html`, `tools/og-card.html`) — the served pages take their
+ground from `styles.css`, which the rule does not read as a page background. The
+ground is a decision, so it is left standing and not silenced with an
+`impeccable ignores` entry: an ignore rule would also hide the next real finding
+on those two files. The twelve advisories are `em-dash-overuse`, advisory by the
+tool's own contract and a deliberate house voice.
+
+Two conventions exist because of how the rules read the sheet: a component states
+its **inset floor as a plain length before** the responsive logical shorthand that
+supersedes it (`padding-block`/`padding-inline` and `clamp()`/`var()` are not
+read, so the floor is what the rule can see), and the `emb-top` frame's cell
+height is the named token `--frame-cell: 1.05` rather than a literal, since
+JetBrains Mono draws its box characters 1.23em tall and a 1.3 cell would leave a
+sub-pixel seam every row.
 
 ## What ships
 
@@ -644,19 +653,18 @@ so the live console on a site preview refuses at the bridge; the apex is.
 
 ## Design notes
 
-**Palette** — a cool neutral paper (`--bg`, `#EDF0F8`), near-black ink
+**Palette** — a warm off-white ground (`--bg`, `#F3F0E8`), near-black ink
 (`#0B0B0B`), one vivid orange (`#FF5A1F`) for surfaces, a deeper
 `--accent-ink` (`#C23D00`) for the accent used as text or as a focus ring, a
-muted grey (`#67696F`) and a leader grey for the annotation steps. The paper is
-a cool stock, deliberately not the warm cream off-white the detector's
-`cream-palette` rule names; the greys the paper is shaded into (the isometric
-plates' faces, the blocks' tints, the recessed rules) are the paper's partners
-at the same L* and chroma with the cast mirrored, and the ink and the dark
-ground keep their own values. All ten values exist once, in
-`tools/pages.json` (`site.tokens`), and `tools/stamp-pages.py` emits them into
-`:root`, every page's theme colour and favicon, and the sitemap.
+muted grey (`#6B6963`) and a leader grey for the annotation steps. The greys
+the paper is shaded into (the isometric plates' faces, the blocks' tints, the
+recessed rules) are the paper's partners at the same L* and chroma with the
+cast mirrored, and the ink and the dark ground keep their own values. All ten
+values exist once, in `tools/pages.json` (`site.tokens`), and
+`tools/stamp-pages.py` emits them into `:root`, every page's theme colour and
+favicon, and the sitemap.
 `#FF5A1F` is 2.74:1 against the paper and `--accent-ink` is
-4.65:1, which is why the accent never carries text or a ring at its surface
+4.66:1, which is why the accent never carries text or a ring at its surface
 value. No gradients, no rounded corners, no shadows except the 5px printed
 offset under the hero button.
 

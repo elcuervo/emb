@@ -836,9 +836,9 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
    material, shaded: each is --bg's partner at the same L* and chroma with its
    cast mirrored (see DESIGN.md, "Palette"). The dark family is the dark ground
    and keeps its values. */
-.cb{ --ct:var(--bg); --cl:#C1C5D0; --cr:#ACB0BB; }
-.cb--w{ --ct:var(--bg); --cl:#C1C5D0; --cr:#ACB0BB; }
-.cb--g{ --ct:#B0B4BF; --cl:#888B94; --cr:#767982; }
+.cb{ --ct:var(--bg); --cl:#C9C5BA; --cr:#B4B0A5; }
+.cb--w{ --ct:var(--bg); --cl:#C9C5BA; --cr:#B4B0A5; }
+.cb--g{ --ct:#B8B4A9; --cl:#8E8B82; --cr:#7C7970; }
 .cb--d{ --ct:#3A3833; --cl:#1E1D19; --cr:#141310; }
 
 /* annotations + stepped leaders */
@@ -1812,14 +1812,14 @@ html.js .console__form{
   --term-color-3:  #B08C4F;
   --term-color-4:  #FF5A1F;
   --term-color-5:  #B4736A;
-  --term-color-6:  #848991;
+  --term-color-6:  #8C8880;
   --term-color-7:  var(--bg);
   --term-color-8:  var(--muted);
   --term-color-9:  #C23D00;
   --term-color-10: #7FA37A;
   --term-color-11: #C9A227;
   --term-color-12: #6B7F8C;
-  --term-color-13: #BFC5D0;
+  --term-color-13: #C9C4B8;
   --term-color-14: #8FA9A0;
   --term-color-15: var(--bg);
 }

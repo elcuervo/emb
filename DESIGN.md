@@ -4,15 +4,14 @@ The overall composition is deliberately oversized, asymmetric, and information-d
 
 # Overall visual direction
 
-The page uses a cool neutral paper rather than pure white. The surface should
-feel slightly tactile and printed, almost like archival paper or an engineering
-datasheet — but it is a cool stock, deliberately not the warm cream off-white
-that has become the default "tasteful" surface.
+The page uses a warm off-white background rather than pure white. The surface
+should feel slightly tactile and printed, almost like archival paper or an
+engineering datasheet.
 
 The dominant colors are:
 
 ```text
-Background:     cool neutral paper
+Background:     warm cream / off-white
 Primary text:   near-black
 Accent:         vivid orange
 Secondary text: muted gray
@@ -21,16 +20,16 @@ Secondary text: muted gray
 The palette, and nothing else, is:
 
 ```text
---bg:         #EDF0F8;   /* the paper: 16.57:1 against --dark */
---fg:         #0B0B0B;   /* the ink: 17.26:1 on --bg */
+--bg:         #F3F0E8;   /* the paper: 16.59:1 against --dark */
+--fg:         #0B0B0B;   /* the ink: 17.28:1 on --bg */
 --accent:     #FF5A1F;   /* surfaces: the button fill, the signal line */
---accent-ink: #C23D00;   /* the accent as text or as a ring: 4.65:1 on the paper */
---muted:      #67696F;   /* 4.81:1 on the paper */
---rule:       #B2B5BE;
---rule-soft:  #CDD1DC;
+--accent-ink: #C23D00;   /* the accent as text or as a ring: 4.66:1 on the paper */
+--muted:      #6B6963;   /* 4.82:1 on the paper; #77756F is only 4.05:1 */
+--rule:       #B8B5AC;
+--rule-soft:  #D5D1C6;
 --rule-dark:  #292823;   /* every hairline inside a dark ground */
---leader-c:   #A3A6AF;
---dark:       #111110;   /* the dark ground: 16.57:1 against --bg */
+--leader-c:   #A9A69D;
+--dark:       #111110;   /* the dark ground: 16.59:1 against --bg */
 ```
 
 These ten values exist once, in `website/tools/pages.json` (`site.tokens`), and
@@ -40,7 +39,7 @@ carries and fails below AA. Nothing else declares a colour: the theme colour
 and the favicon of every page come from the same block, and the greys the
 paper is shaded into (the isometric plates' faces, the blocks' tints, the
 recessed rules) are the paper's partners at the same L* and chroma with the
-cast mirrored — the paper is cool, so the material it is shaded into is cool in
+cast mirrored — the paper is warm, so the material it is shaded into is warm in
 the same proportion. The ink and the dark ground are not paper: they keep their
 values.
 
@@ -935,7 +934,7 @@ callouts: they sit in the paper beside the massif and never point at anything.
 
 The massif is not only the landing's full stop. The reference and every gallery
 plate reuse it — the same cut-out, the same paper ground, the same engraved
-black rock — as a band of rock between text blocks. The world is not forked
+black-and-cream — as a band of rock between text blocks. The world is not forked
 and no second asset enters it:
 
 ```html

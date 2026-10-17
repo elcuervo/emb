@@ -55,10 +55,10 @@ the middle, and the orange line is the brightest thing on the ground.
   `DESIGN.md` rewrite. The visual system is fixed; the composition is open.
 - Atoms only: `rule-head` + rule, ruled ledgers, plates, the axis, the
   annotation form. No cards, gradients, radii, or decorative shadows.
-- The world is the one `DESIGN.md` names after the detector pass: the cool paper,
-  `Public Sans` body, `Archivo` display. The landing adds no colour, font, asset
-  or dependency of its own; the dark block is the page's own `--dark` /
-  `--rule-dark` material inverted, not new material.
+- The world is the one `DESIGN.md` names after the detector pass: the warm cream
+  paper, `Public Sans` body, `Archivo` display. The landing adds no colour,
+  font, asset or dependency of its own; the dark block is the page's own
+  `--dark` / `--rule-dark` material inverted, not new material.
 - Type floor 12px desktop / 14px mobile holds on every ground, and every text and
   control colour is measured against its own background.
 - Code is typeset as code with four token classes, on paper and on dark, all
@@ -92,7 +92,7 @@ full-width cards by making a single orange rule the structure the whole page is
 organised around, and by letting the page invert once rather than varying
 everything slightly.
 
-OWN-WORLD: The palette is unchanged — `#EDF0F8` paper, `#0B0B0B` ink, `#FF5A1F`
+OWN-WORLD: The palette is unchanged — `#F3F0E8` paper, `#0B0B0B` ink, `#FF5A1F`
 as surface, `#C23D00` as ink-accent — and the component language is the poster's:
 hairline rules, tracked mono labels, isometric plate faces (`#111110`,
 `#292823`). With all content removed, what remains is a ruled ledger, a black

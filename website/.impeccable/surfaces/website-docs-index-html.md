@@ -126,7 +126,7 @@ refuses the category default of a sidebar-plus-cards docs layout by using the
 landing's own ruled-ledger, code-specimen and inverted-block atoms, so a reader
 recognizes the project from the first command block.
 
-OWN-WORLD: Identical to the landing and nothing added — `#EDF0F8` paper, `#0B0B0B`
+OWN-WORLD: Identical to the landing and nothing added — `#F3F0E8` paper, `#0B0B0B`
 ink, `#FF5A1F` only as a surface, `#C23D00` as the accent ink, the three
 self-hosted families, hairline rules, tracked mono labels, and the `#111110` /
 `#292823` block inversion and code grounds. With all content removed, what remains

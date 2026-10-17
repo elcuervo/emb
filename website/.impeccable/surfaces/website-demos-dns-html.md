@@ -31,8 +31,8 @@ holding its own model.
 
 ## Constraints (inherited, non-negotiable)
 
-- Inherit the world in `DESIGN.md` as it now stands — the cool paper, `Public
-  Sans` body, `Archivo` display. The plate adds no colour, font, asset,
+- Inherit the world in `DESIGN.md` as it now stands — the warm cream paper,
+  `Public Sans` body, `Archivo` display. The plate adds no colour, font, asset,
   dependency or component language of its own, and spends its one accent on the
   top result's mark.
 - Read with JavaScript disabled: the five sections and the exact commands are

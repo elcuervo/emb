@@ -58,13 +58,6 @@ whatsoever, no checkerboard, no shadows or haze in the background. The
 background must be a single uniform solid color up to the sharp edge of the
 rocks. All rock pixels should remain unchanged. Keep the wide 3:1 aspect.
 
-This edit was made with the paper the page shipped at the time (a warm
-cream). The paper has since moved to the cool neutral in
-`website/tools/pages.json`, and the recipe does not depend on which it is:
-`gen-terrain-matte.py` takes its white point from the artwork's own ground
-level, so a flat ground of either cast cuts the same. Regenerate the source
-with the current `--bg` if the artwork is ever redrawn.
-
 ## The reading breaks
 
 Thirteen `terrain-<name>.png` bands are the same keyed matte, each framing a

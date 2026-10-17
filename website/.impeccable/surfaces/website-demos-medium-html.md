@@ -32,8 +32,8 @@ and that a picture of a sound is not the sound.
 
 ## Constraints (inherited, non-negotiable)
 
-- Inherit the world in `DESIGN.md` as it now stands — the cool paper, `Public
-  Sans` body, `Archivo` display. The plate adds no colour, font, asset,
+- Inherit the world in `DESIGN.md` as it now stands — the warm cream paper,
+  `Public Sans` body, `Archivo` display. The plate adds no colour, font, asset,
   dependency or component language of its own; it composes the gallery's existing
   mark, edge, bar, rule and annotation atoms, and adds only plate-local layout.
 - No upload. Every medium and every picture ships committed; the only visitor
