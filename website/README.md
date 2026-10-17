@@ -64,7 +64,8 @@ website/
 │   │                       own bytes by `just website-topviz`. ~850 KiB of
 │   │                       asciicast that compresses to ~16 KiB, which is why
 │   │                       `_headers` declares its content type
-│   ├── fonts/              self-hosted Archivo, Inter and JetBrains Mono
+│   ├── fonts/              self-hosted Archivo, Public Sans and JetBrains Mono
+│   │                       latin WOFF2 subsets (provenance: § Assets)
 │   └── img/
 │       ├── terrain-matte.png  the cut-out the page ships (2172×724, alpha)
 │       ├── terrain-v2.png  generated rock formation, the matte's source
@@ -97,6 +98,14 @@ website/
 │   ├── stamp-version.py    writes VERSION into every `data-emb-version` element
 │   │                       and into `PRODUCT.md`
 │   ├── stamp-presets.py    writes the preset SHA1s into `data-emb-preset-*`
+│   ├── pages.json          the site's identity: origin, social image, theme
+│   │                       colour, favicon geometry, the palette tokens, and
+│   │                       one entry per page (file, path, title, description,
+│   │                       social texts, indexable)
+│   ├── stamp-pages.py      emits every repeated fact from `pages.json`: each
+│   │                       page's metadata fragment, the `:root` palette block
+│   │                       and `sitemap.xml`. `--check` fails on drift, and the
+│   │                       declared fg/bg pairs must clear their AA contrast
 │   ├── dev-server.py       serves this tree with the console's module origin
 │   │                       pointed at a local bridge (`just website-dev`)
 │   ├── topviz/             the rig behind the emb-top plates: one command
@@ -242,6 +251,7 @@ just website-browser                  # once: fetch Chrome for Testing
 just website-shot                     # full-page screenshot of :8080
 just website-shot http://localhost:8080 /tmp/phone.png 390x844
 just website-version-check            # stamped versions still match VERSION
+just website-pages-check              # pages, palette and sitemap match pages.json
 just website-published                # what ships, the origin, the cache rules
 just website-ink                      # no text ink crosses the viewport
 just website-ink http://localhost:8080 docs   # …on the docs surface
@@ -294,8 +304,22 @@ Two other measurement traps worth knowing before trusting a number:
   SVG-filtered or masked content outside the viewport. The diagram is correct; the
   capture is not. Use a tall viewport, or measure the DOM.
 - **Stylesheets cache silently.** `index.html?cb=N` busts the HTML but not the CSS,
-  and a reload may serve the old sheet. Verify CSS changes in a fresh browser
-  session, or the numbers describe the previous build.
+  and a reload may serve the old sheet — `agent-browser`'s profile caches it as
+  well, so a re-measurement can read the first sheet twice. Run
+  `agent-browser close --all` before a measuring run, or the numbers describe the
+  previous build.
+- **A rendered capture is host-dependent.** `agg` resolves its default
+  font-family through the host's fontconfig, so the frames of `docs/assets/*.gif`
+  depend on the machine's fonts as much as on the theme: re-rendering a committed
+  cast here gives 879px where the committed file is 881px wide, under the same
+  theme. A re-render is deterministic on one machine and not byte-comparable
+  across machines — worth knowing before reading such a diff as a palette change.
+- **One plate fails ink, and it failed before this change.** `demos/dns.html`
+  reports text ink outside the viewport at 390 and 320: one JS-printed reply line
+  (`span.t-dim`, a long escaped-TXT string) inside the console reaches ~490px at
+  those widths. It reproduces on the tree at `24e9f7b` with that tree's own
+  probe, so it is not a regression from the palette, type or inset work — and it
+  is unfixed, pending a decision about whether that line should wrap or scroll.
 
 ### The version check
 
@@ -310,6 +334,46 @@ The same idea covers the sandbox's preset digests: `just website-presets`
 stamps `data-emb-preset-*` from the SHA1 of `website/repl/presets/*.lua`, and
 `just website-presets-check` fails when a preset byte changes under a stamped
 digest. `ci.yml` and `site.yml` both run the check.
+
+### The page check
+
+`website/tools/pages.json` is the site's identity: the origin, the social image,
+the theme colour, the favicon's geometry and colours, the palette tokens, and one
+entry per page (file, request path, title, description, the social texts, whether
+it is indexable). `just website-pages` emits from it — each page's metadata
+fragment between `<!-- meta:start -->` and `<!-- meta:end -->`, the palette block
+inside `:root` in `assets/css/styles.css`, and `sitemap.xml` — and
+`just website-pages-check` fails on any drift, so a hand-edited `<title>` cannot
+disagree with the sitemap, the theme colour or the favicon. Everything the tool
+emits stays committed: the tree still renders with no tooling, which is why the
+fragment sits in the page rather than being assembled at request time.
+
+The tool also measures, because the palette is content and its floors should not
+live in a reviewer's head: every `fg`/`bg` pair the descriptor declares must clear
+the AA contrast it declares (4.5:1 body, 3:1 large), and each colour it emits
+carries the ratio it was measured at. A colour literal anywhere but the descriptor
+is a bug the check cannot see, so do not add one.
+
+### The design detector
+
+The detector is not a CI dependency: it lives outside this repository, with its
+own release cadence, so it is run by hand and its verdict is recorded here rather
+than enforced by a job. On the tree this change ships:
+
+```bash
+~/.pi/agent/skills/impeccable/scripts/impeccable detect website
+# 0 anti-patterns found.
+# 12 advisory notes (not counted).
+```
+
+The twelve are `em-dash-overuse`, advisory by the tool's own contract and a
+deliberate house voice. Two conventions exist because of how the rules read the
+sheet: a component states its **inset floor as a plain length before** the
+responsive logical shorthand that supersedes it (`padding-block`/`padding-inline`
+and `clamp()`/`var()` are not read, so the floor is what the rule can see), and
+the `emb-top` frame's cell height is the named token `--frame-cell: 1.05` rather
+than a literal, since JetBrains Mono draws its box characters 1.23em tall and a
+1.3 cell would leave a sub-pixel seam every row.
 
 ## What ships
 
@@ -346,22 +410,26 @@ agrees on **one** origin, and that `_headers` never pins a `.html`, `.css`, or
 stale page. **Do not delete this check while tidying up:** without it the
 boundary is a comment.
 
-Two of the files above are for a crawler rather than a reader. `robots.txt`
-answers with an explicit `User-agent: *` group, an `Allow: /`, and a `Sitemap`
-line — and with no `Disallow` at all, because nothing this origin serves is
-withheld and a rule naming a path that does not exist would be a policy for some
-other site. `sitemap.xml` names every served page that is indexable, at the
-absolute address the page itself declares. Both are checked against the pages
-rather than trusted: the check fails when the sitemap and the served pages
-disagree in either direction (a page omitted, or an address no page claims),
-when either file's addresses are relative or on another origin, when
-`robots.txt` names no sitemap or one this tree does not serve, and when a
-`Disallow` names a path this origin does not have. The sitemap's addresses come
-from the served tree, not from the page list the metadata check reads —
-`scripting/index.html` and `gem/index.html` are served, declare a canonical, and
-are absent from that list, which is exactly the omission an inventory check has
-to be able to see. `404.html` is out of the sitemap because it says `noindex`
-itself, not because a second list says so.
+Two of the files above are for a crawler rather than a reader, and both are
+emitted by `just website-pages` from `pages.json`. `robots.txt` answers with an
+explicit `User-agent: *` group, an `Allow: /`, and a `Sitemap` line — and with no
+`Disallow` at all, because nothing this origin serves is withheld and a rule
+naming a path that does not exist would be a policy for some other site.
+`sitemap.xml` carries one `<loc>` per page the descriptor marks indexable, at the
+absolute address that page declares, so a page and the inventory cannot disagree
+about an address: neither is typed.
+
+Both are checked rather than trusted. `published-tree.py` derives the expected set
+from the served tree — every served page that declares a canonical and is not
+`noindex` — and fails when the sitemap and the pages disagree in either direction
+(a page omitted, or an address no page claims), when either file's addresses are
+relative or on another origin, when `robots.txt` names no sitemap or one this tree
+does not serve, and when a `Disallow` names a path this origin does not have. It
+reads the served tree rather than the `PAGES` tuple the metadata check uses, and
+deliberately: `scripting/index.html` and `gem/index.html` are served, declare a
+canonical, and are absent from that tuple, which is exactly the omission an
+inventory check has to be able to see. `404.html` is out of the sitemap because it
+says `noindex` itself, not because a second list says so.
 
 The origin is checked for shape but never pinned to `emb.is`. This one tree is
 served from `localhost:8080`, from the Worker's `workers.dev` address, from
@@ -576,19 +644,31 @@ so the live console on a site preview refuses at the bridge; the apex is.
 
 ## Design notes
 
-**Palette** — a warm off-white ground (`#F3F0E8`), near-black ink
+**Palette** — a cool neutral paper (`--bg`, `#EDF0F8`), near-black ink
 (`#0B0B0B`), one vivid orange (`#FF5A1F`) for surfaces, a deeper
 `--accent-ink` (`#C23D00`) for the accent used as text or as a focus ring, a
-muted grey (`#6B6963`) and a leader grey for the annotation steps. No
-gradients, no rounded corners, no shadows except the 5px printed offset under
-the hero button. `#FF5A1F` is 2.74:1 against the paper and `--accent-ink` is
-4.66:1, which is why the accent never carries text or a ring at its surface
-value.
+muted grey (`#67696F`) and a leader grey for the annotation steps. The paper is
+a cool stock, deliberately not the warm cream off-white the detector's
+`cream-palette` rule names; the greys the paper is shaded into (the isometric
+plates' faces, the blocks' tints, the recessed rules) are the paper's partners
+at the same L* and chroma with the cast mirrored, and the ink and the dark
+ground keep their own values. All ten values exist once, in
+`tools/pages.json` (`site.tokens`), and `tools/stamp-pages.py` emits them into
+`:root`, every page's theme colour and favicon, and the sitemap.
+`#FF5A1F` is 2.74:1 against the paper and `--accent-ink` is
+4.65:1, which is why the accent never carries text or a ring at its surface
+value. No gradients, no rounded corners, no shadows except the 5px printed
+offset under the hero button.
 
-**Type** — self-hosted Archivo for the claim, JetBrains Mono for technical
-copy, buttons and labels, and Inter 900 for the masthead brand. The giant
-wordmark uses native SVG outlines matched to the reference, so its silhouette
-does not depend on font metrics. Fonts are preloaded; no CDN is needed.
+**Type** — self-hosted Archivo for the display voice: the claim, the section
+heads, and the masthead's `emb` mark at 900. JetBrains Mono for technical copy,
+buttons and labels, and Public Sans for body text — the same three files the
+pages preload. Archivo replaced Inter as `--display`'s first choice and Public
+Sans replaced it as the body face, because Inter is the one face the design
+detector flags (`overused-font`) and it left the tree with this change; §
+[Assets](#assets) records both subsets' provenance. The giant wordmark uses
+native SVG outlines matched to the reference, so its silhouette does not depend
+on font metrics. Fonts are preloaded; no CDN is needed.
 
 Every technical label is clamped so it cannot compute below **12px on
 `vw`-driven layouts**, and below 1000px the same labels are set at **14px**
@@ -777,7 +857,7 @@ repeated one, made of material already on the page** — the SERVE plate's own
 `#111110` and `#292823`, lit by the spine crossing it in `--accent` at
 **6.06:1**. There is no new palette here, only
 this one turned over. Its `--muted` is remapped to `--rule`, because
-`#6B6963` measures only **3.40:1** on `#111110`.
+the muted grey measures only **3.44:1** on `--dark`.
 
 **Direction contract (console REPL pass).** The console is a *terminal*, not a
 *demonstrator*. One prompt, one transcript, one status strip, and a menu that
@@ -1146,8 +1226,8 @@ sheet's edge cancels those instead.
 capture and the scripts block, so the page closes on the plate's own material
 rather than putting a paper strip back after the photograph. `--muted` is
 remapped to `--rule` there for the same reason it is in the dark block
-(`#6B6963` is only 3.40:1 on `#111110`); measured, the copy is **9.22:1** and
-the `BYTES IN. VECTORS OUT. / EMB` mark is **16.59:1**.
+(the muted grey is only 3.44:1 on `--dark`); measured, the copy is **9.22:1** and
+the `BYTES IN. VECTORS OUT. / EMB` mark is **16.57:1**.
 
 **Accessibility** — real `<header>`, `<nav>`, `<main>`, `<section>`, `<h1>`,
 `<h2>`, `<h3>`, `<footer>`; the giant `emb` is `aria-hidden` decoration and
@@ -1163,7 +1243,29 @@ left out. Every rendered control is at least 44px tall at 320–834px.
 
 ## Assets
 
-- Fonts are self-hosted WOFF2 subsets (latin) from Google Fonts.
+- Fonts are self-hosted WOFF2 subsets (latin) from Google Fonts. The pages
+  preload the three that ship: `archivo-var-latin.woff2` (variable 100–900, the
+  display voice), `public-sans-var-latin.woff2` (variable 100–900, the body
+  face) and `jetbrains-mono-var-latin.woff2` (variable 100–800, the mono voice).
+  No CDN and no build step: they are committed beside the pages.
+- `public-sans-var-latin.woff2` is the latin subset of **Public Sans**, the
+  grotesque that replaced `Inter` as the body face — `Inter` is the one face the
+  design detector flags (`overused-font`), and it is no longer in the tree. Its
+  source is pinned by version, so it can be re-fetched byte-for-byte:
+
+  ```bash
+  curl -fsSL -o website/assets/fonts/public-sans-var-latin.woff2 \
+    https://fonts.gstatic.com/s/publicsans/v21/ijwRs572Xtc6ZYQws9YVwnNGfJ4.woff2
+  # sha256 5ed4d31c988e73b258894244f209069ebe77dc7e564861954b21198b6de90d68
+  ```
+
+  The URL is Google Fonts' variable `wght@100..900` latin file for **Public Sans
+  v21** (the version the family's `css2` endpoint names, `v21`); the upstream
+  typeface is [uswds/public-sans](https://github.com/uswds/public-sans)
+  (v2.001: SIL OFL 1.1 for the Libre Franklin original, CC0 for the GSA
+  modifications, Latin-only). A font subset is versioned by its file, which is
+  why `_headers` may pin `/assets/fonts/*` immutable: re-vendoring a face means
+  a new file beside it, never new bytes under the same name.
 - `terrain-v2.png` was made with the built-in image generation tool using the
   supplied poster as a visual reference. Prompts and provenance are recorded
   in [`assets/img/terrain-v2.md`](assets/img/terrain-v2.md). It is kept as the

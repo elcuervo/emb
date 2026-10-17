@@ -423,6 +423,9 @@ jobs:
       - name: Example controls match the zone's shipped examples
         run: python3 website/tools/stamp-examples.py --check
 
+      - name: Page metadata matches the descriptor
+        run: python3 website/tools/stamp-pages.py --check
+
       - name: Served tree, canonical origin, and cache rules
         run: python3 website/tools/published-tree.py
 

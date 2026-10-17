@@ -145,7 +145,7 @@ rather than as four code samples with prose between them. It refuses the categor
 default of a README restated as a webpage, and it refuses the gallery's own idiom
 of a measured bar, because there is nothing here to measure.
 
-OWN-WORLD: Identical to the rest of the site and nothing added — `#F3F0E8` paper,
+OWN-WORLD: Identical to the rest of the site and nothing added — `#EDF0F8` paper,
 `#0B0B0B` ink, `#FF5A1F` only as a surface and only on the call that carries
 every text, `#C23D00` as accent ink, the three self-hosted families, hairline
 rules, tracked mono labels, and the `#111110` / `#292823` inversion. With all
@@ -210,3 +210,13 @@ scope's commands → the wire* in `THE SCOPE IS PER THREAD`; and *emb, the clien
 complete and animates once as it scrolls into view, and stands still under
 `prefers-reduced-motion`. No command is sent: the page has no sandbox, so these
 are diagrams of the page's own account of the gem.
+
+---
+## Amendment — the world, and this page's caps (2026-10)
+
+`publish-robots-and-sitemap` moved the world off cream — the palette tokens are
+emitted from `website/tools/pages.json` into `styles.css` and into every page's
+theme colour and favicon — and replaced the body face with `Public Sans`, leaving
+`Archivo` as the display voice. On this surface the second `<b>` label also took
+its own caps, so the long uppercase run that the detector counted as
+`all-caps-body` clears: `impeccable detect website` reports zero warnings here.

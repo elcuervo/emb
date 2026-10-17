@@ -82,3 +82,51 @@ would ship without being named as an expected member of the served set.
 
 - **WHEN** either file is added to the site directory without being named in the served set
 - **THEN** the site's own check reports it as a file that would ship unexpectedly, and publication does not depend on someone remembering it
+
+### Requirement: Every repeated fact about a page is emitted from one descriptor
+
+Each served page's canonical address, social-preview metadata, theme colour and
+favicon SHALL be emitted into its `<head>` from one committed descriptor per
+page, and the sitemap SHALL be emitted from that same descriptor, so a page
+cannot state an address the inventory does not carry, or the inventory an
+address no page declares. The descriptor MUST be the only place those values are
+written, and the emitted fragment MUST sit inside the page's own committed
+markup rather than being assembled at request time, because the tree has to
+render for a reader with no tooling and for a crawler that does not run scripts.
+
+#### Scenario: A page's address has one author
+
+- **WHEN** a page's canonical address, title or description changes
+- **THEN** the change is made in the descriptor, and after regeneration the page and the sitemap both carry it
+
+#### Scenario: The metadata is in the response
+
+- **WHEN** a served page's HTML is fetched without running scripts
+- **THEN** its canonical, social-preview, theme-colour and favicon metadata are present in the markup
+
+#### Scenario: Drift is reported rather than published
+
+- **WHEN** a committed page or the sitemap disagrees with the descriptor
+- **THEN** the site's own check fails and names the file, before any publication
+
+#### Scenario: A page cannot join the site without a descriptor
+
+- **WHEN** a page is added to the served set
+- **THEN** it appears in the sitemap only through a descriptor entry, and the checks fail until it has one
+
+### Requirement: The palette and the contrast floor are one checked source
+
+The site's colour tokens SHALL be emitted from the same descriptor as its pages,
+and every text and ground pair the site ships MUST meet WCAG AA contrast on its
+own ground: 4.5:1 for body text, 3:1 for large text. The check MUST report a
+pair below the floor rather than the value reaching a reader.
+
+#### Scenario: A token change is measured, not assumed
+
+- **WHEN** a colour token changes
+- **THEN** contrast is recomputed for every text and ground pair in the same check, and a pair below AA fails it
+
+#### Scenario: The theme colour follows the ground
+
+- **WHEN** the paper ground changes
+- **THEN** the theme colour and the favicon emitted into every page carry the new ground, because both are emitted from the tokens rather than typed per page

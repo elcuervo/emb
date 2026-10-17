@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
+<!-- meta:start -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — demos: the medium — identify the tune, describe the music and the footage</title>
 <link rel="canonical" href="https://emb.is/demos/medium.html">
 <meta name="description" content="A Shazam-style fingerprint names the exact recording from a noisy four-second excerpt, computed live in the browser. Beside it, real models answer the semantic question: CLAP retrieves music by a phrase, and X-CLIP retrieves footage by a phrase, both over an index built offline and queried live.">
-<meta name="theme-color" content="#F3F0E8">
+<meta name="theme-color" content="#EDF0F8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — demos: the medium — name the tune, find the moment">
 <meta property="og:site_name" content="emb">
@@ -19,8 +20,10 @@
 <meta name="twitter:title" content="emb — demos: the medium — name the tune, find the moment">
 <meta name="twitter:description" content="A fingerprint names the exact recording; an embedding says what kind of thing it is.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23EDF0F8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
 
+<link rel="preload" href="../assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/css/styles.css">
@@ -95,7 +98,7 @@
             · <b data-fig-frames>&#8230;</b> clips
             · <b data-fig-model>clip</b>
             · <b data-fig-dim>&#8230;</b> dimensions</p>
-          <p class="fig"><b>CORPUS</b> · Five open-licensed music excerpts and one public-domain clip, all committed with the gallery; the fingerprint database is built from the shipped audio.</p>
+          <p class="fig fig--as-written"><b>CORPUS</b> · Five open-licensed music excerpts and one public-domain clip, all committed with the gallery; the fingerprint database is built from the shipped audio.</p>
         </div>
       </div>
     </section>
@@ -260,8 +263,23 @@ function setState(next, message) {
 
 /* ── the fingerprint rig ─────────────────────────────────────────────── */
 
-/* The site's own ramp, so a spectrogram is drawn in the plate's palette. */
-const RAMP = [[0, [11, 11, 11]], [0.3, [107, 105, 99]], [0.62, [194, 61, 0]], [0.82, [255, 90, 31]], [1, [243, 240, 232]]];
+/* The site's own ramp, so a spectrogram is drawn in the plate's palette -- read
+   from the tokens the stylesheet carries rather than typed, because the palette
+   has one source (`website/tools/pages.json`) and a literal here would be a
+   second copy of it to go stale. `:root` is the element the tokens are declared
+   on, so a dark ground's `--muted` remap cannot reach this. */
+function token(name) {
+  const hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim().slice(1);
+  return [0, 2, 4].map((at) => parseInt(hex.slice(at, at + 2), 16));
+}
+const PAPER = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+const RAMP = [
+  [0, token('--fg')],
+  [0.3, token('--muted')],
+  [0.62, token('--accent-ink')],
+  [0.82, token('--accent')],
+  [1, token('--bg')],
+];
 function ramp(t) {
   t = Math.max(0, Math.min(1, t));
   for (let i = 0; i < RAMP.length - 1; i++) {
@@ -291,7 +309,7 @@ function renderSpectrogram(canvas, db, bins, frames, peaks) {
     }
   }
   ctx.putImageData(image, 0, 0);
-  ctx.fillStyle = '#F3F0E8';
+  ctx.fillStyle = PAPER;
   (peaks || []).forEach((p) => { ctx.fillRect(p.t, bins - 1 - p.f, Math.max(1, frames / 400), Math.max(1, bins / 200)); });
 }
 function renderVotes(ranked, tracks) {

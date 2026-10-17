@@ -4,29 +4,45 @@ The overall composition is deliberately oversized, asymmetric, and information-d
 
 # Overall visual direction
 
-The page uses a warm off-white background rather than pure white. The surface should feel slightly tactile and printed, almost like archival paper or an engineering datasheet.
+The page uses a cool neutral paper rather than pure white. The surface should
+feel slightly tactile and printed, almost like archival paper or an engineering
+datasheet — but it is a cool stock, deliberately not the warm cream off-white
+that has become the default "tasteful" surface.
 
 The dominant colors are:
 
 ```text
-Background:     warm cream / off-white
+Background:     cool neutral paper
 Primary text:   near-black
 Accent:         vivid orange
 Secondary text: muted gray
 ```
 
-A reasonable palette would be:
+The palette, and nothing else, is:
 
 ```text
---background: #F3F0E8;
---foreground: #0B0B0B;
+--bg:         #EDF0F8;   /* the paper: 16.57:1 against --dark */
+--fg:         #0B0B0B;   /* the ink: 17.26:1 on --bg */
 --accent:     #FF5A1F;   /* surfaces: the button fill, the signal line */
---accent-ink: #C23D00;   /* the accent as text or as a ring: 4.66:1 on the paper */
---muted:      #6B6963;   /* 4.82:1 on the paper; #77756F is only 4.05:1 */
---rule:       #B8B5AC;
---rule-soft:  #D5D1C6;
---leader-c:   #A9A69D;
+--accent-ink: #C23D00;   /* the accent as text or as a ring: 4.65:1 on the paper */
+--muted:      #67696F;   /* 4.81:1 on the paper */
+--rule:       #B2B5BE;
+--rule-soft:  #CDD1DC;
+--rule-dark:  #292823;   /* every hairline inside a dark ground */
+--leader-c:   #A3A6AF;
+--dark:       #111110;   /* the dark ground: 16.57:1 against --bg */
 ```
+
+These ten values exist once, in `website/tools/pages.json` (`site.tokens`), and
+are emitted into `:root` in `website/assets/css/styles.css` by
+`website/tools/stamp-pages.py` — which also measures the contrast each pair
+carries and fails below AA. Nothing else declares a colour: the theme colour
+and the favicon of every page come from the same block, and the greys the
+paper is shaded into (the isometric plates' faces, the blocks' tints, the
+recessed rules) are the paper's partners at the same L* and chroma with the
+cast mirrored — the paper is cool, so the material it is shaded into is cool in
+the same proportion. The ink and the dark ground are not paper: they keep their
+values.
 
 `#FF5A1F` is 2.74:1 against the paper. It is a surface colour: it may fill a
 button or draw the signal, and it may never be the only thing that
@@ -57,11 +73,34 @@ The site should visually communicate:
 
 Typography is the main visual element.
 
-There should be three distinct typographic roles.
+There should be three distinct typographic roles. All three are self-hosted
+latin WOFF2 subsets, preloaded by every page, and none is a face the design
+detector flags:
+
+* **`Archivo`** (variable 100–900) — the display voice: the giant wordmark's
+  neighbouring headlines, the masthead's `emb`, the claim and the section heads.
+* **`Public Sans`** (variable 100–900) — the body face, a low-contrast grotesque.
+* **`JetBrains Mono`** (variable 100–800) — the technical voice: labels,
+  metadata, diagrams, annotations.
+
+The giant wordmark itself is drawn as native SVG outlines, so its silhouette
+does not depend on any face; the masthead's small mark is `Archivo` at 900.
+
+**Measures the detector pass fixed** (`publish-robots-and-sitemap`). The floor is
+12px desktop / 14px mobile for every functional label, including the labels inside
+a plate's own diagram, and it now holds on every ground: the plate labels that sat
+at 10–10.5px were raised to it. Two steps were made explicit rather than left
+inside a `clamp()` — the section heads settle at 34px from 1360px up, and
+`demos/medium.html`'s third level is 16px — because a hierarchy a reader cannot
+see in the sheet is one nobody maintains. The frame the `emb-top` plate replays
+keeps its one-cell leading as a named token, `--frame-cell: 1.05`: JetBrains Mono
+draws its box characters 1.23em tall, so a 1.3 cell would leave a sub-pixel seam
+every row, and `assets/js/topviz.js` hands the player the same 1.05 so the still
+frame and the take stay on one grid.
 
 ## Display type
 
-The giant `emb` wordmark and major headlines use an extremely heavy grotesk sans-serif.
+The giant `emb` wordmark and major headlines use an extremely heavy grotesk sans-serif — `Archivo`, at 750–900.
 
 It should be:
 
@@ -89,7 +128,7 @@ The typography should feel closer to printed poster design than a normal website
 
 ## Monospace type
 
-Technical labels, metadata, navigation, diagrams, annotations, and system text use a monospace font.
+Technical labels, metadata, navigation, diagrams, annotations, and system text use a monospace font — `JetBrains Mono`.
 
 Examples:
 
@@ -118,7 +157,7 @@ It gives the page the feeling of:
 
 ## Body type
 
-Descriptions can use either a clean sans-serif or mono depending on section.
+Descriptions can use either a clean sans-serif or mono depending on section — `Public Sans` for prose, `JetBrains Mono` where the surface is technical.
 
 Use conventional body typography sparingly.
 
@@ -896,7 +935,7 @@ callouts: they sit in the paper beside the massif and never point at anything.
 
 The massif is not only the landing's full stop. The reference and every gallery
 plate reuse it — the same cut-out, the same paper ground, the same engraved
-black-and-cream — as a band of rock between text blocks. The world is not forked
+black rock — as a band of rock between text blocks. The world is not forked
 and no second asset enters it:
 
 ```html

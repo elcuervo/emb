@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
+<!-- meta:start -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — a fast embedding server that speaks the Redis protocol</title>
 <link rel="canonical" href="https://emb.is/">
 <meta name="description" content="emb is a simple yet powerful inference server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache, multi-model queries.">
-<meta name="theme-color" content="#F3F0E8">
+<meta name="theme-color" content="#EDF0F8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — a fast embedding server that speaks the Redis protocol">
 <meta property="og:site_name" content="emb">
@@ -19,8 +20,9 @@
 <meta name="twitter:title" content="emb — a fast embedding server that speaks the Redis protocol">
 <meta name="twitter:description" content="A fast embedding server that speaks the Redis protocol.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
-<link rel="preload" href="assets/fonts/inter-900-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23EDF0F8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
+<link rel="preload" href="assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/css/asciinema-player-3.17.0.css">
@@ -244,13 +246,13 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
       <feBlend in2="SourceGraphic" mode="multiply"/>
     </filter>
     <pattern id="edge-lines" width="23" height="24" patternUnits="userSpaceOnUse">
-      <path d="M0 0V24M2 0V24M0 7H23" fill="none" stroke="#F3F0E8" stroke-width=".6"/>
+      <path d="M0 0V24M2 0V24M0 7H23" fill="none" stroke="var(--bg)" stroke-width=".6"/>
     </pattern>
     <pattern id="p-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
       <path d="M0 0H20M0 0V20" fill="none" stroke="#0B0B0B" stroke-width="1.1"/>
     </pattern>
     <pattern id="p-fine" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="matrix(1 0.326 -1 0.326 0 0)">
-      <path d="M0 0H24M0 0V24" fill="none" stroke="#F3F0E8" stroke-width=".65"/>
+      <path d="M0 0H24M0 0V24" fill="none" stroke="var(--bg)" stroke-width=".65"/>
     </pattern>
     <linearGradient id="ramp" x1="0" y1=".62" x2="1" y2=".06">
       <stop offset="0" stop-color="#000"/><stop offset=".28" stop-color="#000"/>
@@ -294,37 +296,37 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
         <path d="M364 422 L182 482 L182 506 L364 446Z" fill="url(#edge-lines)" opacity=".3"/>
         <path d="M182 363 L364 422 L182 482 L0 422Z" fill="#111110"/>
         <path d="M182 363 L364 422 L182 482 L0 422Z" fill="url(#p-fine)" opacity=".45"/>
-        <path d="M206.0 386.5L206.0 376.5L70.0 420.8M70.0 420.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 384.3L297.0 421.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 394.0L229.0 384.0L93.0 428.3M93.0 428.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 391.8L274.0 429.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 401.5L252.0 391.5L116.0 435.8M116.0 435.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 399.3L251.0 436.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 409.0L275.0 399.0L139.0 443.3M139.0 443.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 406.8L228.0 444.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 416.5L298.0 406.5L162.0 450.8M162.0 450.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 414.3L205.0 451.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M206.0 386.5L206.0 364.5L70.0 408.8M70.0 408.8V430.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 372.3L297.0 409.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 394.0L229.0 372.0L93.0 416.3M93.0 416.3V438.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 379.8L274.0 417.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 401.5L252.0 379.5L116.0 423.8M116.0 423.8V445.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 387.3L251.0 424.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 409.0L275.0 387.0L139.0 431.3M139.0 431.3V453.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 394.8L228.0 432.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 416.5L298.0 394.5L162.0 438.8M162.0 438.8V460.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 402.3L205.0 439.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="none" stroke="#F3F0E8" stroke-width="1.2"/>
+        <path d="M206.0 386.5L206.0 376.5L70.0 420.8M70.0 420.8V430.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 384.3L297.0 421.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 384.0L93.0 428.3M93.0 428.3V438.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 391.8L274.0 429.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 391.5L116.0 435.8M116.0 435.8V445.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 399.3L251.0 436.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 399.0L139.0 443.3M139.0 443.3V453.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 406.8L228.0 444.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 406.5L162.0 450.8M162.0 450.8V460.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 414.3L205.0 451.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 386.5L206.0 364.5L70.0 408.8M70.0 408.8V430.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 372.3L297.0 409.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 394.0L229.0 372.0L93.0 416.3M93.0 416.3V438.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 379.8L274.0 417.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 401.5L252.0 379.5L116.0 423.8M116.0 423.8V445.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 387.3L251.0 424.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 409.0L275.0 387.0L139.0 431.3M139.0 431.3V453.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 394.8L228.0 432.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 416.5L298.0 394.5L162.0 438.8M162.0 438.8V460.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 402.3L205.0 439.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M182 363 L364 422 L182 482 L0 422Z" fill="none" stroke="var(--bg)" stroke-width="1.2"/>
         <text class="plate-label plate-label--light" transform="matrix(1 -0.326 1 0.326 48 431)">REDIS</text>
       </g>
 
       <!-- ── 03 EMBEDDING -->
       <g class="slab" data-slab="embedding" data-depth="2" filter="url(#plate-grain)">
-        <path d="M364 303 L182 363 L182 387 L364 327Z" fill="#C9C6BD"/>
-        <path d="M0 303 L182 363 L182 387 L0 327Z" fill="#BDBAB1"/>
+        <path d="M364 303 L182 363 L182 387 L364 327Z" fill="#C3C6CF"/>
+        <path d="M0 303 L182 363 L182 387 L0 327Z" fill="#B7BAC3"/>
         <path d="M0 303 L182 363 L182 387 L0 327Z" fill="url(#edge-lines)" opacity=".3"/>
         <path d="M364 303 L182 363 L182 387 L364 327Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="#E9E6DC"/>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="#E3E6F0"/>
         <path d="M182 244 L364 303 L182 363 L0 303Z" fill="url(#p-grid)" opacity=".09"/>
         <g class="cube-field">
           <use href="#cube" class="cb cb--d" transform="translate(190.5 261.2) scale(0.30)"/>
@@ -376,53 +378,53 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
           <use href="#cube" class="cb cb--o" transform="translate(187.9 333.0) scale(0.35)"/>
           <use href="#cube" class="cb cb--d" transform="translate(203.4 338.7) scale(0.24)"/>
         </g>
-        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <path d="M182 244 L364 303 L182 363 L0 303Z" fill="none" stroke="var(--bg)" stroke-width="1"/>
         <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 312)">VECTORS</text>
       </g>
 
       <!-- ── 02 INFERENCE -->
       <g class="slab" data-slab="inference" data-depth="3" filter="url(#plate-grain)">
-        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="#C9C6BD"/>
-        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="#BDBAB1"/>
+        <path d="M364 184 L182 244 L182 268 L364 208Z" fill="#C3C6CF"/>
+        <path d="M0 184 L182 244 L182 268 L0 208Z" fill="#B7BAC3"/>
         <path d="M0 184 L182 244 L182 268 L0 208Z" fill="url(#edge-lines)" opacity=".3"/>
         <path d="M364 184 L182 244 L182 268 L364 208Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#E9E6DC"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#E3E6F0"/>
         <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-grid)" opacity=".5"/>
         <g mask="url(#ramp-mask)">
           <path d="M182 125 L364 184 L182 244 L0 184Z" fill="#0B0B0B"/>
           <path d="M182 125 L364 184 L182 244 L0 184Z" fill="url(#p-fine)" opacity=".45"/>
         </g>
-        <path d="M206.0 148.5L206.0 138.5L70.0 182.8M70.0 182.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 146.3L297.0 183.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 156.0L229.0 146.0L93.0 190.3M93.0 190.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 153.8L274.0 191.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 163.5L252.0 153.5L116.0 197.8M116.0 197.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 161.3L251.0 198.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 171.0L275.0 161.0L139.0 205.3M139.0 205.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 168.8L228.0 206.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 178.5L298.0 168.5L162.0 212.8M162.0 212.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 176.3L205.0 213.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M206.0 148.5L206.0 126.5L70.0 170.8M70.0 170.8V192.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182.0 134.3L297.0 171.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M229.0 156.0L229.0 134.0L93.0 178.3M93.0 178.3V200.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M159.0 141.8L274.0 179.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M252.0 163.5L252.0 141.5L116.0 185.8M116.0 185.8V207.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M136.0 149.3L251.0 186.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M275.0 171.0L275.0 149.0L139.0 193.3M139.0 193.3V215.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M113.0 156.8L228.0 194.3" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M298.0 178.5L298.0 156.5L162.0 200.8M162.0 200.8V222.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M90.0 164.3L205.0 201.8" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>
-        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <path d="M206.0 148.5L206.0 138.5L70.0 182.8M70.0 182.8V192.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 146.3L297.0 183.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 146.0L93.0 190.3M93.0 190.3V200.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 153.8L274.0 191.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 153.5L116.0 197.8M116.0 197.8V207.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 161.3L251.0 198.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 161.0L139.0 205.3M139.0 205.3V215.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 168.8L228.0 206.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 168.5L162.0 212.8M162.0 212.8V222.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 176.3L205.0 213.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M206.0 148.5L206.0 126.5L70.0 170.8M70.0 170.8V192.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M182.0 134.3L297.0 171.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M229.0 156.0L229.0 134.0L93.0 178.3M93.0 178.3V200.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M159.0 141.8L274.0 179.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M252.0 163.5L252.0 141.5L116.0 185.8M116.0 185.8V207.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M136.0 149.3L251.0 186.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M275.0 171.0L275.0 149.0L139.0 193.3M139.0 193.3V215.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M113.0 156.8L228.0 194.3" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M298.0 178.5L298.0 156.5L162.0 200.8M162.0 200.8V222.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M90.0 164.3L205.0 201.8" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>
+        <path d="M182 125 L364 184 L182 244 L0 184Z" fill="none" stroke="var(--bg)" stroke-width="1"/>
         <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 193)">MODEL</text>
       </g>
 
       <!-- ── 01 INPUT -->
       <g class="slab" data-slab="input" data-depth="4" filter="url(#plate-grain)">
-        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="#C9C6BD"/>
-        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="#BDBAB1"/>
+        <path d="M364 65 L182 125 L182 149 L364 89Z" fill="#C3C6CF"/>
+        <path d="M0 65 L182 125 L182 149 L0 89Z" fill="#B7BAC3"/>
         <path d="M0 65 L182 125 L182 149 L0 89Z" fill="url(#edge-lines)" opacity=".3"/>
         <path d="M364 65 L182 125 L182 149 L364 89Z" fill="url(#edge-lines)" opacity=".3"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="#EFECE3"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="#E9ECF5"/>
         <path d="M182 6 L364 65 L182 125 L0 65Z" fill="url(#p-grid)" opacity=".065"/>
         <ellipse cx="188.0" cy="18.4" rx="1.8" ry=".8" fill="#34332F"/>
         <ellipse cx="204.0" cy="43.8" rx="1.8" ry=".8" fill="#34332F"/>
@@ -470,7 +472,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
         <ellipse cx="192.0" cy="56.9" rx="1.8" ry=".8" fill="#34332F"/>
         <ellipse cx="208.0" cy="82.3" rx="1.8" ry=".8" fill="#34332F"/>
         <ellipse cx="200.0" cy="24.3" rx="1.8" ry=".8" fill="#34332F"/>
-        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="#F3F0E8" stroke-width="1"/>
+        <path d="M182 6 L364 65 L182 125 L0 65Z" fill="none" stroke="var(--bg)" stroke-width="1"/>
         <text class="plate-label" transform="matrix(1 -0.326 1 0.326 48 74)">TEXT</text>
       </g>
 

@@ -15,10 +15,16 @@
    Self-hosted, preloaded in <head>. Each file is the *only* cut we ship,
    so the weight ranges are declared wide: any requested weight maps to the
    real file instead of letting the browser synthesise a thinner/fatter one
-   (`body{font-synthesis-weight:none}` then guarantees no fake bold). */
+   (`body{font-synthesis-weight:none}` then guarantees no fake bold).
+
+   Public Sans is the body face and Archivo the display voice; both are
+   variable (a `wght` axis), which is why either can answer 100-900. The
+   display voice used to lead with Inter, which the design detector flags as
+   an overused face: it is gone from the tree, so no face here is flagged.
+   Provenance for each file is in `website/README.md` (§ Assets). */
 @font-face{
-  font-family: "Inter";
-  src: url("../fonts/inter-900-latin.woff2") format("woff2");
+  font-family: "Public Sans";
+  src: url("../fonts/public-sans-var-latin.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -40,23 +46,40 @@
 
 /* ── 00 tokens ─────────────────────────────────────────────────────── */
 :root{
-  --bg:        #F3F0E8;
-  --fg:        #0B0B0B;
-  --accent:    #FF5A1F;
-  /* accent as ink: 4.66:1 on the paper, so it can carry text and ring a
-     control. #FF5A1F itself is 2.74:1 and is a surface colour only -- it
-     must never be the only thing distinguishing a focus ring or a label. */
-  --accent-ink:#C23D00;
-  --muted:     #6B6963;
-  --rule:      #B8B5AC;
-  --rule-soft: #D5D1C6;
-  /* the hairline and plate edge on the #111110 dark-block ground; the light
-     --rule would be 9.22:1 there and read as a bright line, not a hairline */
-  --rule-dark: #292823;
-  --leader-c:  #A9A69D;
+/* tokens:start */
+  --bg:         #EDF0F8;   /* 16.57:1 on --dark */
+  --fg:         #0B0B0B;   /* 17.26:1 on --bg */
+  --accent:     #FF5A1F;   /* 6.06:1 on --dark */
+  --accent-ink: #C23D00;   /* 4.65:1 on --bg */
+  --muted:      #67696F;   /* 4.81:1 on --bg */
+  --rule:       #B2B5BE;
+  --rule-soft:  #CDD1DC;
+  --rule-dark:  #292823;
+  --leader-c:   #A3A6AF;
+  --dark:       #111110;
+/* tokens:end */
+  /* THE PAPER-TUNED --muted, CAUGHT AT :root. A dark ground remaps `--muted`
+     to `--rule` (`.block--dark` and `.footer` both do), and two paper
+     surfaces live inside those grounds: the checked ticket button, and the
+     examples bar. They need the muted the paper uses, which the remap would
+     otherwise swallow -- and they used to state it as a literal, which is one
+     more copy of a token to go stale. A custom property is substituted where
+     it is declared, so this one keeps :root's value wherever it inherits. */
+  --muted-paper: var(--muted);
   /* the stepped leader: its run, and the notes' inline padding (= the gap
      between the plate's right edge and the note's own box) */
   --lead: 31px;
+
+  /* THE FRAME'S CELL -- the one leading on the site that is not the page's.
+     The terminal plate's frame, and the cast player that takes it over, are
+     drawn in a cell grid: box-drawing characters only meet when a line box is
+     one cell tall, and JetBrains Mono draws them 1.23em high, so the cell has
+     to stay under that (at the page's own 1.7 the verticals arrive as dashes
+     and each model's line drifts from its row). It is a NUMBER and never a
+     length, because the cell scales with the frame's own font-size, and
+     `topviz.js` hands the player the same number so the still frame and the
+     take it plays share one cell. */
+  --frame-cell: 1.05;
 
   --maxw: 1720px;
   --gut: clamp(22px, 3.7vw, 64px);
@@ -163,8 +186,8 @@
   --band: max(var(--art-h), clamp(210px, 27.66vw, calc(.2766 * var(--maxw))));
 
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --display: "Inter", "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --sans: "Public Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 /* ── 01 base ───────────────────────────────────────────────────────── */
@@ -284,6 +307,11 @@ button{ font: inherit; color: inherit; }
   width: 100%;
   max-width: var(--maxw);
   margin-inline: auto;
+  /* The gutter's floor, as a physical length, then the responsive form that
+     supersedes it. One of the two is legible without evaluating a `clamp()`,
+     which is the rule every inset pair on this sheet follows: the content
+     inside a ground always states the margin it never goes under. */
+  padding: 0 22px;
   padding-inline: var(--pad-l) var(--pad-r);
 }
 .mono{ font-family: var(--mono); }
@@ -385,6 +413,12 @@ button{ font: inherit; color: inherit; }
 .masthead__brand{ display: flex; align-items: center; gap: clamp(14px, 2.65vw, 44px); min-width: 0; }
 .brand{
   font-family: var(--display);
+  /* the mark's weight is declared, not inherited: the display voice used to be
+     a single 900-weight file whose descriptor covered 100-900, so every
+     `--display` element rendered at 900 whatever weight it asked for. Archivo
+     is variable, so a 400 here would draw the wordmark in its regular cut.
+     The mark is the one element that keeps the 900 the reference poster has. */
+  font-weight: 900;
   font-size: clamp(1.6rem, 3.15vw, 3rem);
   line-height: .9;
   letter-spacing: -.04em;
@@ -563,7 +597,10 @@ button{ font: inherit; color: inherit; }
 }
 
 .claim{
-  font-family: var(--sans);
+  /* display type, so it follows the display token: the claim shipped in
+     Archivo at 750 before the body face changed, and Archivo is now
+     `--display` (it used to be `--sans`). Same face, same weight. */
+  font-family: var(--display);
   font-weight: 750;
   font-size: clamp(2rem, 3.95vw, 4.7rem);
   line-height: .95;
@@ -598,7 +635,8 @@ button{ font: inherit; color: inherit; }
    as a treatment and this page never uses one. */
 .hero__start{
   margin-top: clamp(24px, 2.6vw, 42px);
-  padding-top: clamp(14px, 1.5vw, 22px);
+  padding: 14px 0 0;
+  padding-block: clamp(14px, 1.5vw, 22px) 0;
   border-top: 1px solid var(--rule);
   display: grid;
   gap: clamp(10px, 1.1vw, 17px);
@@ -793,10 +831,14 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 }
 .plate-label--light{ fill: var(--bg); }
 
-/* isometric blocks, tinted through custom properties */
-.cb{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
-.cb--w{ --ct:#F3F0E8; --cl:#C9C5BA; --cr:#B4B0A5; }
-.cb--g{ --ct:#B8B4A9; --cl:#8E8B82; --cr:#7C7970; }
+/* isometric blocks, tinted through custom properties.
+   The paper face is the token; the five greys below it are the paper's own
+   material, shaded: each is --bg's partner at the same L* and chroma with its
+   cast mirrored (see DESIGN.md, "Palette"). The dark family is the dark ground
+   and keeps its values. */
+.cb{ --ct:var(--bg); --cl:#C1C5D0; --cr:#ACB0BB; }
+.cb--w{ --ct:var(--bg); --cl:#C1C5D0; --cr:#ACB0BB; }
+.cb--g{ --ct:#B0B4BF; --cl:#888B94; --cr:#767982; }
 .cb--d{ --ct:#3A3833; --cl:#1E1D19; --cr:#141310; }
 
 /* annotations + stepped leaders */
@@ -892,7 +934,7 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 
    The dark block is an inversion, not a new palette: it is made of material
    already on the page, the SERVE plate's own #111110 and #292823. Its --muted
-   is remapped to --rule because #6B6963 is only 3.40:1 on #111110.
+   is remapped to --rule because --muted is only 3.44:1 on --dark.
 
    Blocks carry padding and NEVER vertical margins: on the landing that is what
    lets consecutive spine segments abut with no seam. */
@@ -905,11 +947,12 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .block__body{
   position: relative;
   z-index: 1;
+  padding: 34px 0;
   padding-block: clamp(34px, 4vw, 62px);
 }
 .block--paper{ background: var(--bg); }
 .block--dark{
-  background: #111110;
+  background: var(--dark);
   color: var(--bg);
   --muted: var(--rule);
 }
@@ -930,7 +973,7 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   background: var(--fg);
   color: var(--bg);
   padding: clamp(11px, 1.15vw, 16px) clamp(14px, 1.5vw, 22px);
-  font-family: var(--sans);
+  font-family: var(--display);
   font-weight: 750;
   font-size: clamp(19px, 2.5vw, 34px);
   letter-spacing: -.005em;
@@ -939,6 +982,14 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   text-transform: uppercase;
 }
 .block--dark .block__head{ background: var(--bg); color: var(--fg); }
+
+/* The head's clamp settles at its 34px ceiling from 1360px up (2.5vw reaches 34
+   there), so the settled size is stated at that breakpoint: the rule below can
+   never disagree with the curve above it, and the display step the page renders
+   is legible in the sheet instead of only inside a `clamp()`'s endpoints. The
+   same posture the sheet already takes below 1000px, where the small type is
+   set explicitly rather than left to `vw`. */
+@media (min-width: 1360px){ .block__head{ font-size: 34px; } }
 
 /* The prose column ends before the lane and the facts begin after it, so no
    body text can ever sit on the line. The gap either side is --fold-gap, and
@@ -1044,10 +1095,10 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .examples__group{
   /* A paper bar inside the dark block, so it takes the paper's ink back:
      `--muted` is remapped to `--rule` for everything inside `.block--dark`, and
-     `--rule` on paper is a hairline, not a text colour. The literal is
-     `:root`'s own value -- 4.82:1 on --bg -- and is the colour the standalone
-     terminal's own bar uses for the same hint. */
-  --muted: #6B6963;
+     `--rule` on paper is a hairline, not a text colour. `--muted-paper` is
+     `:root`'s own muted, caught above that remap -- 4.81:1 on --bg -- and is
+     the colour the standalone terminal's own bar uses for the same hint. */
+  --muted: var(--muted-paper);
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1202,7 +1253,8 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .code{
   margin-top: clamp(18px, 2vw, 30px);
   border-top: 1px solid var(--rule);
-  padding-top: clamp(12px, 1.3vw, 18px);
+  padding: 12px 0 0;
+  padding-block: clamp(12px, 1.3vw, 18px) 0;
 }
 .block--dark .code{ border-top-color: var(--rule-dark); }
 .code__body{
@@ -1245,6 +1297,7 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
   margin-top: clamp(20px, 2.2vw, 32px);
   border-top: 1px solid #292823;
   border-bottom: 1px solid #292823;
+  padding: 12px 0;
   padding-block: clamp(12px, 1.4vw, 20px);
   font-family: var(--mono);
   font-size: clamp(12.5px, 1.25vw, 16px);
@@ -1277,6 +1330,7 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
 .uses__i{
   display: flex;
   gap: 10px;
+  padding: 9px 0;
   padding-block: clamp(9px, 1vw, 13px);
   border-bottom: 1px solid #292823;
   color: var(--rule);
@@ -1308,7 +1362,19 @@ html.js .pipeline.is-live .sig-hole.is-hot{ translate: 0 -6px; }
      rides over the seam into the block above. */
   overflow-x: clip;
 }
-.terrain > .shell{ padding-block: 0; height: 100%; z-index: 3; }
+.terrain > .shell{
+  /* The band's content inset floor: the annotations sit a gutter in and
+     clamp(20px, 3.7vw, 52px) down from the band's own edges, so the ground
+     states 20px as its block floor and the gutter as its inline one. The
+     logical pair below supersedes both: the band's height is the artwork's, so
+     the shell itself carries no block padding and the shell's own inline inset
+     is the gutter's, not a second one. */
+  padding: 20px 22px;
+  padding-block: 0;
+  padding-inline: var(--pad-l) var(--pad-r);
+  height: 100%;
+  z-index: 3;
+}
 /* same reason as .block__body: the positioned box must be the content box */
 .terrain__inner{ position: relative; height: 100%; }
 /* the spine ends exactly where the artwork begins: the route's trunk starts
@@ -1487,7 +1553,7 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
      it, exactly as it passes behind the hero's slabs */
   position: relative;
   z-index: 1;
-  background: #111110;
+  background: var(--dark);
   border: 1px solid var(--bg);
   color: var(--bg);
   font-family: var(--mono);
@@ -1503,7 +1569,8 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   justify-content: space-between;
   gap: 10px 16px;
   flex-wrap: wrap;
-  padding: 4px clamp(12px, 1.5vw, 18px);
+  padding: 4px 12px;
+  padding-inline: clamp(12px, 1.5vw, 18px);
   border-bottom: 1px solid var(--rule-dark);
 }
 /* The strip is the bar's own bar: it names the console's condition, carries
@@ -1571,7 +1638,9 @@ html.js .route--signal{ stroke-dasharray: 1; stroke-dashoffset: 1; }
   max-height: clamp(264px, 21vw, 336px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: clamp(14px, 1.6vw, 22px) clamp(12px, 1.5vw, 18px);
+  padding: 14px 12px;
+  padding-block: clamp(14px, 1.6vw, 22px);
+  padding-inline: clamp(12px, 1.5vw, 18px);
 }
 .console__out{
   margin: 0;
@@ -1706,8 +1775,10 @@ html.js .console__form{
   position: relative;
   z-index: 1;
   margin: 12px 0 0;
-  padding: clamp(12px, 1.4vw, 18px);
-  background: #111110;
+  padding: 12px;
+  padding-block: clamp(12px, 1.4vw, 18px);
+  padding-inline: clamp(12px, 1.4vw, 18px);
+  background: var(--dark);
   border: 1px solid var(--bg);
   color: var(--bg);
   overflow: hidden;
@@ -1716,7 +1787,7 @@ html.js .console__form{
   margin: 0;
   font-family: var(--mono);
   font-size: clamp(12px, 1.02vw, 13px);
-  line-height: 1.05;
+  line-height: calc(var(--frame-cell));
   white-space: pre;
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1730,24 +1801,27 @@ html.js .console__form{
    has to win against that element's own defaults: this sheet is linked after
    the player's. */
 .asciinema-player-theme-plate{
+  /* The paper and the muted are the tokens themselves; the rest of the sixteen
+     entries are the justfile's `agg --theme` -- the recorder's string, which
+     this has to agree with because it draws the same take. */
   --term-color-background: #111110;
-  --term-color-foreground: #F3F0E8;
+  --term-color-foreground: var(--bg);
   --term-color-0:  #111110;
   --term-color-1:  #A8442A;
   --term-color-2:  #6E8B7B;
   --term-color-3:  #B08C4F;
   --term-color-4:  #FF5A1F;
   --term-color-5:  #B4736A;
-  --term-color-6:  #8C8880;
-  --term-color-7:  #F3F0E8;
-  --term-color-8:  #6B6963;
+  --term-color-6:  #848991;
+  --term-color-7:  var(--bg);
+  --term-color-8:  var(--muted);
   --term-color-9:  #C23D00;
   --term-color-10: #7FA37A;
   --term-color-11: #C9A227;
   --term-color-12: #6B7F8C;
-  --term-color-13: #C9C4B8;
+  --term-color-13: #BFC5D0;
   --term-color-14: #8FA9A0;
-  --term-color-15: #F3F0E8;
+  --term-color-15: var(--bg);
 }
 /* The player brings its own window chrome; the plate already is one. Its edge
    is left alone on purpose: the player draws it in the terminal's own
@@ -1769,9 +1843,9 @@ html.js .console__form{
    capture and the scripts block: #111110, the SERVE plate's own face. It
    closes the page under the massif rather than putting a paper strip back
    after the photograph. --muted is remapped for the same reason it is in the
-   dark block: #6B6963 is only 3.40:1 on #111110. */
+   dark block: --muted is only 3.44:1 on --dark. */
 .footer{
-  background: #111110;
+  background: var(--dark);
   color: var(--bg);
   --muted: var(--rule);
 }
@@ -2280,8 +2354,8 @@ html.js.is-ready .hero__prose{
   /* The page inverts once, and these are the surfaces that carry light text on a
      dark ground: the scripts block, the console, the emb-top capture, the footer,
      the masthead's dark button, the block header bars, and the skip link. Chrome
-     strips background graphics by default, which printed `color: var(--bg)`
-     (#F3F0E8) on white -- legible on screen, invisible on paper.
+     strips background graphics by default, which printed `color: var(--bg)` on
+     white -- legible on screen, invisible on paper.
      `print-color-adjust: exact` keeps the ground the design chose rather than
      re-colouring a whole type ladder for print.
      The header bars and the skip link were MISSED by the first version of this
@@ -2321,7 +2395,8 @@ html.js.is-ready .hero__prose{
    the ruled figure caption carrying the index's real numbers. */
 .plate__head{
   border-top: 2px solid var(--fg);
-  padding-top: clamp(10px, 1.1vw, 16px);
+  padding: 10px 0 0;
+  padding-block: clamp(10px, 1.1vw, 16px) 0;
   display: grid;
   grid-template-columns: minmax(0, var(--col-prose)) minmax(0, 1fr);
   column-gap: clamp(20px, 3vw, 56px);
@@ -2375,6 +2450,14 @@ html.js.is-ready .hero__prose{
   font-variant-numeric: tabular-nums;
 }
 .block--dark .fig{ border-top-color: var(--rule-dark); color: var(--rule); }
+/* A caption whose case is written in the markup rather than made by a
+   transform: `CORPUS` and a long label row state their own caps, and a note
+   that reads as a sentence is not a caps row at all. The transform and the
+   tracking are the caption atom's default -- together they are what turn an
+   authored `dimensions` into a tracked label -- and this is the one variant
+   that opts out of both, so no caption shouts a paragraph and no paragraph is
+   tracked like a label. */
+.fig--as-written{ text-transform: none; letter-spacing: normal; }
 .fig b{ color: var(--fg); font-weight: 500; }
 /* Labels are caps, values are not: the model name and the index's filename are
    proper nouns, and the design's own caption writes them that way. */
@@ -2504,7 +2587,7 @@ html.js.is-ready .hero__prose{
    its own and its controls wrap under it. */
 .rig__pick__fam{
   flex-basis: 100%; border-left: 0;
-  font-family: var(--mono); font-size: 10px; letter-spacing: .16em;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
   text-transform: uppercase; color: var(--rule);
   padding: 10px clamp(10px, 1.1vw, 16px) 2px;
 }
@@ -2513,7 +2596,8 @@ html.js.is-ready .hero__prose{
   font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
   text-transform: uppercase; color: var(--rule);
   background: transparent; border: 0; border-left: 1px solid var(--rule-dark);
-  padding: 0 clamp(10px, 1.1vw, 16px); min-height: 44px; cursor: pointer;
+  padding: 12px 10px; min-height: 44px; cursor: pointer;
+  padding-inline: clamp(10px, 1.1vw, 16px);
 }
 .rig__pick > :first-child{ border-left: 0; }
 .rig__pick__fam + button{ border-left: 0; }
@@ -2545,7 +2629,7 @@ html.js.is-ready .hero__prose{
 .atlas{ margin-top: clamp(14px, 1.6vw, 22px); }
 .atlas__svg{
   display: block; width: 100%; height: auto;
-  border: 1px solid var(--rule-dark); background: #111110;
+  border: 1px solid var(--rule-dark); background: var(--dark);
 }
 .atlas__mark{ fill: var(--rule); }
 .atlas__mark.is-hit{ fill: var(--accent); }
@@ -2590,7 +2674,7 @@ html.js.is-ready .hero__prose{
   margin-bottom: clamp(14px, 1.6vw, 22px);
 }
 .samples button{
-  aspect-ratio: 1; padding: 0; border: 0; background: #111110; cursor: pointer;
+  aspect-ratio: 1; padding: 0; border: 0; background: var(--dark); cursor: pointer;
   overflow: hidden; position: relative;
 }
 .samples img{
@@ -2611,7 +2695,9 @@ html.js.is-ready .hero__prose{
   gap: 1px; background: var(--rule-dark);
   border: 1px solid var(--rule-dark); margin-top: clamp(14px, 1.6vw, 22px);
 }
-.shape{ background: #111110; padding: clamp(12px, 1.3vw, 18px); min-width: 0; }
+.shape{ background: var(--dark); padding: 12px;
+  padding-block: clamp(12px, 1.3vw, 18px);
+  padding-inline: clamp(12px, 1.3vw, 18px); min-width: 0; }
 .shape__h{
   font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
   text-transform: uppercase; color: var(--rule); margin: 0 0 10px;
@@ -2629,7 +2715,8 @@ html.js.is-ready .hero__prose{
 /* The gallery index: the reading order, as a ruled numbered ledger. */
 .ord{ list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
 .ord__i{
-  border-bottom: 1px solid var(--rule); padding: clamp(10px, 1.1vw, 16px) 0;
+  border-bottom: 1px solid var(--rule); padding: 10px 0;
+  padding-block: clamp(10px, 1.1vw, 16px);
   display: grid; grid-template-columns: 3.2ch minmax(0, 1fr) minmax(0, 1.1fr);
   gap: clamp(10px, 1.6vw, 32px); align-items: baseline;
 }
@@ -2697,6 +2784,7 @@ html.js.is-ready .hero__prose{
   grid-template-columns: minmax(0, 1fr) max-content minmax(220px, 288px);
   column-gap: clamp(14px, 2vw, 34px);
   align-items: center;
+  padding: 15px 0;
   padding-block: clamp(15px, 1.7vw, 23px);
   border-bottom: 1px solid var(--rule);
 }
@@ -3107,6 +3195,11 @@ html.js.is-ready .hero__prose{
 }
 .plate-nav__t{
   font-family: var(--display), var(--sans), sans-serif;
+  /* the plate's own name is a plate title, so it carries the weight the other
+     titles get from the heading rules. It used to inherit the display token's
+     single 900-weight cut, which made every title on the site the same weight;
+     the display voice is variable now, so the weight has to be said. */
+  font-weight: 700;
   font-size: clamp(15px, 1.5vw, 21px);
   line-height: 1.1;
   color: var(--fg);
@@ -3151,7 +3244,9 @@ html.js.is-ready .hero__prose{
 .tickets__btn[aria-checked="true"] .tickets__meta{ color: var(--muted); }
 .tickets__q{ font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tickets__meta{ color: var(--rule); letter-spacing: .04em; }
-.block--dark .tickets__btn[aria-checked="true"] .tickets__meta{ color: #6B6963; }
+/* the button keeps the paper ground inside the dark block, so its meta needs
+   the paper's muted, not the dark block's `--rule` remap */
+.block--dark .tickets__btn[aria-checked="true"] .tickets__meta{ color: var(--muted-paper); }
 
 .sheet{
   margin-top: clamp(14px, 1.6vw, 22px);
@@ -3220,13 +3315,13 @@ html.js.is-ready .hero__prose{
 .sheet__opt.is-win .sheet__fill,
 .sheet__row--choice .sheet__fill.is-win{ background: var(--accent); }
 .sheet__row--noul .sheet__fill{ background: var(--accent); }
-.sheet__val{ color: #6B6963; text-align: right; }
+.sheet__val{ color: var(--muted); text-align: right; }
 .sheet__split-labels{
   display: flex;
   justify-content: space-between;
   gap: 12px;
   margin-top: 4px;
-  color: #6B6963;
+  color: var(--muted);
   font-size: clamp(10.5px, 0.9vw, 12px);
 }
 .sheet__ruler{
@@ -3254,12 +3349,12 @@ html.js.is-ready .hero__prose{
   flex-wrap: wrap;
   gap: 4px 18px;
   margin-top: 6px;
-  color: #6B6963;
+  color: var(--muted);
   font-size: clamp(10.5px, 0.9vw, 12px);
 }
 .sheet__conf{
   text-align: right;
-  color: #6B6963;
+  color: var(--muted);
   white-space: nowrap;
   font-size: clamp(11px, 0.95vw, 12.5px);
 }
@@ -3298,7 +3393,7 @@ html.js.is-ready .hero__prose{
   position: absolute;
   top: 15px;
   transform: translateX(-50%);
-  color: #6B6963;
+  color: var(--muted);
   font-family: var(--mono);
   font-size: clamp(10px, 0.9vw, 11.5px);
 }
@@ -3307,7 +3402,7 @@ html.js.is-ready .hero__prose{
   position: absolute;
   top: 26px;
   transform: translateX(-50%);
-  color: #6B6963;
+  color: var(--muted);
   font-family: var(--mono);
   font-size: clamp(9.5px, 0.85vw, 11px);
   letter-spacing: .04em;
@@ -3341,7 +3436,7 @@ html.js.is-ready .hero__prose{
   padding: 1px 7px;
   border: 1px solid var(--rule-dark);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: .07em;
   color: var(--muted);
   text-transform: uppercase;
@@ -3454,9 +3549,9 @@ html.js.is-ready .hero__prose{
   width: 100%;
   height: auto;
   border: 1px solid var(--rule-dark);
-  background: #111110;
+  background: var(--dark);
 }
-.snake__bg{ fill: #111110; }
+.snake__bg{ fill: var(--dark); }
 .snake__grid{ stroke: #23221e; stroke-width: 1; }
 .snake__body{ fill: #3f6b58; }
 .snake__head{ fill: var(--accent); }
@@ -3470,16 +3565,16 @@ html.js.is-ready .hero__prose{
   width: 100%;
   height: auto;
   border: 1px solid var(--rule-dark);
-  background: #111110;
+  background: var(--dark);
 }
-.pac__bg{ fill: #111110; }
+.pac__bg{ fill: var(--dark); }
 .pac__wall{ fill: #3f6b58; }
 .pac__dot{ fill: var(--bg); }
 .pac__power{ fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
 .pac__player{ fill: var(--accent); }
 .pac__ghost{ fill: var(--rule); }
 .pac__ghost.is-frightened{ fill: var(--bg); }
-.pac__eye{ fill: #111110; }
+.pac__eye{ fill: var(--dark); }
 .snakestats{ margin: 0; }
 .snakestats__line{
   margin: 0 0 6px;
@@ -3500,7 +3595,9 @@ html.js.is-ready .hero__prose{
    one column per typed question, one ruled track per option leaf. */
 .qtree{ margin-top: clamp(14px, 1.6vw, 22px); }
 .qtree__inner{
-  padding: clamp(12px, 1.5vw, 18px);
+  padding: 12px;
+  padding-block: clamp(12px, 1.5vw, 18px);
+  padding-inline: clamp(12px, 1.5vw, 18px);
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--rule);
@@ -3516,12 +3613,12 @@ html.js.is-ready .hero__prose{
   background: var(--bg); border: 1px solid var(--rule);
 }
 .ddag__state{ fill: var(--rule-soft); stroke: var(--fg); stroke-width: 2; }
-.ddag__statek{ fill: var(--accent-ink); font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; }
+.ddag__statek{ fill: var(--accent-ink); font-family: var(--mono); font-size: 12px; letter-spacing: .1em; }
 .ddag__statev{ fill: var(--fg); font-family: var(--mono); font-size: 12px; }
 .ddag__q{ fill: var(--bg); stroke: var(--fg); stroke-width: 1.5; }
 .ddag__q--choice{ stroke: var(--accent); stroke-width: 2; }
 .ddag__qid{ fill: var(--fg); font-family: var(--mono); font-size: 12px; font-weight: 700; }
-.ddag__qtype{ fill: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; }
+.ddag__qtype{ fill: var(--muted); font-family: var(--mono); font-size: 12px; letter-spacing: .08em; }
 .ddag__a{ fill: var(--bg); stroke: var(--rule); stroke-width: 1.5; }
 .ddag__node--a.is-decided .ddag__a{ fill: var(--accent); stroke: var(--fg); stroke-width: 2; }
 .ddag__decision{ fill: var(--muted); font-family: var(--mono); font-size: 13px; font-weight: 700; }
@@ -3545,7 +3642,7 @@ html.js.is-ready .hero__prose{
   border-bottom: 1px solid var(--rule);
 }
 .qtree__k{
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--accent-ink);
@@ -3573,7 +3670,7 @@ html.js.is-ready .hero__prose{
   padding: 1px 6px;
   background: var(--fg);
   color: var(--bg);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -3621,7 +3718,8 @@ html.js.is-ready .hero__prose{
   grid-template-columns: minmax(130px, auto) minmax(0, 1fr);
   gap: 8px 22px;
   margin: clamp(14px, 1.6vw, 22px) 0 0;
-  padding-top: clamp(12px, 1.4vw, 18px);
+  padding: 12px 0 0;
+  padding-block: clamp(12px, 1.4vw, 18px) 0;
   border-top: 1px solid var(--rule);
 }
 .api dt{
@@ -3758,7 +3856,7 @@ button.rec__gw:focus-visible{ outline: 2px solid var(--accent); outline-offset: 
    Composed from the gallery's own atoms: hairline rules, tracked mono labels,
    the dark plate, the accent spent once per figure. No card, no radius.
    ═══════════════════════════════════════════════════════════════════════ */
-.media__h{ margin:clamp(30px,3.4vw,54px) 0 4px; font-family:var(--mono); font-size:12px; letter-spacing:.16em;
+.media__h{ margin:clamp(30px,3.4vw,54px) 0 4px; font-family:var(--mono); font-size:16px; letter-spacing:.16em;
   text-transform:uppercase; color:var(--muted); }
 .media__h:first-of-type{ margin-top:0; }
 .media__lede{ margin:0 0 18px; max-width:62ch; color:var(--muted); font-size:14px; line-height:1.6; }
