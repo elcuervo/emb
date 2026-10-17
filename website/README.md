@@ -334,7 +334,7 @@ the same two commands on every pull request:
 
 | Set | Members |
 |---|---|
-| **Served** | `index.html`, `404.html`, `docs/index.html`, `styles.css`, `docs.css`, `main.js`, three WOFF2 subsets, `terrain-matte.png`, `og.png`, `speckle.svg` |
+| **Served** | `index.html`, `robots.txt`, `sitemap.xml`, `404.html`, `docs/index.html`, `styles.css`, `docs.css`, `main.js`, three WOFF2 subsets, `terrain-matte.png`, `og.png`, `speckle.svg` |
 | **Ignored** | `tools/`, `repl/`, `.impeccable/`, `PRODUCT.md`, `README.md`, `terrain-v2.png`, `terrain-v2.md` |
 | **Platform config** | `.assetsignore`, `_headers` — read, never served |
 
@@ -345,6 +345,23 @@ agrees on **one** origin, and that `_headers` never pins a `.html`, `.css`, or
 `.js` path `immutable` — the one way the cache policy could serve a reader a
 stale page. **Do not delete this check while tidying up:** without it the
 boundary is a comment.
+
+Two of the files above are for a crawler rather than a reader. `robots.txt`
+answers with an explicit `User-agent: *` group, an `Allow: /`, and a `Sitemap`
+line — and with no `Disallow` at all, because nothing this origin serves is
+withheld and a rule naming a path that does not exist would be a policy for some
+other site. `sitemap.xml` names every served page that is indexable, at the
+absolute address the page itself declares. Both are checked against the pages
+rather than trusted: the check fails when the sitemap and the served pages
+disagree in either direction (a page omitted, or an address no page claims),
+when either file's addresses are relative or on another origin, when
+`robots.txt` names no sitemap or one this tree does not serve, and when a
+`Disallow` names a path this origin does not have. The sitemap's addresses come
+from the served tree, not from the page list the metadata check reads —
+`scripting/index.html` and `gem/index.html` are served, declare a canonical, and
+are absent from that list, which is exactly the omission an inventory check has
+to be able to see. `404.html` is out of the sitemap because it says `noindex`
+itself, not because a second list says so.
 
 The origin is checked for shape but never pinned to `emb.is`. This one tree is
 served from `localhost:8080`, from the Worker's `workers.dev` address, from

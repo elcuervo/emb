@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The inventory this origin publishes, in the Sitemaps protocol's document shape.
+
+  Each <loc> is the absolute address the page itself declares as canonical, so
+  this document and the pages cannot disagree about an address. `404.html` is
+  absent because it declares `noindex` and claims no canonical address at all.
+
+  Nothing here is typed twice. `website/tools/published-tree.py` reads the
+  canonical address of every served page and fails when this list differs from
+  them, so a page added, renamed, or re-canonicalized cannot ship with this
+  document out of step with it.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://emb.is/</loc></url>
+  <url><loc>https://emb.is/docs/</loc></url>
+  <url><loc>https://emb.is/scripting/</loc></url>
+  <url><loc>https://emb.is/gem/</loc></url>
+  <url><loc>https://emb.is/demos/</loc></url>
+  <url><loc>https://emb.is/demos/atlas.html</loc></url>
+  <url><loc>https://emb.is/demos/batch.html</loc></url>
+  <url><loc>https://emb.is/demos/cache.html</loc></url>
+  <url><loc>https://emb.is/demos/dns.html</loc></url>
+  <url><loc>https://emb.is/demos/function.html</loc></url>
+  <url><loc>https://emb.is/demos/graph.html</loc></url>
+  <url><loc>https://emb.is/demos/image.html</loc></url>
+  <url><loc>https://emb.is/demos/laya.html</loc></url>
+  <url><loc>https://emb.is/demos/lens.html</loc></url>
+  <url><loc>https://emb.is/demos/medium.html</loc></url>
+  <url><loc>https://emb.is/demos/multilingual.html</loc></url>
+  <url><loc>https://emb.is/demos/search.html</loc></url>
+  <url><loc>https://emb.is/demos/similarity.html</loc></url>
+  <url><loc>https://emb.is/demos/vector.html</loc></url>
+</urlset>
