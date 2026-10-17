@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
+<!-- meta:start -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — the Ruby client: one call, one command, and the shape of your call site</title>
 <link rel="canonical" href="https://emb.is/gem/">
 <meta name="description" content="How the emb Ruby gem turns a call site into one EMB or one EMB.MULTI: the four wire shapes, the create-then-consume rule, fail-closed batches, and the emb-server gem that ships the server as a precompiled binary.">
-<meta name="theme-color" content="#F3F0E8">
+<meta name="theme-color" content="#EDF0F8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — the Ruby client: one call, one command, and the shape of your call site">
 <meta property="og:site_name" content="emb">
@@ -19,8 +20,10 @@
 <meta name="twitter:title" content="emb — the Ruby client: one call, one command, and the shape of your call site">
 <meta name="twitter:description" content="Four execution modes, four wire shapes, and the one rule that decides how many commands a scope costs.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23EDF0F8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
 
+<link rel="preload" href="../assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/css/styles.css">
@@ -213,8 +216,8 @@
           </div>
         </dl>
 
-        <p class="fig"><b>THE SHAPE THE CLIENT SENDS</b>
-          · <b>a count of commands, not a stopwatch</b>
+        <p class="fig fig--as-written"><b>THE SHAPE THE CLIENT SENDS</b>
+          · <b>A COUNT OF COMMANDS, NOT A STOPWATCH</b>
           · the sandbox runs the server and not Ruby, so no run of the gem is
           observable from a page — every number here is the shipped slicing
           code's own arithmetic, and every bar is that count drawn to scale.</p>

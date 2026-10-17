@@ -1,0 +1,17 @@
+# What this origin offers a crawler.
+#
+# Everything the Worker serves is public: the landing page, the documentation,
+# the scripting reference, the Ruby client page, the demos gallery, and the
+# assets they load. The sandbox that backs the console is not part of the site
+# and is excluded at the boundary (`.assetsignore`), so no path here is worth
+# withholding -- and none is: no `Disallow` rule is published, because a rule
+# naming a path this origin does not serve would be a policy for some other
+# site. A crawler is answered by this one group.
+
+User-agent: *
+Allow: /
+
+# The inventory: every served page that is indexable, at the absolute address
+# the page itself declares. `website/tools/published-tree.py` fails when this
+# list and the served pages disagree.
+Sitemap: https://emb.is/sitemap.xml

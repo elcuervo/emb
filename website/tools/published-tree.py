@@ -3,8 +3,8 @@
 
 `website/` is both the working tree and the publish source: the pages are edited
 where they are served from, and `.assetsignore` is the only thing between an
-authoring file and a public URL. Two classes of mistake follow from that, and
-neither is visible by reading the ignore file or the markup alone:
+authoring file and a public URL. Four classes of mistake follow from that, and
+none is visible by reading the ignore file or the markup alone:
 
 1. **The served set.** A missing line in `.assetsignore` publishes a file; a
    stray glob in it can publish a broken page. Checked against an explicit
@@ -25,6 +25,12 @@ neither is visible by reading the ignore file or the markup alone:
    `stamp-*.py` checks read — so a change can re-record one take, leave its
    sibling at an older build, and still pass every gate in CI. Checked by
    reading the recorded-run label beside each mount and requiring one version.
+4. **The crawl surface.** `robots.txt` and `sitemap.xml` are the tree's own
+   statement about itself to a crawler, and a statement is worth checking rather
+   than trusting: the sitemap must name exactly the canonical addresses the
+   served pages declare, and the directives must point at that sitemap and at no
+   path this origin does not have. Nothing else compares them, so a page added
+   or re-canonicalized would otherwise leave the inventory behind.
 
     python3 website/tools/published-tree.py
 
@@ -43,14 +49,45 @@ import json
 import posixpath
 import re
 import sys
+import xml.etree.ElementTree as ET
 from fnmatch import fnmatchcase
 from pathlib import Path
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SITE_DIR = REPO_ROOT / "website"
 IGNORE_FILE = SITE_DIR / ".assetsignore"
 HEADERS_FILE = SITE_DIR / "_headers"
 WRANGLER_CONFIG = REPO_ROOT / "wrangler.jsonc"
+
+# The two files a crawler reads at the root. Both are served artifacts and both
+# are the tree's statement about itself, so they are checked against the pages
+# rather than trusted: the sitemap must name exactly the canonical addresses the
+# served pages declare, and the directives must name that sitemap and no path
+# this origin does not have.
+ROBOTS_FILE = "robots.txt"
+SITEMAP_FILE = "sitemap.xml"
+SITEMAP_URLSET = "{http://www.sitemaps.org/schemas/sitemap/0.9}urlset"
+SITEMAP_LOC = "{http://www.sitemaps.org/schemas/sitemap/0.9}loc"
+
+# An absolute http(s) URL, and the origin it names. Matched rather than parsed,
+# so that "is this address absolute, and on whose origin" has one answer in this
+# file: the page metadata and both crawl-surface files are asked the same way.
+ABSOLUTE_URL = re.compile(r"^(https?://[^/]+)(?:/|$)")
+
+# A page's declaration of its own address. One pattern, used by the metadata
+# check below and by the sitemap check at the end, so the two cannot come to
+# disagree about what a canonical link is.
+CANONICAL = re.compile(r"""<link[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']*)["']""", re.I)
+
+# A page's declaration that it should not be indexed. The word is what counts,
+# not the directive list it sits in: `noindex` and `noindex, follow` both mean
+# the page stays out of the inventory.
+NOINDEX = re.compile(r"""<meta[^>]*\bname=["']robots["'][^>]*\bcontent=["']([^"']*)["']""", re.I)
+
+# `Sitemap: <url>` in a robots.txt, read line by line so a commented one cannot
+# count as a reference the file does not actually make.
+ROBOTS_SITEMAP = re.compile(r"^\s*Sitemap:\s*(\S+)\s*$", re.I | re.M)
 
 # The origin is deliberately NOT pinned here. This one tree is served from
 # localhost, from a workers.dev address, from per-branch preview aliases and from
@@ -68,6 +105,10 @@ SERVED = frozenset(
     {
         "index.html",
         "404.html",
+        # The root files a crawler reads. They ship, and the crawl-surface
+        # checks at the end of this file keep them true of the pages beside them.
+        "robots.txt",
+        "sitemap.xml",
         "docs/index.html",
         "scripting/index.html",
         "gem/index.html",
@@ -124,8 +165,8 @@ SERVED = frozenset(
         "assets/cast/emb-top-cluster-1508a5af.cast",
         "assets/js/asciinema-player-3.17.0.min.js",
         "assets/fonts/archivo-var-latin.woff2",
-        "assets/fonts/inter-900-latin.woff2",
         "assets/fonts/jetbrains-mono-var-latin.woff2",
+        "assets/fonts/public-sans-var-latin.woff2",
         "assets/img/terrain-matte.png",
         "assets/img/terrain-bluff.png",
         "assets/img/terrain-crag.png",
@@ -187,7 +228,7 @@ PAGES = (
     "demos/multilingual.html",
 )
 ABSOLUTE_METADATA = (
-    ("canonical", re.compile(r"""<link[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']*)["']""", re.I)),
+    ("canonical", CANONICAL),
     ("og:url", re.compile(r"""<meta[^>]*\bproperty=["']og:url["'][^>]*\bcontent=["']([^"']*)["']""", re.I)),
     ("og:image", re.compile(r"""<meta[^>]*\bproperty=["']og:image["'][^>]*\bcontent=["']([^"']*)["']""", re.I)),
     ("twitter:image", re.compile(r"""<meta[^>]*\bname=["']twitter:image["'][^>]*\bcontent=["']([^"']*)["']""", re.I)),
@@ -577,7 +618,7 @@ def check_url_metadata() -> tuple[list[str], str | None]:
                 problems.append(f"missing:      website/{page} has no {label}")
                 continue
             for value in found:
-                match = re.match(r"^(https?://[^/]+)(?:/|$)", value)
+                match = ABSOLUTE_URL.match(value)
                 if not match:
                     problems.append(
                         f"relative:     website/{page} {label}={value!r} "
@@ -628,6 +669,190 @@ def check_wrangler_route(origin: str | None) -> list[str]:
     return []
 
 
+def indexable_canonicals() -> tuple[dict[str, str], list[str]]:
+    """Every served page's own canonical address, and the problems reading them.
+
+    Read from the served tree rather than from `PAGES`: that tuple names the
+    pages which must declare their metadata, and it is not the served set — it
+    omits `scripting/index.html` and `gem/index.html`, which are served and do
+    declare a canonical. Deriving the sitemap's expected set from it would bless
+    a document missing two pages, so the set is derived from what ships.
+
+    A page that declares `noindex` is excluded by its own markup, which is how
+    `404.html` stays out without a list to maintain. A page that is served,
+    indexable, and declares no canonical is a problem rather than a silent
+    omission, because no sitemap could name it.
+    """
+    canonicals: dict[str, str] = {}
+    problems: list[str] = []
+    served = sorted(
+        page for page in set(SERVED) | index_files()[0] if page.endswith(".html")
+    )
+    for page in served:
+        source = (SITE_DIR / page).read_text(encoding="utf-8")
+        if any("noindex" in value.lower() for value in NOINDEX.findall(source)):
+            continue
+        found = CANONICAL.findall(source)
+        if not found:
+            problems.append(
+                f"missing:      website/{page} is served and declares no canonical address, "
+                f"so the sitemap cannot name it"
+            )
+            continue
+        for value in found:
+            if value in canonicals:
+                problems.append(
+                    f"duplicate:    website/{page} and website/{canonicals[value]} both claim "
+                    f"{value} as their canonical address"
+                )
+                continue
+            canonicals[value] = page
+    return canonicals, problems
+
+
+def read_sitemap() -> tuple[list[str], list[str]]:
+    """The addresses the served sitemap names, and the problems reading it."""
+    path = SITE_DIR / SITEMAP_FILE
+    if not path.exists():
+        return [], [f"absent:       website/{SITEMAP_FILE} (the tree's inventory)"]
+    try:
+        root = ET.parse(path).getroot()
+    except ET.ParseError as err:
+        return [], [f"unreadable:   website/{SITEMAP_FILE} is not well-formed XML ({err})"]
+    if root.tag != SITEMAP_URLSET:
+        return [], [
+            f"unreadable:   website/{SITEMAP_FILE} is not a <urlset> in the sitemap namespace"
+        ]
+    locs: list[str] = []
+    problems: list[str] = []
+    for found in root.iter(SITEMAP_LOC):
+        value = (found.text or "").strip()
+        if not value:
+            problems.append(
+                f"empty:        website/{SITEMAP_FILE} carries a <loc> with no address"
+            )
+            continue
+        locs.append(value)
+    return locs, problems
+
+
+def check_sitemap(origin: str | None) -> list[str]:
+    """Assert the sitemap names exactly the served pages' canonical addresses.
+
+    Both directions are checked, and both are the point: a page the sitemap
+    omits is a page a crawler cannot reach from the inventory, and an address the
+    sitemap invents resolves to nothing. Comparing the two sets is what makes a
+    page that was added, renamed or re-canonicalized fail here instead of
+    shipping with an inventory that no longer describes it.
+    """
+    canonicals, problems = indexable_canonicals()
+    locs, read_problems = read_sitemap()
+    problems += read_problems
+
+    listed: set[str] = set()
+    for value in locs:
+        if value in listed:
+            problems.append(f"duplicate:    website/{SITEMAP_FILE} lists {value} twice")
+            continue
+        listed.add(value)
+        match = ABSOLUTE_URL.match(value)
+        if not match:
+            problems.append(
+                f"relative:     website/{SITEMAP_FILE} lists {value!r} "
+                f"(must be an absolute http(s) URL)"
+            )
+        elif origin and match.group(1) != origin:
+            problems.append(
+                f"split origin: website/{SITEMAP_FILE} lists {value} — "
+                f"the pages declare {origin}"
+            )
+        elif value not in canonicals:
+            problems.append(
+                f"unclaimed:    website/{SITEMAP_FILE} lists {value}, which is no served "
+                f"page's canonical address"
+            )
+    for value, page in sorted(canonicals.items(), key=lambda item: item[1]):
+        if value not in listed:
+            problems.append(
+                f"unlisted:     website/{page} declares {value} and the sitemap omits it"
+            )
+    print(f"published-tree: sitemap lists {len(listed)} of {len(canonicals)} indexable page(s)")
+    return problems
+
+
+def check_robots(origin: str | None) -> list[str]:
+    """Assert the directives are complete, and about this origin's own tree.
+
+    What a crawler reads is a policy, so a file with no group states nothing, and
+    a group with no rule states nothing either. Beyond that the file has to be
+    about this site: the sitemap it names must be an address this origin serves,
+    and a `Disallow` must name a path this origin actually has rather than a
+    boilerplate exclusion carried over from another tree.
+    """
+    path = SITE_DIR / ROBOTS_FILE
+    if not path.exists():
+        return [f"absent:       website/{ROBOTS_FILE} (the tree's crawl policy)"]
+
+    source = path.read_text(encoding="utf-8")
+    problems: list[str] = []
+    directives = [
+        line.strip()
+        for line in source.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not any(line.lower().startswith("user-agent:") for line in directives):
+        problems.append(f"no group:     website/{ROBOTS_FILE} states no User-agent group")
+    if not any(line.lower().startswith(("allow:", "disallow:")) for line in directives):
+        problems.append(
+            f"no rule:      website/{ROBOTS_FILE} states no Allow or Disallow rule, so a "
+            f"crawler reads a group that decides nothing"
+        )
+
+    served_paths = {url for url, _ in served_urls()}
+    for line in directives:
+        name, _, value = line.partition(":")
+        target = value.strip()
+        # An empty `Disallow:` is the allow-everything idiom, not a restriction,
+        # so it names no path to check.
+        if name.strip().lower() != "disallow" or not target:
+            continue
+        if not any(
+            fnmatchcase(served, target) or served.startswith(target)
+            for served in served_paths
+        ):
+            problems.append(
+                f"not served:   website/{ROBOTS_FILE} disallows {target!r}, which is no path "
+                f"this origin serves"
+            )
+
+    references = ROBOTS_SITEMAP.findall(source)
+    if not references:
+        problems.append(
+            f"no sitemap:   website/{ROBOTS_FILE} names no Sitemap, so nothing points a "
+            f"crawler at the inventory"
+        )
+    for value in references:
+        match = ABSOLUTE_URL.match(value)
+        if not match:
+            problems.append(
+                f"relative:     website/{ROBOTS_FILE} names Sitemap {value!r} "
+                f"(must be an absolute http(s) URL)"
+            )
+            continue
+        if origin and match.group(1) != origin:
+            problems.append(
+                f"split origin: website/{ROBOTS_FILE} names Sitemap {value} — "
+                f"the pages declare {origin}"
+            )
+            continue
+        if (urlsplit(value).path or "/") not in served_paths:
+            problems.append(
+                f"unserved:     website/{ROBOTS_FILE} names Sitemap {value}, which this "
+                f"tree does not serve"
+            )
+    return problems
+
+
 def main() -> int:
     problems = []
     problems += check_published_set(read_ignore_patterns())
@@ -637,6 +862,8 @@ def main() -> int:
     problems += check_cache_rules()
     problems += check_internal_links()
     problems += check_take_versions()
+    problems += check_sitemap(origin)
+    problems += check_robots(origin)
 
     if problems:
         print("published-tree: the published tree does not match what we mean", file=sys.stderr)

@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
+<!-- meta:start -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — the decision engine: typed questions, one forward pass</title>
 <link rel="canonical" href="https://emb.is/demos/laya.html">
 <meta name="description" content="Laya is a decision model. A state goes in; a tree of typed questions — choice, score, noul — is answered by one forward pass. See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.">
-<meta name="theme-color" content="#F3F0E8">
+<meta name="theme-color" content="#EDF0F8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — the decision engine: typed questions, one forward pass">
 <meta property="og:site_name" content="emb">
@@ -19,8 +20,10 @@
 <meta name="twitter:title" content="emb — the decision engine: typed questions, one forward pass">
 <meta name="twitter:description" content="One state, a tree of typed questions, one forward pass, typed answers.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23EDF0F8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
 
+<link rel="preload" href="../assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/css/styles.css">
@@ -86,12 +89,12 @@
           <p class="tldr">Laya answers typed questions about a state — choice, score, noul — in one forward pass, with calibrated probabilities and zero generated tokens.</p>
         </div>
         <div>
-          <p class="fig"><b>THE DECISION ENGINE</b>
-            · <b>1</b> model
-            · <b>3</b> question types
-            · <b>3</b> examples
-            · <b>1</b> forward pass
-            · <b data-fig-tokens>0</b> input tokens · <b>0</b> output tokens</p>
+          <p class="fig fig--as-written"><b>THE DECISION ENGINE</b>
+            · <b>1</b> MODEL
+            · <b>3</b> QUESTION TYPES
+            · <b>3</b> EXAMPLES
+            · <b>1</b> FORWARD PASS
+            · <b data-fig-tokens>0</b> INPUT TOKENS · <b>0</b> OUTPUT TOKENS</p>
         </div>
       </div>
     </section>

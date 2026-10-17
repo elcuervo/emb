@@ -687,17 +687,24 @@ website-browser:
     agent-browser install
     agent-browser doctor --offline --quick
 
-# Full-page screenshot of the served site (`just website` first). Pass
-# viewport="390x844" for a phone-width check; agent-browser takes the viewport
-# as a launch flag, so it belongs on the open.
+# Full-page screenshot of the served site (`just website` first). The default is
+# a desktop capture; pass viewport="390x844" for a phone-width check.
+#
+# The viewport is applied with `set viewport` in both cases, rather than left to
+# the launch defaults: `agent-browser open --viewport` is accepted by 0.38.1 and
+# silently ignored (the capture then comes out at the launch width while the
+# recipe reads as a phone-width check), and the viewport a `set` call leaves
+# behind persists for the whole session, so a run without one would inherit
+# whatever the previous run asked for. `set viewport` takes the two numbers
+# separately, so the `WxH` argument is split here.
 #
 # The scroll to the end and back is load-bearing, not decoration: reveals are
 # driven by element position, and a full-page capture otherwise lays the
 # document out without ever moving the trigger line, so everything below the
 # fold is captured at opacity 0. Scrolling once fires the sweep, then the
 # capture is true.
-website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
-    agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
+website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="1440x900":
+    agent-browser open {{url}} && agent-browser set viewport {{replace(viewport, "x", " ")}} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
     @echo "wrote {{out}}"
 
 # Assert that no text ink crosses the viewport at any supported width. Opens
@@ -807,7 +814,7 @@ website-topviz: build
     cfg=website/tools/topviz/models.yaml; \
     runs=website/tools/topviz/runs; \
     port=16379; \
-    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    theme='111110,EDF0F8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,848991,EDF0F8,67696F,C23D00,7FA37A,C9A227,6B7F8C,BFC5D0,8FA9A0,EDF0F8'; \
     rec='env -u CI -u NO_COLOR TERM=xterm-256color COLORTERM=truecolor asciinema'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-topviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
@@ -864,7 +871,7 @@ website-clusterviz: build
     cfg=website/tools/topviz/models.yaml; \
     runs=website/tools/topviz/runs; \
     portA=16379; portB=16380; \
-    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    theme='111110,EDF0F8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,848991,EDF0F8,67696F,C23D00,7FA37A,C9A227,6B7F8C,BFC5D0,8FA9A0,EDF0F8'; \
     rec='env -u CI -u NO_COLOR TERM=xterm-256color COLORTERM=truecolor asciinema'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-clusterviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
@@ -928,7 +935,7 @@ website-stressviz: build
     runs=website/tools/stressviz/runs; \
     port=6379; \
     levels='1,2,4,8'; dwell=12s; warmup=4s; seed=3; \
-    theme='111110,F3F0E8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,8C8880,F3F0E8,6B6963,C23D00,7FA37A,C9A227,6B7F8C,C9C4B8,8FA9A0,F3F0E8'; \
+    theme='111110,EDF0F8,111110,A8442A,6E8B7B,B08C4F,FF5A1F,B4736A,848991,EDF0F8,67696F,C23D00,7FA37A,C9A227,6B7F8C,BFC5D0,8FA9A0,EDF0F8'; \
     for tool in redis-cli asciinema agg; do \
       command -v $tool >/dev/null 2>&1 || { echo "website-stressviz: $tool not found - run inside 'nix develop'"; exit 1; }; \
     done; \
@@ -987,6 +994,17 @@ website-examples:
 
 website-examples-check:
     python3 website/tools/stamp-examples.py --check
+
+# Emit every repeated fact about the pages from `website/tools/pages.json`: each
+# page's metadata fragment, the palette tokens in `styles.css`, and
+# `sitemap.xml`. The site has no build step, so what it emits is committed and
+# `--check` -- the drift guard CI runs -- is what keeps a hand-edited page from
+# disagreeing with the sitemap, the theme colour or the favicon.
+website-pages:
+    python3 website/tools/stamp-pages.py
+
+website-pages-check:
+    python3 website/tools/stamp-pages.py --check
 
 # ── the demos gallery's corpus and index ─────────────────────────────────
 #

@@ -1,0 +1,164 @@
+# Tasks
+
+## 1. The crawl surface
+
+- [x] 1.1 Write `website/robots.txt`: an explicit `User-agent: *` group with
+  `Allow: /`, the `Sitemap:` reference, and no `Disallow`, since nothing this
+  origin serves is withheld. Verified: `just website` answers it `200` with
+  `text/plain`, and the deployed preview origin answers `200 text/plain` too.
+- [x] 1.2 Add `robots.txt` and `sitemap.xml` to `SERVED` in
+  `website/tools/published-tree.py`. Verified: with the entries removed the check
+  reports `unexpected: robots.txt (would ship, not in the served set)` for both,
+  and exits 0 with them restored.
+- [x] 1.3 Assert the sitemap's `<loc>` set equals the canonical set of the served
+  pages (derived from the served tree, not from `PAGES`), that each address is
+  absolute on the one agreed origin, and that the directives name a sitemap this
+  tree serves and no path it does not have. Verified by planting ten regressions
+  — dropped `<loc>`, unclaimed address, `http://` and relative `<loc>`, foreign
+  `Sitemap` host, unserved `Sitemap`, boilerplate `Disallow`, empty policy,
+  malformed XML, namespace-less `<urlset>`, both files absent — each named in the
+  failure output, all reverted.
+- [x] 1.4 Exercise the tree as a reader: `/robots.txt` `200 text/plain`,
+  `/sitemap.xml` `200` XML with 19 `<loc>`, and an unknown path still answered by
+  the not-found page.
+- [x] 1.5 Confirm on a deployed origin rather than an upload: the PR preview
+  serves `text/plain` for the directives and `application/xml` for the sitemap.
+
+## 2. The descriptor and the generator
+
+- [x] 2.1 Write `website/tools/pages.json`: the site block (origin, social image,
+  theme colour, favicon geometry and colours), the palette tokens, and one entry
+  per served page (file, path, title, description, indexable). Verified: 20
+  entries, 19 indexable, one per served page, and every value compared against
+  what the pages shipped at the time — zero mismatches, and the favicon data URI
+  rebuilt from geometry plus tokens is byte-identical to all 20.
+- [x] 2.2 Write `website/tools/stamp-pages.py`: it emits each page's metadata
+  fragment between `<!-- meta:start -->` / `<!-- meta:end -->`, the `:root` token
+  block in `assets/css/styles.css` between its own markers, and
+  `website/sitemap.xml`; `--check` writes nothing and exits 1 naming every
+  drifted file; it computes WCAG contrast for every text/ground pair and fails
+  below AA. Verified: the first run changed only the marked regions (20 pages
+  diffed value-by-value, zero metadata differences, no page body or script
+  touched), `--check` exits 0 afterwards, and a hand-edited `theme-color` in
+  `gem/index.html` made `--check` exit 1 naming that page.
+- [x] 2.3 Wire it: `just website-pages` and `just website-pages-check`, and
+  `stamp-pages.py --check` in `ci.yml`'s `site` job and `site.yml`'s `checks`
+  job. Verified: both commands run green locally and both workflows list the new
+  check.
+- [x] 2.4 Point `published-tree.py`'s crawl assertions at the generated outputs,
+  keeping the served-set, absent-file and directives checks. Verified: a `<loc>`
+  deleted from the generated `sitemap.xml` is named
+  (`sitemap lists 18 of 19` + `unlisted: website/gem/index.html`), and the
+  regenerated file passes.
+
+## 3. The world: ground, tokens, assets
+
+- [x] 3.1 Move the paper ground off cream to a cool neutral in the descriptor's
+  tokens (ink, accent, muted, rules and leader move with it), emitted into
+  `styles.css` and into every page's theme colour and favicon. Verified: the cool
+  paper is the cream mirrored (same L\* 94.8, same chroma, hue +180°), so the
+  declared contrast pairs hold by construction (`muted` 4.81:1 against 4.82
+  before); `grep -ri f3f0e8 website/` returns nothing; `--check` is clean.
+- [x] 3.2 Regenerate every asset drawn from the ground: the terrain matte
+  (`tools/gen-terrain-matte.py`, now reading the paper from the descriptor), the
+  social card (`tools/og-card.html` → `assets/img/og.png`, re-rendered at exactly
+  1200×630), the pipeline SVG (`tools/gen-isometric.py`) and the ink probe's
+  ground. Verified: the detector's `cream-palette` findings are gone, and the
+  captures show the massif compositing on the new paper with no seam or
+  rectangle. The isometric tool was stale against the page — `--write` would have
+  reverted four hand-added per-plate signal bands — so the tool was brought up to
+  the page first, and the regeneration diff is the colour alone.
+- [x] 3.3 Update `DESIGN.md`'s palette block to the shipped values. Verified
+  programmatically: 10/10 tokens, identical names and values against the
+  descriptor and the emitted `:root`.
+
+## 4. The body face
+
+- [x] 4.1 Vendor one latin WOFF2 of a not-overused grotesque from a pinned,
+  versioned source; record the source and version in `website/README.md`; add it
+  to `SERVED`; preload it in every head; set the body face to it and the display
+  voice to the already-vendored `Archivo`; remove `inter-900-latin.woff2`, its
+  preload and its `SERVED` entry. Verified: `Public Sans` (Google Fonts v21,
+  sha256 recorded) is the body face, `Archivo` the display voice, the detector's
+  `overused-font` findings are zero, `published-tree.py` exits 0, and no page
+  requests a file the origin does not serve.
+- [x] 4.2 Update `DESIGN.md` and the affected surface briefs to name the faces.
+  Verified: `DESIGN.md`'s typography section names all three and says the
+  masthead's `emb` is `Archivo` 900; `README.md`'s fonts line and brand sentence
+  match the shipped set; the masthead was captured at 1440×75 and 390×73 and
+  reads as the same wordmark.
+
+## 5. The detector repairs
+
+- [x] 5.1 Repair the 154 `cramped-padding` findings by insetting the components
+  they name — grounds keep their full-bleed composition, the content inside gains
+  its margin. Verified: the finding count is zero. Each component states its
+  inset floor as a plain length before the responsive logical shorthand that
+  supersedes it, because the rule's parser reads neither
+  `padding-block`/`padding-inline` nor `clamp()`/`var()`; runtime is unchanged.
+- [x] 5.2 Raise the 12 `undersized-ui-text` labels to the committed 12px desktop
+  floor, including the labels inside the `dns` and `laya` plates' own diagrams.
+  Verified: the finding count is zero and both plates still pass ink at 320.
+- [x] 5.3 Repair `all-caps-body` (3), `tight-leading` (3) and
+  `flat-type-hierarchy` (2). Verified: all three counts are zero. The caps runs
+  lost their transform (a `.fig--as-written` variant, and two labels taking their
+  own caps); the frame's leading became the named `--frame-cell: 1.05` token
+  rather than the literal D7 first suggested, because JetBrains Mono draws its box
+  characters 1.23em tall — a 1.3 cell would leave a sub-pixel seam every row and
+  would put the still frame on a different grid from the player, which
+  `assets/js/topviz.js` pins at 1.05; and the two flat surfaces gained real steps
+  (`medium`'s h3 16px, the landing's display step stated at the width its curve
+  settles).
+- [x] 5.4 Fix the `<img>` with no `src` on `demos/image.html`. Verified: the
+  `broken-image` finding is gone and the plate renders.
+- [x] 5.5 Verify the pass as a whole: `impeccable detect website` reports **0
+  anti-patterns found** with **12 advisory** `em-dash-overuse` notes; ink was run
+  on **all twenty surfaces** — nineteen PASS at 24 widths and `demos/dns.html`
+  fails at 390 and 320, which reproduces on the tree at `24e9f7b` with that
+  tree's own probe and is therefore pre-existing (recorded in the design and the
+  README, not repaired here); captures were taken at desktop and mobile for
+  `index`, `docs`, `demos/index`, `demos/image`, `404` and `demos/dns`, and read:
+  composition intact, nothing sliced, the new ground carrying the plates.
+
+## 6. The records
+
+- [x] 6.1 Update `website/README.md`: the tools tree, the quick list, a "page
+  check" section (what the descriptor owns, what is emitted, why the output stays
+  committed, and that each colour carries the ratio it was measured at), a
+  "design detector" section recording the command and its verdict plus the two
+  conventions the rules forced, the crawl paragraph rewritten for the generated
+  files, and the ink section's two measurement traps plus the known `dns`
+  failure. Verified: every check the README describes exists, and the commands it
+  names run as written.
+- [x] 6.2 Update the seven `.impeccable/surfaces/*.md` briefs where they pin what
+  changed. Verified: no brief states a constraint the shipped tree violates — the
+  four that said "no new colour, font, asset" now inherit the world `DESIGN.md`
+  names, and dns/gem/medium carry what changed on them.
+- [x] 6.3 Re-run `just website-published`, `stamp-version.py --check`,
+  `stamp-presets.py --check`, `stamp-examples.py --check` and
+  `stamp-pages.py --check` together. Verified: all exit 0 (`ok (80 served paths,
+  one origin at https://emb.is)`; `7 stamped value(s)`; `20 marker(s)`;
+  `25 examples`).
+
+## 7. Publication and confirmation against the origin
+
+- [ ] 7.1 Merge to `main` so `site.yml` runs its `checks` job and deploys.
+  Verify: the workflow is green and the deploy reports a published version.
+- [ ] 7.2 Confirm the live origin: `curl -sI https://emb.is/robots.txt` is `200
+  text/plain`, `curl -sI https://emb.is/sitemap.xml` is `200` with an XML type,
+  and a rescan reports `checks.discoverability.robotsTxt.status == "pass"` and
+  `checks.discoverability.sitemap.status == "pass"`.
+
+## Workflow follow-up
+
+- Archive the change (`/openspec-archive-change`) once 7.2 confirms the deployed
+  origin; it syncs both deltas — `site-deployment` and `product-site` — into
+  `openspec/specs/` and moves the change under `openspec/changes/archive/`.
+- Parked for the maintainer, recorded in `design.md`'s Open Questions: the
+  `stressviz` capture still shows the old palette and needs a re-measurement plus
+  a `BENCHMARK.md` record rewrite; `bench-cpu-budget.{png,svg}` are old-palette,
+  unreferenced and owned by no generator; and `demos/dns.html`'s console clips one
+  reply line at 390/320, which predates this change.
+- The readiness scan's remaining failures (`Link` headers, `llms.txt`, markdown
+  for agents, A2A/MCP discovery) stay out of this change: each is its own
+  capability.

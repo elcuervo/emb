@@ -183,8 +183,8 @@ Committed for the web surface (`DESIGN.md`, `website/`):
   floor, clamped in the stylesheet so no breakpoint can compute below it; the
   smallest text on the 1086px frame and on a 390px phone was measured against
   it.
-- Text must meet contrast requirements; the muted grey (`#6B6963`, 4.82:1 on
+- Text must meet contrast requirements; the muted grey (`#67696F`, 4.81:1 on
   the paper) is a known, recurring risk and should be checked against WCAG AA
   (4.5:1) whenever it is used. `#FF5A1F` is 2.74:1 and is a surface colour
   only: text, hover states and focus rings use `--accent-ink` (`#C23D00`,
-  4.66:1) instead.
+  4.65:1) instead.

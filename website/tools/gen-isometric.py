@@ -45,8 +45,8 @@ def slab(i, name, label):
     out.append('')
     out.append('      <!-- ── %02d %s -->' % (i + 1, name.upper()))
     out.append('      <g class="slab" data-slab="%s" data-depth="%d" filter="url(#plate-grain)">' % (name, len(labels) - i))
-    out.append('        <path d="%s" fill="%s"/>' % (face_r, "#292823" if name == "serve" else "#C9C6BD"))
-    out.append('        <path d="%s" fill="%s"/>' % (face_l, "#171714" if name == "serve" else "#BDBAB1"))
+    out.append('        <path d="%s" fill="%s"/>' % (face_r, "#292823" if name == "serve" else "#C3C6CF"))
+    out.append('        <path d="%s" fill="%s"/>' % (face_l, "#171714" if name == "serve" else "#B7BAC3"))
     for face in (face_l, face_r):
         out.append('        <path d="%s" fill="url(#edge-lines)" opacity=".3"/>' % face)
     out.append('        <path d="%s" fill="%s"/>' % (face_t, label["plate"]))
@@ -87,13 +87,13 @@ DEFS = """  <defs>
       <feBlend in2="SourceGraphic" mode="multiply"/>
     </filter>
     <pattern id="edge-lines" width="23" height="24" patternUnits="userSpaceOnUse">
-      <path d="M0 0V24M2 0V24M0 7H23" fill="none" stroke="#F3F0E8" stroke-width=".6"/>
+      <path d="M0 0V24M2 0V24M0 7H23" fill="none" stroke="var(--bg)" stroke-width=".6"/>
     </pattern>
     <pattern id="p-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="matrix(1 {k} -1 {k} 0 0)">
       <path d="M0 0H20M0 0V20" fill="none" stroke="#0B0B0B" stroke-width="1.1"/>
     </pattern>
     <pattern id="p-fine" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="matrix(1 {k} -1 {k} 0 0)">
-      <path d="M0 0H24M0 0V24" fill="none" stroke="#F3F0E8" stroke-width=".65"/>
+      <path d="M0 0H24M0 0V24" fill="none" stroke="var(--bg)" stroke-width=".65"/>
     </pattern>
     <linearGradient id="ramp" x1="0" y1=".62" x2="1" y2=".06">
       <stop offset="0" stop-color="#000"/><stop offset=".28" stop-color="#000"/>
@@ -102,7 +102,16 @@ DEFS = """  <defs>
     <mask id="ramp-mask"><rect x="0" y="0" width="{vw}" height="{h}" fill="url(#ramp)"/></mask>
     <mask id="signal-depth" maskUnits="userSpaceOnUse" x="0" y="-500" width="{vw}" height="1100">
       <rect x="0" y="-500" width="{vw}" height="1100" fill="white"/>
-      <path d="M182 42V149M182 200V268M182 289V387M182 460V506" stroke="black" stroke-width="10"/>
+      <!-- One band per plate, keyed by stage name. These are what make the line
+           read as passing BEHIND a plate, so each band is a separate path
+           rather than one combined `d`: when a plate lifts on hover its band
+           has to lift with it, or the line is left sheared off in mid-air
+           below the plate -- a cut with nothing behind it. `data-hole` matches
+           the plate's `data-slab`. Each band ends at its plate's front edge. -->
+      <path class="sig-hole" data-hole="input"     d="M182 42V149"  stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="inference" d="M182 200V268" stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="embedding" d="M182 289V387" stroke="black" stroke-width="10"/>
+      <path class="sig-hole" data-hole="serve"     d="M182 460V506" stroke="black" stroke-width="10"/>
     </mask>
     <g id="cube">
       <ellipse cx="3" cy="20" rx="17" ry="5" fill="#0B0B0B" opacity=".16"/>
@@ -113,10 +122,15 @@ DEFS = """  <defs>
   </defs>"""
 parts.append(DEFS.format(k=KS, vw=2 * HW, h=round(H)))
 
+# The plates' material. The paper and the rules are the tokens themselves
+# (`var(--bg)` / `var(--rule)` in the page's own CSS), so the drawing follows
+# the palette with no value of its own; the greys the paper is shaded into are
+# its partners at the same L* and chroma with the cast mirrored (DESIGN.md,
+# "Palette"). The SERVE plate is the dark ground and keeps its own values.
 labels = [
-    ("input",     "TEXT",    {"plate": "#EFECE3"}),
-    ("inference", "MODEL",   {"plate": "#E9E6DC"}),
-    ("embedding", "VECTORS", {"plate": "#E9E6DC"}),
+    ("input",     "TEXT",    {"plate": "#E9ECF5"}),
+    ("inference", "MODEL",   {"plate": "#E3E6F0"}),
+    ("embedding", "VECTORS", {"plate": "#E3E6F0"}),
     ("serve",     "REDIS",   {"plate": "#111110"}),
 ]
 spans = {}
@@ -151,12 +165,12 @@ for i, (name, label, cfg) in enumerate(labels):
             for u in range(48, 163, 23):
                 x1, y1 = ox + u - 24, oy + (u + 24) * K
                 x2, y2 = ox + u - 160, oy + (u + 160) * K
-                parts.append('        <path d="M%.1f %.1fL%.1f %.1fL%.1f %.1fM%.1f %.1fV%.1f" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>' % (x1, y1, x1, y1-z, x2, y2-z, x2, y2-z, y2))
+                parts.append('        <path d="M%.1f %.1fL%.1f %.1fL%.1f %.1fM%.1f %.1fV%.1f" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>' % (x1, y1, x1, y1-z, x2, y2-z, x2, y2-z, y2))
                 x1, y1 = ox + 48 - u, oy + (48 + u) * K
                 x2, y2 = ox + 163 - u, oy + (163 + u) * K
-                parts.append('        <path d="M%.1f %.1fL%.1f %.1f" fill="none" stroke="#B8B5AC" stroke-width=".55" opacity=".35"/>' % (x1, y1-z, x2, y2-z))
+                parts.append('        <path d="M%.1f %.1fL%.1f %.1f" fill="none" stroke="var(--rule)" stroke-width=".55" opacity=".35"/>' % (x1, y1-z, x2, y2-z))
     sw = "1" if name != "serve" else "1.2"
-    stroke = "#F3F0E8"
+    stroke = "var(--bg)"
     parts.append('        <path d="%s" fill="none" stroke="%s" stroke-width="%s"/>' % (face_t, stroke, sw))
     parts.append('        <text class="plate-label%s" transform="matrix(1 -%s 1 %s 48 %d)">%s</text>'
                  % (" plate-label--light" if name == "serve" else "", KS, KS, oy + 68, label))
@@ -186,8 +200,10 @@ parts = parts[:prefix_len] + ORDER_NOTE + [
 ]
 
 parts.append('')
-parts.append('      <!-- The signal enters each surface and passes behind its front edge. -->')
-parts.append('      <line class="sig" x1="%d" y1="-490" x2="%d" y2="%d" pathLength="1" mask="url(#signal-depth)"/>' % (HW, HW, round(H)))
+parts.append('      <!-- The signal enters each surface and passes behind its front edge.')
+parts.append('           vector-effect keeps the stroke at exactly --spine-w, so the SVG')
+parts.append('           spine and every CSS segment render at one weight. -->')
+parts.append('      <line class="sig" x1="%d" y1="-490" x2="%d" y2="%d" pathLength="1" mask="url(#signal-depth)" vector-effect="non-scaling-stroke"/>' % (HW, HW, round(H)))
 parts.append('</svg>')
 
 svg = "\n".join(parts) + "\n"

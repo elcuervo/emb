@@ -2,13 +2,13 @@
 """Derive an alpha matte from the generated terrain artwork.
 
 `assets/img/terrain-v2.png` is a two-tone illustration: near-black rock on a
-flat warm off-white ground, with no alpha channel. The page used to fake
-transparency with `mix-blend-mode: multiply` + `filter: grayscale() brightness()`
-+ a polygon `clip-path`. That is a backdrop-dependent composite: whenever the
-image lands in its own stacking context the backdrop is empty, multiply has
-nothing to darken, and the raw off-white ground paints as an opaque rectangle
-until something forces a repaint. It also puts a full-width filtered, blended
-layer on the compositor — the expensive kind on phones.
+flat warm off-white ground of its own, with no alpha channel. The page used to
+fake transparency with `mix-blend-mode: multiply` + `filter: grayscale()
+brightness()` + a polygon `clip-path`. That is a backdrop-dependent composite:
+whenever the image lands in its own stacking context the backdrop is empty,
+multiply has nothing to darken, and the raw off-white ground paints as an
+opaque rectangle until something forces a repaint. It also puts a full-width
+filtered, blended layer on the compositor — the expensive kind on phones.
 
 This tool bakes the same grade into the pixels and writes a real cut-out:
 
@@ -25,6 +25,7 @@ no matter what the compositor does.
 """
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -34,6 +35,19 @@ import png_lib  # noqa: E402
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parent / "assets" / "img" / "terrain-v2.png"
 TARGET = HERE.parent / "assets" / "img" / "terrain-matte.png"
+DESCRIPTOR = HERE / "pages.json"
+
+
+def paper():
+    """The page's paper, from the palette's one source.
+
+    The matte itself does not depend on it -- its background is alpha 0 -- but
+    the preview this tool writes composites the rock over the paper, so the
+    paper has to be the page's, not a literal that goes stale."
+    """
+    tokens = json.loads(DESCRIPTOR.read_text(encoding="utf-8"))["site"]["tokens"]
+    background = tokens["bg"]
+    return tuple(int(background[index:index + 2], 16) for index in (1, 3, 5))
 
 # The artwork is 2172 x 724; the page gives it a 2172 x 770.2 box, the extra
 # 46.2 units at the top being sky that lets the route start level with the
@@ -131,7 +145,7 @@ def main():
 
     # 2. the cut-out must carry the same picture as the old multiply chain
     #    paper x clamp(L * 1.08) / 255   vs   paper x (1 - alpha/255)
-    paper = (0xF3, 0xF0, 0xE8)
+    colour = paper()
     total = 0
     peak = 0
     for y in range(0, h, 4):
@@ -160,7 +174,7 @@ def main():
         for i in range(w * h):
             a = out[i * 2 + 1]
             for c in range(3):
-                flat[i * 3 + c] = (paper[c] * (255 - a)) // 255
+                flat[i * 3 + c] = (colour[c] * (255 - a)) // 255
         png_lib.write(preview, w, h, "rgb", flat)
         print("preview     %s  (matte composited over the page paper)" % preview)
 
