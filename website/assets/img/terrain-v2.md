@@ -20,10 +20,11 @@ alpha = 1 - L / 235        rgb = 0 (black)
 ever carried a flat ground rather than real transparency, so keying it by
 luminance is exactly what `mix-blend-mode: multiply` was already doing at
 composite time — now baked in, where no compositor state can undo it.
-Compositing the matte over `#F3F0E8` reproduces the old pipeline to a mean
-error of 0.33/255 and a peak of 1.6/255; the ground lands on alpha 0 (37 of
-797,399 sky pixels exceed alpha 8). The matte is 0.80 MB against this file's
-2.29 MB.
+Compositing the matte over the page's paper (`--bg` in
+`website/tools/pages.json`, which the tool reads rather than repeating)
+reproduces the old pipeline to a mean error of 0.33/255 and a peak of
+1.6/255; the ground lands on alpha 0 (37 of 797,399 sky pixels exceed alpha
+8). The matte is 0.80 MB against this file's 2.29 MB.
 
 ## Generation prompt
 
@@ -42,7 +43,7 @@ intricate natural crags and strongly directional lighting, black shadowed
 left faces and warm off-white detailed highlights. Transparent sky everywhere
 above the rock silhouette. No orange route, no text, no watermark, no border,
 no shadow behind the cutout. This asset will render around 850 pixels wide
-and 255 pixels tall on cream paper.
+and 255 pixels tall on the page's paper.
 
 ## Final edit prompt
 
@@ -51,11 +52,11 @@ built-in image edit used this prompt:
 
 Edit only the background. Preserve the rock formation exactly, every crag,
 silhouette, lighting, texture, composition, size and position. Remove the
-entire gray checkerboard pattern and replace it with perfectly flat uniform
-warm off-white #F3F0E8. No background texture whatsoever, no checkerboard, no
-shadows or haze in the background. The background must be a single uniform
-solid color up to the sharp edge of the rocks. All rock pixels should remain
-unchanged. Keep the wide 3:1 aspect.
+entire gray checkerboard pattern and replace it with a perfectly flat uniform
+off-white ground — the page's own paper, with no background texture
+whatsoever, no checkerboard, no shadows or haze in the background. The
+background must be a single uniform solid color up to the sharp edge of the
+rocks. All rock pixels should remain unchanged. Keep the wide 3:1 aspect.
 
 ## The reading breaks
 

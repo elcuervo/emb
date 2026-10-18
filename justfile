@@ -687,17 +687,24 @@ website-browser:
     agent-browser install
     agent-browser doctor --offline --quick
 
-# Full-page screenshot of the served site (`just website` first). Pass
-# viewport="390x844" for a phone-width check; agent-browser takes the viewport
-# as a launch flag, so it belongs on the open.
+# Full-page screenshot of the served site (`just website` first). The default is
+# a desktop capture; pass viewport="390x844" for a phone-width check.
+#
+# The viewport is applied with `set viewport` in both cases, rather than left to
+# the launch defaults: `agent-browser open --viewport` is accepted by 0.38.1 and
+# silently ignored (the capture then comes out at the launch width while the
+# recipe reads as a phone-width check), and the viewport a `set` call leaves
+# behind persists for the whole session, so a run without one would inherit
+# whatever the previous run asked for. `set viewport` takes the two numbers
+# separately, so the `WxH` argument is split here.
 #
 # The scroll to the end and back is load-bearing, not decoration: reveals are
 # driven by element position, and a full-page capture otherwise lays the
 # document out without ever moving the trigger line, so everything below the
 # fold is captured at opacity 0. Scrolling once fires the sweep, then the
 # capture is true.
-website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="":
-    agent-browser open {{url}} {{ if viewport != "" { "--viewport " + viewport } else { "" } }} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
+website-shot url="http://localhost:8080" out="/tmp/emb-site.png" viewport="1440x900":
+    agent-browser open {{url}} && agent-browser set viewport {{replace(viewport, "x", " ")}} && agent-browser scroll to end && agent-browser scroll to top && agent-browser screenshot --full {{out}}
     @echo "wrote {{out}}"
 
 # Assert that no text ink crosses the viewport at any supported width. Opens
@@ -987,6 +994,17 @@ website-examples:
 
 website-examples-check:
     python3 website/tools/stamp-examples.py --check
+
+# Emit every repeated fact about the pages from `website/tools/pages.json`: each
+# page's metadata fragment, the palette tokens in `styles.css`, and
+# `sitemap.xml`. The site has no build step, so what it emits is committed and
+# `--check` -- the drift guard CI runs -- is what keeps a hand-edited page from
+# disagreeing with the sitemap, the theme colour or the favicon.
+website-pages:
+    python3 website/tools/stamp-pages.py
+
+website-pages-check:
+    python3 website/tools/stamp-pages.py --check
 
 # ── the demos gallery's corpus and index ─────────────────────────────────
 #

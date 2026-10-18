@@ -31,8 +31,10 @@ holding its own model.
 
 ## Constraints (inherited, non-negotiable)
 
-- Inherit the world in `DESIGN.md`. No new colour, font, asset, dependency or
-  component language. The plate spends its one accent on the top result's mark.
+- Inherit the world in `DESIGN.md` as it now stands — the warm cream paper,
+  `Public Sans` body, `Archivo` display. The plate adds no colour, font, asset,
+  dependency or component language of its own, and spends its one accent on the
+  top result's mark.
 - Read with JavaScript disabled: the five sections and the exact commands are
   complete and static.
 - No invented number, glyph or reply. The ranked list, the escaped pairing, the
@@ -82,14 +84,19 @@ provenance.
 `impeccable detect --json` over `demos/dns.html`, `demos/index.html`,
 `demos/laya.html` and `assets/css/styles.css`, run once. `dns.html` carries 13
 findings against the gallery's standing 12 (`demos/similarity.html`): wide
-tracking, cramped padding on the ruled blocks, all-caps mono labels, the Inter
+tracking, cramped padding on the ruled blocks, all-caps mono labels, the `Inter`
 family, one em-dash-overuse, and the html/body positioned-child clip the skip
 link already raises on every plate. The one finding beyond the standing set is
 the `rig__pick` control's own cramped edge — the shipped component wherever it
-is used, not this page's markup. `styles.css`'s single finding (Inter, line 20)
-predates the `.rec` block. Nothing in this page's own markup was flagged, so
-there was no mechanical defect to invent a token for; the standing findings are
-recorded, not papered over.
+is used, not this page's markup. `styles.css`'s single finding was its `Inter`
+`@font-face` (line 20), which predates the `.rec` block. Nothing in this page's
+own markup was flagged, so there was no mechanical defect to invent a token for;
+the standing findings are recorded, not papered over. **Amendment — the face
+left the tree.** `Inter` was the one `overused-font` face, and it is now
+replaced: the body voice is `Public Sans` and the display voice `Archivo` (both
+self-hosted, both preloaded by every page), so neither this plate nor
+`styles.css` carries an `overused-font` finding any more, and the plate's count
+is one lower than the run recorded above: the rest are unchanged.
 
 ## Finish review
 
@@ -115,3 +122,13 @@ example, the empty answered state, and the record card drawn from one reply, and
 reduced motion draws all four mechanism stages and the ranked rows in one frame.
 The confirmation is the same run that produced `dns-desktop.png` and
 `dns-mobile.png`; no third round was spent.
+
+**This change.** `publish-robots-and-sitemap` raised the plate's diagram labels
+(`.rig__pick__fam`) from 10px to the committed 12px floor and gave the long
+`as-written` captions a variant that drops the caps transform, so the mechanism
+captions read as sentences. `impeccable detect website` reports zero warnings for
+this surface. One defect it did **not** fix, because it predates the change: the
+console clips a single JS-printed reply line at 390 and 320 (`span.t-dim`, a long
+escaped-TXT string reaching ~490px). It reproduces on the tree at `24e9f7b` with
+its own probe, and whether that line should wrap or scroll is an open decision
+recorded in the change.

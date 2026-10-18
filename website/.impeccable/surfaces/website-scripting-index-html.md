@@ -115,7 +115,7 @@ Neither changes the section order, the inheritance rules, or the constraint set.
 
 THESIS: The scripting reference is the docs surface's own hand applied to a
 language — one rule, one measure, one solid section bar per idea, and the
-landing's black/cream block rhythm — rather than a second docs site in the
+landing's black/paper block rhythm — rather than a second docs site in the
 project's colours. It refuses the category default of a sidebar-plus-cards API
 browser by using the landing's ruled-ledger and code-specimen atoms, so a reader
 recognizes the project from the first `dt` row.
@@ -125,7 +125,7 @@ OWN-WORLD: Identical to the landing and the docs surface and nothing added —
 accent ink, the three self-hosted families, hairline rules, tracked mono labels,
 and the `#111110` / `#292823` block inversion and code grounds. With all content
 removed, what remains is a ruled ledger, a solid section bar, and the page's
-black/cream block rhythm.
+black/paper block rhythm.
 
 STORY: The visitor sees the shift, finds the exact call, reads what it runs
 inside and what it may cost, and leaves knowing that a reply is content-addressed

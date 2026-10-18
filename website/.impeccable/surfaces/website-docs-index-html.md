@@ -120,7 +120,7 @@ set.
 ## Direction contract
 
 THESIS: The documentation is the poster's own hand applied to a reference — one
-rule, one measure, one solid section bar per idea, and the landing's black/cream
+rule, one measure, one solid section bar per idea, and the landing's black/paper
 block rhythm — rather than a separate docs site in the project's colours. It
 refuses the category default of a sidebar-plus-cards docs layout by using the
 landing's own ruled-ledger, code-specimen and inverted-block atoms, so a reader
@@ -130,7 +130,7 @@ OWN-WORLD: Identical to the landing and nothing added — `#F3F0E8` paper, `#0B0
 ink, `#FF5A1F` only as a surface, `#C23D00` as the accent ink, the three
 self-hosted families, hairline rules, tracked mono labels, and the `#111110` /
 `#292823` block inversion and code grounds. With all content removed, what remains
-is a ruled ledger, a solid section bar, and the page's black/cream block rhythm.
+is a ruled ledger, a solid section bar, and the page's black/paper block rhythm.
 
 STORY: The visitor gets a vector out of the model in the first screen, then finds
 any later answer — a command's arity, a reply's shape, a configuration key, a
@@ -281,6 +281,8 @@ frame, and the caption carries every value the scroll can hide on a phone.
 `website/assets/css/docs.css` finds **18 findings, identical to the same run at
 `HEAD`** (13 `cramped-padding`, 2 `clipped-overflow-container`, 1
 `overused-font`, 1 `tight-leading`, 1 `wide-tracking`); the plates add none.
+The `overused-font` finding was `Inter`: the body face is now `Public Sans` and
+the display voice `Archivo`, so that run's count is one lower.
 
 **Claims scoping.** The out-of-the-box improvement is attributed to the
 adaptive-capacity work as a whole, and the plate and prose both state that the
@@ -335,7 +337,14 @@ URL, caption and figures inside `<!-- fleetviz:begin -->` /
 load plate's drawing, caption and figures inside its own markers. A hand-edited
 value in either region is overwritten by the next run.
 
-**Detector.** `impeccable detect --json` over `website/docs/index.html`,
+**Detector.** *Superseded by `publish-robots-and-sitemap`: the `tight-leading`
+recorded below as a tolerated departure no longer appears as a finding, because
+the plate's one-cell leading is now the `--frame-cell` token rather than a
+literal a static analysis can score — the leading itself, and the grid it keeps
+with the player, are unchanged. Both `cramped-padding` findings it names are gone
+with the insets that were written as literal floors. `impeccable detect website`
+now reports zero warnings and the 12 advisory em-dash notes.*
+`impeccable detect --json` over `website/docs/index.html`,
 `website/index.html` and `website/assets/css/docs.css` finds **40 findings
 against 38 for the same run in a worktree at `HEAD`** — and the two are the fleet
 plate repeating the two findings the single-node plate already produces: one

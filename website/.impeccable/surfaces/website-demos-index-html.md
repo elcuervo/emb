@@ -36,9 +36,10 @@ fabricating one.
 
 ## Constraints (inherited, non-negotiable)
 
-- Inherit the world in `DESIGN.md`. No new colour, font, asset, dependency, or
-  component language. Atoms only: ruled captions, tracked mono labels, the
-  isometric plate, the terrain break.
+- Inherit the world in `DESIGN.md` as it now stands — the warm cream paper,
+  `Public Sans` body, `Archivo` display. The gallery adds no colour, font, asset,
+  dependency or component language of its own. Atoms only: ruled captions,
+  tracked mono labels, the isometric plate, the terrain break.
 - Every plate reads with JavaScript disabled; the interactive rig is an
   enhancement over a complete static explanation.
 - No invented number, model, receipt or reply. Every figure is the server's or

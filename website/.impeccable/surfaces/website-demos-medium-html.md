@@ -32,9 +32,10 @@ and that a picture of a sound is not the sound.
 
 ## Constraints (inherited, non-negotiable)
 
-- Inherit the world in `DESIGN.md`. No new colour, font, asset, dependency or
-  component language; the plate composes the gallery's existing mark, edge,
-  bar, rule and annotation atoms, and adds only plate-local layout.
+- Inherit the world in `DESIGN.md` as it now stands — the warm cream paper,
+  `Public Sans` body, `Archivo` display. The plate adds no colour, font, asset,
+  dependency or component language of its own; it composes the gallery's existing
+  mark, edge, bar, rule and annotation atoms, and adds only plate-local layout.
 - No upload. Every medium and every picture ships committed; the only visitor
   input is text.
 - No invented number. The count, the kinds, the dimension and the model name are
@@ -67,3 +68,10 @@ exact commands below carry the rest.
 No second model. No classifier per label. No claim that a contact sheet is
 motion or that audio is unembeddable — the plate reports a measured edge of one
 model reading one picture.
+
+**This change.** `publish-robots-and-sitemap` gave this plate a real third type
+level (`.media__h` 12px → 16px, which is what cleared its
+`flat-type-hierarchy` finding), moved the spectrogram ramp and peak fill to read
+the palette from `:root` instead of typed JS literals, and re-set the world off
+cream — the tokens are emitted from `website/tools/pages.json`. Its `CORPUS` note
+now reads as a sentence rather than caps.

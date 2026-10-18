@@ -55,8 +55,10 @@ the middle, and the orange line is the brightest thing on the ground.
   `DESIGN.md` rewrite. The visual system is fixed; the composition is open.
 - Atoms only: `rule-head` + rule, ruled ledgers, plates, the axis, the
   annotation form. No cards, gradients, radii, or decorative shadows.
-- No new colour, font, asset, or dependency. The dark block is the page's own
-  `#111110` / `#292823` material inverted, not new material.
+- The world is the one `DESIGN.md` names after the detector pass: the warm cream
+  paper, `Public Sans` body, `Archivo` display. The landing adds no colour,
+  font, asset or dependency of its own; the dark block is the page's own
+  `--dark` / `--rule-dark` material inverted, not new material.
 - Type floor 12px desktop / 14px mobile holds on every ground, and every text and
   control colour is measured against its own background.
 - Code is typeset as code with four token classes, on paper and on dark, all
@@ -204,7 +206,16 @@ there is nothing on screen for it to animate. What the plate gains is the motion
 and the heatmap's colour the previous revision sent away to the docs, at the
 plate's own measure — and it still costs the page no image of the dashboard.
 
-**Detector.** `impeccable detect --json website/index.html
+**Detector.** *Superseded by `publish-robots-and-sitemap`, which repaired every
+finding named below and moved the plate's one-cell leading into the
+`--frame-cell` token (the same number `topviz.js` hands the player, so the frame
+and the take still share one grid — raising it to the page's 1.3 would leave a
+sub-pixel seam every row, since JetBrains Mono draws its box characters 1.23em
+tall, and would put the still frame and the player on two different cells).
+`impeccable detect website` now reports zero warnings, with the 12 advisory
+em-dash notes the tool never counts. The paragraph that follows records the
+state before that change, when the findings were tolerated rather than repaired.*
+`impeccable detect --json website/index.html
 website/assets/css/styles.css` was run once after the build, in place, and its
 output compared, finding by finding, against the same run in a worktree of
 `HEAD`: 18 findings there, 20 here, and every one of the two is accounted for.
