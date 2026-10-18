@@ -24,41 +24,6 @@
 
   function boot() {
     var pipeline = document.querySelector('.pipeline');
-    var menu = document.querySelector('.mobile-nav');
-    if (menu) {
-      var menuToggle = menu.querySelector('summary');
-      document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && menu.open) {
-          menu.open = false;
-          menuToggle.focus();
-        }
-      });
-      document.addEventListener('click', function (event) {
-        if (!menu.contains(event.target) || event.target.closest('.mobile-nav a')) {
-          menu.open = false;
-        }
-      });
-      window.matchMedia('(max-width: 1000px)').addEventListener('change', function () {
-        menu.open = false;
-      });
-    }
-
-    /* ── which page is this ─────────────────────────────────────────
-       The navs are per-page markup and the plates link relatively, so the
-       current page is derived from the resolved address rather than typed
-       into twenty files. `link.pathname` is the browser's own resolution,
-       which is what makes `../docs/index.html` and `docs/index.html` the same
-       answer, and `aria-current` is what a screen reader announces and what
-       the stylesheet marks. A link that also carries a fragment is left alone:
-       `docs/index.html#install` is a place on a page, not this page. */
-    var here = location.pathname.replace(/index\.html$/, '');
-    var links = document.querySelectorAll('.nav a, .mobile-nav a');
-    for (var i = 0; i < links.length; i++) {
-      if (links[i].hash) { continue; }
-      if (links[i].pathname.replace(/index\.html$/, '') === here) {
-        links[i].setAttribute('aria-current', 'page');
-      }
-    }
 
     /* ── 1. hero entrance ───────────────────────────────────────────
        The wordmark, spine and prose are painted from the start; the
