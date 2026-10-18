@@ -2031,6 +2031,18 @@ html.js.is-ready .hero__prose{
      nav does. `main.js` sets the attribute from the resolved address. */
   .mobile-nav a[aria-current="page"]{ color: var(--fg); }
   .mobile-nav a[aria-current="page"] span{ color: var(--accent-ink); }
+  /* While the panel is open it owns the tap: this scrim is the panel's own box
+     stretched over the viewport, so a tap outside lands on the panel instead of
+     on whatever is beneath it (measured on /docs/: a tap 600px down the page
+     navigated to a table-of-contents link). Transparent — the panel's border and
+     shadow are what make it read as raised; the scrim is behaviour, not a
+     visual device. `nav.js` closes the panel on that tap. */
+  .mobile-nav[open]::before{
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+  }
 
   .hero{ padding-top: 0; }
   .hero__meta{
@@ -3912,4 +3924,33 @@ video.media__player,.media__player video,.media__player img{ width:100%; height:
 @media (max-width:900px){
   .media__grid{ grid-template-columns:1fr; }
   .media__frames{ grid-template-columns:repeat(4,1fr); }
+}
+
+/* ── the mobile type floor ────────────────────────────────────────────
+   At ≤1000px the layout is one column and the text carries the page on its
+   own, but the `clamp()` floors and `em` chains declared above settle at
+   9.02-11.5px here: measured at 390px, `demos/laya.html` alone carried 9.02px
+   (`.hud__statk`, `.hud__decidedk`), 10.12px (`.hud__sub`), 10.5px (the
+   terminal's syntax spans) and 11-11.5px across the decision tree, while
+   `.mech__name`, `.chip-new` and `.plate-nav__k` sat at 11px on other surfaces
+   and the landing's own notes and links at 11.5px. That is below the site's 12px
+   desktop floor, and a 9px label is not readable on a phone.
+
+   This block is last on purpose: the plates' own rules are declared after the
+   breakpoints above, so an override inside them loses the cascade at equal
+   specificity. Containers come up to the floor so their `em` children land at it
+   too, and the `em`-scaled labels are named explicitly, because 0.82em of 12px
+   is still 9.8px. Text a reader reads rather than scans — the landing's notes
+   and links, the TL;DR bar and its toggle, the install key — takes the 14px
+   mobile size instead of the 12px floor. */
+@media (max-width: 1000px){
+  .hud, .qtree__inner, .tickets, .api, .rec, .code, .code__body{ font-size: 12px; }
+  .hud__sub, .hud__statk, .hud__decidedk,
+  .qtree__text, .qtree__label, .qtree__p, .qtree__k, .qtree__type,
+  .mech__name, .chip-new, .plate-nav__k, .plate__num, .plate__teaches,
+  .ddag__statek, .ddag__qtype, .ddag__meta, .tickets__route, .rec__esc,
+  .t-cmd, .t-str, .t-num, .type__job, .tree__cap, .lab__honest, .lab__blurb,
+  .api dt, .api dd, .code code, .atlas__region, .atlas__label{ font-size: 12px; }
+  .tldr-bar__label, .tldr-toggle, .hero__install-key,
+  .opt__note, .opt__more, .hero__link, .plate__next a{ font-size: 14px; }
 }
