@@ -460,6 +460,10 @@ button{ font: inherit; color: inherit; }
   transition: transform .18s ease;
 }
 .nav a:hover::after{ transform: scaleX(1); }
+/* The current page holds the same rule the pointer draws, so "where am I" is
+   answered by the atom the nav already has rather than a new one. `main.js`
+   sets the attribute from the resolved address. */
+.nav a[aria-current="page"]::after{ transform: scaleX(1); }
 
 .masthead__cta{ justify-self: end; }
 .mobile-nav{ display: none; }
@@ -2022,6 +2026,11 @@ html.js.is-ready .hero__prose{
   }
   .mobile-nav a + a{ border-top: 1px solid var(--rule-soft); }
   .mobile-nav a:hover{ color: var(--muted); }
+  /* The row for the page the reader is on: the label takes the ink and its
+     arrow the accent ink, so the panel answers "where am I" as the desktop
+     nav does. `main.js` sets the attribute from the resolved address. */
+  .mobile-nav a[aria-current="page"]{ color: var(--fg); }
+  .mobile-nav a[aria-current="page"] span{ color: var(--accent-ink); }
 
   .hero{ padding-top: 0; }
   .hero__meta{
@@ -2065,6 +2074,22 @@ html.js.is-ready .hero__prose{
   :root{ --fold-n: .25; --art-min: 100vw;
     /* half the content box is the stack's share here: lengths, per above */
     --spine-w: calc((min(100vw, var(--maxw)) - var(--pad-l) - var(--pad-r)) * 0.5 * 4 / 364); }
+
+  /* The painted line leaves the measure here, while the axis does not. On one
+     column the text spans the full width and the axis sits at 25% of it, so the
+     spine ran across the prose: measured at 390px, 75 accent pixels inside a
+     single line box and 16 line boxes spanned; at 320px it bisects the h1's
+     "embedding server". `--fold` and `--fold-x` keep placing the pipeline's
+     plate centre and the route; only the line moves into the left gutter, where
+     it reads as the page's margin rule and still runs the full height.
+
+     Two offsets because the line hangs from two kinds of box: the hero's is a
+     child of the section, whose box starts at the sheet edge, while the blocks'
+     and the terrain's are children of a body already inset by --pad-l. Both
+     land on the same place on the sheet: the middle of the left gutter. */
+  .spine--hero-top{ left: calc(var(--pad-l) / 2 - var(--spine-w) / 2); }
+  .block__body > .spine,
+  .terrain__inner > .spine{ left: calc(-1 * var(--pad-l) / 2 - var(--spine-w) / 2); }
 
   /* the blocks keep the lane: content right of it, line in the left gutter,
      measure 426.7px at 641 and 673.5px at 1000. The column placement that

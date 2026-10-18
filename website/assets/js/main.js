@@ -43,6 +43,23 @@
       });
     }
 
+    /* ── which page is this ─────────────────────────────────────────
+       The navs are per-page markup and the plates link relatively, so the
+       current page is derived from the resolved address rather than typed
+       into twenty files. `link.pathname` is the browser's own resolution,
+       which is what makes `../docs/index.html` and `docs/index.html` the same
+       answer, and `aria-current` is what a screen reader announces and what
+       the stylesheet marks. A link that also carries a fragment is left alone:
+       `docs/index.html#install` is a place on a page, not this page. */
+    var here = location.pathname.replace(/index\.html$/, '');
+    var links = document.querySelectorAll('.nav a, .mobile-nav a');
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].hash) { continue; }
+      if (links[i].pathname.replace(/index\.html$/, '') === here) {
+        links[i].setAttribute('aria-current', 'page');
+      }
+    }
+
     /* ── 1. hero entrance ───────────────────────────────────────────
        The wordmark, spine and prose are painted from the start; the
        `is-ready` flag draws the orange spine once the display face is

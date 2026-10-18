@@ -75,6 +75,23 @@ compares the copies.
   notes — advisory findings are not failures, and the house voice is not a
   defect. The wordmark's *face* follows the display voice, because the detector
   cannot clear while `Inter` ships in any element.
+- **Mobile clarity, measured rather than eyeballed.** The world change moved the
+  layout's geometry, so the mobile surfaces were measured with a real browser
+  (bounding boxes in document coordinates, paint order from computed
+  `position`/`z-index`, and a rasterised accent-ink test that separates real ink
+  collisions from box phantoms). One confirmed defect came out of it and is fixed:
+  the painted orange spine crossed the landing's prose at ≤1000px — 75 accent
+  pixels inside a single line box at 390px, and a line through the h1 at 320px —
+  because the one-column reflow moves the axis to 25% while the text spans the full
+  width. The line now hangs in the left gutter; the axis still places the
+  pipeline's plate centre and the route. The sweep also named what it did **not**
+  fix, each recorded with its numbers: the mobile menu's Escape/outside-click
+  handlers exist only on the landing (the script that holds them is loaded by
+  `index.html` alone), text below the site's 14px mobile floor is widespread
+  (`demos/laya.html` at 9.02px), the sandbox's `/stats` renders at 5px with 93
+  contrast failures from the dashboard's own ANSI palette, and several tap targets
+  are under 44px. Contrast on every site surface is clean: 0 failures across 3,000+
+  text nodes at 390, 320 and 1440.
 - No **BREAKING** changes to the server, the protocol, the client gems, or any
   on-disk format, and no new runtime dependency for the site.
 

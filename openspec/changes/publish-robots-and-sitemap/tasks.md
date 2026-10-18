@@ -157,6 +157,59 @@
   and a rescan reports `checks.discoverability.robotsTxt.status == "pass"` and
   `checks.discoverability.sitemap.status == "pass"`.
 
+## 8. Mobile clarity
+
+Measured at 390×844 and 320×568 with the real browser (bounding boxes in document
+coordinates, paint order from computed `position`/`z-index`, and a rasterised
+accent-ink test to separate real ink collisions from box phantoms). The site's own
+floor is 12px desktop / 14px mobile.
+
+- [x] 8.1 **The painted spine leaves the measure on one-column layouts.** At
+  ≤1000px `--fold-n` moves to 25% (the pipeline's plate centre) and the line
+  followed it into full-width prose: at 390px, 75 accent pixels inside a single
+  line box with 16 line boxes spanned; at 320px it bisects the h1's "embedding
+  server". The line now hangs in the left gutter from both kinds of box it is a
+  child of, while `--fold`/`--fold-x` keep placing the plate centre and the route.
+  Verified: zero intersections with any text box at 390, 320 and 1000 (was 134,
+  142, 8); desktop untouched (x=922 at 1440); `just website-ink` PASS on the
+  landing and the docs surface; the capture reads as a margin rule.
+- [ ] 8.2 **The mobile menu works on every surface, not just the landing.** The
+  Escape, outside-click and focus-restore handlers live in `assets/js/main.js`,
+  which only `index.html` loads: on `docs`, `demos`, the plates and `404.html` the
+  panel stays open on Escape and on an outside tap, and the tap lands on whatever
+  is under it (on `404.html`, the CTA). The current page is also unmarked
+  everywhere (`aria-current` absent on every surface, panel and desktop nav). Move
+  the menu behaviour and the current-page marking into a script every page loads.
+  Verify: on each surface, Escape closes the panel and returns focus to the
+  summary, an outside tap closes it without activating what is beneath, and the
+  current page's link carries `aria-current="page"`.
+- [ ] 8.3 **Mobile type floor.** At 390px, text below the site's 14px mobile floor
+  is widespread, and `demos/laya.html` is the worst: 9.02px ×2 (`.hud__statk`,
+  `.hud__decidedk`), 10.12px (`.hud__sub`), 10.5px ×3, 11px ×5, 11.5px ×5. Also
+  `/` 11.5px ×3 + 12px ×1, `/docs/` 11px + 12px ×2, `demos/dns` 11px ×2 + 12px ×5,
+  `demos/index` 11px + 12px ×5, `demos/medium` 11px ×3 + 12px ×5. Raise the
+  readable text to the floor and settle what the floor means for diagram
+  annotations, then state it in `DESIGN.md` and the briefs. Verify: re-measure at
+  390 and 320 with the same probe, `just website-ink` PASS at 24 widths, and a
+  capture of `demos/laya.html`.
+- [ ] 8.4 **The sandbox's own surfaces.** `/stats` renders its 120-column
+  dashboard at **5px** (`clamp(5px, calc((100vw - 40px)/72), 13px)`) on a phone —
+  squeezed, not scrollable — and has 93 contrast failures from the dashboard's ANSI
+  palette (`#0000ee` on `#111110` = 2.01:1, 53 box-drawing glyphs). `repl/index`'s
+  output window collapses to 320×20 at 320×568, one line at a time. These are
+  `website/repl/`, which the bridge serves and which needs `just sandbox-deploy`
+  by hand — so this is a decision before it is a change.
+- [ ] 8.5 **Tap targets on mobile.** `/docs` table-of-contents links are 350×34 and
+  `summary.cmds__h` 350×18; `.tldr-toggle` 72.8×36; `/demos`' `.ord__t > a` links
+  are 20px tall inside 152px rows (the link covers 13% of its row); plate nav links
+  38px and 21px; the sandbox's footer links 14px tall. Bring the ones a reader must
+  hit to 44px, or state why a given control stays smaller.
+- [ ] 8.6 **Pre-existing plate defects the sweep named, recorded rather than
+  fixed here:** the `docs` profile plate's dashed cap-line inks across the
+  `21.1 ms / 150–152` label (also at 1440), and the stressviz plate's labels
+  extend 472–500px past its SVG edge and are clipped (width-independent). Both
+  predate this change; they are listed so they are not lost.
+
 ## Workflow follow-up
 
 - Archive the change (`/openspec-archive-change`) once 7.2 confirms the deployed
