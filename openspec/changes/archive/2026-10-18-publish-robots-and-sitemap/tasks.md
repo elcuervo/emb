@@ -150,6 +150,12 @@
 
 ## 7. Publication and confirmation against the origin
 
+**Left out by decision (maintainer, 2026-10-18).** The merge and the live
+confirmation are deliberately not done in this change's lifetime: everything the
+change specifies is implemented, checked and pushed, and the publication is the
+maintainer's own step. The two tasks stay unchecked so the archive is not read as
+"deployed" — the crawl surface is live only once someone merges and runs 7.2.
+
 - [ ] 7.1 Merge to `main` so `site.yml` runs its `checks` job and deploys.
   Verify: the workflow is green and the deploy reports a published version.
 - [ ] 7.2 Confirm the live origin: `curl -sI https://emb.is/robots.txt` is `200
@@ -204,6 +210,9 @@ floor is 12px desktop / 14px mobile.
   website/repl/fly.toml`, by hand, from `nix develop`), not a code change: two
   defensive edits (a transcript floor, a `min-height` shell) were tried, measured
   to change nothing in the tree, and reverted rather than carried unmeasured.
+  **The deploy itself is left out by decision (maintainer, 2026-10-18):** the
+  sandbox stays as deployed, so `cli.emb.is` keeps the older terminal page whose
+  transcript is 20px on a short phone, and `/stats` keeps its 5px dashboard.
 - [x] 8.5 **Tap targets on mobile.** The TL;DR toggle (80×38), the
   table-of-contents links (350×34), the plate nav links (72×40, 65×40) and the
   plate-to-plate link (127×21) now reach the 44px floor the site states for
