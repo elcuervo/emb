@@ -3953,4 +3953,17 @@ video.media__player,.media__player video,.media__player img{ width:100%; height:
   .api dt, .api dd, .code code, .atlas__region, .atlas__label{ font-size: 12px; }
   .tldr-bar__label, .tldr-toggle, .hero__install-key,
   .opt__note, .opt__more, .hero__link, .plate__next a{ font-size: 14px; }
+
+  /* Touch targets. The site's own floor is 44px — the plates' and the
+     sandbox's media queries state it — and these were under it, measured at
+     390px: the TL;DR toggle 80x38, the table-of-contents links 350x34, the
+     plate nav links 72x40 and 65x40, and the plate-to-plate link 127x21. Each
+     already lays its content out (grid or flex), so the floor is a minimum
+     height plus the alignment that keeps the label centred in the taller box.
+     The skip link stays as it is on purpose: it is focus-only, so a keyboard
+     reaches it first and a finger never has to. */
+  .tldr-toggle{ display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
+  .doc-toc a{ min-height: 44px; align-items: center; }
+  .plate-nav__link{ min-height: 44px; justify-content: center; }
+  .plate__next a{ min-height: 44px; align-items: center; }
 }
