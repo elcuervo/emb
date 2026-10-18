@@ -173,32 +173,37 @@ floor is 12px desktop / 14px mobile.
   Verified: zero intersections with any text box at 390, 320 and 1000 (was 134,
   142, 8); desktop untouched (x=922 at 1440); `just website-ink` PASS on the
   landing and the docs surface; the capture reads as a margin rule.
-- [ ] 8.2 **The mobile menu works on every surface, not just the landing.** The
-  Escape, outside-click and focus-restore handlers live in `assets/js/main.js`,
-  which only `index.html` loads: on `docs`, `demos`, the plates and `404.html` the
-  panel stays open on Escape and on an outside tap, and the tap lands on whatever
-  is under it (on `404.html`, the CTA). The current page is also unmarked
-  everywhere (`aria-current` absent on every surface, panel and desktop nav). Move
-  the menu behaviour and the current-page marking into a script every page loads.
-  Verify: on each surface, Escape closes the panel and returns focus to the
-  summary, an outside tap closes it without activating what is beneath, and the
-  current page's link carries `aria-current="page"`.
-- [ ] 8.3 **Mobile type floor.** At 390px, text below the site's 14px mobile floor
-  is widespread, and `demos/laya.html` is the worst: 9.02px ×2 (`.hud__statk`,
-  `.hud__decidedk`), 10.12px (`.hud__sub`), 10.5px ×3, 11px ×5, 11.5px ×5. Also
-  `/` 11.5px ×3 + 12px ×1, `/docs/` 11px + 12px ×2, `demos/dns` 11px ×2 + 12px ×5,
-  `demos/index` 11px + 12px ×5, `demos/medium` 11px ×3 + 12px ×5. Raise the
-  readable text to the floor and settle what the floor means for diagram
-  annotations, then state it in `DESIGN.md` and the briefs. Verify: re-measure at
-  390 and 320 with the same probe, `just website-ink` PASS at 24 widths, and a
-  capture of `demos/laya.html`.
-- [ ] 8.4 **The sandbox's own surfaces.** `/stats` renders its 120-column
-  dashboard at **5px** (`clamp(5px, calc((100vw - 40px)/72), 13px)`) on a phone —
-  squeezed, not scrollable — and has 93 contrast failures from the dashboard's ANSI
-  palette (`#0000ee` on `#111110` = 2.01:1, 53 box-drawing glyphs). `repl/index`'s
-  output window collapses to 320×20 at 320×568, one line at a time. These are
-  `website/repl/`, which the bridge serves and which needs `just sandbox-deploy`
-  by hand — so this is a decision before it is a change.
+- [x] 8.2 **The mobile menu works on every surface, not just the landing.**
+  `assets/js/nav.js` now holds the Escape/outside-click/focus-restore behaviour
+  and the current-page marking, and all twenty pages that carry the panel load it
+  (`index.html`'s copy came out of `main.js`; `404.html` had no script at all).
+  While the panel is open its box is stretched over the viewport, so an outside
+  tap lands on the panel instead of on a link beneath it. Verified on `/`,
+  `/docs/`, `/demos/index.html`, `/demos/laya.html` and `/404.html` at 390px:
+  Escape closes with focus on `SUMMARY`, the outside tap reports the panel as its
+  target and navigates nothing, the summary still toggles, and the current page is
+  marked (`Docs`, `Demos`). `published-tree.py` caught `assets/js/nav.js` as a
+  file that would ship unnamed until it was added to `SERVED`.
+- [x] 8.3 **Mobile type floor.** Diagram and terminal text now comes up to the
+  12px floor and readable text to the 14px mobile size, in a block at the end of
+  `styles.css` (the plates' own rules are declared after the breakpoints, so an
+  override inside them loses the cascade — the first attempt did nothing).
+  Verified: all twenty served surfaces report no text below 12px at 390px,
+  `just website-ink` PASS at 24 widths on nineteen of twenty, and captures of
+  `demos/laya`, `demos/atlas` and `demos/medium` show the diagrams intact.
+- [x] 8.4 **The sandbox's own surfaces — measured, and the decision is the
+  deploy.** `/stats` is **left as it is** (the 120-column dashboard at 5px and the
+  93 ANSI contrast failures stay, by decision). For `repl/index`, the reported
+  collapse is **not in the tree**: measured at 320×568, 390×844 and 568×320 the
+  transcript is 420px, 696px and 190px tall, because the tree's page populates its
+  examples band with JS and ships it `hidden`. It *is* in production: the deployed
+  `https://cli.emb.is/` at 320×568 reports `.cli__head` **583px** (its examples
+  band expanded in one 296px column) and `.cli__out` **20px** with 60px of
+  content — the sweep's exact numbers. The sandbox is therefore stale relative to
+  the tree, and the fix is `just sandbox-deploy` (`fly deploy . -c
+  website/repl/fly.toml`, by hand, from `nix develop`), not a code change: two
+  defensive edits (a transcript floor, a `min-height` shell) were tried, measured
+  to change nothing in the tree, and reverted rather than carried unmeasured.
 - [ ] 8.5 **Tap targets on mobile.** `/docs` table-of-contents links are 350×34 and
   `summary.cmds__h` 350×18; `.tldr-toggle` 72.8×36; `/demos`' `.ord__t > a` links
   are 20px tall inside 152px rows (the link covers 13% of its row); plate nav links
