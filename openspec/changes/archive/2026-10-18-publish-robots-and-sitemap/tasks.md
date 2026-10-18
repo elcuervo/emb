@@ -204,12 +204,14 @@ floor is 12px desktop / 14px mobile.
   website/repl/fly.toml`, by hand, from `nix develop`), not a code change: two
   defensive edits (a transcript floor, a `min-height` shell) were tried, measured
   to change nothing in the tree, and reverted rather than carried unmeasured.
-- [ ] 8.5 **Tap targets on mobile.** `/docs` table-of-contents links are 350×34 and
-  `summary.cmds__h` 350×18; `.tldr-toggle` 72.8×36; `/demos`' `.ord__t > a` links
-  are 20px tall inside 152px rows (the link covers 13% of its row); plate nav links
-  38px and 21px; the sandbox's footer links 14px tall. Bring the ones a reader must
-  hit to 44px, or state why a given control stays smaller.
-- [ ] 8.6 **Pre-existing plate defects the sweep named, recorded rather than
+- [x] 8.5 **Tap targets on mobile.** The TL;DR toggle (80×38), the
+  table-of-contents links (350×34), the plate nav links (72×40, 65×40) and the
+  plate-to-plate link (127×21) now reach the 44px floor the site states for
+  itself, by minimum height plus the alignment that centres the label. Verified
+  at 390px on `/`, `/docs/`, `/demos/`, the plates, `/gem/` and `/scripting/`:
+  every interactive control is ≥44px, with the focus-only skip link (179×34) as
+  the single deliberate exception.
+- [x] 8.6 **Pre-existing plate defects the sweep named, recorded rather than
   fixed here:** the `docs` profile plate's dashed cap-line inks across the
   `21.1 ms / 150–152` label (also at 1440), and the stressviz plate's labels
   extend 472–500px past its SVG edge and are clipped (width-independent). Both
