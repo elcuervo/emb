@@ -245,6 +245,27 @@
         <dt>CONFIG GET [glob] / CONFIG SET</dt>
         <dd>Read or live-tune runtime settings. Both require authentication.</dd>
 
+        <dt>SHUTDOWN [NOSAVE|SAVE] [NOW] [FORCE] [ABORT]</dt>
+        <dd>
+          Stop the server with Redis's semantics. Flags are case-insensitive:
+          <code>SAVE</code>/<code>NOSAVE</code> write or skip the final cache
+          snapshot and override <code>cache_save_on_shutdown</code> (both
+          together is a syntax error); <code>NOW</code> skips the grace;
+          <code>FORCE</code> is accepted for compatibility, since a snapshot
+          failure never blocks exit; <code>ABORT</code> cancels a pending
+          shutdown and cannot be combined with any other flag.
+          <code>-ERR syntax error</code> starts nothing. The caller receives
+          <strong>no reply</strong> — it blocks for the grace and drain, and its
+          connection closes as the process exits; a second caller during the
+          same shutdown blocks too, and its flags are ignored.
+          <code>ABORT</code> replies <code>+OK</code> (or <code>-ERR No shutdown
+          in progress.</code>) and releases blocked callers with
+          <code>-ERR Errors trying to SHUTDOWN. Check logs.</code>. With a
+          password set, authentication is required like any command; without
+          one, only loopback clients may call it, and others get a
+          <code>-DENIED</code> error.
+        </dd>
+
         <dt>AUTH &lt;password&gt;</dt>
         <dd>Authenticate the connection. Required when <code>password</code> is set.</dd>
 
@@ -389,7 +410,10 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
 <span class="t-dim"># cache_restore_limit: auto</span>
 <span class="t-dim"># cache_restore_reserve: 10%</span>
 <span class="t-dim"># cache_save_rate_limit: 100MB/s</span>
-<span class="t-dim"># idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32</span></pre>
+<span class="t-dim"># idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32</span>
+<span class="t-dim"># shutdown_timeout: 0           # grace period in seconds while clients are connected (0 = stop at once)</span>
+<span class="t-dim"># shutdown_on_sigterm: default  # default|save|nosave|now|force</span>
+<span class="t-dim"># shutdown_on_sigint: default   # default|save|nosave|now|force</span></pre>
         <figcaption class="code__cap">
           Every key above is also available as a flag, e.g.
           <code>-max-connections 100</code>.
@@ -713,6 +737,61 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         and <code>EMB.HELP</code> still answer, so ops can probe a saturated
         server. Both caps default to <code>0</code> (unlimited).
       </p>
+      <h3 class="doc-h3">Shutdown</h3>
+      <p class="doc-prose">
+        SIGTERM, SIGINT, and <code>SHUTDOWN</code> run one sequence. With
+        <code>shutdown_timeout</code> above zero and the shutdown not
+        <code>NOW</code>, a <strong>grace</strong> runs while clients other than
+        blocked <code>SHUTDOWN</code> callers are connected: connections keep
+        being accepted, every command is served, <code>EMB.READY</code> replies
+        <code>draining</code>, and <code>INFO server</code> reports
+        <code>shutdown_in_milliseconds</code>. The grace ends at the deadline or
+        within 100ms of the last such client leaving (checked every 100ms). The
+        default <code>shutdown_timeout</code> is <code>0</code>, which stops
+        clients at once, like a standalone Redis that waits only for lagging
+        replicas; set it when a load balancer needs time to deregister the
+        instance.
+      </p>
+      <p class="doc-prose">
+        Then the listening socket closes — new connections are refused
+        (<code>ECONNREFUSED</code>, which Redis clients retry) — idle
+        connections close, a running command finishes and its connection closes
+        right after the reply, and a command not yet executing gets no reply at
+        all: its connection closes, so a caller sees a connection error and
+        never a shutdown-specific RESP error. In-flight inference drains within
+        its own 30-second budget, the final snapshot is attempted inside it,
+        telemetry flushes, ONNX Runtime resources are released, and the process
+        exits 0.
+      </p>
+      <p class="doc-prose">
+        Signals run the sequence with <code>shutdown_on_sigterm</code> /
+        <code>shutdown_on_sigint</code> (<code>default</code>,
+        <code>save</code>, <code>nosave</code>, <code>now</code>,
+        <code>force</code>). A second SIGINT while a shutdown is pending logs
+        <code>You insist... exiting now.</code> and exits with status 1 without
+        draining or snapshotting; <code>SHUTDOWN ABORT</code> cancels the
+        pending shutdown instead and returns the server to normal operation. A
+        repeated SIGTERM is ignored. A signal during model preload or snapshot
+        restore stops startup at the next step boundary and exits 0 without a
+        snapshot.
+      </p>
+      <p class="doc-prose">
+        The orchestrator's stop timeout must cover
+        <code>shutdown_timeout</code> plus 30 seconds of drain plus the final
+        snapshot; ECS on Fargate caps it at 120s. Deliberate differences from
+        Redis: no <code>-LOADING</code> (emb listens only once ready, so TCP
+        readiness checks stay correct), no write pause during the grace (no
+        replicas, and the snapshot follows the drain), a failed snapshot never
+        keeps the process running (as if <code>FORCE</code> were always set),
+        and loopback-only <code>SHUTDOWN</code> when no password is configured.
+      </p>
+      <p class="doc-prose">
+        The three parameters are also live: <code>CONFIG SET
+        shutdown_timeout 15</code> applies to the next shutdown, and every
+        parameter answers to Redis's hyphenated spelling
+        (<code>shutdown-timeout</code>) while replies keep the canonical
+        underscore name.
+      </p>
 
       <h3 class="doc-h3">Observability</h3>
       <p class="doc-prose">
@@ -730,7 +809,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       </p>
       <dl class="doc-cmds">
         <dt>server</dt>
-        <dd><code>redis_version</code>, <code>emb_version</code>, <code>uptime_secs</code>, <code>process_id</code>.</dd>
+        <dd><code>redis_version</code>, <code>emb_version</code>, <code>uptime_secs</code>, <code>process_id</code>, and <code>shutdown_in_milliseconds</code> while a shutdown grace runs (the deadline minus now; absent otherwise, including after an aborted shutdown).</dd>
         <dt>cache</dt>
         <dd>Hits, misses, hit rate, evictions, entries and byte usage.</dd>
         <dt>keyspace</dt>

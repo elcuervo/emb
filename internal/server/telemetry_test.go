@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/registry"
@@ -303,7 +304,7 @@ func TestServerTelemetryFlushesOnShutdown(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+	if err := srv.Shutdown(ctx, config.ShutdownFlags{}); err != nil && !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("shutdown: %v", err)
 	}
 	if sender.count() < 1 {
@@ -422,7 +423,7 @@ func TestTelemetryEndToEnd(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = srv.Shutdown(ctx)
+	_ = srv.Shutdown(ctx, config.ShutdownFlags{})
 }
 
 // ---- minimal OTLP JSON navigation ----

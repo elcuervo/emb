@@ -143,6 +143,8 @@ func sampleInfoSnapshot() infoSnapshot {
 		models:   2,
 		active:   3,
 		cache:    cs,
+		// No grace runs in the sample: the countdown field must stay absent.
+		shutdownInMillis: -1,
 		byModel: []modelInfoLine{
 			{name: "bge", dim: 384, hits: 10, misses: 40, evictions: 1, entries: 50},
 			{name: "minilm", dim: 384, hits: 80, misses: 5, evictions: 1, entries: 50},

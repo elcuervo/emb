@@ -48,6 +48,8 @@ type infoSnapshot struct {
 	// netIn/netOut are aggregate RESP bytes received/sent since start.
 	netIn  uint64
 	netOut uint64
+	// shutdownInMillis is the grace deadline minus now; -1 when no grace runs.
+	shutdownInMillis int64
 }
 
 // resourceStats is one snapshot of the process resource samplers, gathered
@@ -208,7 +210,23 @@ func (s *Server) infoSnapshot() infoSnapshot {
 		res:                 s.resourceStats(),
 		netIn:               s.netIn.Load(),
 		netOut:              s.netOut.Load(),
+		shutdownInMillis:    s.shutdownCountdown(),
 	}
+}
+
+// shutdownCountdown reports the grace deadline minus now in integer
+// milliseconds, as Redis computes shutdown_in_milliseconds; -1 when no grace
+// runs.
+func (s *Server) shutdownCountdown() int64 {
+	deadline := s.graceDeadline.Load()
+	if deadline == 0 {
+		return -1
+	}
+	ms := time.Until(time.Unix(0, deadline)).Milliseconds()
+	if ms < 0 {
+		return 0
+	}
+	return ms
 }
 
 // registryEntrySnapshot is a lightweight per-model view used while assembling
@@ -252,7 +270,12 @@ func buildInfoSections(which []string, snap infoSnapshot) string {
 		fmt.Fprintf(&b, "redis_version:%s\r\n", snap.version)
 		fmt.Fprintf(&b, "emb_version:%s\r\n", snap.version)
 		fmt.Fprintf(&b, "uptime_secs:%d\r\n", snap.uptime)
-		fmt.Fprintf(&b, "process_id:%d\r\n\r\n", snap.process)
+		fmt.Fprintf(&b, "process_id:%d\r\n", snap.process)
+		// Redis reports the remaining grace only while a shutdown is pending.
+		if snap.shutdownInMillis >= 0 {
+			fmt.Fprintf(&b, "shutdown_in_milliseconds:%d\r\n", snap.shutdownInMillis)
+		}
+		b.WriteString("\r\n")
 	}
 	if selected["cache"] {
 		b.WriteString("# Cache\r\n")

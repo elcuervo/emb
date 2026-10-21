@@ -85,10 +85,6 @@ func (c *scriptCache) Flush(model string) { c.by.Clear(model) }
 
 // handleSCRIPT implements EMB.SCRIPT LOAD|EXISTS|FLUSH [<model>] [<script>|<sha...>].
 func (s *Server) handleSCRIPT(conn redcon.Conn, cmd redcon.Command) {
-	if s.shuttingDown.Load() {
-		conn.WriteError("ERR server shutting down")
-		return
-	}
 	args := cmd.Args[1:]
 	var argStr []string
 	for _, a := range args {

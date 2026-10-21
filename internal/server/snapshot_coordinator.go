@@ -241,9 +241,12 @@ func (c *snapshotCoordinator) Configure(file string, interval time.Duration, shu
 	}
 }
 
-func (c *snapshotCoordinator) Shutdown(ctx context.Context) {
+// Shutdown saves the final snapshot when save is set and waits for any running
+// save, then stops the background loop. The caller resolves save from the
+// shutdown flags and cache_save_on_shutdown.
+func (c *snapshotCoordinator) Shutdown(ctx context.Context, save bool) {
 	c.mu.RLock()
-	enabled := c.file != "" && c.saveOnShutdown
+	enabled := c.file != "" && save
 	c.mu.RUnlock()
 	if enabled && c.dirty() && !c.saving.Load() {
 		_ = c.Save(ctx)

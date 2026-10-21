@@ -29,7 +29,7 @@ func TestSnapshotCoordinatorSingleFlightDirtyAndAvailability(t *testing.T) {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		c.Shutdown(ctx)
+		c.Shutdown(ctx, true)
 	})
 
 	captured := make(chan CacheSnapshot, 1)

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/onnx"
 )
 
@@ -25,7 +26,10 @@ func TestInferenceAdmissionReservesFinalSlotAtomically(t *testing.T) {
 	for range 32 {
 		wg.Go(func() {
 			<-start
-			release, err := s.admitInference()
+			release, err, admitted := s.admitInference()
+			if !admitted {
+				t.Error("admission refused before any stop")
+			}
 			outcomes <- outcome{release: release, err: err}
 		})
 	}
@@ -49,13 +53,13 @@ func TestInferenceAdmissionReservesFinalSlotAtomically(t *testing.T) {
 
 func TestDrainingRejectsNewAdmissionAndWaitsForAcceptedWork(t *testing.T) {
 	s := New("", nil, "", "", nil)
-	release, replyErr := s.admitInference()
-	if replyErr != "" {
-		t.Fatal(replyErr)
+	release, replyErr, admitted := s.admitInference()
+	if replyErr != "" || !admitted {
+		t.Fatalf("admission refused before drain: %q", replyErr)
 	}
 	s.beginDraining()
-	if nextRelease, err := s.admitInference(); nextRelease != nil || err != "ERR server shutting down" {
-		t.Fatalf("admission during drain returned release=%t, error=%q", nextRelease != nil, err)
+	if nextRelease, err, admitted := s.admitInference(); nextRelease != nil || admitted || err != "" {
+		t.Fatalf("admission while stopping returned release=%t, admitted=%t, error=%q", nextRelease != nil, admitted, err)
 	}
 
 	done := make(chan struct{})
@@ -91,7 +95,7 @@ func TestShutdownPreservesAcceptedConnectionUntilReply(t *testing.T) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		shutdown <- srv.Shutdown(ctx)
+		shutdown <- srv.Shutdown(ctx, config.ShutdownFlags{})
 	}()
 	waitFor(t, srv.shuttingDown.Load)
 
@@ -123,13 +127,13 @@ func TestShutdownPreservesAcceptedConnectionUntilReply(t *testing.T) {
 
 func TestShutdownReturnsTimeoutWithoutWaitingIndefinitely(t *testing.T) {
 	s := New("", nil, "", "", nil)
-	release, errText := s.admitInference()
-	if errText != "" {
-		t.Fatal(errText)
+	release, errText, admitted := s.admitInference()
+	if errText != "" || !admitted {
+		t.Fatalf("admission refused: %q", errText)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	err := s.Shutdown(ctx)
+	err := s.Shutdown(ctx, config.ShutdownFlags{})
 	if !errors.Is(err, ErrShutdownTimeout) {
 		t.Fatalf("Shutdown error = %v, want ErrShutdownTimeout", err)
 	}

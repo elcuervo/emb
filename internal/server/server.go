@@ -36,6 +36,14 @@ const (
 
 type connState struct {
 	authenticated bool
+	// inProgress counts the command currently executing on this connection.
+	inProgress atomic.Int32
+	// closeAfter makes the dispatch close the connection once the running
+	// command's reply is out (shutdown with work in flight).
+	closeAfter atomic.Bool
+	// blocked marks a SHUTDOWN caller waiting for the sequence to end; such a
+	// caller is excluded from the grace's connected-client count.
+	blocked atomic.Bool
 }
 
 type Server struct {
@@ -45,13 +53,33 @@ type Server struct {
 	active       sync.WaitGroup
 	admissionMu  sync.Mutex
 	shuttingDown atomic.Bool
-	started      time.Time
-	addr         string
-	password     atomic.Value // string; live-updatable via CONFIG SET
-	tlsConfig    *tls.Config
-	tlsCert      string
-	tlsKey       string
-	cache        *Cache
+	// shutdownReqs is the entrypoint's shutdown-request loop (nil in tests that
+	// never wire one); shutdownMu guards the sequence state, and the waiters are
+	// the blocked SHUTDOWN callers.
+	shutdownReqs      chan<- ShutdownRequest
+	shutdownPending   *atomic.Bool
+	shutdownMu        sync.Mutex
+	shutdownRunning   bool
+	stopping          atomic.Bool // clients are being stopped; ABORT no longer applies
+	shutdownWaiters   []chan string
+	shutdownCancel    chan struct{} // closed by SHUTDOWN ABORT
+	shutdownTimeout   atomic.Int64
+	drainTimeout      time.Duration
+	shutdownOnSigterm atomic.Value // string, canonical ParseShutdownFlags form
+	shutdownOnSigint  atomic.Value
+	graceDeadline     atomic.Int64 // unix nanos; 0 when no grace runs
+	// clientMu guards clients, the set of accepted, unclosed connections that
+	// the shutdown closes.
+	clientMu  sync.Mutex
+	clients   map[redcon.Conn]struct{}
+	gate      atomic.Pointer[gateListener]
+	started   time.Time
+	addr      string
+	password  atomic.Value // string; live-updatable via CONFIG SET
+	tlsConfig *tls.Config
+	tlsCert   string
+	tlsKey    string
+	cache     *Cache
 	// cacheConfig is the live cache size string (boot value, then each
 	// CONFIG SET), reported by CONFIG GET.
 	cacheConfig atomic.Value // string
@@ -170,19 +198,21 @@ func isInferenceCommand(name string) bool {
 	}
 }
 
-// admitInference atomically checks draining/capacity and registers accepted
-// work with the shutdown waiter. The returned release must be called once.
-func (s *Server) admitInference() (release func(), replyErr string) {
+// admitInference atomically checks the stop state and the concurrency cap and
+// registers accepted work with the shutdown waiter. admitted is false once
+// clients are stopped: the dispatcher then closes the connection without a
+// reply. The returned release must be called once.
+func (s *Server) admitInference() (release func(), replyErr string, admitted bool) {
 	s.admissionMu.Lock()
 	defer s.admissionMu.Unlock()
 	if s.shuttingDown.Load() {
-		return nil, "ERR server shutting down"
+		return nil, "", false
 	}
 	if s.maxConcurrentReqs > 0 && s.activeReqs.Load() >= int64(s.maxConcurrentReqs) {
 		// Counted with the admission refusals: both are the server declining
 		// work it cannot serve in time.
 		s.busyRefusals.Add(1)
-		return nil, fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs)
+		return nil, fmt.Sprintf("ERR busy: max concurrent requests exceeded (%d)", s.maxConcurrentReqs), true
 	}
 	s.activeReqs.Add(1)
 	s.active.Add(1)
@@ -192,7 +222,7 @@ func (s *Server) admitInference() (release func(), replyErr string) {
 			s.activeReqs.Add(-1)
 			s.active.Done()
 		})
-	}, ""
+	}, "", true
 }
 
 func (s *Server) beginDraining() {
@@ -325,12 +355,16 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		cacheSaveOnShutdown: true,
 		version:             "dev",
 		idleTimeout:         config.DefaultIdleTimeout,
+		drainTimeout:        DefaultShutdownDrainTimeout,
 		monitor:             NewMonitor(8192),
+		clients:             make(map[redcon.Conn]struct{}),
 		// Series are gated to the configured model set, so the histogram's
 		// memory is bounded by configuration rather than by client traffic.
 		latency: telemetry.NewLatencyHistogram(reg.HasModel),
 	}
 	s.cacheConfig.Store(cacheConfig)
+	s.shutdownOnSigterm.Store(config.DefaultShutdownFlags)
+	s.shutdownOnSigint.Store(config.DefaultShutdownFlags)
 	s.maxTexts.Store(4096)
 	s.maxPairs.Store(4096)
 	s.maxImages.Store(4096)
@@ -374,6 +408,7 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	mux.HandleFunc("emb.script", s.handleSCRIPT)
 	mux.HandleFunc("info", s.handleInfo)
 	mux.HandleFunc("config", s.handleConfig)
+	mux.HandleFunc("shutdown", s.handleSHUTDOWN)
 	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
 	mux.HandleFunc("emb.save", s.handleSAVE)
 
@@ -386,6 +421,34 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		// Wrap the connection so every reply written by any handler is counted
 		// towards total_net_output_bytes.
 		conn = s.wrapConn(conn)
+
+		// Clients stopped: no command is executed and the connection closes
+		// without a reply, as when Redis exits. Pipelined commands behind a
+		// running one land here too.
+		if s.shuttingDown.Load() {
+			_ = conn.Close()
+			return
+		}
+		var st *connState
+		if state, ok := conn.Context().(*connState); ok && state != nil {
+			st = state
+			st.inProgress.Add(1)
+		}
+		var release func()
+		// One exit path, so the ordering is explicit: the reply is flushed (and
+		// a connection marked closeAfter is closed) before the admission release
+		// lets the drain waiter proceed.
+		defer func() {
+			if st != nil {
+				st.inProgress.Add(-1)
+				if st.closeAfter.Load() {
+					_ = conn.Close()
+				}
+			}
+			if release != nil {
+				release()
+			}
+		}()
 
 		// Command-size guard: a command whose buffered bytes exceed the cap is
 		// rejected without decode or inference. The per-bulk guard (SetMaxBulkSize
@@ -406,12 +469,17 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 		if len(cmd.Args) > 0 {
 			name := strings.ToLower(string(cmd.Args[0]))
 			if isInferenceCommand(name) {
-				release, replyErr := s.admitInference()
+				var replyErr string
+				var admitted bool
+				release, replyErr, admitted = s.admitInference()
+				if !admitted {
+					_ = conn.Close()
+					return
+				}
 				if replyErr != "" {
 					conn.WriteError(replyErr)
 					return
 				}
-				defer release()
 			}
 		}
 		mux.ServeRESP(conn, cmd)
@@ -429,10 +497,16 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 				return false
 			}
 			s.conns.Add(1)
+			s.clientMu.Lock()
+			s.clients[conn] = struct{}{}
+			s.clientMu.Unlock()
 			return true
 		},
 		func(conn redcon.Conn, err error) {
 			s.conns.Add(-1)
+			s.clientMu.Lock()
+			delete(s.clients, conn)
+			s.clientMu.Unlock()
 		},
 	)
 
@@ -500,48 +574,14 @@ func (s *Server) listen() (net.Listener, error) {
 		return nil, fmt.Errorf("listening on %s: %w", s.addr, err)
 	}
 	s.ln = ln
+	gate := newGateListener(ln)
+	s.gate.Store(gate)
 	if s.tlsConfig != nil {
 		log.Printf("emb listening on %s (TLS)", s.addr)
 	} else {
 		log.Printf("emb listening on %s", s.addr)
 	}
-	return ln, nil
-}
-
-func (s *Server) Shutdown(ctx context.Context) error {
-	// Keep redcon's accept loop alive while accepted requests drain. New TCP
-	// connections reach the accept callback above and are rejected, while
-	// existing sockets remain open long enough to receive completed replies.
-	s.beginDraining()
-
-	done := make(chan struct{})
-	go func() {
-		s.active.Wait()
-		close(done)
-	}()
-
-	timedOut := false
-	select {
-	case <-done:
-	case <-ctx.Done():
-		log.Printf("shutdown timeout after %v", ctx.Err())
-		timedOut = true
-	}
-	s.persistenceMu.RLock()
-	coordinator := s.snapshot
-	s.persistenceMu.RUnlock()
-	if coordinator != nil {
-		coordinator.Shutdown(ctx)
-	}
-	if s.telemetryExport != nil {
-		s.telemetryExport.Shutdown(ctx)
-	}
-
-	closeErr := s.srv.Close()
-	if timedOut {
-		return errors.Join(ErrShutdownTimeout, ctx.Err(), closeErr)
-	}
-	return closeErr
+	return gate, nil
 }
 
 func (s *Server) restoreSnapshot(cfg PersistenceConfig) {
@@ -619,6 +659,11 @@ func (s *Server) Close() error {
 	}
 	if s.telemetryExport != nil {
 		s.telemetryExport.Close()
+	}
+	if gate := s.gate.Load(); gate != nil {
+		// Let a held Accept return, so redcon's serve loop ends (and closes its
+		// connections) instead of blocking on the gate forever.
+		gate.Release()
 	}
 	return s.srv.Close()
 }
@@ -1854,6 +1899,7 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"INFO [section ...] - Redis-style server info (version, stats, memory, cpu, cache hit ratios)",
 		"CONFIG GET [pattern] - List runtime configuration parameters",
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
+		"SHUTDOWN [NOSAVE|SAVE] [NOW] [FORCE] [ABORT] - Stop the server (the caller blocks with no reply; ABORT cancels a pending shutdown)",
 		"AUTH <password> - Authenticate with the server",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
