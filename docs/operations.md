@@ -60,6 +60,55 @@ Equivalent flags: `-idle-timeout 15m`, `-max-connections 100`,
   `EMB.INFO`, `EMB.HELP`) always answer so ops can still probe a saturated
   server.
 
+### Shutdown
+
+SIGTERM, SIGINT, and the `SHUTDOWN` command run one sequence (see
+[SHUTDOWN](commands.md#shutdown) for the command's flags and replies):
+
+1. **Grace** — when the shutdown is not `NOW` and `shutdown_timeout` is above
+   zero, the server waits up to that many seconds while clients other than
+   blocked `SHUTDOWN` callers are still connected. During the grace it keeps
+   accepting connections and serves every command, and `EMB.READY` replies
+   `draining` so probes move traffic away. The wait ends at the deadline or
+   within 100ms of the last such client leaving. `INFO server` reports
+   `shutdown_in_milliseconds` for the remaining time. The default
+   `shutdown_timeout` is **0**: like a standalone Redis (which waits only for
+   lagging replicas), emb then stops clients immediately. Set it when a load
+   balancer needs time to deregister the instance.
+2. **Clients stop** — the listening socket closes, so new connections are
+   refused (the `ECONNREFUSED` a Redis client retries on). Idle connections are
+   closed; a running command finishes and its connection closes right after the
+   reply; anything not yet executing gets no reply and its connection closes. No
+   shutdown-specific RESP error is ever sent — the removed `ERR server shutting
+   down` was the breaking change of this release.
+3. **Drain, snapshot, telemetry** — in-flight inference gets its full
+   `shutdown_timeout`-independent budget of 30 seconds, then the final snapshot
+   is attempted within that same budget, telemetry flushes, and ONNX Runtime
+   resources are released. The process exits 0.
+
+Signals run the sequence with the flags in `shutdown_on_sigterm` /
+`shutdown_on_sigint` (`default`, `save`, `nosave`, `now`, `force`). A second
+SIGINT while a shutdown is pending logs `You insist... exiting now.` and exits
+immediately with status **1**, without draining or snapshotting (as in Redis);
+deploy `SHUTDOWN ABORT` to cancel a pending shutdown instead, which returns the
+server to normal operation. A repeated SIGTERM is ignored: it changes nothing.
+A signal received while models load or the snapshot restores stops startup at
+the next step boundary and exits **0** without writing a snapshot.
+
+`CONFIG SET shutdown_timeout` and the two signal parameters apply to the next
+shutdown. Both spellings work in `CONFIG`: the canonical `shutdown_timeout` and
+Redis's `shutdown-timeout`, for every parameter.
+
+**Stop-timeout budget.** An orchestrator's kill timeout must cover
+`shutdown_timeout` + up to 30s of drain + the final snapshot. ECS on Fargate caps
+a stop timeout at 120s, so `shutdown_timeout` must stay well under 90s there.
+
+**Deliberate differences from Redis:** emb sends no `-LOADING` (it listens only
+once ready, so TCP health checks stay correct); it does not pause writes during
+the grace (it has no replicas, and the snapshot is taken after the drain); a
+snapshot failure never keeps the process running (the cache is rebuildable, as
+if `FORCE` were set); and with no password, `SHUTDOWN` is loopback-only.
+
 ## Observability
 
 `EMB.STATS` reports uptime, total requests, live `connections` and

@@ -99,6 +99,21 @@ func (s *Server) configParams() []configParam {
 			set:  (*Server).setConfigMaxCommandBytes,
 		},
 		{
+			name: "shutdown_timeout",
+			get:  func(s *Server) string { return strconv.FormatInt(s.shutdownTimeout.Load(), 10) },
+			set:  (*Server).setConfigShutdownTimeout,
+		},
+		{
+			name: "shutdown_on_sigterm",
+			get:  func(s *Server) string { return s.shutdownOnSigterm.Load().(string) },
+			set:  shutdownFlagSetter(&s.shutdownOnSigterm),
+		},
+		{
+			name: "shutdown_on_sigint",
+			get:  func(s *Server) string { return s.shutdownOnSigint.Load().(string) },
+			set:  shutdownFlagSetter(&s.shutdownOnSigint),
+		},
+		{
 			name: "password",
 			get:  func(s *Server) string { return s.password.Load().(string) },
 			set: func(s *Server, v string) error {
@@ -316,6 +331,30 @@ func (s *Server) setConfigMaxCommandBytes(v string) error {
 	return nil
 }
 
+// setConfigShutdownTimeout changes the grace period, in integer seconds. A
+// change applies to the next shutdown, never to a grace already running.
+func (s *Server) setConfigShutdownTimeout(v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fmt.Errorf("shutdown_timeout must be a non-negative integer number of seconds")
+	}
+	s.shutdownTimeout.Store(int64(n))
+	return nil
+}
+
+// shutdownFlagSetter builds the CONFIG SET handler for a signal's shutdown
+// flags; the stored value is the canonical ParseShutdownFlags form.
+func shutdownFlagSetter(target *atomic.Value) func(*Server, string) error {
+	return func(_ *Server, v string) error {
+		flags, err := config.ParseShutdownFlags(v)
+		if err != nil {
+			return err
+		}
+		target.Store(flags.String())
+		return nil
+	}
+}
+
 func (s *Server) handleConfig(conn redcon.Conn, cmd redcon.Command) {
 	args := cmd.Args[1:]
 	if len(args) == 0 {
@@ -327,7 +366,9 @@ func (s *Server) handleConfig(conn redcon.Conn, cmd redcon.Command) {
 	case "GET":
 		pattern := ""
 		if len(args) >= 2 {
-			pattern = string(args[1])
+			// Redis tooling sends hyphenated names (shutdown-timeout); the
+			// canonical spelling is the underscore one.
+			pattern = strings.ReplaceAll(string(args[1]), "-", "_")
 		}
 		params := s.configParams()
 		matched := make([]configParam, 0, len(params))
@@ -352,7 +393,7 @@ func (s *Server) handleConfig(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteError("ERR wrong number of arguments for 'CONFIG SET' command")
 			return
 		}
-		name := string(args[1])
+		name := strings.ReplaceAll(string(args[1]), "-", "_")
 		value := string(args[2])
 		for _, p := range s.configParams() {
 			if p.name != name {

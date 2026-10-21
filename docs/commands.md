@@ -24,6 +24,7 @@ Full reference for the `emb` command surface. See the
 | `EMB.HELP` | Command reference (includes the full script surface) |
 | `INFO [section...]` | Redis-style INFO: `server`, `cache`, `keyspace`, `stats`, `memory`, `cpu`, `clients` |
 | `CONFIG GET [glob]` / `CONFIG SET` | Read or live-tune runtime settings (see [Configuration](configuration.md)) |
+| `SHUTDOWN [NOSAVE\|SAVE] [NOW] [FORCE] [ABORT]` | Stop the server with Redis's semantics (see [SHUTDOWN](#shutdown)) |
 | `AUTH <password>` | Authenticate the connection (required if `password` is set) |
 | `HELLO [2\|3]` | Negotiate the RESP protocol version for the connection (default 2); bare `HELLO` reports the current version |
 | `PING` | PONG |
@@ -56,6 +57,46 @@ reason an unresolved or fallback layout was served. See
 precedence, and fallbacks, and
 [Operations](operations.md#reading-the-process-cpu-plan) for what each timing
 does and does not include.
+
+## SHUTDOWN
+
+`SHUTDOWN [NOSAVE|SAVE] [NOW] [FORCE] [ABORT]` stops the server the way Redis
+does. Flags are case-insensitive and may come in any order.
+
+| Flag | Meaning |
+|---|---|
+| `SAVE` / `NOSAVE` | Write, or do not write, the final cache snapshot. They override `cache_save_on_shutdown`; `SAVE` with `NOSAVE` is a syntax error |
+| `NOW` | Skip the grace period and stop clients immediately |
+| `FORCE` | Accepted for Redis compatibility. emb's snapshot is a rebuildable cache, so a failed save never blocks exit and `FORCE` is always effectively set |
+| `ABORT` | Cancel a pending shutdown; cannot be combined with any other flag |
+
+Replies:
+
+- `-ERR syntax error` for an unknown flag, `SAVE` with `NOSAVE`, or `ABORT`
+  combined with any other flag. Nothing starts and the server keeps running.
+- `+OK` to the aborting client when `SHUTDOWN ABORT` cancels a pending or
+  running shutdown; `-ERR No shutdown in progress.` when there is nothing to
+  abort.
+- A shutdown caller receives **no reply**: it blocks (for the grace, then the
+  drain) and its connection closes as the process exits, as with Redis. A
+  second `SHUTDOWN` sent while one runs also blocks, and its flags are ignored.
+- A blocked caller released by `ABORT` receives
+  `-ERR Errors trying to SHUTDOWN. Check logs.`
+
+The sequence is the same one SIGTERM and SIGINT run: the grace period
+(`shutdown_timeout`, during which every command is still served and `EMB.READY`
+replies `draining`), then the listening socket closes and clients stop —
+idle connections close at once, a running command finishes and its connection
+closes right after the reply, and commands not yet executing get no reply at all
+(their connection closes, so clients see a connection error, never a RESP error).
+Then in-flight inference drains, the final snapshot is attempted within the
+drain budget, telemetry flushes, and ONNX Runtime resources are released.
+
+Access control follows Redis protected mode: with a `password` configured,
+`SHUTDOWN` requires authentication like any other command; without one, only
+loopback clients may call it, and any other client gets
+`-DENIED SHUTDOWN is only accepted from loopback clients when no password is
+configured`.
 
 ## EMB.MULTI
 

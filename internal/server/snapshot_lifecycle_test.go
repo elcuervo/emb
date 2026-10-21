@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/registry"
 )
 
@@ -152,7 +153,7 @@ func TestShutdownSavesOnlyDirtyCache(t *testing.T) {
 		s.cache.Set("test:dirty", make([]byte, 16))
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		if err := s.Shutdown(ctx); err != nil && err.Error() != "not serving" {
+		if err := s.Shutdown(ctx, config.ShutdownFlags{}); err != nil && err.Error() != "not serving" {
 			t.Fatal(err)
 		}
 		if _, err := os.Stat(path); err != nil {
@@ -167,7 +168,7 @@ func TestShutdownSavesOnlyDirtyCache(t *testing.T) {
 		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		if err := s.Shutdown(ctx); err != nil && err.Error() != "not serving" {
+		if err := s.Shutdown(ctx, config.ShutdownFlags{}); err != nil && err.Error() != "not serving" {
 			t.Fatal(err)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -183,7 +184,7 @@ func TestShutdownSavesOnlyDirtyCache(t *testing.T) {
 		s.cache.Set("test:dirty", make([]byte, 16))
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = s.Shutdown(ctx)
+		_ = s.Shutdown(ctx, config.ShutdownFlags{})
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("disabled shutdown wrote snapshot: %v", err)
 		}
@@ -200,7 +201,7 @@ func TestShutdownSavesOnlyDirtyCache(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = s.Shutdown(ctx)
+		_ = s.Shutdown(ctx, config.ShutdownFlags{})
 		if status := s.snapshot.Status(); status.Failures != 1 || status.Successes != 0 {
 			t.Fatalf("failed shutdown status = %#v", status)
 		}
@@ -220,7 +221,7 @@ func TestShutdownSavesOnlyDirtyCache(t *testing.T) {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_ = s.Shutdown(ctx)
+		_ = s.Shutdown(ctx, config.ShutdownFlags{})
 		select {
 		case <-cancelled:
 		case <-time.After(time.Second):

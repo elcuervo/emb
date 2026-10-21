@@ -9,6 +9,7 @@ Server settings live in a YAML file (`-config config.yaml`) or inline flags.
 - [Batching](#batching)
 - [Caching](#caching)
 - [Persistent cache snapshots](#persistent-cache-snapshots)
+- [Shutdown](#shutdown)
 
 ## Full example
 
@@ -30,6 +31,9 @@ cpu_budget: auto              # process-local ORT budget; use off for legacy siz
 # cache_restore_reserve: 10%
 # cache_save_rate_limit: 100MB/s
 # idle_timeout: 15m, max_connections: 100, max_concurrent_requests: 32
+# shutdown_timeout: 0           # grace period in seconds while clients are connected (0 = stop at once)
+# shutdown_on_sigterm: default  # default|save|nosave|now|force
+# shutdown_on_sigint: default   # default|save|nosave|now|force
 # admission_timeout: 10s        # how long a command may wait for CPU admission (0 = unbounded)
 # max_command_bytes: 64MB       # max buffered bytes per command (0 = unlimited)
 # max_images: 4096              # images per EMB.IMG/EMB.IMGMULTI (0 = unlimited)
@@ -551,6 +555,38 @@ rejects those commands with an explicit error rather than letting an
 unauthenticated client point snapshot writes at an arbitrary path. Bind
 `localhost` for a password-free deployment, or set `password` (and `AUTH`)
 when serving non-loopback clients.
+
+## Shutdown
+
+SIGTERM, SIGINT, and the `SHUTDOWN` command run the same sequence. These
+parameters shape it; see [Operations → Shutdown](operations.md#shutdown) for the
+order and [SHUTDOWN](commands.md#shutdown) for the command.
+
+| Setting / CLI flag | Default | Live update | Meaning |
+|---|---:|---:|---|
+| `shutdown_timeout` / `-shutdown-timeout` | `0` | yes | Grace period in **integer seconds**. While clients other than blocked `SHUTDOWN` callers are connected, the server keeps serving and accepting connections for up to this long (checked every 100ms). `0` stops clients immediately, like a standalone Redis |
+| `shutdown_on_sigterm` / `-shutdown-on-sigterm` | `default` | yes | Flags SIGTERM runs the shutdown with: a space-separated combination of `default`, `save`, `nosave`, `now`, and `force` |
+| `shutdown_on_sigint` / `-shutdown-on-sigint` | `default` | yes | Same for SIGINT (Ctrl+C) |
+
+```yaml
+shutdown_timeout: 15          # let a load balancer deregister this instance
+shutdown_on_sigterm: nosave   # container stops never write the final snapshot
+shutdown_on_sigint: default
+```
+
+```bash
+./bin/emb -config config.yaml -shutdown-timeout 15
+```
+
+`SAVE` / `NOSAVE` override `cache_save_on_shutdown` for one shutdown;
+`default` leaves that setting in charge. `shutdown_timeout` is rejected when it
+is negative or fractional, and `save` with `nosave` is rejected in either signal
+parameter.
+
+`CONFIG GET` / `CONFIG SET` accept both spellings of every parameter: the
+canonical underscore form (`shutdown_timeout`) and Redis's hyphenated form
+(`shutdown-timeout`). Replies always name parameters with underscores. A change
+applies to the next shutdown, never to a grace already running.
 
 ## Telemetry (OpenTelemetry)
 

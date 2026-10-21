@@ -43,6 +43,15 @@ type Config struct {
 	// duration. nil (default) applies DefaultIdleTimeout; an explicit 0
 	// disables reaping entirely (strict Redis semantics).
 	IdleTimeout *Duration `yaml:"idle_timeout"`
+	// ShutdownTimeout is the grace period, in seconds, during which a shutdown
+	// waits for connected clients (Redis's shutdown-timeout). 0 (default)
+	// stops clients immediately, like a standalone Redis.
+	ShutdownTimeout ShutdownTimeout `yaml:"shutdown_timeout"`
+	// ShutdownOnSigterm / ShutdownOnSigint are the flags a signal runs the
+	// shutdown with: a space-separated combination of default, save, nosave,
+	// now, and force. Empty means "default".
+	ShutdownOnSigterm string `yaml:"shutdown_on_sigterm"`
+	ShutdownOnSigint  string `yaml:"shutdown_on_sigint"`
 	// MaxConnections refuses new connections beyond the cap. 0 (default) is
 	// unlimited.
 	MaxConnections int `yaml:"max_connections"`
@@ -535,6 +544,15 @@ func (c *Config) validate() error {
 	if c.AdmissionTimeout != nil && time.Duration(*c.AdmissionTimeout) < 0 {
 		return fmt.Errorf("admission_timeout must not be negative, got %s", time.Duration(*c.AdmissionTimeout))
 	}
+	if c.ShutdownTimeout < 0 {
+		return fmt.Errorf("shutdown_timeout must be a non-negative number of seconds, got %d", c.ShutdownTimeout)
+	}
+	if _, err := c.ShutdownSigtermFlags(); err != nil {
+		return err
+	}
+	if _, err := c.ShutdownSigintFlags(); err != nil {
+		return err
+	}
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		return fmt.Errorf("both tls_cert and tls_key must be set together")
 	}
@@ -890,6 +908,30 @@ func ParseFlags(args []string) (*FlagConfig, error) {
 		}
 		dur := Duration(d)
 		fc.IdleTimeout = &dur
+		return nil
+	})
+	fs.Func("shutdown-timeout", "", func(s string) error {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 0 {
+			return fmt.Errorf("-shutdown-timeout must be a non-negative integer number of seconds, got %q", s)
+		}
+		fc.ShutdownTimeout = ShutdownTimeout(n)
+		return nil
+	})
+	fs.Func("shutdown-on-sigterm", "", func(s string) error {
+		f, err := ParseShutdownFlags(s)
+		if err != nil {
+			return fmt.Errorf("parsing -shutdown-on-sigterm: %w", err)
+		}
+		fc.ShutdownOnSigterm = f.String()
+		return nil
+	})
+	fs.Func("shutdown-on-sigint", "", func(s string) error {
+		f, err := ParseShutdownFlags(s)
+		if err != nil {
+			return fmt.Errorf("parsing -shutdown-on-sigint: %w", err)
+		}
+		fc.ShutdownOnSigint = f.String()
 		return nil
 	})
 	fs.Var(lenientInt{&fc.MaxConnections}, "max-connections", "")

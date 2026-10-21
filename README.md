@@ -139,12 +139,34 @@ redis-cli EMB minilm "hello world"
 | `EMB.HELP` | Command reference |
 | `INFO [section...]` | Redis-style INFO sections |
 | `CONFIG GET [glob]` / `CONFIG SET` | Read or live-tune runtime settings |
+| `SHUTDOWN [NOSAVE\|SAVE] [NOW] [FORCE] [ABORT]` | Stop the server with Redis's semantics: grace, blocked caller, `ABORT` |
 | `AUTH <password>` | Authenticate the connection |
 | `HELLO [2\|3]` | Negotiate the RESP version |
 | `PING` | PONG |
 
 Reply formats, `EMB.IMG` semantics, and RESP3 differences are documented in
 [Commands](docs/commands.md).
+
+## Shutdown
+
+SIGTERM, SIGINT, and `SHUTDOWN` run one Redis-compatible sequence. With
+`shutdown_timeout` above zero, a grace period keeps serving (and accepting)
+connections while clients other than blocked `SHUTDOWN` callers remain; the
+default is `0`, so clients stop immediately, like a standalone Redis. Then the
+listening socket closes (new connections are refused), idle connections close, a
+running command finishes and closes right after its reply, and anything not yet
+executing gets no reply at all. No shutdown-specific RESP error is ever sent —
+callers see a retryable connection error, as with Redis.
+
+`SHUTDOWN` blocks its caller and replies nothing on success; `SHUTDOWN ABORT`
+answers `+OK` and releases blocked callers with `-ERR Errors trying to SHUTDOWN.
+Check logs.`. Without a password only loopback clients may call it. A second
+SIGINT during a pending shutdown exits immediately with status 1; a repeated
+SIGTERM is ignored. `shutdown_on_sigterm` / `shutdown_on_sigint` choose the flags
+(`default`, `save`, `nosave`, `now`, `force`), and `CONFIG GET`/`SET` accept
+Redis's hyphenated spellings for every parameter. Details in
+[Operations](docs/operations.md#shutdown) and
+[Configuration](docs/configuration.md#shutdown).
 
 ## Laya decision models
 

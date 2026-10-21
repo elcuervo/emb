@@ -57,7 +57,7 @@
 
   Move the select loop into a testable function that runs grace, then drain, then exit, and returns to waiting after an abort. Verify with tests driving fake signal and request channels: grace then shutdown; `now`; abort then a later SIGTERM; repeated SIGTERM ignored; second SIGINT calls an injected exit with 1.
 - [x] 5.2 Check the request channel between preload and restore steps before the listener opens; on a pending request, unwind and exit 0 without a snapshot. Verify with a test that injects a request during startup.
-- [ ] 5.3 Emit the Redis-style log lines listed in design Decision 12. Verify in the 7.2 run log.
+- [x] 5.3 Emit the Redis-style log lines listed in design Decision 12. Verify in the 7.2 run log.
 
 ## 6. CONFIG and INFO
 
@@ -67,7 +67,7 @@
 
 ## 7. Redis parity and end-to-end check
 
-- [ ] 7.1 Add `internal/server/shutdown_parity_test.go`. It is gated by `EMB_REDIS_PARITY=1` and skips when `redis-server` is not on `PATH`. It runs the same client script against `redis-server --port 0 --save ''` and against emb, and asserts identical client-visible results:
+- [x] 7.1 Add `internal/server/shutdown_parity_test.go`. It is gated by `EMB_REDIS_PARITY=1` and skips when `redis-server` is not on `PATH`. It runs the same client script against `redis-server --port 0 --save ''` and against emb, and asserts identical client-visible results:
   - `SHUTDOWN SAVE NOSAVE`, `SHUTDOWN ABORT NOW`, and `SHUTDOWN LATER` replies;
   - `SHUTDOWN ABORT` with nothing running;
   - the error class (connection error, not command error) an idle connection gets after `SHUTDOWN NOW NOSAVE`;
@@ -75,7 +75,7 @@
   - exit status 1 on a double SIGINT.
 
   Grace, abort, and blocked-waiter text are compared only on emb: Redis waits only with lagging replicas. Verify with `nix develop --command bash -c 'EMB_REDIS_PARITY=1 go test ./internal/server/ -run Parity -count=1'`.
-- [ ] 7.2 Inside `nix develop`, run `just lint`, `just test`, and `just build`. Then run `./bin/emb -config test-two-models.yaml -listen 127.0.0.1:16379 -shutdown-timeout 10` with a held `redis-cli` connection and check:
+- [x] 7.2 Inside `nix develop`, run `just lint`, `just test`, and `just build`. Then run `./bin/emb -config test-two-models.yaml -listen 127.0.0.1:16379 -shutdown-timeout 10` with a held `redis-cli` connection and check:
   - after SIGTERM, `EMB` answers, `EMB.READY` replies `draining`, and `INFO server` shows `shutdown_in_milliseconds`;
   - `SHUTDOWN ABORT` from loopback replies `OK`, and `EMB.READY` returns `OK`;
   - after another SIGTERM, closing the held connection ends the grace at once and the process exits 0 with the Redis-style log lines;
@@ -83,8 +83,8 @@
 
 ## 8. Documentation
 
-- [ ] 8.1 `docs/commands.md`: document `SHUTDOWN` with syntax, flags, replies, blocking, abort, and access control, and remove `ERR server shutting down`. `docs/operations.md`, in the Connection lifecycle section: document the shutdown sequence, the grace, refused connections, second SIGINT, the stop-timeout budget (`shutdown_timeout` + 30s drain + snapshot), and the deliberate differences from Redis. `docs/configuration.md`: add the three parameters to the table and the YAML sample, and note the hyphenated CONFIG names. Verify that every command in these docs ran as written in 7.2.
-- [ ] 8.2 Mirror 8.1 in `website/docs/index.html`, as the `product-docs` parity requirement demands, and add the README shutdown notes. Verify that the site's docs page lists `SHUTDOWN` and the three parameters with the same fields as `docs/commands.md` and `docs/configuration.md`.
+- [x] 8.1 `docs/commands.md`: document `SHUTDOWN` with syntax, flags, replies, blocking, abort, and access control, and remove `ERR server shutting down`. `docs/operations.md`, in the Connection lifecycle section: document the shutdown sequence, the grace, refused connections, second SIGINT, the stop-timeout budget (`shutdown_timeout` + 30s drain + snapshot), and the deliberate differences from Redis. `docs/configuration.md`: add the three parameters to the table and the YAML sample, and note the hyphenated CONFIG names. Verify that every command in these docs ran as written in 7.2.
+- [x] 8.2 Mirror 8.1 in `website/docs/index.html`, as the `product-docs` parity requirement demands, and add the README shutdown notes. Verify that the site's docs page lists `SHUTDOWN` and the three parameters with the same fields as `docs/commands.md` and `docs/configuration.md`.
 
 ## Workflow follow-up
 

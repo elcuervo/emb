@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"sort"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -36,6 +35,16 @@ func run() error {
 		return fmt.Errorf("parsing flags: %w", err)
 	}
 
+	// Shutdown requests are collected from the first moment: a signal while
+	// models load must unwind startup cleanly instead of killing the process
+	// with Go's default action.
+	requests := make(chan server.ShutdownRequest, 4)
+	var pending atomic.Bool
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	go watchSignals(signals, &pending, requests, os.Exit)
+
 	if err := onnx.InitEnvironment(fc.OrtLib); err != nil {
 		return fmt.Errorf("initializing ONNX Runtime: %w", err)
 	}
@@ -59,6 +68,9 @@ func run() error {
 
 	var modelCount int
 	for name, modelCfg := range fc.Models {
+		if startupAborted(requests) {
+			return nil
+		}
 		log.Printf("registering model %q", name)
 		entry, err := registry.LoadModelDeferred(modelCfg, name)
 		if err != nil {
@@ -115,6 +127,9 @@ func run() error {
 	if telemetryCfg.ServiceVersion == "" {
 		telemetryCfg.ServiceVersion = version
 	}
+	if startupAborted(requests) {
+		return nil
+	}
 	srv := server.New(fc.Listen, reg, fc.Password, fc.Cache, tlsConfig,
 		server.WithIdleTimeout(idleTimeout),
 		server.WithMaxConnections(fc.MaxConnections),
@@ -137,9 +152,16 @@ func run() error {
 			SaveRateRaw:    fc.CacheSaveRateLimit,
 		}),
 		server.WithTelemetry(telemetryCfg),
+		server.WithShutdownRequests(requests, &pending),
+		server.WithShutdownConfig(int(fc.ShutdownTimeout), fc.ShutdownOnSigterm, fc.ShutdownOnSigint),
 	)
 	srv.SetVersion(version)
 	srv.SetTLSConfigPaths(fc.TLSCert, fc.TLSKey)
+	if startupAborted(requests) {
+		// A signal during the snapshot restore: unwind before listening.
+		_ = srv.Close()
+		return nil
+	}
 
 	var warmups []server.ScriptWarmup
 	for name, modelCfg := range fc.Models {
@@ -187,39 +209,21 @@ func run() error {
 		srv.WarmScripts(warmups)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sig)
-
 	serveDone, err := srv.Start()
 	if err != nil {
 		return fmt.Errorf("server error: %w", err)
 	}
 
-	select {
-	case serveErr := <-serveDone:
-		if serveErr != nil {
-			return fmt.Errorf("server error: %w", serveErr)
-		}
-	case received := <-sig:
-		log.Printf("shutting down (signal: %v)...", received)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		shutdownErr := srv.Shutdown(ctx)
-		cancel()
-		if errors.Is(shutdownErr, server.ErrShutdownTimeout) {
+	outcome, err := awaitShutdown(requests, serveDone, &pending, srv.SignalShutdownFlags, srv.Shutdown, srv.ShutdownInProgress)
+	if err != nil {
+		if outcome == outcomeTimeout {
 			// Returning reaches main's fatal exit. Skip native cleanup because an
 			// inference call may still be using those resources; the OS reclaims
 			// them when the process exits.
 			closeRegistry = false
 			destroyEnvironment = false
-			return shutdownErr
 		}
-		if shutdownErr != nil {
-			return fmt.Errorf("shutting down server: %w", shutdownErr)
-		}
-		if serveErr := <-serveDone; serveErr != nil {
-			return fmt.Errorf("server shutdown: %w", serveErr)
-		}
+		return err
 	}
 
 	if err := reg.Close(); err != nil {
@@ -227,7 +231,9 @@ func run() error {
 	}
 	closeRegistry = false
 
-	log.Print("server stopped")
+	if outcome == outcomeShutdown {
+		log.Print("emb is now ready to exit, bye bye...")
+	}
 	return nil
 }
 
