@@ -655,3 +655,32 @@ func TestAbortRefusedOnceClientsAreStopping(t *testing.T) {
 	}
 	s.finishShutdown()
 }
+
+// TestGraceRejectsAnAbortThatLandedBeforeItStarts pins the window between
+// Shutdown marking the sequence and grace taking the lock: an ABORT there must
+// not leave a stale grace that reports draining and ignores further aborts.
+func TestGraceRejectsAnAbortThatLandedBeforeItStarts(t *testing.T) {
+	s := New("", nil, "", "", nil)
+	s.shutdownTimeout.Store(30)
+	if _, first := s.requestShutdown(); !first {
+		t.Fatal("the first request must start the sequence")
+	}
+	if !s.abortShutdown() {
+		t.Fatal("the pending shutdown was not abortable")
+	}
+
+	start := time.Now()
+	err := s.grace(config.ShutdownFlags{})
+	if !errors.Is(err, ErrShutdownAborted) {
+		t.Fatalf("grace after an abort = %v, want ErrShutdownAborted", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("grace waited %v after the abort", elapsed)
+	}
+	if got := serverState(s.state.Load()); got != stateReady {
+		t.Fatalf("state after the aborted grace = %v, want ready", got)
+	}
+	if s.graceDeadline.Load() != 0 {
+		t.Fatal("grace left a deadline after the abort")
+	}
+}

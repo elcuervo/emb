@@ -196,12 +196,19 @@ func (s *Server) grace(flags config.ShutdownFlags) error {
 	}
 
 	s.shutdownMu.Lock()
+	// An ABORT that landed between Shutdown marking the sequence and here has
+	// already cleared the cancel channel: do not start a stale grace, which
+	// would report draining and ignore further aborts until its deadline.
+	cancel := s.shutdownCancel
+	if cancel == nil {
+		s.shutdownMu.Unlock()
+		return ErrShutdownAborted
+	}
 	if s.graceClients() == 0 {
 		s.shutdownMu.Unlock()
 		return nil
 	}
 	deadline := time.Now().Add(timeout)
-	cancel := s.shutdownCancel
 	s.graceDeadline.Store(deadline.UnixNano())
 	// EMB.READY reports draining during the grace; admission and accept stay
 	// open, so every command still runs.
