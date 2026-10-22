@@ -145,25 +145,27 @@ and N concurrently running shares SHALL report near N.
 - **WHEN** a `lazy: :multi` scope sends three shares one after another
 - **THEN** its parallelism observation is near 1
 
-### Requirement: Histograms declare their bucket boundaries
+### Requirement: Histogram boundaries fit the instrument's unit
 
-Every client histogram SHALL declare recommended bucket boundaries spanning 1 ms to
-30 s through the instrument's advisory parameters, instead of leaving consumers to
-the SDK's millisecond-scale defaults. Because the OpenTelemetry metrics SDK does not
-apply instrument advisories yet, the gem's documentation SHALL show the SDK view
-that applies those boundaries to `emb.client.*` histograms.
+Every client histogram SHALL declare recommended bucket boundaries matched to its
+unit — 1 ms to 30 s for durations, count-scale boundaries for `{share}`, and
+ratio-scale boundaries for the dimensionless parallelism metric — instead of
+leaving consumers to the SDK's millisecond-scale defaults. Because the metrics SDK
+does not apply instrument advisories yet, the documentation SHALL show the SDK
+views that apply them per unit.
 
-#### Scenario: Documented view applies the boundaries
+#### Scenario: Documented per-unit views
 
-- **WHEN** an application adds the documented `emb.client.*` view before its first embedding call
-- **THEN** exported client histogram datapoints carry explicit boundaries between 0.001 s and 30 s
+- **WHEN** an application adds the documented views before its first embedding call
+- **THEN** duration histograms carry boundaries between 0.001 s and 30 s, the share-count histogram carries count-scale boundaries, and the parallelism histogram carries ratio-scale boundaries
 
 ### Requirement: Attributes are bounded and carry no content
 
 Emitted attributes SHALL be limited to model name, operation kind, batching mode,
-reply format, text counts, instance identifier, and error status. They SHALL NOT include input
-texts, image bytes, embedding values, user or request identifiers, or the list of
-models in a multi-model batch.
+reply format, text counts, share and worker counts, queue time, dispatch outcome,
+instance identifier, and error status. They SHALL NOT include input texts, image
+bytes, embedding values, user or request identifiers, or the list of models in a
+multi-model batch.
 
 #### Scenario: Text content never leaves the process
 

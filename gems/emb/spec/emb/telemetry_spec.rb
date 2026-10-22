@@ -106,18 +106,24 @@ RSpec.describe Emb::Telemetry do
       expect(client.commands.size).to eq(1)
     end
 
-    it 'carries the declared boundaries when the documented view is applied' do
-      OpenTelemetry.meter_provider.add_view(
-        'emb.client.*',
-        aggregation: OpenTelemetry::SDK::Metrics::Aggregation::ExplicitBucketHistogram.new(
-          boundaries: Emb::Telemetry::BOUNDARIES
-        )
-      )
-      client = TelemetryHelpers::FakeClient.new
+    it 'applies per-unit boundaries through the documented views' do
+      hist = OpenTelemetry::SDK::Metrics::Aggregation::ExplicitBucketHistogram
+      { 's' => Emb::Telemetry::BOUNDARIES,
+        '{share}' => Emb::Telemetry::COUNT_BOUNDARIES,
+        '1' => Emb::Telemetry::RATIO_BOUNDARIES }.each do |unit, boundaries|
+        OpenTelemetry.meter_provider.add_view('emb.client.*', type: :histogram, unit: unit,
+                                                              aggregation: hist.new(boundaries: boundaries))
+      end
+      client = TelemetryHelpers::FakeClient.new(lazy_mode: :batch)
+      minilm = Emb.build_batch_loader(client, :minilm, 'one')
+      clip = Emb.build_batch_loader(client, :clip, 'two')
 
-      Emb::Proxy.new(client, :minilm)['hello']
+      force(minilm)
+      force(clip)
 
       expect(histogram('emb.client.embed.duration').explicit_bounds).to eq(Emb::Telemetry::BOUNDARIES.sort)
+      expect(histogram('emb.client.batch.shares').explicit_bounds).to eq(Emb::Telemetry::COUNT_BOUNDARIES.sort)
+      expect(histogram('emb.client.batch.parallelism').explicit_bounds).to eq(Emb::Telemetry::RATIO_BOUNDARIES.sort)
     end
   end
 
@@ -186,6 +192,10 @@ RSpec.describe Emb::Telemetry do
       )
       expect(spans_named('emb.share').size).to eq(2)
       expect(spans_named('emb.embed').size).to eq(2)
+      # The text count stays on the span: as a metric attribute it would create
+      # one series per count.
+      expect(histogram('emb.client.share.duration').attributes).not_to have_key('emb.texts')
+      expect(span_named('emb.share').attributes).to include('emb.texts')
     end
 
     it 'records overlapping shares and a parallelism near the share count' do
@@ -260,7 +270,7 @@ RSpec.describe Emb::Telemetry do
 
     it 'keeps a password out of the instance attribute when the URL is malformed' do
       stub_const('RedisClient', TelemetryHelpers::StubRedis)
-      client = Emb::Client.new(url: 'redis://user:pa/ss@host:6379/0', lazy: :batch)
+      client = Emb::Client.new(url: 'redis://user:pa/ss@host:6379/0?password=secret', lazy: :batch)
       loader = Emb.build_batch_loader(client, :minilm, 'hello')
 
       force(loader)
@@ -268,6 +278,7 @@ RSpec.describe Emb::Telemetry do
       attributes = span_named('emb.share').attributes
       expect(attributes['emb.instance']).to eq('host:6379')
       expect(attributes.inspect).not_to include('pa/ss')
+      expect(attributes.inspect).not_to include('secret')
     end
 
     it 'attributes each share to the instance that served it, without credentials' do
@@ -310,6 +321,8 @@ RSpec.describe Emb::Telemetry do
       dispatched = spans_named('emb.embed').map { |span| span.attributes['emb.dispatched'] }
       expect(dispatched).to contain_exactly(true, false)
       expect(histogram('emb.client.share.duration').count).to eq(1)
+      # Only the attempted share reports a queue; the unsent one never does.
+      expect(histogram('emb.client.queue.duration').count).to eq(1)
     end
   end
 end

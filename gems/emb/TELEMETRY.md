@@ -43,15 +43,16 @@ OpenTelemetry.meter_provider.add_metric_reader(
   )
 )
 
-# Embedding latency is seconds, not milliseconds. The metrics SDK does not apply
-# instrument advisories yet, so apply the gem's declared boundaries yourself,
-# before the first embedding call.
-OpenTelemetry.meter_provider.add_view(
-  "emb.client.*",
-  aggregation: OpenTelemetry::SDK::Metrics::Aggregation::ExplicitBucketHistogram.new(
-    boundaries: Emb::Telemetry::BOUNDARIES
-  )
-)
+# Boundaries per unit: embedding latency is seconds, the share count is a count,
+# and parallelism is a ratio. The metrics SDK does not apply instrument advisories
+# yet, so apply the gem's declared boundaries yourself, before the first call.
+view = OpenTelemetry::SDK::Metrics::Aggregation::ExplicitBucketHistogram
+OpenTelemetry.meter_provider.add_view("emb.client.*", type: :histogram, unit: "s",
+                                      aggregation: view.new(boundaries: Emb::Telemetry::BOUNDARIES))
+OpenTelemetry.meter_provider.add_view("emb.client.*", type: :histogram, unit: "{share}",
+                                      aggregation: view.new(boundaries: Emb::Telemetry::COUNT_BOUNDARIES))
+OpenTelemetry.meter_provider.add_view("emb.client.*", type: :histogram, unit: "1",
+                                      aggregation: view.new(boundaries: Emb::Telemetry::RATIO_BOUNDARIES))
 ```
 
 Spans land under the current trace, so a lookup inside a controller or job shows

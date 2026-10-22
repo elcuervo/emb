@@ -18,9 +18,13 @@ module Emb
     SPAN_BATCH = 'emb.batch'
     SPAN_SHARE = 'emb.share'
 
-    # Declared as instrument advice: 1 ms .. 30 s. The SDK's default boundaries
-    # are millisecond-scale and would put every embedding in one bucket.
+    # Declared as instrument advice, per unit. The SDK's default boundaries are
+    # millisecond-scale, so durations need their own and counts/ratios would
+    # collapse into one bucket under them.
     BOUNDARIES = [0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0].freeze
+    COUNT_BOUNDARIES = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128].freeze
+    RATIO_BOUNDARIES = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0].freeze
+    UNIT_BOUNDARIES = { 's' => BOUNDARIES, '{share}' => COUNT_BOUNDARIES, '1' => RATIO_BOUNDARIES }.freeze
 
     HISTOGRAMS = {
       'emb.client.embed.duration' => ['s', 'End-to-end latency of one embedding call, deferral included.'],
@@ -185,11 +189,13 @@ module Emb
       attributes
     end
 
+    # The span keeps the text count; the histogram must not: it would create one
+    # series per count (up to batch_size), which is unbounded label cardinality.
     def self.end_share(span, elapsed, attributes:, instance: nil)
       attributes = attributes.merge('emb.instance' => instance) if instance
       safe { span&.set_attribute('emb.instance', instance) } if instance
       end_span(span)
-      histogram('emb.client.share.duration', elapsed, attributes: attributes)
+      histogram('emb.client.share.duration', elapsed, attributes: attributes.except('emb.texts'))
       elapsed
     end
 

@@ -20,17 +20,14 @@ module Emb
         deferrals[item] ||= entry.merge(at: Telemetry.mono, wall: Time.now)
       end
 
-      # Records the dispatch point of a share's items: the queue ends here,
-      # before the command is written. Called for failed shares too, so a failed
-      # call still reports the time it waited.
+      # Stamps the dispatch point of a share's items: the queue ends here,
+      # before the command is written. The metric is emitted on resolution, so a
+      # slice an earlier failure never attempted contributes no queue.
       def dispatched(slice)
         now = Telemetry.mono
         slice.each do |item|
           entry = deferrals[item]
-          next unless entry
-
-          entry[:queue] ||= now - entry[:at]
-          Telemetry.histogram('emb.client.queue.duration', entry[:queue], attributes: { 'emb.mode' => entry[:mode] })
+          entry[:queue] ||= now - entry[:at] if entry
         end
       end
 
@@ -42,9 +39,11 @@ module Emb
         return unless entry
 
         now = Telemetry.mono
-        span = open_span(entry, dispatched: dispatched, queue: entry[:queue] || (now - entry[:at]))
+        queue = entry[:queue] || (now - entry[:at])
+        span = open_span(entry, dispatched: dispatched, queue: queue)
         Telemetry.fail_span(span, error) if error
         Telemetry.end_span(span)
+        Telemetry.histogram('emb.client.queue.duration', queue, attributes: { 'emb.mode' => entry[:mode] })
         Telemetry.histogram('emb.client.embed.duration', now - entry[:at], attributes: metric_attributes(entry))
       end
 

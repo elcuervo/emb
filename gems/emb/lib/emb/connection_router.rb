@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'uri'
-
 require_relative 'round_robin_pool'
 require 'redis_client'
 
@@ -56,32 +54,18 @@ module Emb
 
     private
 
-    # host:port of a redis URL. Never the raw URL: its userinfo can hold a
-    # password. nil when no URL is configured (redis-client's own defaults), so
-    # the attribute is simply absent.
+    # host[:port] of a redis URL. Never the URL text itself: its userinfo can
+    # hold a password and its query can hold one. Parsed by hand rather than
+    # with URI, which accepts some credential shapes as host and port.
+    # nil when nothing is left (no URL configured) so the attribute is absent.
     def instance_label(url)
       return nil if url.nil?
 
-      label = parse_instance_label(url)
-      label unless label.nil? || label.empty?
-    end
-
-    def parse_instance_label(url)
-      uri = URI.parse(url)
-      # Everything after the last "@" is safe even when the URL does not parse
-      # or has no authority: stripping only before a "/" would leave a password
-      # that contains a slash in place.
-      return safe_tail(url) if uri.host.to_s.empty?
-
-      "#{uri.host}#{":#{uri.port}" if uri.port}"
-    rescue URI::Error, TypeError
-      safe_tail(url)
-    end
-
-    # host[:port] from a URL that does not parse: everything after the last
-    # "@", minus any path.
-    def safe_tail(url)
-      url.split('@').last.to_s.split('/').first
+      label = url.to_s.split(/[?#]/, 2).first.split('://', 2).last.to_s
+      userinfo = label.rindex('@')
+      label = label[(userinfo + 1)..] if userinfo
+      label = label.split('/').first.to_s
+      label unless label.empty?
     end
 
     def pick_instance

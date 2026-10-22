@@ -126,18 +126,20 @@ above) so a dashboard never averages them as fast inferences.
 
 ### Explicit histogram boundaries are declared, then applied by the app
 
-`[0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]`
-seconds, declared on each instrument through its advisory parameters.
+Per unit, declared on each instrument through its advisory parameters:
+`[0.001 … 30]` seconds for durations, `[1 … 128]` for the `{share}` count, and
+`[1 … 32]` for the dimensionless parallelism ratio. One second-scale set for every
+instrument would leave counts and ratios in the first bucket.
 
 Measured, not assumed: `opentelemetry-metrics-sdk` 0.22 accepts instrument
 advisories and does **not** apply them (`meter.rb`: "advisory parameters are
 accepted but not yet applied to stream configuration"), and its default boundaries
 are `[0, 5, 10, 25, …]` — milliseconds — so every embedding would land in the first
 bucket. The gem therefore declares the boundaries and documents the one-line
-`meter_provider.add_view('emb.client.*', aggregation:
-ExplicitBucketHistogram.new(boundaries: Emb::Telemetry::BOUNDARIES))` an
-application adds before its first call. Verified against the SDK: with the view,
-exported datapoints carry those bounds.
+three `meter_provider.add_view('emb.client.*', type: :histogram, unit: …,
+aggregation: ExplicitBucketHistogram.new(boundaries: …))` calls an application adds
+before its first call. Verified against the SDK: with the views, each datapoint
+carries its unit's bounds.
 
 ### Timing sources, per metric
 
@@ -150,9 +152,11 @@ exported datapoints carry those bounds.
 | embed (eager) | before `send_command` | after decode |
 
 The queue is stamped once per slice on the forcing thread, never inside a worker:
-the deferral registry is thread-local, so a worker could not read it. A serial
-(`:multi`) call that then waits behind an earlier share keeps that wait inside its
-`emb.embed` span rather than the queue metric.
+the deferral registry is thread-local, so a worker could not read it. The metric is
+emitted when the item resolves, so a slice an earlier failure never attempted
+contributes no queue observation. A serial (`:multi`) call that then waits behind
+an earlier share keeps that wait inside its `emb.embed` span rather than the queue
+metric.
 
 ## Risks / Trade-offs
 
