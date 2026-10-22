@@ -1,0 +1,34 @@
+# emb
+
+> emb is a self-hosted embedding server that speaks the Redis protocol, so any Redis client is already a client. `EMB` returns raw little-endian float32 bytes by default, or a self-describing `VALUES` envelope; `HELLO 3` opts a connection into RESP3.
+> The reply's shape depends on how many texts you send: one text is a bulk string, several are an array of bulk strings.
+
+## Reference
+
+- [Documentation](https://emb.is/docs/): install, every command (`EMB`, `EMB.MULTI`, `EMB.IMG`, `EMB.MODELS`, `EMB.READY`, `INFO`, `CONFIG`, `SHUTDOWN`), both reply formats, model configuration, operations
+- [Scripting](https://emb.is/scripting/): `EMB.EVAL`, `EMB.EVSHA`, `EMB.SCRIPT`, the sandbox, the complete `emb.*` host API, and the Lua-to-RESP reply grammar
+- [Ruby client](https://emb.is/gem/): the four call-site shapes and the wire command each one sends
+
+## Markdown sources
+
+Readable versions of the pages above, tracking the repository's `main` branch.
+
+- [README](https://raw.githubusercontent.com/elcuervo/emb/main/README.md): what emb is, quick start, Docker
+- [commands.md](https://raw.githubusercontent.com/elcuervo/emb/main/docs/commands.md): the command table, `BLOB` vs `VALUES`, RESP3 differences, error replies
+- [configuration.md](https://raw.githubusercontent.com/elcuervo/emb/main/docs/configuration.md): config file, models, batching, cache, CPU plan, shutdown
+- [scripting.md](https://raw.githubusercontent.com/elcuervo/emb/main/docs/scripting.md): the scripting engine in depth
+- [operations.md](https://raw.githubusercontent.com/elcuervo/emb/main/docs/operations.md): health checks, limits, observability, `emb-top`
+- [clients.md](https://raw.githubusercontent.com/elcuervo/emb/main/docs/clients.md): Ruby, Python and Go recipes
+
+## Install and run
+
+- [install.sh](https://github.com/elcuervo/emb/raw/main/install.sh): macOS (Apple Silicon) and Linux amd64/arm64, into `/usr/local/bin`
+- `emb -model-repo Xenova/all-MiniLM-L6-v2` downloads a model and serves on `:6379`; `emb -config config.yaml` serves a configured set
+- `docker run -v ./models:/models elcuervo/emb -config /models/config.yaml`
+- [emb-server gem](https://rubygems.org/gems/emb-server): the same binary shipped as a gem
+
+## Optional
+
+- [Demos](https://emb.is/demos/): small plates run against a real server, including the DNS zone where every name is a sentence
+- [BENCHMARK.md](https://raw.githubusercontent.com/elcuervo/emb/main/BENCHMARK.md): measured throughput and latency, with reproduction steps
+- [Releases](https://github.com/elcuervo/emb/releases): binaries and version notes

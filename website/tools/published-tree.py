@@ -109,6 +109,8 @@ SERVED = frozenset(
         # checks at the end of this file keep them true of the pages beside them.
         "robots.txt",
         "sitemap.xml",
+        # The agent-facing index: prose plus links, served at /llms.txt.
+        "llms.txt",
         "docs/index.html",
         "scripting/index.html",
         "gem/index.html",
