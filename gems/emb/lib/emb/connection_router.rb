@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'uri'
+
 require_relative 'round_robin_pool'
 require 'redis_client'
 
@@ -21,12 +23,20 @@ module Emb
 
     attr_reader :pools
 
+    # Thread-local label of the instance that last served a command, read by
+    # telemetry right after a command returns. host:port only: a redis URL can
+    # carry a password in its userinfo, which must never reach a span.
+    LAST_INSTANCE = :emb_last_instance
+
+    def self.last_instance = Thread.current[LAST_INSTANCE]
+
     def initialize(size, urls, redis_options)
       @pools = urls.map do |url|
         RoundRobinPool.new(size) do
           RedisClient.new(url: url, **redis_options)
         end
       end
+      @labels = urls.map { |url| instance_label(url) }
       @next_instance = 0
       @instance_mutex = Mutex.new
     end
@@ -36,7 +46,7 @@ module Emb
       idx = pick_instance
       last_error = nil
       attempts.times do
-        return perform_command(@pools[idx], args)
+        return perform_command(@pools[idx], args, @labels[idx])
       rescue PRESEND_CONNECTION_ERROR => e
         last_error = e
         idx = (idx + 1) % @pools.size if @pools.size > 1
@@ -45,6 +55,34 @@ module Emb
     end
 
     private
+
+    # host:port of a redis URL. Never the raw URL: its userinfo can hold a
+    # password. nil when no URL is configured (redis-client's own defaults), so
+    # the attribute is simply absent.
+    def instance_label(url)
+      return nil if url.nil?
+
+      label = parse_instance_label(url)
+      label unless label.nil? || label.empty?
+    end
+
+    def parse_instance_label(url)
+      uri = URI.parse(url)
+      # Everything after the last "@" is safe even when the URL does not parse
+      # or has no authority: stripping only before a "/" would leave a password
+      # that contains a slash in place.
+      return safe_tail(url) if uri.host.to_s.empty?
+
+      "#{uri.host}#{":#{uri.port}" if uri.port}"
+    rescue URI::Error, TypeError
+      safe_tail(url)
+    end
+
+    # host[:port] from a URL that does not parse: everything after the last
+    # "@", minus any path.
+    def safe_tail(url)
+      url.split('@').last.to_s.split('/').first
+    end
 
     def pick_instance
       return 0 if @pools.size == 1
@@ -56,7 +94,8 @@ module Emb
       end
     end
 
-    def perform_command(pool, args)
+    def perform_command(pool, args, label)
+      Thread.current[LAST_INSTANCE] = label if Emb::Telemetry.available?
       debug = Emb.debug?
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC) if debug
       result = pool.with { |r| r.call(*args) }

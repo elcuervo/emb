@@ -248,6 +248,15 @@ Useful dashboard queries: `sum:emb.requests{service:emb}.as_count()` (req/s),
 `sum:emb.errors{service:emb}.as_count()`, `avg:emb.active_requests{service:emb}`,
 and `avg:process.memory.usage{service:emb}`.
 
+**Client-side signals.** An application using the Ruby client emits its own
+`emb.client.*` metrics and `emb.embed`/`emb.batch`/`emb.share` spans from its own
+process — per-call latency including the `lazy` coalescing queue, and the observed
+parallelism of a `:batch` scope. See
+[the client telemetry guide](../gems/emb/TELEMETRY.md). Those numbers
+measure the round trip, never the server's internal phases: use this page's
+`emb.dispatch.wait`, `emb.inference.duration` and `emb.sessions.busy` for
+queueing-versus-compute, and join the two on `model`.
+
 ## Monitoring: emb-top
 
 `emb-top` is a live terminal dashboard for a running `emb` node. It connects

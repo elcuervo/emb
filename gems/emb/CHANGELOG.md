@@ -14,6 +14,16 @@ All notable changes to the `emb` gem are documented here. The format follows
 
 ### Added
 
+- Optional OpenTelemetry instrumentation. With `opentelemetry-api` (and
+  `opentelemetry-metrics-api` for metrics) installed, the client emits `emb.embed`,
+  `emb.batch`, and `emb.share` spans plus `emb.client.*` metrics: per-call latency,
+  deferral queue time, batch shape, share durations, observed parallelism, and
+  in-flight shares. There is **no new runtime dependency** — the gems are loaded on
+  first use, and without them every path returns immediately — and no emb-specific
+  configuration; `OTEL_SDK_DISABLED=true` is the off switch. See `TELEMETRY.md`,
+  including the view that applies the declared 1 ms–30 s histogram boundaries.
+  Measured cost: ~1.1 µs per call with the API loaded and no SDK (~0.1% of a
+  single-text round trip), and one branch without it.
 - `eval`/`evalsha` honor the configured `lazy` mode: deferred under `:multi` and
   `:batch` (each call is its own share, concurrent in `:batch`) and eager under
   `false`. `decode:` applies when the value resolves.

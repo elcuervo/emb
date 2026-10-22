@@ -21,9 +21,15 @@ module Emb
       if @client.lazy?
         return Emb.build_batch_loader(@client, @name, texts.empty? ? text : [text, *texts], format: format)
       end
-      return values_query(text, texts) if format == :values
 
-      unpack_set(@client.send_command('EMB', @name.to_s, text, *texts))
+      Emb::Telemetry.embed_call(operation: 'embed', model: @name, texts: 1 + texts.size,
+                                format: format, mode: 'eager') do
+        if format == :values
+          values_query(text, texts)
+        else
+          unpack_set(@client.send_command('EMB', @name.to_s, text, *texts))
+        end
+      end
     end
 
     def inspect
@@ -45,18 +51,8 @@ module Emb
       format = normalize_format(format)
       images = [image_bytes, *more].map { |bytes| self.class.coerce_image_bytes(bytes) }
 
-      if format == :values
-        reply = @client.send_command('EMB.IMG', @name.to_s, 'VALUES', *images)
-        envelope = Emb::ValuesReply.parse(reply)
-        return envelope if images.size == 1
-
-        return envelope.merge(values: Emb::ValuesReply.rows(envelope[:shape], envelope[:values]))
-      end
-
-      reply = @client.send_command('EMB.IMG', @name.to_s, *images)
-      return unpack_embedding(reply) if images.size == 1
-
-      Array(reply).map { |entry| entry.nil? ? nil : unpack_embedding(entry) }
+      Emb::Telemetry.embed_call(operation: 'image', model: @name, texts: images.size,
+                                format: format, mode: 'eager') { image_reply(images, format) }
     end
 
     # coerce_image_bytes normalizes an image argument to a binary byte string
@@ -70,6 +66,22 @@ module Emb
     end
 
     private
+
+    def image_reply(images, format)
+      return values_image_reply(images) if format == :values
+
+      reply = @client.send_command('EMB.IMG', @name.to_s, *images)
+      return unpack_embedding(reply) if images.size == 1
+
+      Array(reply).map { |entry| entry.nil? ? nil : unpack_embedding(entry) }
+    end
+
+    def values_image_reply(images)
+      envelope = Emb::ValuesReply.parse(@client.send_command('EMB.IMG', @name.to_s, 'VALUES', *images))
+      return envelope if images.size == 1
+
+      envelope.merge(values: Emb::ValuesReply.rows(envelope[:shape], envelope[:values]))
+    end
 
     # One packed vector for a single text, an array for several; a null slot
     # (failed/truncated position) maps to nil.

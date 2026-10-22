@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative 'support/telemetry_helpers'
 
 class FakeEmbClient
   attr_reader :commands
@@ -187,6 +188,8 @@ class QueueRedisClient
 end
 
 RSpec.describe Emb do
+  include TelemetryHelpers
+
   after { BatchLoader::Executor.clear_current }
 
   describe 'Emb::BATCH_BLOCK (unit)' do
@@ -647,6 +650,34 @@ RSpec.describe Emb do
       # concurrent, no sleeps.
       expect(tracker.max_overlap).to eq(2)
       expect(loaded.map(&:last)).to eq([[1.0, 1.0], [2.0, 2.0]])
+    end
+
+    it 'records the concurrent shares as overlapping spans' do
+      tracer_provider = OpenTelemetry.tracer_provider
+      meter_provider = OpenTelemetry.meter_provider
+      begin
+        install_telemetry_sdk
+        tracker = LatchTracker.new(2)
+        client = ParallelFakeEmbClient.new(
+          { %w[EMB minilm a] => [FakeEmbClient.vec(1.0)],
+            %w[EMB minilm b] => [FakeEmbClient.vec(2.0)] },
+          tracker: tracker
+        )
+        client.batch_size = 1
+        items = [[client, :minilm, 'a'], [client, :minilm, 'b']]
+        loaded = []
+
+        Emb::BATCH_BLOCK.call(items, ->(i, v) { loaded << [i, v] }, {})
+
+        shares = spans_named('emb.share').sort_by(&:start_timestamp)
+        expect(shares.size).to eq(2)
+        expect(tracker.max_overlap).to eq(2)
+        # The second share starts before the first one ends: the spans carry the
+        # same overlap the latch proved, so a flame graph shows it.
+        expect(shares.last.start_timestamp).to be < shares.first.end_timestamp
+      ensure
+        restore_providers(tracer_provider, meter_provider)
+      end
     end
 
     it 'reassembles results in deferral order across many shares' do
