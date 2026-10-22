@@ -9,6 +9,13 @@ gem 'redis-client'
 gem 'rake', require: false
 gem 'rspec', require: false
 
+group :development, :test do
+  # The telemetry specs assert emitted spans and metrics through the SDK's
+  # in-memory exporters. Consumers bring their own SDK; versions live in the lock.
+  gem 'opentelemetry-metrics-sdk', require: false
+  gem 'opentelemetry-sdk', require: false
+end
+
 # Development-only: the Railtie integration suite boots a real Rails app so the
 # real middleware-stack objects and boot order are exercised. Rails is never a
 # runtime dependency of the gem. Select a line with RAILS_VERSION.

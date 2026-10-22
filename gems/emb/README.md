@@ -641,6 +641,21 @@ chain when `Sidekiq::Testing` is loaded *before the app finishes booting* (e.g. 
 after the app boots, so require it before your environment to get per-job clearing in
 fake/inline tests — e.g. `gem "sidekiq", require: ["sidekiq", "sidekiq/testing"]`.
 
+## Telemetry (OpenTelemetry)
+
+Optional: the gem ships no OpenTelemetry dependency, and there is no emb setting.
+Install the SDK and the client emits `emb.embed`, `emb.batch`, and `emb.share`
+spans plus `emb.client.*` metrics — per-call latency, the `lazy` queue, batch
+shape, and observed parallelism.
+
+```ruby
+gem "opentelemetry-sdk"
+gem "opentelemetry-exporter-otlp"
+```
+
+[TELEMETRY.md](TELEMETRY.md) has the setup, the span and metric reference, and
+Datadog queries. `OTEL_SDK_DISABLED=true` turns it off.
+
 ## Performance
 
 ### Eager-burst pipelining (no new API)

@@ -120,7 +120,6 @@ GEM
       net-smtp
     marcel (1.2.1)
     mini_mime (1.1.5)
-    mini_portile2 (2.8.9)
     minitest (6.0.6)
       drb (~> 2.0)
       prism (~> 1.5)
@@ -134,11 +133,28 @@ GEM
     net-smtp (0.5.1)
       net-protocol
     nio4r (2.7.5)
-    nokogiri (1.19.4)
-      mini_portile2 (~> 2.8.2)
-      racc (~> 1.4)
     nokogiri (1.19.4-arm64-darwin)
       racc (~> 1.4)
+    opentelemetry-api (1.11.1)
+      logger
+    opentelemetry-common (0.25.2)
+      opentelemetry-api (~> 1.0)
+    opentelemetry-metrics-api (0.10.0)
+      opentelemetry-api (~> 1.0)
+    opentelemetry-metrics-sdk (0.22.0)
+      opentelemetry-api (~> 1.1)
+      opentelemetry-metrics-api (~> 0.10.0)
+      opentelemetry-sdk (~> 1.13.0)
+    opentelemetry-registry (0.6.3)
+      opentelemetry-api (~> 1.1)
+    opentelemetry-sdk (1.13.1)
+      logger
+      opentelemetry-api (~> 1.1)
+      opentelemetry-common (~> 0.20)
+      opentelemetry-registry (~> 0.2)
+      opentelemetry-semantic_conventions
+    opentelemetry-semantic_conventions (1.44.0)
+      opentelemetry-api (~> 1.0)
     parallel (2.1.0)
     parser (3.3.11.1)
       ast (~> 2.4.1)
@@ -256,10 +272,11 @@ GEM
 
 PLATFORMS
   arm64-darwin-25
-  ruby
 
 DEPENDENCIES
   emb!
+  opentelemetry-metrics-sdk
+  opentelemetry-sdk
   rails (~> 8.0)
   rake
   redis-client

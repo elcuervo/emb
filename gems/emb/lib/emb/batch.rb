@@ -21,7 +21,7 @@ module Emb
   # fail-closed rescue/wrap paths treat it as a client error, but stays
   # distinct so transient_error? does not count it as a transport retry: the
   # reply shape was wrong on the single send — nothing was re-sent.
-  ShortReplyError = Class.new(RedisClient::ProtocolError)
+  class ShortReplyError < RedisClient::ProtocolError; end
 
   BATCH_BLOCK = lambda do |items, loader, _args|
     items.group_by(&:first).each do |client, client_items|
@@ -29,22 +29,19 @@ module Emb
       # Script items never coalesce (each call is its own share); split them out
       # before packing embeds by model.
       embeds, scripts = client_items.partition { |item| !script_item?(item) }
+      parallel = client.respond_to?(:parallel_batch?) && client.parallel_batch?
 
-      if client.respond_to?(:parallel_batch?) && client.parallel_batch?
-        # :batch — one or more plain EMB shares per model plus one share per
-        # script call, all dispatched concurrently. A lone share stays on the
-        # forcing thread (no worker spawn).
-        slices = batch_shares(embeds, scripts, chunk)
-        if slices.size > 1
-          dispatch_parallel(client, slices, loader)
-        else
-          dispatch_serial(client, slices, loader)
-        end
-      else
-        # :multi — embeds coalesce across models into EMB/EMB.MULTI chunks,
-        # then scripts are sent one after another.
-        dispatch_serial(client, pack_slices(embeds, chunk) + scripts.map { |item| [item] }, loader)
-      end
+      # :batch — one or more plain EMB shares per model plus one share per
+      # script call, all dispatched concurrently. :multi — embeds coalesce
+      # across models into EMB/EMB.MULTI chunks, then scripts are sent one
+      # after another.
+      slices = if parallel
+                 batch_shares(embeds, scripts, chunk)
+               else
+                 pack_slices(embeds, chunk) + scripts.map { |item| [item] }
+               end
+      # A lone share stays on the forcing thread (no worker spawn).
+      run_batch(client, slices, loader, concurrent: parallel && slices.size > 1)
     end
   end
 
@@ -66,7 +63,14 @@ module Emb
       # instead (raises on use).
       # Items carry [client, model, text, format] so the dispatch knows how to
       # shape and parse the reply.
-      BatchLoader.for([client, model, text, format]).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
+      item = [client, model, text, format]
+      # Telemetry keys its deferral clock by this item (the batch-loader dedupe
+      # key); it must never be stored inside the tuple, which would make every
+      # call unique and defeat coalescing.
+      Telemetry::Deferred.record(
+        item, Telemetry.entry_for(client, operation: 'embed', model: model, texts: Array(text).size, format: format)
+      )
+      BatchLoader.for(item).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
     end
 
     # Scripts join the same batch scope as embeds (same BATCH_KEY) so forcing
@@ -74,17 +78,42 @@ module Emb
     # to nil. The item carries the prebuilt EMB.EVAL/EMB.EVSHA argv and the
     # normalized decode for resolve_slice.
     def build_script_loader(client, argv, decode)
-      BatchLoader.for([client, SCRIPT_ITEM, argv, decode]).batch(default_value: nil, key: BATCH_KEY, &BATCH_BLOCK)
+      item = [client, SCRIPT_ITEM, argv, decode]
+      Telemetry::Deferred.record(
+        item, Telemetry.entry_for(client, operation: 'script', model: argv[1], texts: argv[3].to_i, format: nil)
+      )
+      BatchLoader.for(item).batch(default_value: nil, key: BATCH_KEY, &BATCH_BLOCK)
+    end
+
+    # Forced batch: one emitting wrapper around either dispatch path, so the
+    # batch's shape and wall time are recorded once, even when it raises.
+    def run_batch(client, slices, loader, concurrent:)
+      # Queue ends when dispatch starts, on the forcing thread: the deferral
+      # registry is per-thread, so workers must never read or write it. A
+      # serial batch's later shares include their wait for earlier ones here.
+      slices.each { |slice| Telemetry::Deferred.dispatched(slice) }
+      texts = slices.sum { |slice| slice.sum { |item| item_text_count(item) } }
+      workers = concurrent ? [slices.size, worker_capacity(client)].min : 1
+      Telemetry.batch(mode: Telemetry.mode_for(client), shares: slices.size, texts: texts,
+                      workers: workers) do |durations|
+        if concurrent
+          dispatch_parallel(client, slices, loader, durations)
+        else
+          dispatch_serial(client, slices, loader, durations)
+        end
+      end
     end
 
     # Removes every pending item of the batch scope. batch-loader prunes
     # pending items only after a successful batch block, so failed batches
     # would otherwise stay queued: retries would re-run the whole batch and
     # stale items would be re-sent by later batches in the same scope. Guarded
-    # for a nil executor (no batch scope).
+    # for a nil executor (no batch scope). Deferrals that never reached a
+    # command are flushed here so they are reported as not dispatched.
     def clear_batch_pending!
       key = [BATCH_BLOCK.source_location, BATCH_KEY]
       BatchLoader::Executor.current&.items_by_block&.delete(key)
+      Telemetry::Deferred.flush
     end
 
     # Builds the Emb::ServerError for a failed share, carrying the models/texts/

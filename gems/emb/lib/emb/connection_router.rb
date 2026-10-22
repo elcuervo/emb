@@ -21,12 +21,20 @@ module Emb
 
     attr_reader :pools
 
+    # Thread-local label of the instance that last served a command, read by
+    # telemetry right after a command returns. host:port only: a redis URL can
+    # carry a password in its userinfo, which must never reach a span.
+    LAST_INSTANCE = :emb_last_instance
+
+    def self.last_instance = Thread.current[LAST_INSTANCE]
+
     def initialize(size, urls, redis_options)
       @pools = urls.map do |url|
         RoundRobinPool.new(size) do
           RedisClient.new(url: url, **redis_options)
         end
       end
+      @labels = urls.map { |url| instance_label(url) }
       @next_instance = 0
       @instance_mutex = Mutex.new
     end
@@ -36,7 +44,7 @@ module Emb
       idx = pick_instance
       last_error = nil
       attempts.times do
-        return perform_command(@pools[idx], args)
+        return perform_command(@pools[idx], args, @labels[idx])
       rescue PRESEND_CONNECTION_ERROR => e
         last_error = e
         idx = (idx + 1) % @pools.size if @pools.size > 1
@@ -45,6 +53,20 @@ module Emb
     end
 
     private
+
+    # host[:port] of a redis URL. Never the URL text itself: its userinfo can
+    # hold a password and its query can hold one. Parsed by hand rather than
+    # with URI, which accepts some credential shapes as host and port.
+    # nil when nothing is left (no URL configured) so the attribute is absent.
+    def instance_label(url)
+      return nil if url.nil?
+
+      label = url.to_s.split(/[?#]/, 2).first.split('://', 2).last.to_s
+      userinfo = label.rindex('@')
+      label = label[(userinfo + 1)..] if userinfo
+      label = label.split('/').first.to_s
+      label unless label.empty?
+    end
 
     def pick_instance
       return 0 if @pools.size == 1
@@ -56,7 +78,8 @@ module Emb
       end
     end
 
-    def perform_command(pool, args)
+    def perform_command(pool, args, label)
+      Thread.current[LAST_INSTANCE] = label if Emb::Telemetry.available?
       debug = Emb.debug?
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC) if debug
       result = pool.with { |r| r.call(*args) }

@@ -52,13 +52,21 @@ module Emb
 
     # Serial dispatch: one share in flight at a time. Redis errors fail closed
     # with context; anything else is a local bug and is re-raised unchanged
-    # after the pending set is dropped.
-    def dispatch_serial(client, slices, loader)
+    # after the pending set is dropped. The failing share's items are closed
+    # with the error before the pending set is cleared, so only the shares that
+    # were never sent are flushed as not dispatched.
+    def dispatch_serial(client, slices, loader, durations)
       slices.each do |slice|
-        resolve_slice(loader, slice, dispatch_slice(client, slice))
+        status, _, result, elapsed = dispatch_share(client, slice, Emb::Telemetry.current_context)
+        durations << elapsed
+        raise result if status == :error
+
+        resolve_slice(loader, slice, result)
       rescue RedisClient::Error => e
+        error = batch_error(e, slice: slice, budget: retry_budget(client))
+        slice.each { |item| Emb::Telemetry::Deferred.resolve(item, error: error) }
         clear_batch_pending!
-        raise batch_error(e, slice: slice, budget: retry_budget(client))
+        raise error
       rescue StandardError
         clear_batch_pending!
         raise
@@ -102,9 +110,8 @@ module Emb
     # items created before the format slot existed default to :binary.
     def slice_format(slice)
       formats = slice.map { |item| item[3] }.uniq
-      if formats.size > 1
-        raise ArgumentError, "cannot mix :binary and :values formats in one batch"
-      end
+      raise ArgumentError, 'cannot mix :binary and :values formats in one batch' if formats.size > 1
+
       formats.first || :binary
     end
 
@@ -116,31 +123,31 @@ module Emb
     # retry).
     def resolve_slice(loader, slice, results)
       return resolve_script_slice(loader, slice.first, results) if script_item?(slice.first)
+      return ValuesBatch.resolve(loader, slice, results) if slice_format(slice) == :values
 
-      if slice_format(slice) == :values
-        return ValuesBatch.resolve(loader, slice, results)
-      end
+      resolve_entries(loader, slice, results)
+    end
 
-      expected = slice.sum { |_, _, text, _| Array(text).size }
-      unless results.size >= expected
-        raise ShortReplyError, "expected #{expected} reply entries, got #{results.size}"
-      end
-
+    def resolve_entries(loader, slice, results)
+      expect_reply_size!(slice, results.size)
       offset = 0
       slice.each do |item|
-        _, _, text, _ = item
-        texts = Array(text)
-        values = entry_values(results, offset, texts)
+        texts = Array(item[2])
+        values = results[offset, texts.size].map { |entry| entry&.unpack('e*') }
         offset += texts.size
 
         # eager Proxy#[] shape: vector for a single text, vectors for many
-        loader.call(item, values)
+        loader.call(item, values.size == 1 ? values.first : values)
+        Emb::Telemetry::Deferred.resolve(item)
       end
     end
 
-    def entry_values(results, offset, texts)
-      values = results[offset, texts.size].map { |entry| entry&.unpack('e*') }
-      values.size == 1 ? values.first : values
+    # A reply shorter than the slice's texts is a protocol violation.
+    def expect_reply_size!(slice, got)
+      expected = slice.sum { |_, _, text, _| Array(text).size }
+      return if got >= expected
+
+      raise ShortReplyError, "expected #{expected} reply entries, got #{got}"
     end
 
     # A script call is always a singleton slice; its reply is parsed on the
@@ -148,25 +155,46 @@ module Emb
     def resolve_script_slice(loader, item, results)
       multi = item[2][3].to_i > 1
       loader.call(item, ScriptReplyDecode.parse_script_reply(results, multi: multi, decode: item[3]))
+      Emb::Telemetry::Deferred.resolve(item)
     end
 
     # The worker captures failures as outcomes; only the forcing thread
-    # resolves loaders (see resolve_slice).
-    def dispatch_share(client, slice)
-      [:ok, slice, dispatch_slice(client, slice)]
-    rescue StandardError => e
-      [:error, slice, e]
+    # resolves loaders (see resolve_slice). The share's span is opened and
+    # closed here, inside the batch's context: a worker thread starts with an
+    # empty one. An elapsed time is appended to the outcome for the batch's
+    # parallelism.
+    def dispatch_share(client, slice, context)
+      Emb::Telemetry.in_flight(1)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      span = Emb::Telemetry.start_span(Emb::Telemetry::SPAN_SHARE, kind: :client,
+                                                                   attributes: share_attributes(slice), parent: context)
+      outcome = begin
+        [:ok, slice, dispatch_slice(client, slice)]
+      rescue StandardError => e
+        Emb::Telemetry.fail_span(span, e)
+        [:error, slice, e]
+      end
+      outcome << Emb::Telemetry.end_share(span, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started,
+                                          attributes: share_attributes(slice),
+                                          instance: Emb::ConnectionRouter.last_instance)
+    ensure
+      Emb::Telemetry.in_flight(-1)
+    end
+
+    def share_attributes(slice)
+      Emb::Telemetry.share_attributes(slice.map { |item| item_model(item) }.uniq,
+                                      slice.sum { |item| item_text_count(item) })
     end
 
     # Dispatches all shares concurrently over at most the client's connection
     # capacity workers, then resolves the outcomes (isolating a failed share's
     # error to its own items).
-    def dispatch_parallel(client, slices, loader)
+    def dispatch_parallel(client, slices, loader, durations)
       workers = slices.size.clamp(1, worker_capacity(client))
       queue = share_queue(slices, workers)
       outcomes = Array.new(slices.size)
-      run_worker_threads(client, queue, outcomes, workers)
-      resolve_outcomes(client, outcomes, loader)
+      run_worker_threads(client, queue, outcomes, workers, Emb::Telemetry.current_context)
+      resolve_outcomes(client, outcomes, loader, durations)
     end
 
     def share_queue(slices, workers)
@@ -182,12 +210,12 @@ module Emb
       client.pools.sum { |pool| pool.respond_to?(:size) ? pool.size : 1 }
     end
 
-    def run_worker_threads(client, queue, outcomes, workers)
+    def run_worker_threads(client, queue, outcomes, workers, context)
       workers.times.map do
         Thread.new do
           while (job = queue.pop)
             index, slice = job
-            outcomes[index] = dispatch_share(client, slice)
+            outcomes[index] = dispatch_share(client, slice, context)
           end
         end
       end.each(&:join)
@@ -200,9 +228,10 @@ module Emb
     # prunes the pending items itself once the block returns. Non-redis errors
     # are local bugs: resolve the other shares, then clear the pending set and
     # re-raise the first one.
-    def resolve_outcomes(client, outcomes, loader)
+    def resolve_outcomes(client, outcomes, loader, durations)
       first_error = nil
-      outcomes.each do |status, slice, result|
+      outcomes.each do |status, slice, result, elapsed|
+        durations << elapsed if elapsed
         error = outcome_error(loader, status, slice, result)
         next unless error
 
@@ -234,7 +263,10 @@ module Emb
     # message/context and cause identical for all of the share's items.
     def fail_share(loader, slice, error, client)
       poison = batch_error(error, slice: slice, budget: retry_budget(client))
-      slice.each { |item| loader.call(item, FailedShare.new(poison)) }
+      slice.each do |item|
+        Emb::Telemetry::Deferred.resolve(item, error: poison)
+        loader.call(item, FailedShare.new(poison))
+      end
     end
 
     # Packs items into shares by accumulated text count so one command stays

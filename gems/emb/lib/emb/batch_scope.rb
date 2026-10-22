@@ -14,6 +14,7 @@ module Emb
     def self.wrap
       yield
     ensure
+      Emb::Telemetry::Deferred.flush
       BatchLoader::Executor.clear_current
     end
   end

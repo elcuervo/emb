@@ -101,7 +101,10 @@ module Emb
       schema = normalize_decode(decode)
       return Emb.build_script_loader(self, argv, schema) if lazy?
 
-      parse_script_reply(send_command(*argv), multi: argv[3].to_i > 1, decode: schema)
+      Emb::Telemetry.embed_call(operation: 'script', model: argv[1], texts: argv[3].to_i,
+                                format: nil, mode: 'eager') do
+        parse_script_reply(send_command(*argv), multi: argv[3].to_i > 1, decode: schema)
+      end
     end
 
     # Parse Redis INFO section text into a nested Hash:

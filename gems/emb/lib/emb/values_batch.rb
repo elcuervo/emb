@@ -58,6 +58,7 @@ module Emb
         values = rows[offset, texts.size]
         offset += texts.size
         loader.call(item, values.size == 1 ? values.first : values)
+        Emb::Telemetry::Deferred.resolve(item)
       end
     end
 
@@ -70,6 +71,7 @@ module Emb
         values = entry_values(results, offset, texts)
         offset += texts.size
         loader.call(item, values.size == 1 ? values.first : values)
+        Emb::Telemetry::Deferred.resolve(item)
       end
     end
 
