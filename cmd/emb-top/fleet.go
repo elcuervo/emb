@@ -171,7 +171,7 @@ func (f *fleet) addNode(rn embtop.ResolvedNode) *fleetNode {
 		spec:      rn.Spec,
 		name:      rn.Name,
 		addr:      rn.Addr,
-		tui:       newTUI(f.newClient(rn.Addr, rn.Name), f.opts.interval, f.opts.window),
+		tui:       newTUI(f.newClient(rn.Addr, rn.TLSName), f.opts.interval, f.opts.window),
 		resolved:  true,
 		firstSeen: f.nextSeen,
 	}
@@ -246,6 +246,9 @@ func (f *fleet) applyResolved(resolved []embtop.ResolvedNode) {
 			n.resolved = true
 			continue
 		}
+		if n := f.rekeySameNode(rn); n != nil {
+			continue
+		}
 		f.addNode(rn)
 	}
 	for _, n := range f.nodes {
@@ -253,6 +256,26 @@ func (f *fleet) applyResolved(resolved []embtop.ResolvedNode) {
 			n.resolved = false
 		}
 	}
+}
+
+// rekeySameNode adopts the row a specification already has for rn's address,
+// for the transition between the two key shapes: one address is keyed by the
+// specification (so the row follows the name), several are keyed by address (so
+// every pod has its own row). Without it the same node is added under the new
+// key while the old row keeps polling it, which shows and counts it twice.
+func (f *fleet) rekeySameNode(rn embtop.ResolvedNode) *fleetNode {
+	for _, n := range f.nodes {
+		if n.spec != rn.Spec || n.addr != rn.Addr {
+			continue
+		}
+		delete(f.byKey, n.key)
+		n.key = rn.Key
+		f.byKey[n.key] = n
+		n.name = rn.Name
+		n.resolved = true
+		return n
+	}
+	return nil
 }
 
 // prune removes a node only once it is both unresolved and unreachable beyond

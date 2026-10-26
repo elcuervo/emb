@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/elcuervo/emb/internal/embtop"
 )
 
 // The flag surface must stay self-documenting: every flag the tool takes has a
@@ -246,5 +248,22 @@ func TestFailedRunExitsNonZeroAsJSON(t *testing.T) {
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1 (stderr %q)", code, errBuf.String())
+	}
+}
+
+// A row expanded from a name is dialled by its address, so the certificate has
+// to be verified against the name that resolved it; the override still wins.
+func TestTLSServerNameFollowsTheResolvedName(t *testing.T) {
+	expanded := embtop.ResolvedNode{
+		Key: "10.0.0.1:6399", Spec: "emb.internal:6399", TLSName: "emb.internal", Addr: "10.0.0.1:6399",
+	}
+	if got := tlsServerName(&options{}, expanded); got != "emb.internal" {
+		t.Errorf("TLS name = %q, want the resolved name", got)
+	}
+	if got := tlsServerName(&options{tlsServerName: "override"}, expanded); got != "override" {
+		t.Errorf("TLS name = %q, want the override", got)
+	}
+	if got := tlsServerName(&options{}, embtop.ResolvedNode{Addr: "10.0.0.1:6399"}); got != "" {
+		t.Errorf("literal row TLS name = %q, want none", got)
 	}
 }

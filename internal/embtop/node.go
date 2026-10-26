@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// DefaultAddr is the node watched when no node flag is given. It carries a
-// port on purpose, so the default stays a single literal node rather than a
-// DNS name that could expand to several addresses.
+// DefaultAddr is the node watched when no node flag is given. Its loopback
+// alias is a literal address rather than a DNS name, so the default stays a
+// single node instead of expanding to both loopback families.
 const DefaultAddr = "localhost:6379"
 
 // DefaultPort is applied to a node specification that carries no port.
@@ -29,14 +29,15 @@ type NodeSpec struct {
 func (s NodeSpec) Addr() string { return net.JoinHostPort(s.host, s.port) }
 
 // ParseNodeSpec parses one specification: host:port, a bare host (taking the
-// default port), or a DNS name. An explicit port, or an IP literal, is an
-// address; a bare non-IP host is a name that is resolved at watch time.
+// default port), or a DNS name. An IP literal, or the loopback alias, is an
+// address dialed as written; any other host is a name, with or without a port,
+// that is expanded through the resolver at watch time.
 func ParseNodeSpec(raw string) (NodeSpec, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return NodeSpec{}, fmt.Errorf("empty node specification")
 	}
-	host, port, hasPort, err := splitSpec(raw)
+	host, port, err := splitSpec(raw)
 	if err != nil {
 		return NodeSpec{}, err
 	}
@@ -47,26 +48,34 @@ func ParseNodeSpec(raw string) (NodeSpec, error) {
 		raw:    raw,
 		host:   host,
 		port:   port,
-		isName: !hasPort && net.ParseIP(host) == nil,
+		isName: net.ParseIP(host) == nil && !isLoopbackAlias(host),
 	}, nil
 }
 
 // splitSpec separates host and port, applying the default port when the entry
-// carries none. It returns whether the port was explicit.
-func splitSpec(s string) (host, port string, hasPort bool, err error) {
+// carries none. The port never decides whether the host is a name, so it is
+// only parsed and validated here.
+func splitSpec(s string) (host, port string, err error) {
 	if h, p, e := net.SplitHostPort(s); e == nil {
 		if !validPort(p) {
-			return "", "", false, fmt.Errorf("node specification %q has an invalid port %q", s, p)
+			return "", "", fmt.Errorf("node specification %q has an invalid port %q", s, p)
 		}
-		return h, p, true, nil
+		return h, p, nil
 	}
 	if net.ParseIP(s) != nil {
-		return s, DefaultPort, false, nil // bare IPv4 or IPv6 literal
+		return s, DefaultPort, nil // bare IPv4 or IPv6 literal
 	}
 	if strings.Contains(s, ":") {
-		return "", "", false, fmt.Errorf("node specification %q is not host:port or a host", s)
+		return "", "", fmt.Errorf("node specification %q is not host:port or a host", s)
 	}
-	return s, DefaultPort, false, nil
+	return s, DefaultPort, nil
+}
+
+// isLoopbackAlias reports whether host is the loopback alias, which names this
+// machine rather than a fleet to expand. The fully-qualified spelling
+// (`localhost.`) is the same name.
+func isLoopbackAlias(host string) bool {
+	return strings.EqualFold(strings.TrimSuffix(host, "."), "localhost")
 }
 
 func validPort(p string) bool {
@@ -89,10 +98,11 @@ func (NetResolver) LookupHost(ctx context.Context, host string) ([]string, error
 
 // ResolvedNode is one monitored address a specification produced.
 type ResolvedNode struct {
-	Key  string // stable row identity: a per-node name, else the address
-	Spec string // the specification that produced it
-	Name string // DNS name when the row follows a name, "" for a literal address
-	Addr string // host:port to dial
+	Key     string // stable row identity: a per-node name, else the address
+	Spec    string // the specification that produced it
+	Name    string // DNS name when the row follows a name, "" for a literal address
+	TLSName string // name the certificate is verified against; "" for a literal address
+	Addr    string // host:port to dial
 }
 
 // ResolveSpecs expands every name specification to its address records and
@@ -118,7 +128,12 @@ func ResolveSpecs(ctx context.Context, r Resolver, specs []NodeSpec) ([]Resolved
 			// name would label every row identically.
 			name = ""
 		}
-		out = append(out, ResolvedNode{Key: key, Spec: spec.raw, Name: name, Addr: addr})
+		// The certificate belongs to the name, not to the address it resolved to.
+		tlsName := ""
+		if spec.isName {
+			tlsName = spec.host
+		}
+		out = append(out, ResolvedNode{Key: key, Spec: spec.raw, Name: name, TLSName: tlsName, Addr: addr})
 	}
 	for _, spec := range specs {
 		if !spec.isName {
@@ -209,7 +224,7 @@ func IsLoopback(addr string) bool {
 	if err != nil {
 		host = addr
 	}
-	if host == "localhost" {
+	if isLoopbackAlias(host) {
 		return true
 	}
 	ip := net.ParseIP(host)
