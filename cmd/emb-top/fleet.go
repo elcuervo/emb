@@ -171,7 +171,7 @@ func (f *fleet) addNode(rn embtop.ResolvedNode) *fleetNode {
 		spec:      rn.Spec,
 		name:      rn.Name,
 		addr:      rn.Addr,
-		tui:       newTUI(f.newClient(rn.Addr, rn.Name), f.opts.interval, f.opts.window),
+		tui:       newTUI(f.newClient(rn.Addr, rn.TLSName), f.opts.interval, f.opts.window),
 		resolved:  true,
 		firstSeen: f.nextSeen,
 	}

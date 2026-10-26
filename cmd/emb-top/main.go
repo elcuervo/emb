@@ -97,7 +97,7 @@ func parseFlags(args []string, getenv func(string) string) (*options, error) {
 	o := &options{}
 	fs := flag.NewFlagSet("emb-top", flag.ContinueOnError)
 	fs.StringVar(&o.addr, "addr", "", "emb node address (host:port); compatibility alias for -node")
-	fs.Var(&o.nodes, "node", "emb node to monitor (host, host:port or DNS name); repeatable")
+	fs.Var(&o.nodes, "node", "emb node to monitor (host, host:port, or a DNS name with an optional port); repeatable")
 	fs.StringVar(&o.nodesCSV, "nodes", "", "comma-separated emb nodes to monitor")
 	fs.DurationVar(&o.interval, "interval", time.Second, "poll interval")
 	fs.StringVar(&o.password, "password", getenv("EMB_TOP_PASSWORD"),

@@ -2,12 +2,12 @@
 // fleet, parameterized by an emb server configuration.
 //
 // It takes the configuration the fleet was started with (which models to
-// exercise, and their settings), a target that is either host:port or a DNS
-// name, expands the name into the node set behind it, reconciles the configured
-// models against what each node reports, and then offers load to every node at
-// each level in turn. It reports the client's own throughput and latency, per
-// node and for the fleet; the token-exact figures are the server's, read by
-// emb-top.
+// exercise, and their settings), a target that is host:port or a DNS name with
+// an optional port, expands the name into the node set behind it, reconciles
+// the configured models against what each node reports, and then offers load to
+// every node at each level in turn. It reports the client's own throughput and
+// latency, per node and for the fleet; the token-exact figures are the server's,
+// read by emb-top.
 //
 // It is a pure RESP client: no model, no ONNX Runtime, builds with CGO_ENABLED=0.
 //
@@ -69,6 +69,16 @@ type options struct {
 	showVersion   bool
 
 	specs []embtop.NodeSpec
+}
+
+// tlsServerName is the name a client verifies its certificate against: the
+// explicit override wins, then the name the row was resolved from. An expanded
+// row is dialled by its address, so the name cannot be left to the dial address.
+func tlsServerName(o *options, rn embtop.ResolvedNode) string {
+	if o.tlsServerName != "" {
+		return o.tlsServerName
+	}
+	return rn.TLSName
 }
 
 // parseFlags parses args into options, writing usage and parse errors to
@@ -202,10 +212,8 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	clients := make([]embstress.Endpoint, 0, len(resolved))
 	for _, rn := range resolved {
 		c := embstress.NewClient(rn.Addr, rn.Addr, o.password, o.useTLS)
-		if o.tlsServerName != "" {
-			c.SetTLSServerName(o.tlsServerName)
-		} else if rn.Name != "" {
-			c.SetTLSServerName(rn.Name)
+		if name := tlsServerName(o, rn); name != "" {
+			c.SetTLSServerName(name)
 		}
 		clients = append(clients, c)
 		defer func() { _ = c.Close() }()

@@ -292,8 +292,11 @@ emb-top -addr localhost:6379
 emb-top -node emb-0.internal -node emb-1.internal -interval 1s
 emb-top -nodes 127.0.0.1:16379,127.0.0.1:16380
 
-# a bare name is expanded to every A/AAAA record and re-resolved while watching
+# a name is expanded to every A/AAAA record and re-resolved while watching
 emb-top -nodes emb.internal
+
+# the port rides along: every record behind the name is dialled on 6399
+emb-top -nodes emb.internal:6399
 
 # headless: machine-readable lines (rates + latency percentiles from MONITOR)
 emb-top -addr localhost:6379 -once -samples 10 -interval 1s
@@ -310,7 +313,13 @@ emb-top -nodes emb.internal -tls -tls-server-name emb.internal
 ```
 
 A `-nodes <name>` entry is resolved through the resolver the task was given, so
-what makes it resolve is the deployment, not the tool. In a Fargate fleet that
+what makes it resolve is the deployment, not the tool. The **host** decides whether an entry is a
+name, never the port: `emb.internal:6399` is the same discovery as `emb.internal`, with every
+resolved record dialled on `6399`. An IP literal, and the `localhost` alias, stay one row dialled as
+written — `localhost` names this machine rather than a fleet, so the default invocation keeps
+rendering a single node. Rows discovered through a name verify their TLS certificate against that
+name (`-tls-server-name` still overrides it) even though each row dials and is labelled by the
+address it resolved to. In a Fargate fleet that
 means a Cloud Map **private** namespace whose hosted zone is associated with the
 **VPC the watching task runs in**: a private namespace resolves only through the
 VPC resolver the task was given, so a zone associated with some other VPC

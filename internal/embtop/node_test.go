@@ -18,11 +18,14 @@ func TestParseNodeSpecTable(t *testing.T) {
 		err    bool
 	}{
 		{"localhost:6379", "localhost", "6379", false, false},
-		{"db-a:16379", "db-a", "16379", false, false},
-		{"localhost", "localhost", "6379", true, false},
+		{"LocalHost:6379", "LocalHost", "6379", false, false},
+		{"db-a:16379", "db-a", "16379", true, false},
+		{"localhost", "localhost", "6379", false, false},
+		{"localhost.:6379", "localhost.", "6379", false, false},
+		{"localhost.", "localhost.", "6379", false, false},
 		{"10.0.3.7", "10.0.3.7", "6379", false, false},
 		{"emb.internal", "emb.internal", "6379", true, false},
-		{"emb.internal:16379", "emb.internal", "16379", false, false},
+		{"emb.internal:16379", "emb.internal", "16379", true, false},
 		{"[::1]:16379", "::1", "16379", false, false},
 		{"::1", "::1", "6379", false, false},
 		{"", "", "", false, true},
@@ -43,6 +46,55 @@ func TestParseNodeSpecTable(t *testing.T) {
 		if got.host != tc.host || got.port != tc.port || got.isName != tc.isName {
 			t.Errorf("ParseNodeSpec(%q) = %+v, want host=%q port=%q isName=%v",
 				tc.in, got, tc.host, tc.port, tc.isName)
+		}
+	}
+}
+
+// A port in the specification decides the port dialed, never whether the host
+// is a name: the records behind a name are expanded on that port.
+func TestResolveSpecsExpandsNamesOnTheirPort(t *testing.T) {
+	r := &fakeResolver{answers: map[string][]string{
+		"emb.internal": {"10.0.3.7", "10.0.3.8", "10.0.3.9"},
+		"db-a":         {"10.0.4.2"},
+	}}
+	specs, err := BuildSpecs("", nil, "emb.internal:6399,db-a:6399")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, err := ResolveSpecs(context.Background(), r, specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 4 {
+		t.Fatalf("resolved %d nodes, want 4: %+v", len(nodes), nodes)
+	}
+	for i, want := range []string{"10.0.3.7:6399", "10.0.3.8:6399", "10.0.3.9:6399"} {
+		n := nodes[i]
+		if n.Addr != want || n.Name != "" || n.Key != want {
+			t.Errorf("expanded node %d = %+v, want %s labelled and keyed by its address", i, n, want)
+		}
+		if n.TLSName != "emb.internal" {
+			t.Errorf("expanded node %d verifies TLS against %q, want the resolved name", i, n.TLSName)
+		}
+	}
+	if n := nodes[3]; n.Addr != "10.0.4.2:6399" || n.Name != "db-a" || n.Key != "db-a:6399" || n.TLSName != "db-a" {
+		t.Errorf("single-address name with a port = %+v, want the specification's identity", n)
+	}
+}
+
+// A literal address has no name to verify: the client checks the dialed host.
+func TestResolveSpecsLiteralRowsCarryNoTLSName(t *testing.T) {
+	specs, err := BuildSpecs("", []string{"10.0.0.1:16379", "localhost:6379"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, err := ResolveSpecs(context.Background(), &fakeResolver{}, specs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range nodes {
+		if n.TLSName != "" || n.Name != "" || n.Addr != n.Key {
+			t.Errorf("literal node = %+v, want no name and its own address as identity", n)
 		}
 	}
 }
@@ -122,12 +174,12 @@ func TestResolveSpecsResolverError(t *testing.T) {
 
 func TestResolveSpecsMixesAddressesAndNames(t *testing.T) {
 	r := &fakeResolver{answers: map[string][]string{"emb.internal": {"10.0.0.9"}}}
-	specs, _ := BuildSpecs("", []string{"db-a:16379"}, "emb.internal")
+	specs, _ := BuildSpecs("", []string{"10.0.0.1:16379"}, "emb.internal")
 	nodes, err := ResolveSpecs(context.Background(), r, specs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(nodes) != 2 || nodes[0].Addr != "db-a:16379" || nodes[1].Addr != "10.0.0.9:6379" {
+	if len(nodes) != 2 || nodes[0].Addr != "10.0.0.1:16379" || nodes[1].Addr != "10.0.0.9:6379" {
 		t.Fatalf("mixed fleet = %+v", nodes)
 	}
 }

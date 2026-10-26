@@ -110,7 +110,7 @@ func rn(addr string) embtop.ResolvedNode {
 }
 
 func namedRN(name, addr string) embtop.ResolvedNode {
-	return embtop.ResolvedNode{Key: name, Spec: name, Name: name, Addr: addr}
+	return embtop.ResolvedNode{Key: name, Spec: name, Name: name, TLSName: name, Addr: addr}
 }
 
 func fakeFleet(opts *options, clients map[string]dashboardClient, nodes ...embtop.ResolvedNode) *fleet {
@@ -135,6 +135,42 @@ func seedNode(n *fleetNode, reqs ...int64) {
 }
 
 // ---- 1.5: refresh & membership ----
+
+// `-nodes emb.internal:6399` reaches the fleet rows: one per address record,
+// dialled and labelled on the specification's port, and a record that appears
+// later joins without a restart.
+func TestFleetExpandsAPortCarryingName(t *testing.T) {
+	specs, err := embtop.BuildSpecs("", nil, "emb.internal:6399")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := &fakeResolver{answers: map[string][]string{
+		"emb.internal": {"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+	}}
+	f := newFleetWith(nil, &options{interval: time.Second, window: 10, specs: specs}, res,
+		func(addr, _ string) dashboardClient { return &fakeNodeClient{addr: addr} })
+	f.refreshSync()
+
+	var addrs []string
+	for _, n := range f.nodes {
+		addrs = append(addrs, n.addr)
+		if n.displayName() != n.addr {
+			t.Errorf("row %s is labelled %q, want its address", n.addr, n.displayName())
+		}
+		if msg := f.pollOnce(n); msg.err != nil {
+			t.Errorf("poll %s: %v", n.addr, msg.err)
+		}
+	}
+	if got := strings.Join(addrs, ","); got != "10.0.0.1:6399,10.0.0.2:6399,10.0.0.3:6399" {
+		t.Fatalf("rows = %s, want one per record on port 6399", got)
+	}
+
+	res.answers["emb.internal"] = []string{"10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"}
+	f.refreshSync()
+	if len(f.nodes) != 4 || f.nodes[3].addr != "10.0.0.4:6399" {
+		t.Fatalf("scaled-out record did not join: %+v", f.nodes)
+	}
+}
 
 func TestFleetAddsResolvedAddressWithoutRestart(t *testing.T) {
 	a, b := "10.0.0.1:6379", "10.0.0.2:6379"
@@ -303,6 +339,30 @@ func TestReconnectRebasesRates(t *testing.T) {
 	f.applyPoll(nodePollMsg{key: a, res: fakePoll(5, 50, 0, 0), dialed: true})
 	if got := n.tui.sampler.Latest.ReqRate; got != 0 {
 		t.Fatalf("rejoin rate = %v, want 0 (rebased, no spike)", got)
+	}
+}
+
+// An expanded row is labelled and dialled by its address, but its certificate
+// is still verified against the name it was resolved from.
+func TestFleetBuildsExpandedRowsWithTheirResolvedName(t *testing.T) {
+	var built []string
+	nodes := []embtop.ResolvedNode{
+		{Key: "10.0.0.1:6399", Spec: "emb.internal:6399", TLSName: "emb.internal", Addr: "10.0.0.1:6399"},
+		{Key: "10.0.0.2:6399", Spec: "emb.internal:6399", TLSName: "emb.internal", Addr: "10.0.0.2:6399"},
+	}
+	f := newFleetWith(nodes, &options{interval: time.Second, window: 10}, &fakeResolver{},
+		func(addr, tlsName string) dashboardClient {
+			built = append(built, addr+"|"+tlsName)
+			return &fakeNodeClient{addr: addr}
+		})
+	for _, n := range f.nodes {
+		if n.name != "" {
+			t.Errorf("expanded row %s is labelled %q, want its address", n.addr, n.name)
+		}
+	}
+	want := []string{"10.0.0.1:6399|emb.internal", "10.0.0.2:6399|emb.internal"}
+	if strings.Join(built, ",") != strings.Join(want, ",") {
+		t.Fatalf("clients built with %v, want %v", built, want)
 	}
 }
 
