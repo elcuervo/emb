@@ -172,6 +172,71 @@ func TestFleetExpandsAPortCarryingName(t *testing.T) {
 	}
 }
 
+// A name that resolves to one record and later to several must keep one row per
+// address: the row keyed by the specification is rekeyed, not left orphaned and
+// polled a second time under its address.
+func TestFleetRekeysWhenANameStartsExpanding(t *testing.T) {
+	specs, err := embtop.BuildSpecs("", nil, "emb.internal:6399")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := &fakeResolver{answers: map[string][]string{"emb.internal": {"10.0.0.1"}}}
+	built := 0
+	f := newFleetWith(nil, &options{interval: time.Second, window: 10, specs: specs}, res,
+		func(addr, _ string) dashboardClient {
+			built++
+			return &fakeNodeClient{addr: addr}
+		})
+	f.refreshSync()
+	if len(f.nodes) != 1 || f.nodes[0].key != "emb.internal:6399" {
+		t.Fatalf("single-address name = %+v, want one row keyed by the specification", f.nodes)
+	}
+
+	res.answers["emb.internal"] = []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	f.refreshSync()
+	var keys []string
+	for _, n := range f.nodes {
+		keys = append(keys, n.key)
+	}
+	if got := strings.Join(keys, ","); got != "10.0.0.1:6399,10.0.0.2:6399,10.0.0.3:6399" {
+		t.Fatalf("rows = %s, want one per address and no stale specification row", got)
+	}
+	if built != 3 {
+		t.Errorf("built %d clients, want 3: the existing row is rekeyed, not rebuilt and not polled twice", built)
+	}
+}
+
+// The same identity rule in reverse: a name that collapses to one record keeps
+// the surviving node's row (rekeyed to the specification) instead of adding a
+// second row for an address it is already polling.
+func TestFleetRekeysWhenANameCollapses(t *testing.T) {
+	specs, err := embtop.BuildSpecs("", nil, "emb.internal:6399")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := &fakeResolver{answers: map[string][]string{
+		"emb.internal": {"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+	}}
+	f := newFleetWith(nil, &options{interval: time.Second, window: 10, specs: specs}, res,
+		func(addr, _ string) dashboardClient { return &fakeNodeClient{addr: addr} })
+	f.refreshSync()
+
+	res.answers["emb.internal"] = []string{"10.0.0.2"}
+	f.refreshSync()
+	perAddr := map[string]int{}
+	for _, n := range f.nodes {
+		perAddr[n.addr]++
+		if n.resolved && n.key != "emb.internal:6399" {
+			t.Errorf("surviving row %s is keyed %q, want the specification", n.addr, n.key)
+		}
+	}
+	for addr, count := range perAddr {
+		if count != 1 {
+			t.Errorf("%s has %d rows, want 1", addr, count)
+		}
+	}
+}
+
 func TestFleetAddsResolvedAddressWithoutRestart(t *testing.T) {
 	a, b := "10.0.0.1:6379", "10.0.0.2:6379"
 	ca := &fakeNodeClient{addr: a}

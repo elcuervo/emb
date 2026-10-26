@@ -68,11 +68,19 @@ to the client, and `tlsServerName` still lets `-tls-server-name` override it.
 - Alternative considered: deriving the name from `ResolvedNode.Spec` — the spec string carries the
   port, so it would need the same split the resolver already performed.
 
-### Keying and the literal branch are untouched
+### Keying and the literal branch are unchanged
 
 A single-address name stays keyed by the specification (the row follows a moving record); a
 multi-address name stays keyed by address. `ResolveSpecs` continues to hand IP literals and
 `localhost` through `spec.Addr()`, dialed as written, resolved by the dialer at connect time.
+
+The fleet reconciles the two key shapes on refresh: when a specification's key changes shape, the
+row it already has for the same address is rekeyed rather than left orphaned beside a new one
+(`fleet.rekeySameNode`). Without that, a name that starts or stops expanding polls the same node
+twice under two rows, which contradicts "addresses that resolve to the same `host:port` SHALL be
+monitored once" and doubles that node's share of the fleet totals until the orphan grace expires.
+It is a pre-existing flaw for bare names that this change would otherwise extend to port-carrying
+ones.
 
 ## Risks / Trade-offs
 
