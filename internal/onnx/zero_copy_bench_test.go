@@ -19,7 +19,7 @@ func BenchmarkRuntimeSessionRun(b *testing.B) {
 	defer func() { _ = DestroyEnvironment() }()
 
 	sess, err := NewRuntimeSessionFromBytes(
-		data,
+		data, "",
 		[]string{"input_ids", "attention_mask", "token_type_ids"},
 		[]string{"last_hidden_state"},
 		384, 3, 1, 2, ExecModeSequential, true,

@@ -56,15 +56,21 @@ Emb[:minilm]["hello world"]
 ```
 
 Images use the same proxy and float32 decode; pass the encoded file bytes
-unchanged (they are sent as an `ASCII-8BIT` RESP bulk):
+unchanged (they are sent as an `ASCII-8BIT` RESP bulk). The reply is a Hash
+keyed by the model's configured output names, so a model with several products
+(a pooled vector plus a patch grid) returns them all under their own keys:
 
 ```ruby
 Emb[:clip].image(File.binread("cat.jpg"))
-# => [0.0123, -0.0456, ...]
+# => { "embedding" => [0.0123, -0.0456, ...] }
 
-# several images: one vector per requested slot, nil for a failed/truncated one
+# narrow the projection to the outputs you need
+Emb[:dinov3].image(File.binread("cat.jpg"), outputs: ["patches"])
+# => { "patches" => [ ... 441 * 384 floats ... ] }
+
+# several images: one keyed Hash per requested slot, nil for a failed/truncated one
 Emb[:clip].image(File.binread("cat.jpg"), File.binread("dog.png"))
-# => [[0.01, ...], [0.07, ...]]
+# => [{ "embedding" => [0.01, ...] }, { "embedding" => [0.07, ...] }]
 ```
 
 Gem list:

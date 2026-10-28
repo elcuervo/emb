@@ -1324,9 +1324,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 52)
+		writePairs(conn, 53)
 	} else {
-		writePairs(conn, 45)
+		writePairs(conn, 46)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1404,6 +1404,34 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(boolInt(scriptTokenizer))
 	conn.WriteBulkString("image_sessions")
 	conn.WriteInt(int(entry.ImageFootprint()))
+	// Every configured image product, with the shape one image yields. The list
+	// is read without opening a session, and it has no notion of a default:
+	// a bare EMB.IMG serves all of them.
+	imageOutputs, _ := entry.ImageOutputs()
+	conn.WriteBulkString("image_outputs")
+	writePairs(conn, len(imageOutputs))
+	for _, o := range imageOutputs {
+		conn.WriteBulkString(o.Name)
+		fields := 4
+		if o.Select == "tokens" {
+			fields = 5
+		}
+		writePairs(conn, fields)
+		conn.WriteBulkString("tensor")
+		conn.WriteBulkString(o.Tensor)
+		conn.WriteBulkString("select")
+		conn.WriteBulkString(o.Select)
+		conn.WriteBulkString("rows")
+		conn.WriteInt(o.Rows)
+		conn.WriteBulkString("dim")
+		conn.WriteInt(o.Dim)
+		if o.Select == "tokens" {
+			conn.WriteBulkString("grid")
+			conn.WriteArray(2)
+			conn.WriteInt(o.Grid)
+			conn.WriteInt(o.Grid)
+		}
+	}
 	// Per-model dispatch observability, split into the script and embedding
 	// paths. Averages come from deltas between two EMB.INFO/EMB.STATS reads.
 	scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy := entry.ScriptDispatch()
@@ -1880,8 +1908,9 @@ func (s *Server) processMultiPair(ctx context.Context, pairs [][]byte, results [
 func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 	help := strings.Join([]string{
 		"EMB <model> [BLOB|VALUES] <text> [text...] - Generate embeddings (default BLOB: float32 binary; VALUES: dtype/shape/values envelope with decimal values)",
-		"EMB.IMG <model> [BLOB|VALUES] <image-bytes> [<image-bytes>...] - Embed one or more raw images (JPEG/PNG/GIF/WebP bytes; no URLs — the client fetches)",
-		"EMB.IMGMULTI [BLOB|VALUES] <model> <image-bytes> [<model> <image-bytes>...] - Multi-model image embedding with MGET-style per-pair nulls",
+		"EMB.IMG <model> [BLOB|VALUES] [OUTPUTS <name>[,<name>...]] <image-bytes> [<image-bytes>...] - Embed one or more raw images (JPEG/PNG/GIF/WebP bytes; no URLs — the client fetches); replies a map of output name to value per image",
+		"EMB.IMGMULTI [BLOB|VALUES] [OUTPUTS <name>[,<name>...]] <model> <image-bytes> [<model> <image-bytes>...] - Multi-model image embedding, one keyed map per pair, with MGET-style per-pair nulls",
+		"EMB.IMG keywords: BLOB|VALUES then OUTPUTS <name>[,<name>...], both before the first image; no OUTPUTS serves every output the model configures",
 		"EMB.MODELS - List available models and their dimensions",
 		"EMB.INFO <model> - Show model details and statistics (includes cache stats)",
 		"EMB.MULTI [BLOB|VALUES] <model> <text> [<model> <text>...] - Multi-model embedding with MGET-style partial failures",

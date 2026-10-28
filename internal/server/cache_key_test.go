@@ -17,7 +17,7 @@ func TestTextCacheKeyNamespaces(t *testing.T) {
 	text := "vision:" + hex.EncodeToString(sum[:])
 
 	textKey := textCacheKey("img", text)
-	imgKey := imageCacheKey("vision", data)
+	imgKey := imageCacheKey("vision", data, "embedding")
 	if textKey == imgKey {
 		t.Fatalf("text and image cache keys collide: %q", textKey)
 	}
@@ -31,6 +31,18 @@ func TestTextCacheKeyNamespaces(t *testing.T) {
 	if textCacheKey("m", "a") == textCacheKey("m", "b") {
 		t.Fatal("distinct texts produced the same cache key")
 	}
+	// Two outputs of one image under one model stay distinct and both attribute
+	// to the model.
+	pooled := imageCacheKey("vision", data, "embedding")
+	grid := imageCacheKey("vision", data, "patches")
+	if pooled == grid {
+		t.Fatal("two outputs of one image share a cache key")
+	}
+	for _, key := range []string{pooled, grid} {
+		if got := modelOf(key); got != "vision" {
+			t.Fatalf("modelOf(%q) = %q, want vision", key, got)
+		}
+	}
 }
 
 // TestModelOfHandlesColonsInModelNames verifies per-model attribution when a
@@ -40,8 +52,8 @@ func TestTextCacheKeyNamespaces(t *testing.T) {
 func TestModelOfHandlesColonsInModelNames(t *testing.T) {
 	const model = "team:model"
 	cases := map[string]string{
-		textCacheKey(model, "some text"):            "txt key",
-		imageCacheKey(model, []byte("image bytes")): "img key",
+		textCacheKey(model, "some text"):                                                                       "txt key",
+		imageCacheKey(model, []byte("image bytes"), "patches"):                                                 "img key",
 		model + ":" + strings.Repeat("a", sha1HexLen) + ":" + strings.Repeat("b", sha256HexLen) + ":some text": "script key",
 	}
 	for key, kind := range cases {

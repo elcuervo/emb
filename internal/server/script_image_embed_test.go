@@ -22,11 +22,9 @@ func injectImageBranch(t *testing.T, srv *Server, model string, dim int) {
 		t.Fatal(err)
 	}
 	entry.ImageRes = &registry.ImageResources{
-		Sessions:     []onnx.NamedSession{&fakeImageSession{dim: dim}},
-		Plan:         testImagePlan(4),
-		OutputTensor: "image_embeds",
-		Pooling:      "none",
-		Dim:          dim,
+		Sessions: []onnx.NamedSession{&fakeImageSession{dim: dim}},
+		Plan:     testImagePlan(4),
+		Outputs:  []registry.ImageOutput{{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: dim}},
 	}
 }
 
@@ -81,9 +79,9 @@ func TestEmbImageEmbedMatchesEMBIMG(t *testing.T) {
 	addr, _, _ := serveImage(t, "")
 	png := solidImagePNG(t, color.White)
 
-	want := bulkOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", png))
+	want := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", png), "embedding")
 	got := bulkOf(t, redisCmd(t, addr, "EMB.EVAL", "imgA",
-		`return emb.math.float32_bytes(emb.image.embed(KEYS[1]))`, "1", png))
+		`return emb.math.float32_bytes(emb.image.embed(KEYS[1], {output = "embedding"}))`, "1", png))
 	if got != want {
 		t.Fatalf("emb.image.embed differs from EMB.IMG (%d vs %d bytes)", len(got), len(want))
 	}
@@ -109,14 +107,14 @@ func TestCrossModalSimilarity(t *testing.T) {
 	const text = "a photo of a cat"
 
 	textVec := bulkOf(t, redisCmd(t, addr, "EMB", "test", text))
-	imgVec := bulkOf(t, redisCmd(t, addr, "EMB.IMG", "test", png))
+	imgVec := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "test", png), "embedding")
 	if len(textVec) == 0 || len(imgVec) == 0 {
 		t.Fatalf("reference vectors empty: text=%d image=%d bytes", len(textVec), len(imgVec))
 	}
 	want := cosineOf(t, floatsOf(t, textVec), floatsOf(t, imgVec))
 
 	script := `local t = emb.embed(KEYS[1])
-local i = emb.image.embed(ARGV[1])
+local i = emb.image.embed(ARGV[1], {output = "embedding"})
 return emb.similarity(t, i)`
 	got := numOf(t, redisCmd(t, addr, "EMB.EVAL", "test", script, "1", text, png))
 	if math.Abs(got-want) > 1e-6 {

@@ -45,9 +45,9 @@ func TestCrossModalSmoke(t *testing.T) {
 		Pooling:      "none",
 		Normalize:    true,
 		Image: &config.ImageConfig{
-			Input:  "pixel_values",
-			Output: envOr("EMB_FUSED_IMAGE_OUTPUT", "image_embeds"),
-			Size:   224,
+			Input:   "pixel_values",
+			Outputs: []config.ImageOutputConfig{{Name: "embedding", Tensor: envOr("EMB_FUSED_IMAGE_OUTPUT", "image_embeds")}},
+			Size:    224,
 		},
 	}, "fused")
 	if err != nil {
@@ -113,4 +113,123 @@ func cosineSimilarity(a, b []float32) float64 {
 		return 0
 	}
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+}
+
+// TestDINOv3ServerEndToEnd serves EMB.IMG from a real DINOv3 export: the keyed
+// reply's sizes, the token envelope's shape and grid, and a three-image request
+// against the static batch-1 graph. Gated on the downloaded kornia export and
+// its generated reference.
+func TestDINOv3ServerEndToEnd(t *testing.T) {
+	dir := envOr("EMB_DINOV3_KORNIA", "../../models/dinov3-336")
+	graph := filepath.Join(dir, "dinov3-vits16-336.onnx")
+	if _, err := os.Stat(graph); err != nil {
+		t.Skipf("DINOv3 fixture missing: %v (run: just download-dinov3-model kornia/dinov3 ./models/dinov3-336)", err)
+	}
+	if !ortOK {
+		t.Skip("onnx runtime unavailable (run inside nix develop)")
+	}
+	ref, err := os.ReadFile("../../internal/registry/testdata/dinov3_vits16_336_pooled.f32")
+	if err != nil {
+		t.Skipf("reference fixture missing: %v", err)
+	}
+
+	entry, err := registry.LoadModel(config.ModelConfig{
+		ONNX:      graph,
+		Workers:   1,
+		Normalize: true,
+		Image: &config.ImageConfig{
+			Preset: "dinov3",
+			Input:  "input",
+			Size:   336,
+			Outputs: []config.ImageOutputConfig{
+				{Name: "embedding", Tensor: "descriptor"},
+				{Name: "patches", Tensor: "tokens", Select: "tokens", Start: new(5), Grid: 21},
+			},
+		},
+	}, "dinov3-336")
+	if err != nil {
+		t.Fatalf("loading the export: %v", err)
+	}
+	reg := registry.New()
+	reg.Add("dinov3-336", entry)
+	t.Cleanup(func() { _ = reg.Close() })
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "1MB", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+
+	png := readPNG(t, "../../internal/imageproc/testdata/golden_input.png")
+	const dim = 384
+
+	// A bare request serves every configured output: one keyed map.
+	one := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3-336", png), "embedding")
+	if len(one) != dim*4 {
+		t.Fatalf("embedding = %d bytes, want %d", len(one), dim*4)
+	}
+	want := decodeLE(ref)
+	got := decodeLE([]byte(one))
+	var dot, na, nb float64
+	for i := range got {
+		dot += float64(got[i]) * float64(want[i])
+		na += float64(got[i]) * float64(got[i])
+		nb += float64(want[i]) * float64(want[i])
+	}
+	if cosine := dot / (math.Sqrt(na) * math.Sqrt(nb)); cosine < 0.995 {
+		t.Fatalf("server embedding cosine = %.6f, want >= 0.995 vs the reference", cosine)
+	}
+
+	// Both outputs in one map, sized 441x384 for the grid.
+	both := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3-336", "OUTPUTS", "embedding,patches", png))
+	if len(both) != 4 || both[0].val != "embedding" || both[2].val != "patches" {
+		t.Fatalf("two-output map = %#v", both)
+	}
+	if got := len(bulkOf(t, both[3])); got != 441*dim*4 {
+		t.Fatalf("patches = %d bytes, want 441*384*4 = %d", got, 441*dim*4)
+	}
+
+	// VALUES carries the token grid's shape and grid edges.
+	envelope := arrayOf(t, bulkOrArray(t, redisCmd(t, addr, "EMB.IMG", "dinov3-336", "VALUES", "OUTPUTS", "patches", png), "patches"))
+	fields := map[string]respToken{}
+	for i := 0; i+1 < len(envelope); i += 2 {
+		fields[bulkOf(t, envelope[i])] = envelope[i+1]
+	}
+	if shape := arrayOf(t, fields["shape"]); shape[0].val != 441 || shape[1].val != dim {
+		t.Fatalf("token shape = %#v, want [441 %d]", shape, dim)
+	}
+	if grid := arrayOf(t, fields["grid"]); grid[0].val != 21 || grid[1].val != 21 {
+		t.Fatalf("token grid = %#v, want [21 21]", grid)
+	}
+
+	// Three images against a batch-1 graph: every slot served, one run each.
+	three := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3-336", "OUTPUTS", "embedding", png, png, png))
+	if len(three) != 3 {
+		t.Fatalf("three-image request = %d slots, want 3", len(three))
+	}
+	for i, slot := range three {
+		m := arrayOf(t, slot)
+		if len(m) != 2 || len(bulkOf(t, m[1])) != dim*4 {
+			t.Fatalf("slot %d = %#v, want a %d-byte embedding", i, slot, dim*4)
+		}
+	}
+}
+
+// readPNG loads an image fixture as raw bytes.
+func readPNG(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	return string(data)
+}
+
+// decodeLE decodes little-endian float32 bytes.
+func decodeLE(raw []byte) []float32 {
+	out := make([]float32, len(raw)/4)
+	for i := range out {
+		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(raw[i*4:]))
+	}
+	return out
 }

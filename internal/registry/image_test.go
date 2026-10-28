@@ -104,7 +104,7 @@ func TestResolveImagePlanExplicit(t *testing.T) {
 			Std:      []float64{0.26862954, 0.26130258, 0.27577711},
 		},
 	}
-	plan, err := resolveImagePlan(cfg, "clip")
+	plan, _, err := resolveImagePlan(cfg, "clip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestResolveImagePlanDefaultsWhenOmitted(t *testing.T) {
 		ONNX:  "model.onnx",
 		Image: &config.ImageConfig{Input: "pixel_values", Size: 16},
 	}
-	plan, err := resolveImagePlan(cfg, "siglip")
+	plan, _, err := resolveImagePlan(cfg, "siglip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestResolveImagePlanPreprocessorConfigAndPrecedence(t *testing.T) {
 
 	// Input set explicitly so graph detection is not attempted.
 	cfg := config.ModelConfig{ONNX: onnxPath, Image: &config.ImageConfig{Input: "pixel_values"}}
-	plan, err := resolveImagePlan(cfg, "detected")
+	plan, _, err := resolveImagePlan(cfg, "detected")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestResolveImagePlanPreprocessorConfigAndPrecedence(t *testing.T) {
 		Mean:    []float64{0.1, 0.2, 0.3},
 		Std:     []float64{0.4, 0.5, 0.6},
 	}
-	plan, err = resolveImagePlan(cfg, "override")
+	plan, _, err = resolveImagePlan(cfg, "override")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestResolveImagePlanMissingSizeErrors(t *testing.T) {
 		ONNX:  filepath.Join(t.TempDir(), "missing.onnx"),
 		Image: &config.ImageConfig{Input: "pixel_values"},
 	}
-	_, err := resolveImagePlan(cfg, "no-size")
+	_, _, err := resolveImagePlan(cfg, "no-size")
 	if err == nil || !strings.Contains(err.Error(), "image.size") {
 		t.Fatalf("expected image.size error, got %v", err)
 	}
@@ -254,7 +254,7 @@ func TestResolveImagePlanRejectsInvalidResolvedValues(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, "preprocessor_config.json"), []byte(tc.pp), 0644); err != nil {
 				t.Fatal(err)
 			}
-			_, err := resolveImagePlan(config.ModelConfig{ONNX: onnxPath, Image: tc.img}, tc.name)
+			_, _, err := resolveImagePlan(config.ModelConfig{ONNX: onnxPath, Image: tc.img}, tc.name)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("expected error mentioning %q, got %v", tc.want, err)
 			}
@@ -270,7 +270,7 @@ func TestResolveImagePlanPreprocessorConfigSizeObject(t *testing.T) {
 		[]byte(`{"size": {"height": 256, "width": 256}, "resample": 2}`), 0644)
 
 	cfg := config.ModelConfig{ONNX: onnxPath, Image: &config.ImageConfig{Input: "pixel_values"}}
-	plan, err := resolveImagePlan(cfg, "m")
+	plan, _, err := resolveImagePlan(cfg, "m")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,19 +332,18 @@ func TestImageResourcesEmbedSingleRunBatched(t *testing.T) {
 			},
 		},
 	}
+	outputs := []ImageOutput{{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: dim}}
 	res := &ImageResources{
-		Sessions:     []onnx.NamedSession{fake},
-		Plan:         plan,
-		OutputTensor: "image_embeds",
-		Pooling:      "none",
-		Normalize:    false,
-		Dim:          dim,
+		Sessions:  []onnx.NamedSession{fake},
+		Plan:      plan,
+		Outputs:   outputs,
+		Normalize: false,
 	}
 
 	elem := plan.ElementCount()
 	a := make([]float32, elem)
 	b := make([]float32, elem)
-	got, err := res.Embed([][]float32{a, b})
+	got, err := res.Embed([][]float32{a, b}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,8 +357,8 @@ func TestImageResourcesEmbedSingleRunBatched(t *testing.T) {
 	if len(shape) != 4 || shape[0] != 2 || shape[1] != 3 || shape[2] != 2 || shape[3] != 2 {
 		t.Fatalf("input shape = %v, want [2 3 2 2]", shape)
 	}
-	if len(got) != 2 || len(got[0]) != dim*4 || len(got[1]) != dim*4 {
-		t.Fatalf("got %d embeddings", len(got))
+	if len(got) != 2 || len(got[0]["embedding"]) != dim*4 || len(got[1]["embedding"]) != dim*4 {
+		t.Fatalf("got %d results", len(got))
 	}
 }
 
@@ -376,16 +375,17 @@ func TestImageResourcesMeanPoolNormalizes(t *testing.T) {
 			},
 		},
 	}
-	res := &ImageResources{Sessions: []onnx.NamedSession{fake}, Plan: plan, OutputTensor: "last_hidden_state", Pooling: "mean", Normalize: true, Dim: 2}
-	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())})
+	outputs := []ImageOutput{{Name: "embedding", Tensor: "last_hidden_state", Select: "mean", Rows: 1, Dim: 2}}
+	res := &ImageResources{Sessions: []onnx.NamedSession{fake}, Plan: plan, Outputs: outputs, Normalize: true}
+	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || len(got[0]) != 8 {
+	if len(got) != 1 || len(got[0]["embedding"]) != 8 {
 		t.Fatalf("got %v", got)
 	}
 	// sqrt(8) ≈ 2.828427; each component 2/2.828427 ≈ 0.7071.
-	first := float32FromLE(got[0][0:4])
+	first := float32FromLE(got[0]["embedding"][0:4])
 	if first < 0.707 || first > 0.708 {
 		t.Fatalf("normalized first component = %v, want ~0.7071", first)
 	}
@@ -393,4 +393,305 @@ func TestImageResourcesMeanPoolNormalizes(t *testing.T) {
 
 func float32FromLE(b []byte) float32 {
 	return math.Float32frombits(binary.LittleEndian.Uint32(b))
+}
+
+// TestStaticBatchCap covers the graph-declared batch axis: a positive value
+// caps a chunk, a symbolic axis leaves it unbounded.
+func TestStaticBatchCap(t *testing.T) {
+	cases := []struct {
+		name  string
+		infos []onnx.InputInfo
+		input string
+		want  int
+	}{
+		{"static batch 1", []onnx.InputInfo{{Name: "input", Rank: 4, Dimensions: []int64{1, 3, 336, 336}}}, "input", 1},
+		{"static batch 4", []onnx.InputInfo{{Name: "pixel_values", Rank: 4, Dimensions: []int64{4, 3, 224, 224}}}, "pixel_values", 4},
+		{"symbolic batch", []onnx.InputInfo{{Name: "pixel_values", Rank: 4, Dimensions: []int64{-1, 3, -1, -1}}}, "pixel_values", 0},
+		{"input not in graph", []onnx.InputInfo{{Name: "input_ids", Rank: 2, Dimensions: []int64{1, 128}}}, "pixel_values", 0},
+	}
+	for _, c := range cases {
+		if got := staticBatchCap(c.infos, c.input); got != c.want {
+			t.Errorf("%s: cap = %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// imageOutputFixture builds a config with one declared output, so output
+// resolution tests state only the fields they exercise.
+func imageOutputFixture(outputs ...config.ImageOutputConfig) config.ModelConfig {
+	return config.ModelConfig{
+		Dim:   4,
+		Image: &config.ImageConfig{Input: "pixel_values", Size: 32, Outputs: outputs},
+	}
+}
+
+// dinov3OutputInfo is the pair of tensors a DINOv3-family export publishes.
+func dinov3OutputInfo() map[string]onnx.OutputInfo {
+	return map[string]onnx.OutputInfo{
+		"last_hidden_state": {Name: "last_hidden_state", Rank: 3, Dim: 4},
+		"pooler_output":     {Name: "pooler_output", Rank: 2, Dim: 4},
+	}
+}
+
+// TestResolveImageOutputs covers the load-time output rules: a missing tensor, a
+// rank that contradicts the selector, a duplicate name, an unknown selector, and
+// a grid that cannot divide the configured size.
+func TestResolveImageOutputs(t *testing.T) {
+	cases := []struct {
+		name string
+		outs []config.ImageOutputConfig
+		info map[string]onnx.OutputInfo
+		md   modelImageMetadata
+		want string
+	}{
+		{
+			name: "missing tensor",
+			outs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "nope"}},
+			want: `tensor "nope" not found`,
+		},
+		{
+			name: "tokens on a rank-2 tensor",
+			outs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "pooler_output", Select: "tokens", Grid: 2}},
+			want: "selects tokens from a rank-2 tensor",
+		},
+		{
+			name: "none on a rank-3 tensor",
+			outs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "last_hidden_state", Select: "none"}},
+			want: "selects none from a rank-3 tensor",
+		},
+		{
+			name: "duplicate name",
+			outs: []config.ImageOutputConfig{
+				{Name: "embedding", Tensor: "pooler_output"},
+				{Name: "embedding", Tensor: "last_hidden_state", Select: "cls"},
+			},
+			want: `duplicate image output name "embedding"`,
+		},
+		{
+			name: "unknown select",
+			outs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "pooler_output", Select: "pool"}},
+			want: `unknown select "pool"`,
+		},
+		{
+			name: "grid does not divide size",
+			outs: []config.ImageOutputConfig{{Name: "patches", Tensor: "last_hidden_state", Select: "tokens", Grid: 7}},
+			want: "does not divide image.size",
+		},
+		{
+			name: "no outputs",
+			want: "image.outputs must declare at least one named output",
+		},
+		{
+			name: "tokens without any grid source",
+			outs: []config.ImageOutputConfig{{Name: "patches", Tensor: "last_hidden_state", Select: "tokens"}},
+			md:   modelImageMetadata{}, // no patch_size to fall back on
+			want: "has no grid",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			info := tc.info
+			if info == nil {
+				info = dinov3OutputInfo()
+			}
+			cfg := imageOutputFixture(tc.outs...)
+			_, err := resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, info, tc.md)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestResolveImageOutputsLayout covers the resolved shape of both dialects: a
+// pooled vector from a rank-2 tensor and a token grid whose start/grid come from
+// the model's own config.json, with explicit values winning.
+func TestResolveImageOutputsLayout(t *testing.T) {
+	cfg := imageOutputFixture(
+		config.ImageOutputConfig{Name: "embedding", Tensor: "pooler_output"},
+		config.ImageOutputConfig{Name: "patches", Tensor: "last_hidden_state", Select: "tokens"},
+	)
+	md := modelImageMetadata{PatchSize: 16, NumRegisterTokens: 4}
+	outs, err := resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, dinov3OutputInfo(), md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outs) != 2 {
+		t.Fatalf("got %d outputs, want 2", len(outs))
+	}
+	if outs[0].Name != "embedding" || outs[0].Select != "none" || outs[0].Rows != 1 || outs[0].Dim != 4 {
+		t.Fatalf("pooled output = %+v", outs[0])
+	}
+	p := outs[1]
+	// size 32 / patch_size 16 = a 2x2 grid; start = 1 CLS + 4 registers.
+	if p.Select != "tokens" || p.Start != 5 || p.Grid != 2 || p.Rows != 4 {
+		t.Fatalf("token output = %+v, want start 5 grid 2 rows 4", p)
+	}
+
+	// Explicit start and grid win over the model metadata.
+	start := 1
+	cfg.Image.Outputs[1].Start = &start
+	cfg.Image.Outputs[1].Grid = 4
+	outs, err = resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, dinov3OutputInfo(), md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := outs[1]; got.Start != 1 || got.Grid != 4 || got.Rows != 16 {
+		t.Fatalf("explicit layout = %+v, want start 1 grid 4 rows 16", got)
+	}
+}
+
+// TestLoadModelImageMetadata reads the layout a DINOv3 export declares about
+// itself, beside the graph or one directory up.
+func TestLoadModelImageMetadata(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "onnx")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	graph := filepath.Join(sub, "model.onnx")
+	if err := os.WriteFile(graph, []byte("dummy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"),
+		[]byte(`{"patch_size": 16, "num_register_tokens": 4, "hidden_size": 384}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	md := loadModelImageMetadata(graph)
+	if md.PatchSize != 16 || md.NumRegisterTokens != 4 {
+		t.Fatalf("metadata = %+v, want patch_size 16 registers 4", md)
+	}
+
+	// A graph with no config.json yields the zero metadata rather than failing.
+	md = loadModelImageMetadata(filepath.Join(t.TempDir(), "model.onnx"))
+	if md.PatchSize != 0 || md.NumRegisterTokens != 0 {
+		t.Fatalf("metadata without config.json = %+v, want zero", md)
+	}
+}
+
+// TestImagePresets covers each family profile: the constants it supplies and
+// the fact that an explicit key still wins over it.
+func TestImagePresets(t *testing.T) {
+	cases := []struct {
+		preset   string
+		mean     [3]float64
+		std      [3]float64
+		rescale  float64
+		resample imageproc.Resample
+		crop     imageproc.CropMode
+	}{
+		{"clip", [3]float64{0.48145466, 0.4578275, 0.40821073}, [3]float64{0.26862954, 0.26130258, 0.27577711}, 1.0 / 255.0, imageproc.ResampleBicubic, imageproc.CropCenter},
+		{"siglip", [3]float64{0.5, 0.5, 0.5}, [3]float64{0.5, 0.5, 0.5}, 1.0 / 255.0, imageproc.ResampleBicubic, imageproc.CropNone},
+		{"imagenet", [3]float64{0.485, 0.456, 0.406}, [3]float64{0.229, 0.224, 0.225}, 1.0 / 255.0, imageproc.ResampleBicubic, imageproc.CropNone},
+		{"dinov3", [3]float64{0.485, 0.456, 0.406}, [3]float64{0.229, 0.224, 0.225}, 1.0 / 255.0, imageproc.ResampleBilinear, imageproc.CropNone},
+	}
+	for _, c := range cases {
+		t.Run(c.preset, func(t *testing.T) {
+			cfg := config.ModelConfig{Image: &config.ImageConfig{Input: "input", Size: 32, Preset: c.preset}}
+			plan, src, err := resolveImagePlan(cfg, "m")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Mean != c.mean || plan.Std != c.std || plan.Rescale != c.rescale ||
+				plan.Resample != c.resample || plan.Crop != c.crop {
+				t.Fatalf("%s plan = %+v", c.preset, plan)
+			}
+			if src.Mean != "preset:"+c.preset || src.Crop != "preset:"+c.preset {
+				t.Fatalf("%s sources = %+v, want the preset named", c.preset, src)
+			}
+		})
+	}
+
+	// An explicit key overrides the preset field it names, leaving the rest.
+	cfg := config.ModelConfig{Image: &config.ImageConfig{
+		Input: "input", Size: 32, Preset: "dinov3", Resample: "bicubic", Crop: "center",
+	}}
+	plan, src, err := resolveImagePlan(cfg, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Resample != imageproc.ResampleBicubic || plan.Crop != imageproc.CropCenter {
+		t.Fatalf("explicit keys did not win: %+v", plan)
+	}
+	if plan.Mean != [3]float64{0.485, 0.456, 0.406} {
+		t.Fatalf("preset mean lost: %v", plan.Mean)
+	}
+	if src.Resample != "explicit" || src.Crop != "explicit" || src.Mean != "preset:dinov3" {
+		t.Fatalf("sources = %+v", src)
+	}
+
+	// An unknown preset is a load error naming the valid ones.
+	bad := config.ModelConfig{Image: &config.ImageConfig{Input: "input", Size: 32, Preset: "nope"}}
+	if _, _, err := resolveImagePlan(bad, "m"); err == nil || !strings.Contains(err.Error(), "clip, siglip, imagenet, dinov3") {
+		t.Fatalf("unknown preset error = %v", err)
+	}
+}
+
+// TestResolveImageOutputsPairing covers the dual-encoder rule applied to every
+// output: one output disagreeing with the text dimension fails the load naming
+// that output.
+func TestResolveImageOutputsPairing(t *testing.T) {
+	info := map[string]onnx.OutputInfo{
+		"pooler_output":     {Name: "pooler_output", Rank: 2, Dim: 4},
+		"last_hidden_state": {Name: "last_hidden_state", Rank: 3, Dim: 8},
+	}
+	cfg := imageOutputFixture(
+		config.ImageOutputConfig{Name: "embedding", Tensor: "pooler_output"},
+		config.ImageOutputConfig{Name: "patches", Tensor: "last_hidden_state", Select: "cls"},
+	)
+	_, err := resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, info, modelImageMetadata{})
+	if err == nil {
+		t.Fatal("expected a pairing error for the 8-dimensional output")
+	}
+	for _, want := range []string{"patches", "4", "8", "pairing"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q should name %q", err, want)
+		}
+	}
+}
+
+// TestImageResourcesTokenGridValidation covers the run-time row check: a token
+// tensor whose row count disagrees with the configured start and grid is refused
+// naming both counts, and no partial grid is returned.
+func TestImageResourcesTokenGridValidation(t *testing.T) {
+	plan := imageproc.Plan{Input: "pixel_values", Size: 2, Rescale: 1, Std: [3]float64{1, 1, 1}}
+	outputs := []ImageOutput{{Name: "patches", Tensor: "last_hidden_state", Select: "tokens", Start: 1, Grid: 2, Rows: 4, Dim: 2}}
+
+	// 5 rows per image, start 1 → 4 rows, which matches this grid.
+	ok := &fakeNamedSession{outputs: map[string]onnx.NamedTensor{
+		"last_hidden_state": {
+			Name:  "last_hidden_state",
+			Shape: []int64{1, 5, 2},
+			DType: onnx.TensorFloat32,
+			Float: []float32{9, 9, 1, 2, 3, 4, 5, 6, 7, 8},
+		},
+	}}
+	res := &ImageResources{Sessions: []onnx.NamedSession{ok}, Plan: plan, Outputs: outputs, Normalize: false}
+	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0]["patches"]) != 4*2*4 {
+		t.Fatalf("grid blob = %d bytes, want 4 rows * 2 dims * 4", len(got[0]["patches"]))
+	}
+
+	// A short sequence must be refused instead of returning a partial grid.
+	short := &fakeNamedSession{outputs: map[string]onnx.NamedTensor{
+		"last_hidden_state": {
+			Name:  "last_hidden_state",
+			Shape: []int64{1, 4, 2},
+			DType: onnx.TensorFloat32,
+			Float: make([]float32, 8),
+		},
+	}}
+	res = &ImageResources{Sessions: []onnx.NamedSession{short}, Plan: plan, Outputs: outputs}
+	_, err = res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	if err == nil {
+		t.Fatal("expected a row-count refusal")
+	}
+	for _, want := range []string{"3 rows", "want 4"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q should name %q", err, want)
+		}
+	}
 }

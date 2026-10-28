@@ -39,7 +39,7 @@ func probe(path string, inputs []onnx.NamedTensor) error {
 	if err != nil {
 		return err
 	}
-	sess, err := onnx.NewNamedRuntimeSessionFromBytes(data, inNames, outNames, 1, 1, 0, false)
+	sess, err := onnx.NewNamedRuntimeSessionFromBytes(data, path, inNames, outNames, 1, 1, 0, false)
 	if err != nil {
 		return fmt.Errorf("session: %w", err)
 	}

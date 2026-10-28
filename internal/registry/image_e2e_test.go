@@ -46,20 +46,27 @@ func newVisionImageResources(t *testing.T, dir string, image *config.ImageConfig
 	t.Helper()
 	onnxPath := filepath.Join(dir, "vision_model.onnx")
 
-	plan, err := resolveImagePlan(config.ModelConfig{
-		ONNX:      onnxPath,
-		Tokenizer: filepath.Join(dir, "tokenizer.json"),
-		Image:     image,
-	}, "vision")
-	if err != nil {
-		t.Fatalf("resolveImagePlan: %v", err)
-	}
-
 	outInfo, err := onnx.GetOutputInfo(onnxPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	outputName, rank := selectOutputTensor(outInfo)
+	outputName, _ := selectOutputTensor(outInfo)
+
+	// The model config names its one product; every other field stays
+	// auto-discoverable, which is what the autoconfig case exercises.
+	ic := *image
+	if len(ic.Outputs) == 0 {
+		ic.Outputs = []config.ImageOutputConfig{{Name: "embedding", Tensor: outputName}}
+	}
+	cfg := config.ModelConfig{
+		ONNX:      onnxPath,
+		Tokenizer: filepath.Join(dir, "tokenizer.json"),
+		Image:     &ic,
+	}
+	plan, outputs, _, err := resolveImageResources(cfg, "vision")
+	if err != nil {
+		t.Fatalf("resolveImageResources: %v", err)
+	}
 
 	modelData, err := os.ReadFile(onnxPath)
 	if err != nil {
@@ -75,17 +82,15 @@ func newVisionImageResources(t *testing.T, dir string, image *config.ImageConfig
 	}
 	sort.Strings(outputNames)
 
-	sess, err := onnx.NewNamedRuntimeSessionFromBytes(modelData, inputNames, outputNames, 1, 1, onnx.ExecModeSequential, true)
+	sess, err := onnx.NewNamedRuntimeSessionFromBytes(modelData, onnxPath, inputNames, outputNames, 1, 1, onnx.ExecModeSequential, true)
 	if err != nil {
 		t.Fatalf("opening vision session: %v", err)
 	}
 	res := &ImageResources{
-		Sessions:     []onnx.NamedSession{sess},
-		Plan:         plan,
-		OutputTensor: outputName,
-		Pooling:      poolingForRank(rank),
-		Normalize:    normalize,
-		Dim:          int(outInfo[outputName].Dim),
+		Sessions:  []onnx.NamedSession{sess},
+		Plan:      plan,
+		Outputs:   outputs,
+		Normalize: normalize,
 	}
 	t.Cleanup(func() {
 		for _, s := range res.Sessions {
@@ -111,26 +116,28 @@ func TestImageEmbeddingEndToEnd(t *testing.T) {
 	requireORT(t)
 
 	res, _, outputName := newVisionImageResources(t, dir, &config.ImageConfig{Input: "pixel_values"}, true)
-	t.Logf("vision output=%q dim=%d pooling=%s", outputName, res.Dim, res.Pooling)
+	dim := res.Outputs[0].Dim
+	t.Logf("vision output=%q dim=%d select=%s", outputName, dim, res.Outputs[0].Select)
 
 	tensor, err := res.Plan.Tensor(goldenImage(t))
 	if err != nil {
 		t.Fatalf("preprocessing: %v", err)
 	}
-	embs, err := res.Embed([][]float32{tensor})
+	embs, err := res.Embed([][]float32{tensor}, res.Outputs)
 	if err != nil {
 		t.Fatalf("embedding: %v", err)
 	}
 	if len(embs) != 1 {
 		t.Fatalf("got %d embeddings, want 1", len(embs))
 	}
-	if res.Dim <= 0 || len(embs[0]) != res.Dim*4 {
-		t.Fatalf("embedding bytes = %d, want dim %d * 4", len(embs[0]), res.Dim)
+	blob := embs[0]["embedding"]
+	if dim <= 0 || len(blob) != dim*4 {
+		t.Fatalf("embedding bytes = %d, want dim %d * 4", len(blob), dim)
 	}
 	if res.Normalize {
 		var sumSq float64
-		for i := 0; i < res.Dim; i++ {
-			v := math.Float32frombits(binary.LittleEndian.Uint32(embs[0][i*4:]))
+		for i := 0; i < dim; i++ {
+			v := math.Float32frombits(binary.LittleEndian.Uint32(blob[i*4:]))
 			sumSq += float64(v) * float64(v)
 		}
 		if math.Abs(sumSq-1) > 1e-3 {
@@ -179,22 +186,22 @@ func TestSigLIP2VisionAutoconfigAndReference(t *testing.T) {
 	if plan.Mean != [3]float64{0.5, 0.5, 0.5} || plan.Std != [3]float64{0.5, 0.5, 0.5} {
 		t.Errorf("mean/std = %v/%v, want 0.5/0.5 (image_mean/image_std)", plan.Mean, plan.Std)
 	}
-	if outputName != "pooler_output" || res.Dim != 768 {
-		t.Errorf("output = %q dim=%d, want pooler_output/768 (graph rank-2 preference)", outputName, res.Dim)
+	if outputName != "pooler_output" || res.Outputs[0].Dim != 768 {
+		t.Errorf("output = %q dim=%d, want pooler_output/768 (graph rank-2 preference)", outputName, res.Outputs[0].Dim)
 	}
 	t.Logf("autoconfig: input=%q size=%d crop=%s resample=%s rescale=%v mean=%v std=%v output=%q dim=%d",
-		plan.Input, plan.Size, plan.Crop, plan.Resample, plan.Rescale, plan.Mean, plan.Std, outputName, res.Dim)
+		plan.Input, plan.Size, plan.Crop, plan.Resample, plan.Rescale, plan.Mean, plan.Std, outputName, res.Outputs[0].Dim)
 
 	// Embedding parity against the Python reference.
 	tensor, err := plan.Tensor(goldenImage(t))
 	if err != nil {
 		t.Fatalf("preprocessing: %v", err)
 	}
-	embs, err := res.Embed([][]float32{tensor})
+	embs, err := res.Embed([][]float32{tensor}, res.Outputs)
 	if err != nil {
 		t.Fatalf("embedding: %v", err)
 	}
-	got := decodeFloat32LE(embs[0])
+	got := decodeFloat32LE(embs[0]["embedding"])
 	wantRaw, err := os.ReadFile(refPath)
 	if err != nil {
 		t.Fatal(err)

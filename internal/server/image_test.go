@@ -7,11 +7,14 @@ import (
 	"image/color"
 	"image/gif"
 	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/imageproc"
 	"github.com/elcuervo/emb/internal/onnx"
 	"github.com/elcuervo/emb/internal/registry"
@@ -26,10 +29,21 @@ type fakeImageSession struct {
 	shapes    [][]int64
 	dim       int
 	err       error
-	// outBatch, when > 0, overrides the batch dimension of the returned output
+	// outBatch, when > 0, overrides the batch dimension of the returned outputs
 	// (shape[0] and row count) so a test can model a graph whose output batch
 	// disagrees with the images it was run with. 0 returns the requested batch.
 	outBatch int
+	// tensors, when set, replaces the default single [batch, dim] tensor: each
+	// spec is emitted with the requested batch and rows per image, so a test can
+	// model a graph with a pooled vector and a token grid.
+	tensors []fakeTensorSpec
+}
+
+// fakeTensorSpec describes one tensor a fakeImageSession emits: its name and how
+// many rows each image yields (1 = a pooled vector, grid*grid = a token grid).
+type fakeTensorSpec struct {
+	name string
+	rows int
 }
 
 func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
@@ -55,18 +69,29 @@ func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.
 	if f.outBatch > 0 {
 		batch = f.outBatch
 	}
-	out := make([]float32, batch*f.dim)
-	for i := range out {
-		out[i] = float32(i%f.dim) + 0.5
+	emitted := f.tensors
+	if len(emitted) == 0 {
+		emitted = []fakeTensorSpec{{name: "image_embeds", rows: 1}}
 	}
-	return map[string]onnx.NamedTensor{
-		"image_embeds": {
-			Name:  "image_embeds",
-			Shape: []int64{int64(batch), int64(f.dim)},
+	result := make(map[string]onnx.NamedTensor, len(emitted))
+	for _, spec := range emitted {
+		rows := max(spec.rows, 1)
+		out := make([]float32, batch*rows*f.dim)
+		for i := range out {
+			out[i] = float32(i%f.dim) + 0.5
+		}
+		shape := []int64{int64(batch), int64(f.dim)}
+		if rows > 1 {
+			shape = []int64{int64(batch), int64(rows), int64(f.dim)}
+		}
+		result[spec.name] = onnx.NamedTensor{
+			Name:  spec.name,
+			Shape: shape,
 			DType: onnx.TensorFloat32,
 			Float: out,
-		},
-	}, nil
+		}
+	}
+	return result, nil
 }
 
 func (f *fakeImageSession) Close() error { return nil }
@@ -120,11 +145,9 @@ func serveImage(t *testing.T, cacheConfig string, opts ...Option) (string, *Serv
 			Name: name,
 			Dim:  testImageDim,
 			ImageRes: &registry.ImageResources{
-				Sessions:     []onnx.NamedSession{fake},
-				Plan:         testImagePlan(4),
-				OutputTensor: "image_embeds",
-				Pooling:      "none",
-				Dim:          testImageDim,
+				Sessions: []onnx.NamedSession{fake},
+				Plan:     testImagePlan(4),
+				Outputs:  []registry.ImageOutput{{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: testImageDim}},
 			},
 		})
 	}
@@ -136,6 +159,34 @@ func serveImage(t *testing.T, cacheConfig string, opts ...Option) (string, *Serv
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
 	return addr, srv, sessions
+}
+
+// bulkOrArray returns the named output's value from an EMB.IMG reply map, for
+// callers that expect a nested envelope rather than a bulk.
+func bulkOrArray(t *testing.T, tok respToken, name string) respToken {
+	t.Helper()
+	elems := arrayOf(t, tok)
+	for i := 0; i+1 < len(elems); i += 2 {
+		if got, ok := elems[i].val.(string); ok && got == name {
+			return elems[i+1]
+		}
+	}
+	t.Fatalf("reply %#v has no %q output", tok, name)
+	return respToken{}
+}
+
+// imageValueOf returns the named output's blob from an EMB.IMG reply map (a flat
+// name/value array under RESP2).
+func imageValueOf(t *testing.T, tok respToken, name string) string {
+	t.Helper()
+	elems := arrayOf(t, tok)
+	for i := 0; i+1 < len(elems); i += 2 {
+		if got, ok := elems[i].val.(string); ok && got == name {
+			return bulkOf(t, elems[i+1])
+		}
+	}
+	t.Fatalf("reply %#v has no %q output", tok, name)
+	return ""
 }
 
 func solidImagePNG(t *testing.T, c color.Color) string {
@@ -201,16 +252,18 @@ func TestEMBIMGArityAndModelErrors(t *testing.T) {
 	}
 }
 
-func TestEMBIMGSingleBulk(t *testing.T) {
+func TestEMBIMGKeyedMap(t *testing.T) {
 	addr, _, sessions := serveImage(t, "")
 	pngBytes := solidImagePNG(t, color.NRGBA{R: 10, G: 20, B: 30, A: 255})
 
-	tok := redisCmd(t, addr, "EMB.IMG", "imgA", pngBytes)
-	if tok.kind != "bulk" {
-		t.Fatalf("single image reply = %#v, want bulk", tok)
+	// A single image replies one map keyed by output name (a flat name/value
+	// array under RESP2), never a bare bulk.
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", pngBytes))
+	if len(elems) != 2 || elems[0].kind != "bulk" || elems[0].val != "embedding" {
+		t.Fatalf("single image reply = %#v, want a one-key map named embedding", elems)
 	}
-	if len(bulkOf(t, tok)) != testImageDim*4 {
-		t.Fatalf("embedding length = %d, want %d", len(bulkOf(t, tok)), testImageDim*4)
+	if got := len(bulkOf(t, elems[1])); got != testImageDim*4 {
+		t.Fatalf("embedding length = %d, want %d", got, testImageDim*4)
 	}
 	if sessions["imgA"].callCount() != 1 {
 		t.Fatalf("session calls = %d, want 1", sessions["imgA"].callCount())
@@ -221,9 +274,9 @@ func TestEMBIMGBinarySafety(t *testing.T) {
 	addr, _, _ := serveImage(t, "")
 	gifBytes := gifWithBinaryComment(t)
 
-	tok := redisCmd(t, addr, "EMB.IMG", "imgA", gifBytes)
-	if tok.kind != "bulk" {
-		t.Fatalf("binary-content gif reply = %#v (bytes corrupted or undecodable?)", tok)
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", gifBytes))
+	if len(elems) != 2 || len(bulkOf(t, elems[1])) != testImageDim*4 {
+		t.Fatalf("binary-content gif reply = %#v (bytes corrupted or undecodable?)", elems)
 	}
 }
 
@@ -231,22 +284,23 @@ func TestEMBIMGKeywordPosition(t *testing.T) {
 	addr, _, _ := serveImage(t, "")
 	pngBytes := solidImagePNG(t, color.NRGBA{R: 1, G: 2, B: 3, A: 255})
 
-	// VALUES at position 2 is the reply format → a 6-element RESP2 envelope.
+	// VALUES at position 2 is the reply format → a one-key map whose value is a
+	// 3-pair RESP2 envelope (one row of the model dimension).
 	raw := string(respCommand("EMB.IMG", "imgA", "VALUES", pngBytes))
 	c := dial(t, addr)
 	c.Write([]byte(raw))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "*6\r\n") {
-		t.Fatalf("VALUES reply = %q, want 6-element envelope", resp)
+	if !strings.HasPrefix(resp, "*2\r\n$9\r\nembedding\r\n*6\r\n") {
+		t.Fatalf("VALUES reply = %q, want a one-key map with a 3-pair envelope", resp)
 	}
 	if !strings.Contains(resp, "$5\r\nshape\r\n*2\r\n:1\r\n:4\r\n") {
 		t.Fatalf("VALUES shape wrong: %q", resp)
 	}
 
-	// A trailing VALUES is an image argument, not a format keyword.
-	tok := redisCmd(t, addr, "EMB.IMG", "imgA", pngBytes, "VALUES")
-	elems := arrayOf(t, tok)
-	if len(elems) != 2 || elems[0].kind != "bulk" || elems[1].kind != "bulk" || elems[1].val != nil {
+	// A trailing VALUES is an image argument, not a format keyword: two slots,
+	// the first keyed and the second a failed (null) slot.
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", pngBytes, "VALUES"))
+	if len(elems) != 2 || elems[0].kind != "array" || elems[1].kind != "bulk" || elems[1].val != nil {
 		t.Fatalf("trailing VALUES should be a (failed) image slot: %#v", elems)
 	}
 }
@@ -257,10 +311,14 @@ func TestEMBIMGBatchedSingleRun(t *testing.T) {
 	b := solidImagePNG(t, color.NRGBA{G: 2, A: 255})
 	d := solidImagePNG(t, color.NRGBA{B: 3, A: 255})
 
-	tok := redisCmd(t, addr, "EMB.IMG", "imgA", a, b, d)
-	elems := arrayOf(t, tok)
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", a, b, d))
 	if len(elems) != 3 {
 		t.Fatalf("reply slots = %d, want 3", len(elems))
+	}
+	for i, e := range elems {
+		if e.kind != "array" || len(e.val.([]respToken)) != 2 {
+			t.Fatalf("slot %d = %#v, want a one-key map", i, e)
+		}
 	}
 	fake := sessions["imgA"]
 	if fake.callCount() != 1 {
@@ -287,8 +345,8 @@ func TestEMBIMGBoundedBatchedRuns(t *testing.T) {
 		t.Fatalf("reply slots = %d, want %d", len(elems), len(imgs))
 	}
 	for i, e := range elems {
-		if e.kind != "bulk" || e.val == nil {
-			t.Fatalf("slot %d = %#v, want a bulk embedding", i, e)
+		if e.kind != "array" || e.val == nil {
+			t.Fatalf("slot %d = %#v, want a keyed map", i, e)
 		}
 	}
 
@@ -322,11 +380,9 @@ func TestEMBIMGBatchDimensionMismatch(t *testing.T) {
 				Name: "imgA",
 				Dim:  testImageDim,
 				ImageRes: &registry.ImageResources{
-					Sessions:     []onnx.NamedSession{fake},
-					Plan:         testImagePlan(4),
-					OutputTensor: "image_embeds",
-					Pooling:      "none",
-					Dim:          testImageDim,
+					Sessions: []onnx.NamedSession{fake},
+					Plan:     testImagePlan(4),
+					Outputs:  []registry.ImageOutput{{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: testImageDim}},
 				},
 			})
 			entry, err := reg.Resolve("imgA")
@@ -343,10 +399,10 @@ func TestEMBIMGBatchDimensionMismatch(t *testing.T) {
 			}
 
 			srv := New(getFreeAddr(), reg, "", "", nil)
-			results, _, errs := srv.embedImages("imgA", ir, images)
+			results, _, errs := srv.embedImages("imgA", ir, ir.Outputs, images)
 
 			want := fmt.Sprintf("image output %q has batch dimension %d, want %d",
-				"image_embeds", tc.outBatch, tc.images)
+				"embedding", tc.outBatch, tc.images)
 			for i, e := range errs {
 				if e == nil {
 					t.Fatalf("slot %d: no error, want %q", i, want)
@@ -375,7 +431,7 @@ func TestEMBIMGTruncation(t *testing.T) {
 	if len(elems) != 3 {
 		t.Fatalf("truncated reply slots = %d, want 3", len(elems))
 	}
-	if elems[0].kind != "bulk" || elems[1].kind != "bulk" || elems[2].kind != "bulk" || elems[2].val != nil {
+	if elems[0].kind != "array" || elems[1].kind != "array" || elems[2].kind != "bulk" || elems[2].val != nil {
 		t.Fatalf("overflow slot should be null: %#v", elems)
 	}
 	if fake := sessions["imgA"]; fake.callCount() != 1 {
@@ -396,7 +452,7 @@ func TestEMBIMGOneBadImageDoesNotFailCommand(t *testing.T) {
 	if len(elems) != 3 {
 		t.Fatalf("slots = %d, want 3", len(elems))
 	}
-	if elems[0].kind != "bulk" || elems[2].kind != "bulk" {
+	if elems[0].kind != "array" || elems[2].kind != "array" {
 		t.Fatalf("good images should succeed: %#v", elems)
 	}
 	if elems[1].val != nil {
@@ -418,8 +474,8 @@ func TestEMBIMGValuesRESP3(t *testing.T) {
 	}
 	c.Write(respCommand("EMB.IMG", "imgA", "VALUES", pngBytes))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "%3\r\n") {
-		t.Fatalf("RESP3 VALUES envelope = %q, want a 3-field map", resp)
+	if !strings.HasPrefix(resp, "%1\r\n$9\r\nembedding\r\n%3\r\n") {
+		t.Fatalf("RESP3 VALUES envelope = %q, want a one-key map holding a 3-field envelope", resp)
 	}
 	if !strings.Contains(resp, "dtype") || !strings.Contains(resp, "shape") || !strings.Contains(resp, "values") {
 		t.Fatalf("RESP3 VALUES envelope missing fields: %q", resp)
@@ -433,13 +489,13 @@ func TestEMBIMGMULTITwoModelsAndPartialFailure(t *testing.T) {
 
 	tok := redisCmd(t, addr, "EMB.IMGMULTI", "imgA", a, "imgB", b)
 	elems := arrayOf(t, tok)
-	if len(elems) != 2 || elems[0].kind != "bulk" || elems[1].kind != "bulk" {
+	if len(elems) != 2 || elems[0].kind != "array" || elems[1].kind != "array" {
 		t.Fatalf("two-model IMGMULTI = %#v", elems)
 	}
 
 	tok = redisCmd(t, addr, "EMB.IMGMULTI", "imgA", a, "imgB", "bad", "imgA", b)
 	elems = arrayOf(t, tok)
-	if len(elems) != 3 || elems[0].kind != "bulk" || elems[1].val != nil || elems[2].kind != "bulk" {
+	if len(elems) != 3 || elems[0].kind != "array" || elems[1].val != nil || elems[2].kind != "array" {
 		t.Fatalf("partial failure IMGMULTI = %#v", elems)
 	}
 }
@@ -451,7 +507,7 @@ func TestEMBIMGMULTITruncationAndFormat(t *testing.T) {
 
 	tok := redisCmd(t, addr, "EMB.IMGMULTI", "imgA", a, "imgB", b)
 	elems := arrayOf(t, tok)
-	if len(elems) != 2 || elems[0].kind != "bulk" || elems[1].val != nil {
+	if len(elems) != 2 || elems[0].kind != "array" || elems[1].val != nil {
 		t.Fatalf("truncated IMGMULTI = %#v", elems)
 	}
 	if got := statsIntField(t, dial(t, addr), "truncated_images"); got != 1 {
@@ -463,8 +519,8 @@ func TestEMBIMGMULTITruncationAndFormat(t *testing.T) {
 	c := dial(t, addr)
 	c.Write([]byte(raw))
 	resp := readRESP(t, c)
-	if !strings.HasPrefix(resp, "*2\r\n*8\r\n") {
-		t.Fatalf("IMGMULTI VALUES reply = %q, want 2 model-tagged envelopes", resp)
+	if !strings.HasPrefix(resp, "*2\r\n*4\r\n") {
+		t.Fatalf("IMGMULTI VALUES reply = %q, want 2 model-tagged maps (model + one output)", resp)
 	}
 	if !strings.Contains(resp, "$5\r\nmodel\r\n") {
 		t.Fatalf("IMGMULTI VALUES envelope missing model key: %q", resp)
@@ -555,7 +611,7 @@ func TestConfigCommandAndImageCaps(t *testing.T) {
 func TestEMBHELPDocumentsImageCommands(t *testing.T) {
 	addr, _, _ := serveImage(t, "")
 	help := bulkOf(t, redisCmd(t, addr, "EMB.HELP"))
-	for _, want := range []string{"EMB.IMG", "EMB.IMGMULTI", "emb.image"} {
+	for _, want := range []string{"EMB.IMG", "EMB.IMGMULTI", "emb.image", "OUTPUTS"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("EMB.HELP missing %q", want)
 		}
@@ -593,20 +649,20 @@ func TestImageCacheFlushIsModelScoped(t *testing.T) {
 	if srv.cache == nil {
 		t.Fatal("cache not configured")
 	}
-	if _, ok := srv.cache.Get(imageCacheKey("imgA", []byte(a))); !ok {
+	if _, ok := srv.cache.Get(imageCacheKey("imgA", []byte(a), "embedding")); !ok {
 		t.Fatal("imgA entry missing before flush")
 	}
-	if _, ok := srv.cache.Get(imageCacheKey("imgB", []byte(b))); !ok {
+	if _, ok := srv.cache.Get(imageCacheKey("imgB", []byte(b), "embedding")); !ok {
 		t.Fatal("imgB entry missing before flush")
 	}
 
 	if got := redisCmd(t, addr, "EMB.CACHE.FLUSH", "imgA"); got.kind != "int" || got.val.(int) != 1 {
 		t.Fatalf("flush imgA = %#v, want integer 1", got)
 	}
-	if _, ok := srv.cache.Get(imageCacheKey("imgA", []byte(a))); ok {
+	if _, ok := srv.cache.Get(imageCacheKey("imgA", []byte(a), "embedding")); ok {
 		t.Fatal("imgA image entry survived a model-scoped flush")
 	}
-	if _, ok := srv.cache.Get(imageCacheKey("imgB", []byte(b))); !ok {
+	if _, ok := srv.cache.Get(imageCacheKey("imgB", []byte(b), "embedding")); !ok {
 		t.Fatal("imgB image entry was removed by flushing imgA")
 	}
 
@@ -627,7 +683,7 @@ func TestImageCacheByteBudgetAndEviction(t *testing.T) {
 	c := NewCache(400)
 	val := make([]byte, 8)
 	for i := 0; i < 20; i++ {
-		c.Set(imageCacheKey("m", []byte{byte(i)}), val)
+		c.Set(imageCacheKey("m", []byte{byte(i)}, "embedding"), val)
 	}
 	st := c.Stats()
 	if st.Evictions == 0 {
@@ -638,5 +694,389 @@ func TestImageCacheByteBudgetAndEviction(t *testing.T) {
 	}
 	if st.CurBytes > st.MaxBytes {
 		t.Fatalf("cache over budget: %d > %d", st.CurBytes, st.MaxBytes)
+	}
+}
+
+// TestEMBIMGStaticBatchCap proves a graph that declares batch 1 is fed one
+// image per run and still serves every slot of a multi-image request.
+func TestEMBIMGStaticBatchCap(t *testing.T) {
+	addr, _, sessions := serveImageBatchCap(t, 1)
+	a := solidImagePNG(t, color.NRGBA{R: 1, A: 255})
+	b := solidImagePNG(t, color.NRGBA{G: 2, A: 255})
+	d := solidImagePNG(t, color.NRGBA{B: 3, A: 255})
+
+	tok := redisCmd(t, addr, "EMB.IMG", "imgA", a, b, d)
+	elems := arrayOf(t, tok)
+	if len(elems) != 3 {
+		t.Fatalf("reply slots = %d, want 3", len(elems))
+	}
+	for i, e := range elems {
+		m := arrayOf(t, e)
+		if len(m) != 2 || m[0].val != "embedding" || len(bulkOf(t, m[1])) != testImageDim*4 {
+			t.Fatalf("slot %d = %#v, want a one-key map with a %d-byte embedding", i, e, testImageDim*4)
+		}
+	}
+	fake := sessions["imgA"]
+	if fake.callCount() != 3 {
+		t.Fatalf("session runs = %d, want one per image (3)", fake.callCount())
+	}
+	for i, shape := range fake.runShapes() {
+		if shape[0] != 1 {
+			t.Fatalf("run %d batch = %d, want 1", i, shape[0])
+		}
+	}
+}
+
+// serveImageBatchCap starts a server whose imgA model declares a static batch
+// axis, so tests can observe the per-run batching the cap forces.
+func serveImageBatchCap(t *testing.T, batchCap int) (string, *Server, map[string]*fakeImageSession) {
+	t.Helper()
+	reg := registry.New()
+	fake := &fakeImageSession{dim: testImageDim}
+	reg.Add("imgA", &registry.ModelEntry{
+		Name: "imgA",
+		Dim:  testImageDim,
+		ImageRes: &registry.ImageResources{
+			Sessions: []onnx.NamedSession{fake},
+			Plan:     testImagePlan(4),
+			BatchCap: batchCap,
+			Outputs:  []registry.ImageOutput{{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: testImageDim}},
+		},
+	})
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr, srv, map[string]*fakeImageSession{"imgA": fake}
+}
+
+// TestTextOnImageOnlyModelNamesMissingTokenizer proves an image-only model
+// loads without a tokenizer, serves the image surface, and answers a text
+// command with an error naming the model and the tokenizer file it wanted.
+func TestTextOnImageOnlyModelNamesMissingTokenizer(t *testing.T) {
+	const model = "../../models/minilm/model.onnx"
+	if _, err := os.Stat(model); err != nil {
+		t.Skipf("test model not present: %v (run: just download-model)", err)
+	}
+	if !ortOK {
+		t.Skip("onnx runtime unavailable (run inside nix develop)")
+	}
+
+	// A graph with no tokenizer.json beside it: the inferred tokenizer path
+	// does not exist, which is exactly an image-only export.
+	dir := t.TempDir()
+	abs, err := filepath.Abs(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph := filepath.Join(dir, "model.onnx")
+	if err := os.Symlink(abs, graph); err != nil {
+		t.Fatalf("symlinking model: %v", err)
+	}
+
+	entry, err := registry.LoadModel(config.ModelConfig{
+		ONNX: graph,
+		Image: &config.ImageConfig{
+			Input:   "pixel_values",
+			Size:    4,
+			Outputs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "last_hidden_state"}},
+		},
+	}, "imgonly")
+	if err != nil {
+		t.Fatalf("loading image-only model without a tokenizer: %v", err)
+	}
+	reg := registry.New()
+	reg.Add("imgonly", entry)
+	t.Cleanup(func() { _ = reg.Close() })
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", "", nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+
+	// The load is asynchronous, so the first text command can race it; the
+	// failure under test is the one reported once loading has finished.
+	got := errorOf(t, redisCmd(t, addr, "EMB", "imgonly", "hello"))
+	for i := 0; i < 100 && strings.Contains(got, "initializing"); i++ {
+		time.Sleep(10 * time.Millisecond)
+		got = errorOf(t, redisCmd(t, addr, "EMB", "imgonly", "hello"))
+	}
+	if !strings.Contains(got, "imgonly") || !strings.Contains(got, "tokenizer") {
+		t.Fatalf("text on an image-only model = %q, want the model and the missing tokenizer named", got)
+	}
+}
+
+// serveImageMulti starts a server whose "dinov3" model serves two outputs — a
+// pooled vector and a 3x3 token grid — and a second model with only the pooled
+// one.
+func serveImageMulti(t *testing.T, cacheConfig string) (string, *Server, map[string]*fakeImageSession) {
+	t.Helper()
+	reg := registry.New()
+	sessions := map[string]*fakeImageSession{}
+	pooled := registry.ImageOutput{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: testImageDim}
+	grid := registry.ImageOutput{Name: "patches", Tensor: "tokens", Select: "tokens", Start: 1, Grid: 3, Rows: 9, Dim: testImageDim}
+
+	two := &fakeImageSession{dim: testImageDim, tensors: []fakeTensorSpec{
+		{name: "image_embeds", rows: 1},
+		{name: "tokens", rows: 10}, // 1 CLS + 9 patch rows
+	}}
+	sessions["dinov3"] = two
+	reg.Add("dinov3", &registry.ModelEntry{
+		Name: "dinov3",
+		Dim:  testImageDim,
+		ImageRes: &registry.ImageResources{
+			Sessions: []onnx.NamedSession{two},
+			Plan:     testImagePlan(4),
+			Outputs:  []registry.ImageOutput{pooled, grid},
+		},
+	})
+
+	only := &fakeImageSession{dim: testImageDim}
+	sessions["pooled"] = only
+	reg.Add("pooled", &registry.ModelEntry{
+		Name: "pooled",
+		Dim:  testImageDim,
+		ImageRes: &registry.ImageResources{
+			Sessions: []onnx.NamedSession{only},
+			Plan:     testImagePlan(4),
+			Outputs:  []registry.ImageOutput{pooled},
+		},
+	})
+
+	addr := getFreeAddr()
+	srv := New(addr, reg, "", cacheConfig, nil)
+	go srv.ListenAndServe()
+	t.Cleanup(func() { srv.Close() })
+	time.Sleep(50 * time.Millisecond)
+	return addr, srv, sessions
+}
+
+// TestEMBIMGOutputsKeyword covers the OUTPUTS positions, the all-outputs
+// default, the unknown-name error, and a URL in the first image slot after it.
+func TestEMBIMGOutputsKeyword(t *testing.T) {
+	addr, _, sessions := serveImageMulti(t, "")
+	png := solidImagePNG(t, color.NRGBA{R: 4, A: 255})
+
+	// No OUTPUTS → every configured output, in configured order.
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", png))
+	if len(elems) != 4 || elems[0].val != "embedding" || elems[2].val != "patches" {
+		t.Fatalf("default projection = %#v, want both outputs", elems)
+	}
+
+	// OUTPUTS right after the model.
+	elems = arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "OUTPUTS", "patches", png))
+	if len(elems) != 2 || elems[0].val != "patches" {
+		t.Fatalf("OUTPUTS patch projection = %#v", elems)
+	}
+
+	// OUTPUTS after the reply-format keyword.
+	elems = arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "BLOB", "OUTPUTS", "embedding", png))
+	if len(elems) != 2 || elems[0].val != "embedding" {
+		t.Fatalf("BLOB OUTPUTS projection = %#v", elems)
+	}
+
+	// Repeated names are deduped into one entry.
+	elems = arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "OUTPUTS", "patches,patches", png))
+	if len(elems) != 2 {
+		t.Fatalf("deduped projection = %#v, want one output", elems)
+	}
+
+	// An unknown name fails the command before any image is decoded, naming the
+	// configured outputs.
+	got := errorOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "OUTPUTS", "nope", png))
+	for _, want := range []string{"nope", "embedding", "patches"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("unknown output error %q should mention %q", got, want)
+		}
+	}
+
+	// A URL in the first image slot after OUTPUTS is still caught by the guard.
+	if got := errorOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "OUTPUTS", "embedding", "https://example.com/x.png")); !strings.Contains(got, "fetch") {
+		t.Fatalf("URL after OUTPUTS = %q, want the fetch guidance", got)
+	}
+
+	if c := sessions["dinov3"].callCount(); c != 4 {
+		t.Fatalf("runs = %d, want 4 (the deduped projection shares one run)", c)
+	}
+}
+
+// TestEMBIMGMultiOutputKeyedShapes asserts the exact wire shapes of the keyed
+// reply under both protocols: one map with two keys, an array of two maps, and
+// the token envelope's grid.
+func TestEMBIMGMultiOutputKeyedShapes(t *testing.T) {
+	addr, _, sessions := serveImageMulti(t, "")
+	a := solidImagePNG(t, color.NRGBA{R: 1, A: 255})
+	b := solidImagePNG(t, color.NRGBA{G: 2, A: 255})
+
+	// RESP2: one image → flat name/value array, in configured order, with the
+	// two values being a dim*4 blob and a 9*dim*4 grid blob.
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", a))
+	if len(elems) != 4 {
+		t.Fatalf("two-output map = %d elements, want 4", len(elems))
+	}
+	if got := len(bulkOf(t, elems[1])); got != testImageDim*4 {
+		t.Fatalf("embedding = %d bytes, want %d", got, testImageDim*4)
+	}
+	if got := len(bulkOf(t, elems[3])); got != 9*testImageDim*4 {
+		t.Fatalf("patches = %d bytes, want %d", got, 9*testImageDim*4)
+	}
+
+	// RESP2: several images → an array of two such maps.
+	tok := redisCmd(t, addr, "EMB.IMG", "dinov3", a, b)
+	slotElems := arrayOf(t, tok)
+	if len(slotElems) != 2 {
+		t.Fatalf("two images = %d slots, want 2", len(slotElems))
+	}
+	for i, slot := range slotElems {
+		if slot.kind != "array" || len(slot.val.([]respToken)) != 4 {
+			t.Fatalf("slot %d = %#v, want a two-key map", i, slot)
+		}
+	}
+
+	// RESP3: a real map keyed by output name, with a raw blob value.
+	c := dial(t, addr)
+	defer c.Close()
+	c.Write([]byte("*2\r\n$5\r\nHELLO\r\n$1\r\n3\r\n"))
+	if resp := readRESP(t, c); !strings.HasPrefix(resp, "%") {
+		t.Fatalf("HELLO 3 = %q", resp)
+	}
+	c.Write(respCommand("EMB.IMG", "dinov3", "OUTPUTS", "patches", a))
+	resp := readRESPComplete(t, c)
+	wantBlob := fmt.Sprintf("%%1\r\n$7\r\npatches\r\n$%d\r\n", 9*testImageDim*4)
+	if !strings.HasPrefix(resp, wantBlob) {
+		t.Fatalf("RESP3 keyed map = %q, want %q", resp[:min(len(resp), 80)], wantBlob)
+	}
+
+	// VALUES (RESP2) carries the token envelope's shape and grid.
+	envelope := arrayOf(t, bulkOrArray(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "VALUES", "OUTPUTS", "patches", a), "patches"))
+	fields := map[string]respToken{}
+	for i := 0; i+1 < len(envelope); i += 2 {
+		fields[bulkOf(t, envelope[i])] = envelope[i+1]
+	}
+	if shape := arrayOf(t, fields["shape"]); shape[0].val != 9 || shape[1].val != testImageDim {
+		t.Fatalf("token shape = %#v, want [9 %d]", shape, testImageDim)
+	}
+	if grid := arrayOf(t, fields["grid"]); grid[0].val != 3 || grid[1].val != 3 {
+		t.Fatalf("token grid = %#v, want [3 3]", grid)
+	}
+
+	// Four commands, one session run each: the two-output map, the two-image
+	// array, and the two narrowed projections.
+	if c := sessions["dinov3"].callCount(); c != 4 {
+		t.Fatalf("runs = %d, want 4 (one per command)", c)
+	}
+}
+
+// TestEMBIMGPerOutputCache proves each output is cached on its own: narrowing
+// the projection after a full request performs no inference, while asking for
+// the other output does its own run.
+func TestEMBIMGPerOutputCache(t *testing.T) {
+	addr, srv, sessions := serveImageMulti(t, "1MB")
+	png := solidImagePNG(t, color.NRGBA{R: 7, A: 255})
+
+	redisCmd(t, addr, "EMB.IMG", "dinov3", png)
+	if c := sessions["dinov3"].callCount(); c != 1 {
+		t.Fatalf("first request runs = %d, want 1", c)
+	}
+	// Same bytes, same outputs → every entry hits.
+	redisCmd(t, addr, "EMB.IMG", "dinov3", png)
+	if c := sessions["dinov3"].callCount(); c != 1 {
+		t.Fatalf("repeat request runs = %d, want 1 (per-output hits)", c)
+	}
+	// A different output of the same bytes is a different entry, so it is
+	// already cached and needs no second run either.
+	redisCmd(t, addr, "EMB.IMG", "dinov3", "OUTPUTS", "patches", png)
+	if c := sessions["dinov3"].callCount(); c != 1 {
+		t.Fatalf("narrowed request runs = %d, want 1", c)
+	}
+
+	for _, out := range []string{"embedding", "patches"} {
+		if _, ok := srv.cache.Get(imageCacheKey("dinov3", []byte(png), out)); !ok {
+			t.Fatalf("%s entry missing from the cache", out)
+		}
+	}
+
+	// Flushing the model removes every output's entry.
+	if got := redisCmd(t, addr, "EMB.CACHE.FLUSH", "dinov3"); got.kind != "int" || got.val.(int) != 2 {
+		t.Fatalf("flush = %#v, want 2 entries", got)
+	}
+}
+
+// TestEMBIMGTwoOutputRequestCountedOnce covers request accounting: one command
+// is one image request however many outputs it asks for.
+func TestEMBIMGTwoOutputRequestCountedOnce(t *testing.T) {
+	addr, _, _ := serveImageMulti(t, "")
+	png := solidImagePNG(t, color.NRGBA{R: 5, A: 255})
+
+	redisCmd(t, addr, "EMB.IMG", "dinov3", png)
+	if got := statsIntField(t, dial(t, addr), "image_requests"); got != 1 {
+		t.Fatalf("image_requests = %d, want 1 for one command", got)
+	}
+}
+
+// TestEMBIMGMULTIKeyedMapsPerPair asserts the EMB.IMGMULTI wire shape: one keyed
+// map per pair, with the pair's model beside its outputs under VALUES, and the
+// projection keyword at its fixed position.
+func TestEMBIMGMULTIKeyedMapsPerPair(t *testing.T) {
+	addr, _, _ := serveImageMulti(t, "")
+	a := solidImagePNG(t, color.NRGBA{R: 1, A: 255})
+	b := solidImagePNG(t, color.NRGBA{G: 2, A: 255})
+
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMGMULTI", "OUTPUTS", "embedding", "dinov3", a, "pooled", b))
+	if len(elems) != 2 {
+		t.Fatalf("pairs = %d, want 2", len(elems))
+	}
+	for i, pair := range elems {
+		if m := arrayOf(t, pair); len(m) != 2 || m[0].val != "embedding" {
+			t.Fatalf("pair %d = %#v, want a one-key embedding map", i, pair)
+		}
+	}
+
+	// A name one model does not configure fails only that pair.
+	elems = arrayOf(t, redisCmd(t, addr, "EMB.IMGMULTI", "OUTPUTS", "patches", "dinov3", a, "pooled", b))
+	if elems[1].val != nil {
+		t.Fatalf("pooled pair = %#v, want null for an unconfigured output", elems[1])
+	}
+
+	// VALUES carries the pair's model beside its outputs.
+	raw := string(respCommand("EMB.IMGMULTI", "VALUES", "OUTPUTS", "embedding", "pooled", b))
+	c := dial(t, addr)
+	defer c.Close()
+	c.Write([]byte(raw))
+	resp := readRESPComplete(t, c)
+	if !strings.HasPrefix(resp, "*1\r\n*4\r\n$5\r\nmodel\r\n$6\r\npooled\r\n") {
+		t.Fatalf("IMGMULTI VALUES map = %q, want model beside the output", resp)
+	}
+}
+
+// TestEMBINFOImageOutputs proves EMB.INFO lists every configured image output
+// with its shape, without running inference and without a notion of a default.
+func TestEMBINFOImageOutputs(t *testing.T) {
+	addr, _, sessions := serveImageMulti(t, "")
+	c := dial(t, addr)
+	defer c.Close()
+
+	c.Write(respCommand("EMB.INFO", "dinov3"))
+	info := replyPairs(t, parseRESP(t, readRESPComplete(t, c)))
+
+	outputs := arrayOf(t, info["image_outputs"])
+	if len(outputs) != 4 {
+		t.Fatalf("image_outputs = %#v, want two named entries", outputs)
+	}
+	pooled := replyPairs(t, outputs[1])
+	if pooled["tensor"].val != "image_embeds" || pooled["select"].val != "none" || intOf(t, pooled["rows"]) != 1 || intOf(t, pooled["dim"]) != testImageDim {
+		t.Fatalf("pooled output = %#v", pooled)
+	}
+	grid := replyPairs(t, outputs[3])
+	if grid["tensor"].val != "tokens" || grid["select"].val != "tokens" || intOf(t, grid["rows"]) != 9 {
+		t.Fatalf("token output = %#v", grid)
+	}
+	if g := arrayOf(t, grid["grid"]); intOf(t, g[0]) != 3 || intOf(t, g[1]) != 3 {
+		t.Fatalf("token grid = %#v, want [3 3]", g)
+	}
+	if c := sessions["dinov3"].callCount(); c != 0 {
+		t.Fatalf("EMB.INFO ran %d inferences, want none", c)
 	}
 }

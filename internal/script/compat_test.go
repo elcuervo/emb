@@ -95,7 +95,7 @@ func TestHostSurfaceIsComplete(t *testing.T) {
 		EncodePretokenized: func([]string, int) ([]int64, []int64, error) { return nil, nil, nil },
 		Image: &ImageHost{
 			Preprocess: func([]byte) ([]float32, error) { return nil, nil },
-			Embed:      func([][]byte) ([][]byte, error) { return nil, nil },
+			Embed:      func([][]byte, []string) ([]map[string][]byte, error) { return nil, nil },
 		},
 	}
 	want := []string{

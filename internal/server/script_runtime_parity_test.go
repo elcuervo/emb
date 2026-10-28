@@ -97,10 +97,10 @@ func TestScriptWorkersOverrideOpensFour(t *testing.T) {
 func imageModelConfig() config.ModelConfig {
 	return config.ModelConfig{
 		Image: &config.ImageConfig{
-			Input:  "pixel_values",
-			Size:   4,
-			Output: "last_hidden_state",
-			Std:    []float64{1, 1, 1},
+			Input:   "pixel_values",
+			Size:    4,
+			Outputs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "last_hidden_state"}},
+			Std:     []float64{1, 1, 1},
 		},
 	}
 }
@@ -158,7 +158,7 @@ func TestImageInfoDoesNotOpenSessions(t *testing.T) {
 // distinct variants defeat the script-reply cache while sharing the image
 // cache.
 func scriptedImageEmbed(variant int) string {
-	return "return #emb.image.embed(KEYS[1]) + " + strconv.Itoa(variant)
+	return `return #emb.image.embed(KEYS[1], {output = "embedding"}) + ` + strconv.Itoa(variant)
 }
 
 // TestScriptedImageEmbedSharesNativeCache verifies EMB.IMG followed by a
@@ -167,7 +167,7 @@ func TestScriptedImageEmbedSharesNativeCache(t *testing.T) {
 	addr, _, sessions := serveImage(t, "1MB")
 	png := solidImagePNG(t, color.White)
 
-	if got := bulkOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", png)); len(got) == 0 {
+	if got := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", png), "embedding"); len(got) == 0 {
 		t.Fatal("EMB.IMG returned an empty embedding")
 	}
 	if c := sessions["imgA"].callCount(); c != 1 {
@@ -189,7 +189,7 @@ func TestNativeImageHitsScriptedCache(t *testing.T) {
 	if c := sessions["imgA"].callCount(); c != 1 {
 		t.Fatalf("scripted embed runs = %d, want 1", c)
 	}
-	if got := bulkOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", png)); len(got) == 0 {
+	if got := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", png), "embedding"); len(got) == 0 {
 		t.Fatal("EMB.IMG returned an empty embedding")
 	}
 	if c := sessions["imgA"].callCount(); c != 1 {

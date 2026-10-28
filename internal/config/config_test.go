@@ -121,6 +121,30 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestValidateImageOnlyModelNeedsNoTokenizer covers a DINOv3-style export: an
+// image block and no tokenizer.json loads, while a text-only model with the
+// same missing file still fails at load.
+func TestValidateImageOnlyModelNeedsNoTokenizer(t *testing.T) {
+	dir := t.TempDir()
+	onnxPath := filepath.Join(dir, "model.onnx")
+	tokPath := filepath.Join(dir, "tokenizer.json")
+	if err := os.WriteFile(onnxPath, []byte("dummy"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	imageOnly := ModelConfig{ONNX: onnxPath, Tokenizer: tokPath, Image: &ImageConfig{Size: 224}}
+	if err := imageOnly.Validate(); err != nil {
+		t.Fatalf("image-only model without a tokenizer: %v", err)
+	}
+
+	textOnly := ModelConfig{ONNX: onnxPath, Tokenizer: tokPath}
+	if err := textOnly.Validate(); err == nil {
+		t.Fatal("text-only model without a tokenizer should fail at load")
+	} else if !strings.Contains(err.Error(), tokPath) {
+		t.Fatalf("error %q should name the missing tokenizer", err)
+	}
+}
+
 func TestValidateMissingFiles(t *testing.T) {
 	m := ModelConfig{ONNX: "/nonexistent.onnx", Tokenizer: "./nonexistent.json"}
 	if err := m.Validate(); err == nil {
@@ -1050,5 +1074,75 @@ func TestLoadReservedModelNames(t *testing.T) {
 		if !strings.Contains(err.Error(), "reserved") {
 			t.Fatalf("expected reserved-word error for %q, got %v", name, err)
 		}
+	}
+}
+
+// TestValidateImageOutputs covers the structural image-output rejections: an
+// unnamed output, a missing tensor, an unknown selector, a negative start, a
+// grid that cannot divide the size, and a duplicate name.
+func TestValidateImageOutputs(t *testing.T) {
+	cases := []struct {
+		name    string
+		outputs []ImageOutputConfig
+		size    int
+		want    string
+	}{
+		{"unnamed output", []ImageOutputConfig{{Tensor: "pooler_output"}}, 0, "needs a name"},
+		{"missing tensor", []ImageOutputConfig{{Name: "embedding"}}, 0, "needs a tensor"},
+		{"unknown select", []ImageOutputConfig{{Name: "embedding", Tensor: "t", Select: "pool"}}, 0, "unknown select"},
+		{"negative start", []ImageOutputConfig{{Name: "patches", Tensor: "t", Select: "tokens", Start: new(-1), Grid: 2}}, 0, "start must be non-negative"},
+		{"negative grid", []ImageOutputConfig{{Name: "patches", Tensor: "t", Select: "tokens", Grid: -2}}, 0, "grid must be non-negative"},
+		{"grid does not divide size", []ImageOutputConfig{{Name: "patches", Tensor: "t", Select: "tokens", Grid: 5}}, 224, "does not divide image.size"},
+		{"duplicate name", []ImageOutputConfig{{Name: "a", Tensor: "t"}, {Name: "a", Tensor: "u"}}, 0, "duplicate image output name"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateImageConfig("m", ImageConfig{Size: tc.size, Outputs: tc.outputs})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestLoadRejectsStaleImageOutputKey covers strict decoding: the pre-change
+// image.output key fails the boot naming the offending key instead of silently
+// falling back.
+func TestLoadRejectsStaleImageOutputKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+models:
+  clip:
+    onnx: ./model.onnx
+    image:
+      size: 224
+      output: image_embeds
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := loadFile(path)
+	if err == nil {
+		t.Fatal("stale image.output key loaded, want a strict-decoding error")
+	}
+	if !strings.Contains(err.Error(), "output") {
+		t.Fatalf("error %q should name the unknown key", err)
+	}
+}
+
+// TestLoadReservedOutputsModelName covers the OUTPUTS keyword's reserved word.
+func TestLoadReservedOutputsModelName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+models:
+  OUTPUTS:
+    onnx: ./model.onnx
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := loadFile(path)
+	if err == nil || !strings.Contains(err.Error(), "reserved word") {
+		t.Fatalf("reserved model name error = %v", err)
 	}
 }

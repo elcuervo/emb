@@ -134,6 +134,41 @@ func ExtractCLS(hidden []float32, batchSize, dim, seqLen int, normalize bool) []
 	return rowViews(out, batchSize, dim)
 }
 
+// ExtractTokenRows returns rows [start:seqLen) of each sequence of a 3D output
+// tensor (batch×seq×dim) as one contiguous little-endian float32 blob per image,
+// L2-normalized per row when normalize. It is the dense-feature extraction a
+// patch grid needs (a DINOv3 last_hidden_state, whose first rows are the CLS and
+// register tokens), so callers get rows*dim*4 bytes per image.
+func ExtractTokenRows(hidden []float32, batchSize, dim, seqLen, start int, normalize bool) [][]byte {
+	if batchSize == 0 || start < 0 || start > seqLen {
+		return nil
+	}
+	rows := seqLen - start
+	if rows == 0 {
+		return nil
+	}
+	out := make([]byte, batchSize*rows*dim*4)
+	if !normalize {
+		// Each image's rows are a contiguous block inside its own sequence.
+		for b := range batchSize {
+			from := b*seqLen*dim + start*dim
+			copy(out[b*rows*dim*4:], f32Bytes(hidden[from:from+rows*dim]))
+		}
+		return rowViews(out, batchSize, rows*dim)
+	}
+	scratch := make([]float32, batchSize*rows*dim)
+	normImage := func(b int) {
+		dst := scratch[b*rows*dim : (b+1)*rows*dim]
+		copy(dst, hidden[b*seqLen*dim+start*dim:b*seqLen*dim+seqLen*dim])
+		for r := range rows {
+			L2Normalize(dst[r*dim : (r+1)*dim])
+		}
+		copy(out[b*rows*dim*4:], f32Bytes(dst))
+	}
+	parallelRows(batchSize, normImage)
+	return rowViews(out, batchSize, rows*dim)
+}
+
 // parallelRows fans out per-row work across GOMAXPROCS workers, running
 // inline for a single row to avoid goroutine overhead on the dominant
 // single-text path.
@@ -207,6 +242,33 @@ func meanPoolAndNormalizeScalar(hidden []float32, masks []int64, dim, seqLen, ba
 		bytes := make([]byte, dim*4)
 		for d := range dim {
 			binary.LittleEndian.PutUint32(bytes[d*4:], math.Float32bits(vec[d]))
+		}
+		result[b] = bytes
+	}
+	return result
+}
+
+func extractTokenRowsScalar(hidden []float32, batchSize, dim, seqLen, start int, normalize bool) [][]byte {
+	if batchSize == 0 || start < 0 || start > seqLen {
+		return nil
+	}
+	rows := seqLen - start
+	if rows == 0 {
+		return nil
+	}
+	result := make([][]byte, batchSize)
+	for b := range batchSize {
+		bytes := make([]byte, rows*dim*4)
+		for r := range rows {
+			off := (b*seqLen + start + r) * dim
+			vec := make([]float32, dim)
+			copy(vec, hidden[off:off+dim])
+			if normalize {
+				L2Normalize(vec)
+			}
+			for d := range dim {
+				binary.LittleEndian.PutUint32(bytes[(r*dim+d)*4:], math.Float32bits(vec[d]))
+			}
 		}
 		result[b] = bytes
 	}

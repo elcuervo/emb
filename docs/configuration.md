@@ -95,14 +95,32 @@ models:
     dim: 512
     image:
       input: pixel_values             # image branch input tensor
-      output: image_embeds            # image branch output (dim must match dim)
-      size: 224
-      crop: center                    # none | center
-      resample: bicubic               # nearest | bilinear | bicubic | lanczos
-      rescale: 0.00392156862745098    # 1/255
-      mean: [0.48145466, 0.4578275, 0.40821073]
-      std:  [0.26862954, 0.26130258, 0.27577711]
+      size: 224                       # square input edge
+      preset: clip                    # clip | siglip | imagenet | dinov3
+      outputs:                        # every product the image branch serves
+        - name: embedding             # reply key (unique, no default)
+          tensor: image_embeds        # graph output (dim must match dim)
+      # Every preprocessing field is optional and falls back in this order:
+      # explicit -> preprocessor_config.json -> preset -> graph -> default.
+      # crop: center                  # none | center
+      # resample: bicubic             # nearest | bilinear | bicubic | lanczos
+      # rescale: 0.00392156862745098  # 1/255
+      # mean: [0.48145466, 0.4578275, 0.40821073]
+      # std:  [0.26862954, 0.26130258, 0.27577711]
     image_preload: true
+
+  # DINOv3: one pooled vector and a patch grid from one inference per image.
+  # `start`/`grid` come from the export's own config.json when it ships one.
+  dinov3:
+    onnx: ./models/dinov3-vits16/model.onnx
+    normalize: true
+    image:
+      preset: dinov3
+      input: pixel_values
+      size: 224
+      outputs:
+        - {name: embedding, tensor: pooler_output}
+        - {name: patches, tensor: last_hidden_state, select: tokens}
 ```
 
 ## Model options
@@ -129,7 +147,7 @@ models:
 | `capacity` | `auto` | Creation-time layout: `auto` (derived layout plus runtime adaptation), `latency` (spinning on, one caller per session), or `throughput` (spinning off, shared sessions) |
 | `intra_op_threads` | calibrated when unset with `cpu_budget: auto`; legacy default with `off` | ONNX intra-op threads per session. An explicit value is honored; runs wider than the process budget are admitted alone |
 | `scripts` | `[]` | List of file paths to Lua scripts to preload at boot. Relative paths resolve against the config file's directory; absolute paths are used as-is. Invalid scripts (bad syntax, missing file, oversized) fail startup |
-| `image` | — | Image preprocessing block (enables `EMB.IMG`); see [Image models](#image-models-and-preprocessing-parity) |
+| `image` | — | Image block (enables `EMB.IMG`): `input`, `size`, `preset`, `crop`, `resample`, `rescale`, `mean`, `std`, `outputs`; see [Image models](#image-models-and-preprocessing-parity) |
 | `image_preload` | `false` | Warm the image named-session pool at startup instead of on first `EMB.IMG` |
 | `batching` | `{timeout: 1, max_batch: 32, max_batch_tokens: 16384}` | Smart batching settings. **Enabled by default** (1 ms window) for every model; set `timeout: 0` to use the worker pool. With batching on, `tokenize_workers` defaults to `min(4, cores)` and the token budget auto-applies. Batching is batch-determinism gated automatically (no flag): dynamic-quantized int8 graphs degrade to the worker pool at load (see *Batch determinism*) |
 
@@ -372,18 +390,51 @@ without runtime adaptation; `autotune: off` keeps concurrency fixed. See
 
 ## Image models and preprocessing parity
 
-A model accepts `EMB.IMG` only when it declares an `image:` block. The block's
-fields (`input`, `output`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`)
-are all optional: explicit configuration always wins, then
-`preprocessor_config.json`, then the ONNX graph (a rank-4 image input's name and
-static spatial dimensions), then documented defaults. An undeterminable `size`
-is a load error naming the field. `crop: center` resizes the shortest edge then
-center-crops (CLIP); `crop: none` resizes directly to `size×size` (SigLIP).
+A model accepts `EMB.IMG` only when it declares an `image:` block. The block
+declares the image input, the square `size`, an optional `preset`, and an
+ordered `outputs` list — the complete set of products the branch serves, each
+its own reply name. There is no default output: a bare `EMB.IMG` returns every
+one of them.
+
+Each output is `{name, tensor, select, start, grid}`: `name` is the reply key,
+`tensor` the graph output it reads, and `select` (`none` | `cls` | `mean` |
+`tokens`) how its rows are reduced — unset uses the model's `pooling`, else the
+tensor's rank. `tokens` emits every row from `start`, L2-normalized per row, and
+requires a `grid` (the patch edge): unset, it comes from the model's
+`config.json` as `size / patch_size`, and `start` from `1 + num_register_tokens`.
+
+Preprocessing fields (`crop`, `resample`, `rescale`, `mean`, `std`) are all
+optional and resolved per field in a fixed order: explicit key →
+`preprocessor_config.json` → the named `preset` → the ONNX graph (a rank-4 image
+input's name and static spatial dimensions) → documented defaults. An
+undeterminable `size` is a load error naming the field. `crop: center` resizes
+the shortest edge then center-crops (CLIP); `crop: none` resizes directly to
+`size×size` (SigLIP, DINOv3).
+
+| preset | mean / std | rescale | resample | crop | layout |
+|---|---|---|---|---|---|
+| `clip` | `0.48145466, 0.4578275, 0.40821073` / `0.26862954, 0.26130258, 0.27577711` | 1/255 | bicubic | center | — |
+| `siglip` | 0.5 / 0.5 | 1/255 | bicubic | none | — |
+| `imagenet` | `0.485, 0.456, 0.406` / `0.229, 0.224, 0.225` | 1/255 | bicubic | none | — |
+| `dinov3` | `0.485, 0.456, 0.406` / `0.229, 0.224, 0.225` | 1/255 | bilinear | none | `grid = size/patch_size`, `start = 1 + registers` |
+
+The boot log prints the resolved plan with each field's source, so a wrong
+family default is visible rather than silent. `workers` bounds the image session
+pool exactly as it bounds the embedding pool (unset auto-tunes by RAM).
+
+**Tokenizers.** A model that declares an `image:` block loads without
+`tokenizer.json` (a DINOv3 export ships none). A text command on such a model
+fails with an error naming the model and the missing tokenizer; a text-only
+model without one still fails at load.
+
+How to add a family, the DINOv3 catalog and both published export dialects:
+[docs/image-models.md](image-models.md).
 
 **Dual-encoder pairing.** When one model serves both `EMB` (text) and `EMB.IMG`
 (image), the two branches must land in the same embedding space. The server
-fails model loading when `dim` and the image output tensor's dimension disagree,
-so a text-to-image search can never silently degrade to incomparable vectors.
+fails model loading when `dim` and any image output's dimension disagree naming
+that output, so a text-to-image search can never silently degrade to
+incomparable vectors.
 Use a fused/paired export (e.g. `onnx-community/siglip2-base-patch16-224-ONNX`)
 rather than mixing an unrelated vision checkpoint with a text model.
 

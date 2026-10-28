@@ -201,7 +201,7 @@ func policyRegistry(t *testing.T, budget string, calibrate *bool, session func()
 	origTok, origRT := newTokenizer, newRuntimeSession
 	t.Cleanup(func() { newTokenizer, newRuntimeSession = origTok, origRT })
 	newTokenizer = func(string, bool) (tokenizer.Tokenizer, error) { return registryTok{}, nil }
-	newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
+	newRuntimeSession = func(data []byte, modelPath string, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
 		return session(), nil
 	}
 	reg, err := NewWithConfig(&config.Config{

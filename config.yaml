@@ -52,9 +52,11 @@ models:
 
   # Dual-encoder vision model: enables EMB.IMG/EMB.IMGMULTI. Text EMB and image
   # EMB.IMG share one embedding space; the dimensions of the text output and the
-  # image output must match (the server fails load otherwise). Fields omitted
-  # from `image:` are auto-detected from preprocessor_config.json and the ONNX
-  # graph. See the README's "Image models and preprocessing parity" section.
+  # image output must match (the server fails load otherwise). `image.outputs`
+  # names every product the image branch serves (the reply is keyed by those
+  # names); fields omitted from `image:` are auto-detected from
+  # preprocessor_config.json, the preset, and the ONNX graph. A model that
+  # declares `image:` needs no tokenizer to load. See docs/image-models.md.
   # clip:
   #   onnx: ./models/clip/vision_model.onnx
   #   tokenizer: ./models/clip/tokenizer.json
@@ -64,7 +66,10 @@ models:
   #   dim: 512
   #   image:
   #     input: pixel_values
-  #     output: image_embeds
+  #     preset: clip
+  #     outputs:
+  #       - name: embedding
+  #         tensor: image_embeds
   #     size: 224
   #     crop: center
   #     resample: bicubic

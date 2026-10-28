@@ -130,7 +130,9 @@ models:
     script_workers: 1
     image:
       input: pixel_values
-      output: image_embeds
+      outputs:
+        - name: embedding
+          tensor: image_embeds
       size: 224
       crop: center
       resample: bicubic

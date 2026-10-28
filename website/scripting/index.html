@@ -375,9 +375,9 @@
         <dt>emb.image.preprocess(bytes)</dt>
         <dd>Decode raw image bytes and apply the model's configured preprocessing (size, crop, resample, rescale, mean, std), returning a tensor spec <code>{shape = {1, 3, H, W}, bytes = &lt;float32&gt;, dtype = "f32", input = &lt;tensor name&gt;}</code> that <code>emb.run</code> accepts with no per-element Lua table. Preprocessing is deterministic and bounded by the same byte and pixel caps as <code>EMB.IMG</code>.</dd>
         <dt>emb.image.info()</dt>
-        <dd>The model's configured preprocessing plan: <code>{input, size, crop, resample, rescale, mean, std}</code>.</dd>
-        <dt>emb.image.embed(bytes | {bytes, …})</dt>
-        <dd>Pooled, normalized image embeddings for raw encoded image bytes, in the model's shared text/image space. Shares the same image cache and resources as <code>EMB.IMG</code>, so an image embedded by either path is a hit for the other.</dd>
+        <dd>The model's configured preprocessing plan plus its outputs: <code>{input, size, crop, resample, rescale, mean, std, outputs = {{name, tensor, select, rows, dim [, grid]}, …}}</code>.</dd>
+        <dt>emb.image.embed(bytes | {bytes, …} [, {output = name, bytes = bool}])</dt>
+        <dd>The model's image products for raw encoded image bytes, keyed by output name (<code>{embedding = {…}, patches = {…}}</code>), in the model's shared text/image space. <code>output = &lt;name&gt;</code> returns that one value instead of the table; an unknown name raises an error listing the configured outputs. Shares the same image cache and resources as <code>EMB.IMG</code>, so an image embedded by either path is a hit for the other.</dd>
       </dl>
 
       <h3 class="doc-h3">Vector math</h3>

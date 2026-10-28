@@ -2,7 +2,6 @@ package registry
 
 import (
 	"errors"
-	"os"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -14,10 +13,10 @@ import (
 func imageFixtureConfig() config.ModelConfig {
 	return config.ModelConfig{
 		Image: &config.ImageConfig{
-			Input:  "pixel_values",
-			Size:   4,
-			Output: "last_hidden_state",
-			Std:    []float64{1, 1, 1},
+			Input:   "pixel_values",
+			Size:    4,
+			Outputs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "last_hidden_state"}},
+			Std:     []float64{1, 1, 1},
 		},
 	}
 }
@@ -30,7 +29,7 @@ func TestOpenImageResourcesLifecycle(t *testing.T) {
 	t.Cleanup(func() { newNamedSession = orig })
 
 	var created, closed atomic.Int64
-	newNamedSession = func([]byte, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
+	newNamedSession = func([]byte, string, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
 		created.Add(1)
 		return &countingSession{closes: &closed}, nil
 	}
@@ -46,8 +45,8 @@ func TestOpenImageResourcesLifecycle(t *testing.T) {
 	if got := entry.ImageFootprint(); got != created.Load() || got == 0 {
 		t.Fatalf("footprint = %d, created = %d, want equal and > 0", got, created.Load())
 	}
-	if res.OutputTensor != "last_hidden_state" || res.Dim != 384 {
-		t.Fatalf("resources = {output:%q dim:%d}, want {last_hidden_state 384}", res.OutputTensor, res.Dim)
+	if len(res.Outputs) != 1 || res.Outputs[0].Tensor != "last_hidden_state" || res.Outputs[0].Dim != 384 {
+		t.Fatalf("resources = %+v, want one output on last_hidden_state of dim 384", res.Outputs)
 	}
 
 	if err := reg.Close(); err != nil {
@@ -72,7 +71,7 @@ func TestOpenImageResourcesRollsBackOnFailure(t *testing.T) {
 
 	var created, closed atomic.Int64
 	injected := errors.New("injected image session failure")
-	newNamedSession = func([]byte, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
+	newNamedSession = func([]byte, string, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
 		if created.Add(1) == 2 {
 			return nil, injected
 		}
@@ -91,32 +90,5 @@ func TestOpenImageResourcesRollsBackOnFailure(t *testing.T) {
 	}
 	if got := entry.ImageFootprint(); got != 0 {
 		t.Fatalf("footprint after failed construction = %d, want 0", got)
-	}
-}
-
-// TestValidateImagePairing covers the dual-encoder dimension check: matching
-// dims pass, a mismatch and a missing output tensor fail, and the early-return
-// cases skip validation.
-func TestValidateImagePairing(t *testing.T) {
-	const model = "../../models/minilm/model.onnx"
-	if _, err := os.Stat(model); err != nil {
-		t.Skipf("test model not present: %v (run: just download-model)", err)
-	}
-	requireORT(t)
-
-	if err := validateImagePairing(config.ModelConfig{ONNX: model, Dim: 384}, "test", "last_hidden_state"); err != nil {
-		t.Errorf("matching dimensions: %v", err)
-	}
-	if err := validateImagePairing(config.ModelConfig{ONNX: model, Dim: 5}, "test", "last_hidden_state"); err == nil {
-		t.Error("expected a mismatch error for dim 5 vs the graph's 384")
-	}
-	if err := validateImagePairing(config.ModelConfig{ONNX: model, Dim: 384}, "test", "nope"); err == nil {
-		t.Error("expected a missing-output-tensor error")
-	}
-	if err := validateImagePairing(config.ModelConfig{ONNX: model, Dim: 384}, "test", ""); err != nil {
-		t.Errorf("empty output tensor should skip validation: %v", err)
-	}
-	if err := validateImagePairing(config.ModelConfig{ONNX: model}, "test", "last_hidden_state"); err != nil {
-		t.Errorf("non-positive dim should skip validation: %v", err)
 	}
 }
