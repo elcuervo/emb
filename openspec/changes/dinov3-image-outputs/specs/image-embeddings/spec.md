@@ -16,8 +16,8 @@ The server SHALL support an optional `image:` block on a model config declaring 
 
 #### Scenario: A token grid and a pooled vector from one model
 
-- **WHEN** a model config declares `outputs: [{name: embedding, tensor: descriptor}, {name: patches, tensor: tokens, select: tokens, start: 5, grid: 16}]` at `size: 336`
-- **THEN** the server loads the model with two outputs, the first of them default, and validates that the token tensor can yield a 21x21 grid from row 5
+- **WHEN** a model config declares `outputs: [{name: embedding, tensor: descriptor}, {name: patches, tensor: tokens, select: tokens, start: 5, grid: 21}]` at `size: 336`
+- **THEN** the server loads the model with two outputs and validates that the token tensor can yield a 21x21 grid from row 5, and a bare request serves both
 
 #### Scenario: A preset fills unnamed preprocessing fields
 

@@ -1146,3 +1146,20 @@ models:
 		t.Fatalf("reserved model name error = %v", err)
 	}
 }
+
+// TestImageOutputNameModelIsReserved covers the one output name that cannot be
+// served: EMB.IMGMULTI VALUES writes the pair's own `model` key into the same
+// map as the outputs, so an output of that name would collide with it.
+func TestImageOutputNameModelIsReserved(t *testing.T) {
+	img := ImageConfig{
+		Input: "pixel_values",
+		Size:  224,
+		Outputs: []ImageOutputConfig{
+			{Name: "model", Tensor: "pooler_output"},
+		},
+	}
+	err := validateImageOutputsConfig("clip", img)
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("output named model = %v, want the reserved-name error", err)
+	}
+}

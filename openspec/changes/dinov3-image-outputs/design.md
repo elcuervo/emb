@@ -225,7 +225,7 @@ dinov3-vits16-336:
     size: 336
     outputs:
       - {name: embedding, tensor: descriptor}
-      - {name: patches, tensor: tokens, select: tokens, start: 5, grid: 16}
+      - {name: patches, tensor: tokens, select: tokens, start: 5, grid: 21}
 ```
 
 Other export notes that matter operationally:

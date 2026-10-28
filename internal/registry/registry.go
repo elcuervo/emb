@@ -1075,9 +1075,11 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 		if tokenizerRepo == "" {
 			tokenizerRepo = cfg.ModelRepo
 		}
-		// An image-only model needs no tokenizer, and its repo may ship none:
-		// fetching one would fail the download for a model that serves fine.
-		if cfg.Tokenizer != "" && cfg.Image == nil {
+		// Fetch only what the config asks for: an image-only model that needs no
+		// tokenizer simply declares none (its repo may ship none), while a
+		// dual-encoder model that names a tokenizer must get it or every text
+		// command fails after a load that looked successful.
+		if cfg.Tokenizer != "" {
 			if _, err := os.Stat(cfg.Tokenizer); err != nil {
 				if _, err := client.Download(tokenizerRepo, "tokenizer.json", dir); err != nil {
 					return fmt.Errorf("downloading tokenizer from %s: %w", tokenizerRepo, err)

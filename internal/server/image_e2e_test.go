@@ -70,7 +70,7 @@ func TestCrossModalSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test image: %v", err)
 	}
-	imageVec := decodeFloat32Bulk(t, bulkOf(t, redisCmd(t, addr, "EMB.IMG", "fused", string(image))))
+	imageVec := decodeFloat32Bulk(t, imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "fused", string(image)), "embedding"))
 
 	labels := []string{"a photo of a cat", "a photo of a dog", "a photo of a car"}
 	best, bestSim := "", -2.0

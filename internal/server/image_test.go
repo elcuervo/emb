@@ -853,6 +853,36 @@ func serveImageMulti(t *testing.T, cacheConfig string) (string, *Server, map[str
 	return addr, srv, sessions
 }
 
+// TestEMBIMGPartialCacheMissIsNull proves a failed miss cannot leave the map a
+// partial cache hit filled. One output is cached; the other's preprocessing then
+// fails, because the byte cap was lowered after the first call. Before the fix
+// the incomplete map reached the VALUES writer, which sliced a nil blob and
+// panicked the handler; a failed image is a null in both reply formats.
+func TestEMBIMGPartialCacheMissIsNull(t *testing.T) {
+	addr, srv, sessions := serveImageMulti(t, "16MB")
+	png := solidImagePNG(t, color.NRGBA{R: 4, A: 255})
+
+	// Cache one of the two products by asking for it alone.
+	if got := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "dinov3", "OUTPUTS", "embedding", png), "embedding"); len(got) == 0 {
+		t.Fatal("the pooled product was not cached")
+	}
+	calls := sessions["dinov3"].callCount()
+
+	// The same bytes no longer preprocess, so the second product cannot be
+	// computed and the cached first one must not be answered on its own.
+	srv.maxImageBytes.Store(8)
+
+	for _, format := range []string{"BLOB", "VALUES"} {
+		tok := redisCmd(t, addr, "EMB.IMG", "dinov3", format, "OUTPUTS", "embedding,patches", png)
+		if tok.kind != "bulk" || tok.val != nil {
+			t.Fatalf("%s: failed image = %#v, want a null rather than a partial map", format, tok)
+		}
+	}
+	if got := sessions["dinov3"].callCount(); got != calls {
+		t.Fatalf("the refused image ran %d extra session(s), want none", got-calls)
+	}
+}
+
 // TestEMBIMGOutputsKeyword covers the OUTPUTS positions, the all-outputs
 // default, the unknown-name error, and a URL in the first image slot after it.
 func TestEMBIMGOutputsKeyword(t *testing.T) {

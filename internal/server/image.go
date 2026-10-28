@@ -420,6 +420,16 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 			}
 		}
 	}
+	// A slot whose miss failed must not keep the map a partial cache hit filled:
+	// the writers emit one value per configured output, so an incomplete map
+	// would answer a zero-byte product under BLOB and slice a nil blob under
+	// VALUES. A failed image is a null, which is what the reply already says for
+	// one that failed before anything was cached.
+	for i, e := range errs {
+		if e != nil {
+			results[i] = nil
+		}
+	}
 	return results, cached, errs
 }
 

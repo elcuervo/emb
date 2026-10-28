@@ -195,6 +195,12 @@ func validateImageOutputsConfig(name string, img ImageConfig) error {
 		if o.Tensor == "" {
 			return fmt.Errorf("model %q: image output %q needs a tensor", name, o.Name)
 		}
+		// EMB.IMGMULTI VALUES answers a map per model/image pair and writes the
+		// pair's own `model` key into it; an output of that name would collide
+		// with it and a map-decoding client would keep only one of the two.
+		if o.Name == "model" {
+			return fmt.Errorf("model %q: image output name %q is reserved by EMB.IMGMULTI's pair identity", name, o.Name)
+		}
 		if _, dup := seen[o.Name]; dup {
 			return fmt.Errorf("model %q: duplicate image output name %q", name, o.Name)
 		}

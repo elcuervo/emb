@@ -503,6 +503,38 @@ func TestResolveImageOutputs(t *testing.T) {
 	}
 }
 
+// TestImageOutputInheritsOnlyCompatiblePooling covers a text+image model: its
+// pooling describes the text tower, so an image output without an explicit
+// select inherits it only where it can mean the same thing. A pre-pooled rank-2
+// row used to inherit "mean" and fail the load.
+func TestImageOutputInheritsOnlyCompatiblePooling(t *testing.T) {
+	info := dinov3OutputInfo()
+	for _, tc := range []struct {
+		input  string
+		pooled string
+		tensor string
+		want   string
+	}{
+		{input: "mean", pooled: "mean", tensor: "pooler_output", want: "none"},
+		{input: "cls", pooled: "cls", tensor: "pooler_output", want: "none"},
+		{input: "mean", pooled: "mean", tensor: "last_hidden_state", want: "mean"},
+		{input: "cls", pooled: "cls", tensor: "last_hidden_state", want: "cls"},
+		{input: "none", pooled: "none", tensor: "last_hidden_state", want: "cls"},
+	} {
+		t.Run(tc.input+"-"+tc.tensor, func(t *testing.T) {
+			cfg := imageOutputFixture(config.ImageOutputConfig{Name: "embedding", Tensor: tc.tensor})
+			cfg.Pooling = tc.pooled
+			outs, err := resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, info, modelImageMetadata{})
+			if err != nil {
+				t.Fatalf("resolveImageOutputs(%s) = %v, want the pooling handled", tc.tensor, err)
+			}
+			if outs[0].Select != tc.want {
+				t.Fatalf("select = %q, want %q", outs[0].Select, tc.want)
+			}
+		})
+	}
+}
+
 // TestResolveImageOutputsLayout covers the resolved shape of both dialects: a
 // pooled vector from a rank-2 tensor and a token grid whose start/grid come from
 // the model's own config.json, with explicit values winning.

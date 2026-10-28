@@ -853,12 +853,18 @@ func resolveImageOutputs(cfg config.ModelConfig, name string, size int, preset i
 				name, oc.Name, oc.Tensor, strings.Join(available, ", "))
 		}
 
-		// select defaults to the model's pooling; with neither set, the tensor's
-		// rank decides (a pre-pooled row, or the CLS token of a sequence). mean
-		// and tokens are never inferred: both need an explicit intent.
+		// select defaults to the model's pooling when that pooling can mean the
+		// same thing here: on a text+image model it describes the text tower, so
+		// it is inherited only for a rank-3 tensor and only when it names a
+		// reduction (`cls`, `mean`). A pre-pooled rank-2 row is never `none`
+		// because its text twin pooled "mean". With neither set, the tensor's
+		// rank decides (a pre-pooled row, or the CLS token of a sequence). tokens
+		// is never inferred: it needs an explicit intent and a grid.
 		select_ := oc.Select
-		if select_ == "" {
-			select_ = cfg.Pooling
+		if select_ == "" && oi.Rank == 3 {
+			if pooled := strings.ToLower(cfg.Pooling); pooled == "cls" || pooled == "mean" {
+				select_ = pooled
+			}
 		}
 		if select_ == "" {
 			if oi.Rank == 2 {
