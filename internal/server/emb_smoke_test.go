@@ -115,6 +115,9 @@ const (
 	// embFairAttempts is how many times the arm re-tries to park the wide head
 	// behind a holder before recording the assertion as unexercised.
 	embFairAttempts = 3
+	// embFairWindow bounds how long the arm waits for one observed gate state —
+	// the holder admitted, then the head queued — before it retries.
+	embFairWindow = 2 * time.Second
 	// embAdmissionCommands is how many commands each admission burst offers:
 	// more than the pool can admit plus queue, so refusals are counted rather
 	// than raced.
@@ -891,6 +894,25 @@ func embWatch(addr string, command []string, field string, interval time.Duratio
 	}
 }
 
+// embAwait polls EMB.STATS until pred holds, returning the snapshot that did.
+// It reports the last snapshot it read with ok=false when d elapses, so a caller
+// that orders requests by observed server state can tell an observation from a
+// timeout instead of assuming a launch has already reached the gate.
+func embAwait(t *testing.T, addr string, d time.Duration, pred func(embSnapshot) bool) (embSnapshot, bool) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for {
+		snapshot := embTake(t, addr)
+		if pred(snapshot) {
+			return snapshot, true
+		}
+		if !time.Now().Before(deadline) {
+			return snapshot, false
+		}
+		time.Sleep(250 * time.Microsecond)
+	}
+}
+
 // embHealthProbe answers PING and EMB.READY on one connection until stopped,
 // counting the probes that were answered as expected.
 func embHealthProbe(addr string, interval time.Duration) (stop func() (answered, failed int)) {
@@ -1394,6 +1416,12 @@ func embLayoutConcurrency(t *testing.T, gate *embAssertions, fixture *embFixture
 // offers a narrow probe. Borrowing idle capacity serves the probe immediately;
 // a gate that only ever admits the head makes it wait out the holder and the
 // wide run, which is orders of magnitude more than its own measured serial cost.
+//
+// The three requests are ordered by what the server reports, not by sleeping
+// between launches: a launch only starts a dial, so on a busy host the wide head
+// can reach the gate after the holder has already finished. The head then never
+// parks, the arm records a skip, and a gate that skips this assertion cannot
+// catch the regression it exists for.
 func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 	t.Helper()
 	off := 0
@@ -1421,15 +1449,28 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 
 	detail := "the wide head never blocked (the holder had already finished before the wide run parked)"
 	for attempt := range embFairAttempts {
-		// Each attempt widens the window between the launches: on a slow host the
-		// holder is longer, but on a fast one the sleeps are what keep the head
-		// parked while the probe arrives.
-		gap := time.Duration(attempt+1) * 500 * time.Microsecond
 		before := embTake(t, arm.addr)
 		holder := embLaunch(arm.addr, 30*time.Second, "EMB", embModelName, long)
-		time.Sleep(gap)
+		// The holder has to be admitted before the wide head is offered, and the
+		// head has to be queued before the probe is: the window is read from the
+		// gate's own counters. A retry drains what it launched first, so the next
+		// attempt starts from a quiet gate.
+		if _, ok := embAwait(t, arm.addr, embFairWindow, func(s embSnapshot) bool {
+			return s.activeToken > before.activeToken
+		}); !ok {
+			_, _, _ = holder()
+			detail = fmt.Sprintf("attempt %d: the holder never reached the gate", attempt)
+			continue
+		}
 		wide := embLaunch(arm.addr, 30*time.Second, "EMB", wideModel, short)
-		time.Sleep(gap)
+		if _, ok := embAwait(t, arm.addr, embFairWindow, func(s embSnapshot) bool {
+			return s.waiters > 0
+		}); !ok {
+			_, _, _ = holder()
+			_, _, _ = wide()
+			detail = fmt.Sprintf("attempt %d: the wide head never queued behind the holder", attempt)
+			continue
+		}
 		begin := time.Now()
 		probe, err := embAsk(arm.addr, time.Now().Add(30*time.Second), "EMB", embModelName, short)
 		probeLatency := time.Since(begin)
@@ -1444,6 +1485,14 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 		detail = fmt.Sprintf("attempt %d: the wide head never blocked; holder %s, wide %s, probe %s",
 			attempt, holderLatency, wideLatency, probeLatency)
 		if wideWait <= 0 {
+			continue
+		}
+		// An unproven window is not a failure: when the holder released before the
+		// probe reached the gate, the probe is measuring the wide run instead. A
+		// head still queued when the probe returned was parked for the whole probe,
+		// which is the state the property is about.
+		if after.waiters == 0 && probeLatency <= bound {
+			detail = fmt.Sprintf("attempt %d: the holder released before the probe reached the gate (probe %s)", attempt, probeLatency)
 			continue
 		}
 		// The head is parked: the probe's latency is the property under test.
