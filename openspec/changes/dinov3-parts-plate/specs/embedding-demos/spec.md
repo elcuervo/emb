@@ -227,7 +227,7 @@ The plate SHALL build a spatial region from the probed patch and SHALL expose th
 
 - **WHEN** the reader uploads an image
 - **THEN** the browser bounds it, the same two models answer the same two calls, and the field keeps the uploaded photograph's aspect and colours
-- **AND** nothing is stored on the server, and the plate ranks the uploaded part against the committed samples without a further call per picture
+- **AND** the picture is not stored on the server — the two replies are cached by a hash of those bytes, and no image is written — and the plate ranks the uploaded part against the committed samples without a further call per picture
 
 #### Scenario: A grown region is not a mask
 
