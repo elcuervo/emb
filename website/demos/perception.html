@@ -1,0 +1,2087 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- meta:start -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the perception — depth says where, DINOv3 says what</title>
+<link rel="canonical" href="https://emb.is/demos/perception.html">
+<meta name="description" content="One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with five readings — textured, wireframe, camera-space normals, depth contours, dense cloud — plus a probe that finds any part again in the other five photographs.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the perception — depth says where, DINOv3 says what">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, contour by depth, cut in half and search — from two live calls.">
+<meta property="og:url" content="https://emb.is/demos/perception.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the perception — depth says where, DINOv3 says what">
+<meta name="twitter:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, contour by depth, cut in half and search — from two live calls.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
+
+<link rel="preload" href="../assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- ══════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+  </noscript>
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <section class="plate plate--stage" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="index.html"><span>Gallery</span> <b>All the plates</b> <span aria-hidden="true">&#8594;</span></a></nav>
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">VII.</span>The perception</h1>
+          <p class="plate__teaches">
+            A photograph read by two models: one measures where everything is, the
+            other says what looks alike. One surface comes back, with five readings —
+            surface, wireframe, normals, contours, cloud — and a probe that finds the
+            same patch in the other five photographs.
+          </p>
+          <p class="tldr">Depth puts the pixels in space and DINOv3 gives each patch a vector, so one photograph becomes something you can orbit, cut and search by the part you point at.</p>
+        </div>
+        <div class="plate__ledger">
+          <p class="fig fig--as-written"><b>THE TWO</b>
+            · <b>DINOv3&nbsp;ViT-S/16</b>
+            · <b data-fig-rows>196</b>&nbsp;PATCHES
+            · <b data-fig-dim>384</b>&nbsp;DIMENSIONS
+            · <b>Depth&nbsp;Anything&nbsp;V2</b>
+            · <b data-fig-depth>266×266</b>&nbsp;DEPTH
+            · <b data-fig-bytes>301&nbsp;056</b>&nbsp;B
+            · <b>2</b>&nbsp;CALLS</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- THE STAGE. The figure is the page: one photograph, one reveal, one state
+       control, and the long form is a disclosure below. -->
+  <section class="block block--dark stage-block" aria-label="Try it — one photograph, two calls">
+    <div class="shell">
+      <div data-live class="rig" data-rig="perception">
+        <div class="stage__view">
+          <div class="perception__stage" data-stage></div>
+          <button class="stage__cue" type="button" data-reveal hidden>
+            <span class="stage__cue-k">one photograph · two calls</span>
+            <span class="stage__cue-t">Reveal perception</span>
+          </button>
+          <p class="stage__hud" data-stage-cap aria-hidden="true"></p>
+        </div>
+
+        <div class="stage__film">
+          <div class="samples" data-samples role="group" aria-label="Sample images">
+            <button type="button" data-sample="samples/parts/autumn-road.jpg" aria-pressed="false" title="Road curve in the autumn"><img src="samples/parts/autumn-road.jpg" alt="A road curving through a tunnel of autumn trees, leaves overhead and tall trunks beyond"><span class="samples__a" data-answer hidden></span></button>
+            <button type="button" data-sample="samples/parts/nave.jpg" aria-pressed="false" title="Lincoln Cathedral nave"><img src="samples/parts/nave.jpg" alt="A cathedral nave: near columns, rows of chairs, and the altar far down the aisle"><span class="samples__a" data-answer hidden></span></button>
+            <button type="button" data-sample="samples/parts/forest.jpg" aria-pressed="false" title="Autumn forest path"><img src="samples/parts/forest.jpg" alt="A path through tall trees in autumn"><span class="samples__a" data-answer hidden></span></button>
+            <button type="button" data-sample="samples/parts/castle-courtyard.jpg" aria-pressed="false" title="Pieskowa Skała castle courtyard"><img src="samples/parts/castle-courtyard.jpg" alt="A castle courtyard seen through a near stone arch, arcaded galleries on three sides"><span class="samples__a" data-answer hidden></span></button>
+            <button type="button" data-sample="samples/parts/yellowstone-canyon.jpg" aria-pressed="false" title="Yellowstone River and canyon walls"><img src="samples/parts/yellowstone-canyon.jpg" alt="Near rock ledges, a river winding through the middle distance, and pale canyon walls beyond"><span class="samples__a" data-answer hidden></span></button>
+            <button type="button" data-sample="samples/parts/seven-arches.jpg" aria-pressed="false" title="Seven Arches aqueduct, Leeds"><img src="samples/parts/seven-arches.jpg" alt="A stone aqueduct on arches receding along a wooded valley"><span class="samples__a" data-answer hidden></span></button>
+          </div>
+          <p class="drop__hint" data-strip-hint>Samples · CC0 + public domain · Aaron Burden · Michael D Beckwith · Vovogov90 · Michał Bulsa · NPS/Jacob W. Frank · Chemical Engineer · two calls each</p>
+        </div>
+
+        <p class="rig__state" data-state>pick a sample</p>
+
+        <div class="rig__out" data-out hidden>
+          <div class="stage__ctrls">
+            <div class="perception__states" role="radiogroup" aria-label="State">
+              <label><input type="radio" name="perception-view" value="0" data-view checked>photograph</label>
+              <label><input type="radio" name="perception-view" value="1" data-view>relief</label>
+              <label><input type="radio" name="perception-view" value="2" data-view>look-alikes</label>
+            </div>
+            <div class="perception__states" role="radiogroup" aria-label="Reading">
+              <label><input type="radio" name="perception-reading" value="0" data-reading checked>surface</label>
+              <label><input type="radio" name="perception-reading" value="1" data-reading>wireframe</label>
+              <label><input type="radio" name="perception-reading" value="2" data-reading>normals</label>
+              <label><input type="radio" name="perception-reading" value="3" data-reading>contours</label>
+              <label><input type="radio" name="perception-reading" value="4" data-reading>cloud</label>
+            </div>
+          </div>
+
+          <p class="rig__readout" data-readout aria-live="polite"></p>
+
+          <div class="stage__under">
+            <figure class="perception__shot">
+              <img class="drop__img" data-preview src="samples/parts/autumn-road.jpg" alt="">
+              <canvas class="perception__plan" data-plan role="img" aria-label="The photograph, tinted where the region grown from the probe covers it"></canvas>
+              <figcaption class="perception__cap">the region the model grows, tinted over the photograph</figcaption>
+            </figure>
+            <div class="stage__read">
+              <details class="perception__fold">
+                <summary class="perception__fold-h">adjust</summary>
+                <div class="perception__fold-body">
+                  <label class="perception__count">exaggeration <input type="range" min="0" max="150" step="1" value="100" data-exag></label>
+                  <label class="perception__count">cut <input type="range" min="0" max="100" step="1" value="70" data-cut></label>
+                  <label class="perception__count">density <input type="range" min="0" max="2" step="1" value="2" data-density></label>
+                  <label class="perception__count">isolate <input type="checkbox" data-iso></label>
+                  <label class="perception__count">column <input type="range" min="0" max="13" step="1" value="7" data-col></label>
+                  <label class="perception__count">row <input type="range" min="0" max="13" step="1" value="7" data-row></label>
+                  <label class="perception__count">upload <input type="file" accept="image/*" data-upload></label>
+                </div>
+              </details>
+              <p class="drop__hint">drag to orbit · wheel to zoom · hover to probe · click to pin · double-click resets · arrow keys and + − 0 turn and zoom</p>
+              <p class="perception__cap">relative, monocular depth — no metres, one face · the box is the region's extent, not a detector's output</p>
+            </div>
+          </div>
+
+          <details class="cmds" data-cmds hidden>
+            <summary class="cmds__h">the commands this run sent</summary>
+            <div class="cmds__body" data-cmds-body></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+
+        <p class="block__deck">The stage holds one photograph and its surface: each cell of a regular grid becomes two triangles, its corners carried into camera space by the depth the model predicted. The photograph supplies the colour; a cell whose corners disagree is left out, which is where one object ends.</p>
+        <p class="block__deck">Everything else is a reading of the same buffers. Wireframe: every stride line and each cell's diagonal, so the topology is visible. Normals: the depth gradient's orientation, in camera space. Contours: isolines of view depth, one swept every 11 seconds. Cloud: the same vertices as points.</p>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+
+        <p class="block__deck">The browser bounded the sample to 768 pixels and base64-encoded it, because JSON cannot carry bytes; the bridge decoded it and the sandbox ran two graphs over the same pixels. DINOv3 answered 196 rows of 384, Depth Anything V2 a 266×266 relative map, both packed float32, both cached.</p>
+        <p class="block__deck">The page built the index: one grid, two triangles per cell, five depth tests per cell. One buffer feeds three renderers, so a view change is a uniform, never a rebuild. The probe is a dot product over the rows; the region grows outward from the pinned patch, not predicted.</p>
+
+        <details class="perception__fold perception__fold--prose">
+          <summary class="perception__fold-h">the two calls, byte for byte</summary>
+          <div class="perception__fold-body">
+            <p class="block__deck"><span class="t-dim">1</span> The browser bounds the picture: drawn to a canvas at no more than 768 pixels on the long edge, re-encoded as JPEG at quality 0.85. What leaves the page is that encode, not the file in the repository.</p>
+            <p class="block__deck"><span class="t-dim">2</span> JSON carries no bytes, so the encode goes into argument 5 as base64 and <span class="t-cmd">bin: [5]</span> names it; <span class="t-cmd">proto: 2</span> asks for a keyed reply. The bridge decodes argument 5 back to bytes and sends one binary-safe RESP bulk, so emb never sees base64.</p>
+            <p class="block__deck"><span class="t-dim">3</span> The sandbox takes SHA-256 of the bytes first and looks up <span class="t-cmd">img:&lt;model&gt;:&lt;sha256&gt;:&lt;output&gt;</span>, one entry per output. A miss is decoded, squashed to 224 pixels square for <span class="t-cmd">dinov3</span> — 266 for <span class="t-cmd">depth</span> — rescaled 1/255 and normalised per channel.</p>
+            <p class="block__deck"><span class="t-dim">4</span> One run answers every output. <span class="t-cmd">pooler_output</span> and <span class="t-cmd">last_hidden_state</span> leave the same forward pass, so two products cost one inference.</p>
+            <p class="block__deck"><span class="t-dim">5</span> <span class="t-cmd">select</span> decides what leaves the graph. <span class="t-cmd">none</span> is the rank-2 pooled vector, 1 × 384. <span class="t-cmd">tokens</span> with <span class="t-cmd">start: 5</span> and <span class="t-cmd">grid: 14</span> drops the CLS row and the four register rows and keeps 196 patch rows, because 196 = 14². <span class="t-cmd">map</span> reduces nothing: 266 × 266, flat.</p>
+            <p class="block__deck"><span class="t-dim">6</span> Both numbers come from the export's own <span class="t-cmd">config.json</span> — <span class="t-cmd">start = 1 + num_register_tokens</span>, <span class="t-cmd">grid = size / patch_size</span> — and the server re-checks the row count against the tensor, so a wrong <span class="t-cmd">start</span> is refused instead of returning a grid shifted by one patch.</p>
+            <p class="block__deck"><span class="t-dim">7</span> <span class="t-cmd">BLOB</span> is row-major little-endian float32, no header and no shape: 384 × 4 = 1 536 B for the vector, 196 × 384 × 4 = 301 056 B for the grid, 266 × 266 × 4 = 283 024 B for the map. The shape is read once, from <span class="t-cmd">EMB.INFO</span>.</p>
+            <p class="block__deck"><span class="t-dim">8</span> The bridge carries each bulk as base64, and base64 spends four characters for every three bytes: the grid and the map cross it as 401 408 and 377 368 characters. RESP framing adds a few dozen header bytes on the server side; the payload arithmetic above is what dominates the wire.</p>
+            <p class="block__deck"><span class="t-dim">9</span> The second call repeats 2 to 8 against another model; the bridge takes one command at a time, so the two are sequential. The cache identity is the bytes, not the picture: the same image again is a lookup, and the same photograph re-encoded at another quality is a fresh run.</p>
+          </div>
+        </details>
+
+        <details class="perception__fold perception__fold--prose">
+          <summary class="perception__fold-h">the index, the tolerances and the limits</summary>
+          <div class="perception__fold-body">
+            <p class="block__deck">DINOv3 was trained without captions, labels or a text tower. One run of its graph answers with two things: a pooled vector for the whole image, and a hidden state of tokens — 201 rows at 224 pixels, five reserved and the other 196 the picture itself, one vector per 16-pixel patch. emb slices the patch rows out from row 5, normalises every row, and hands the grid over as flat float32. Both products come back from the one call, so the page ranks whole pictures by the pooled vector and parts inside a picture by the grid, without a second pass.</p>
+            <p class="block__deck">The mesh is one regular grid at the density the reader picks, and the readout under the stage carries the vertex count of the tier drawn. A cell survives when its four edges and its diagonal each change the display depth by less than the cut tolerance, and the tolerance scales with the step, so the same surface survives at every tier: a smooth ramp changes more across a coarse step than a fine one, while a real occlusion boundary changes by the same amount either way. Refused cells leave a hole, which is the honest shape of an unknown surface.</p>
+            <p class="block__deck">Elevation is the rank-equalised depth times a single gain, so the exaggeration slider scales the geometry without touching the buffer. The reading, the contours, the normals and the region are uniforms over that buffer, which is why they compose: a reader can pin a patch, isolate it, ask for contours and watch the matching structures fall into different depth layers. The camera is clamped to 25° of yaw and 15° of pitch, because a single-view reconstruction has one face.</p>
+            <p class="block__deck">The chosen sample is sent to the sandbox for two calls; the models' weights are downloaded by the sandbox on boot, and this page ships none of them. A photograph you upload goes the same way: bounded to 768 pixels in the browser, sent as bytes, answered by the same two graphs, stored nowhere. The other five pictures are looked up once each, so the strip can rank them — one call per picture, then it is memory.</p>
+            <p class="block__deck">The strip asks two different questions of the replies already in hand. With no patch pinned it asks which picture is most like this one, and that is the pooled vector's cosine: 1 × 384 against 1 × 384. With a patch pinned it asks where that part comes back, which is one dot product per row of every other grid — 196 rows a picture — keeping each picture's best row and the cell it came from. Neither question sends a command.</p>
+            <p class="block__deck">The six photographs were not chosen by subject. Sixty-nine candidates cleared the licence filter — CC0 or public domain from Wikimedia Commons, every original at least 1800 pixels on the long edge — and each went through the plate's own depth call as <span class="t-cmd">EMB.IMG depth BLOB OUTPUTS depth</span>. The 283 024-byte map was min-max normalised and reduced to the p5 and p95 spread, the share below 0.10 and above 0.90, and the gradient energy; the six kept reach both ends of the range, so the mesh has a near foreground, a middle ground and a far background to cut between. Four are CC0, two public domain, and the strip names each author.</p>
+          </div>
+        </details>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+
+        <p class="block__deck">A single-view reconstruction is a shell of what one camera saw, and a shell is worth more than a picture once it is a real mesh: geometry can be measured, cut, wireframed and lit without a second model.</p>
+        <p class="block__deck">A vector per image answers which image; a vector per patch answers where in the image, which is where copy detection, region search and "find this part in that photo" begin. One model measures, one holds meaning, and the page says which number came from which.</p>
+
+        <details class="perception__fold perception__fold--prose">
+          <summary class="perception__fold-h">what one inference buys</summary>
+          <div class="perception__fold-body">
+            <p class="block__deck">One pass, one space. The pooled vector is 384 wide and a patch row is 384 wide because they come out of the same graph — row 0 before pooling — so a single run yields a point for the picture and a grid for its parts in one metric. Rank whole pictures by the vector, rank parts by the grid, re-run nothing.</p>
+            <p class="block__deck">Those 196 rows are an index nobody had to build. <span class="t-cmd">normalize: true</span> makes every row a unit vector, so a dot product is a cosine: inside a picture that is the similarity field the relief is drawn from, and between two pictures it is still a cosine, because every grid here left the same graph on the same 14 × 14 lattice at the same 384 dimensions. Six pictures are six calls, 1 176 patch vectors and 1 806 336 bytes of grid held in the page; the ranking is arithmetic over them, not a query.</p>
+            <p class="block__deck">The map is a different kind of output, not a wider one. <span class="t-cmd">select: map</span> reduces no rows: 266 × 266 = 70 756 numbers, never normalised, declared as <span class="t-cmd">rows: 266, dim: 266</span> rather than as a grid. A dot product between two maps means nothing, so the declared shape is the whole contract and the client owns the transform.</p>
+            <p class="block__deck">The second graph is not free. It has its own session — <span class="t-cmd">EMB.INFO depth</span> reports <span class="t-cmd">image_sessions: 1</span> — 27 MB of int8 weights on disk and about 100 MB resident once the CPU provider dequantises them, beside DINOv3's 22 MB on disk and about 90 MB resident. Both stay warm, which is why a picture already seen is a lookup instead of a second wait.</p>
+            <p class="block__deck">No vector database is involved. Beyond the sandbox's content-hash entries nothing is stored, the six grids live in the page's own memory, and one ranking is 196 dot products of 384 multiplies a picture. A second service would hold an index the inference already delivered.</p>
+            <p class="block__deck">One grid is what the five readings share: surface, wireframe, normals, contours and cloud read the same vertices and the same index, and the probe composes with any of them. The depth map is the other buffer, and the only thing the second model contributes.</p>
+          </div>
+        </details>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+
+        <p class="block__deck">Two commands, two graphs, packed float32. <span class="t-cmd">BLOB</span> is the reply form: four bytes per number, so a 196×384 grid crosses as 301 056 bytes instead of decimal text.</p>
+<figure class="code"><pre class="code__body"><code>EMB.IMG dinov3 BLOB OUTPUTS embedding,patches &lt;image bytes&gt;
+# -> ["embedding", &lt;1536 B: 384 float32&gt;, "patches", &lt;196 x 384 float32&gt;]
+
+EMB.IMG depth BLOB OUTPUTS depth &lt;image bytes&gt;
+# -> ["depth", &lt;283 024 B: 266 x 266 float32, relative&gt;]
+
+# the bridge request: `bin` names argument 5 as base64 bytes
+{ "args": ["EMB.IMG", "depth", "BLOB", "OUTPUTS", "depth", "&lt;b64&gt;"],
+  "bin": [5], "proto": 2 }
+
+# what the server declares, read once per page
+EMB.INFO dinov3
+# -> image_outputs.patches = { tensor: "last_hidden_state", select: "tokens",
+#                              rows: 196, dim: 384, grid: [14, 14] }
+EMB.INFO depth
+# -> image_outputs.depth  = { tensor: "predicted_depth", select: "map",
+#                             rows: 266, dim: 266 }
+
+# the config that names both products (one `image:` block each)
+image:
+  preset: dinov3
+  outputs:
+    - { name: embedding, tensor: pooler_output }
+    - { name: patches, tensor: last_hidden_state, select: tokens }
+# rows 0..4 = CLS + 4 registers · rows 5.. = the 196 patches
+# start=5 and grid=14 resolved from the export's config.json, not typed here
+
+image:
+  preset: imagenet
+  size: 266
+  outputs:
+    - { name: depth, tensor: predicted_depth, select: map }
+# 266 = 19 x 14, the export's multiple-of-14 rule; the map is never normalized</code></pre>
+        <figcaption class="code__cap">The grid's layout is read from the model's own <span class="t-cmd">config.json</span>; the map's shape is declared by the server. The page refuses to draw if either reply's byte count disagrees.</figcaption>
+      </figure>
+
+        <p class="block__deck">One row per output: the tensor it leaves, the selector that shapes it, its rows × dim and its bytes.</p>
+
+        <dl class="api">
+          <dt>embedding</dt><dd><span class="t-cmd">pooler_output</span> · select <span class="t-cmd">none</span> (rank 2) · 1 × 384 · 1 536 B</dd>
+          <dt>patches</dt><dd><span class="t-cmd">last_hidden_state</span> · select <span class="t-cmd">tokens</span>, <span class="t-cmd">start 5</span>, <span class="t-cmd">grid 14</span> · 196 × 384 · 301 056 B</dd>
+          <dt>depth</dt><dd><span class="t-cmd">predicted_depth</span> · select <span class="t-cmd">map</span> · 266 × 266 · 283 024 B</dd>
+        </dl>
+
+        <dl class="api">
+          <dt>VALUES on a map</dt><dd>The bridge refuses the keyword for either call; the server beneath it refuses a map's <span class="t-cmd">VALUES</span>, naming <span class="t-cmd">BLOB</span> and its 70 756 numbers.</dd>
+          <dt>a second image</dt><dd>Refused by the bridge: <span class="t-cmd">EMB.IMG takes exactly one image per call</span>.</dd>
+        </dl>
+
+<dl class="api">
+  <dt>two products, one run</dt><dd>DINOv3 answers the pooled vector and the patch grid from the same forward pass. The pooled vector ranks images; the grid localises inside one.</dd>
+  <dt>depth is another model</dt><dd>A dense feature map is not a depth map: monocular depth needs a trained decoder. The plate runs Depth Anything V2 beside DINOv3 and never lets one answer for the other.</dd>
+  <dt>the cut is topology, not a filter</dt><dd>A cell is refused before any triangle exists, so the wireframe cannot draw an edge the surface does not have. The tolerance is a control — lower it and the mesh spends its triangles on the material, raise it and only real object edges open.</dd>
+  <dt>five readings, one geometry</dt><dd>Surface, wireframe, normals, contours and cloud share one vertex buffer and one index, and the probe composes with all of them. The fill rate changes, the geometry does not.</dd>
+  <dt>the normals are the map's</dt><dd>Each normal is the gradient of the depth model's own ordering, clamped so a cliff reads as a steep ramp instead of a black band. It is a convincing orientation, not a recovered surface normal.</dd>
+  <dt>a region is not a mask</dt><dd>The grown region is connectivity plus three tolerances — the model's cosine, the photograph's colour, the depth map — not a segmentation: it can leak along a wall and stop at a shadow. The box is the region's extent, not a detector's output.</dd>
+  <dt>one model, six pictures</dt><dd>The strip ranks across pictures because every grid came out of the same graph: same patch size, same 384 dimensions, so the dot products mean something. Ask a different checkpoint and the numbers are not comparable.</dd>
+  <dt>what it is not</dt><dd>No labels, no attention maps, no segmentation head, and no metric scale: the reconstruction has one face, the depth is monocular and relative, and the box is in display units.</dd>
+</dl>
+
+        <p class="block__deck">DINOv3's weights are under the <a href="https://ai.meta.com/resources/models-and-libraries/dinov3-license" rel="noopener">DINOv3 License</a> (Meta), restricted from military and ITAR use; the graph served here is the <span class="t-cmd">onnx-community</span> conversion of ViT-S/16, quantized. Depth Anything V2 Small is Apache-2.0. Both are downloaded by the sandbox on boot; the six photographs are CC0 or public domain.</p>
+      </div></div>
+    </section>
+  <div class="shell">
+    <nav class="plate-nav" aria-label="The gallery">
+      <a class="plate-nav__link" href="medium.html"><span class="plate-nav__k">Previous</span><span class="plate-nav__t">The medium</span></a>
+      <a class="plate-nav__link plate-nav__link--next" href="index.html"><span class="plate-nav__k">Next</span><span class="plate-nav__t">The demos gallery</span></a>
+    </nav>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════ FOOTER -->
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+import { gallery, el, showState, unfold, duration, motionAllowed } from '../assets/js/demos.js';
+
+const g = gallery();
+const FEATURES = 'dinov3';
+const DEPTH = 'depth';
+const MAX_EDGE = 768;
+const MAX_PARTICLES = 600000;
+/* The sandbox refuses an image argument above 256 KiB (the bridge's and the
+ * server's `max_image_bytes`), so the browser aims well under it and steps the
+ * JPEG quality down until it is there: 768 pixels at 0.85 is not always small. */
+const MAX_IMAGE_BYTES = 200000;
+/* Pixels per grid step for the three tiers: one regular grid feeds the mesh and
+ * the cloud, so a tier change re-samples the same bounded photograph and never
+ * issues a command. */
+const DENSITY = [3, 2, 1];
+const READINGS = ['surface', 'wireframe', 'normals', 'contours', 'cloud'];
+const root = document.querySelector('[data-rig="perception"]');
+const stage = root.querySelector('[data-stage]');
+const stageCap = root.querySelector('[data-stage-cap]');
+const preview = root.querySelector('[data-preview]');
+const plan = root.querySelector('[data-plan]');
+const cue = root.querySelector('[data-reveal]');
+const stateEl = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const stripHint = root.querySelector('[data-strip-hint]');
+const samplesEl = root.querySelector('[data-samples]');
+const sampleButtons = Array.from(root.querySelectorAll('[data-sample]'));
+const viewRadios = Array.from(root.querySelectorAll('[data-view]'));
+const readRadios = Array.from(root.querySelectorAll('[data-reading]'));
+const exagInput = root.querySelector('[data-exag]');
+const cutInput = root.querySelector('[data-cut]');
+const densityInput = root.querySelector('[data-density]');
+const isoInput = root.querySelector('[data-iso]');
+const colInput = root.querySelector('[data-col]');
+const rowInput = root.querySelector('[data-row]');
+const uploadInput = root.querySelector('[data-upload]');
+
+/* The plate's colours are the stylesheet's tokens, read once. */
+const token = (name) => {
+  const hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace('#', '');
+  return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+};
+const ACCENT = token('--accent');
+const RULE = token('--rule');
+
+/* ── the derived state ─────────────────────────────────────────────────
+ * One object per sample: the depth map and its gradient, the patch grid, the
+ * probe's similarities, and the figure's own arrays. Every number printed
+ * comes from here. */
+const S = {
+  id: '', rows: 0, dim: 0, grid: 0, patches: null, cls: null,
+  depthRows: 0, depthDim: 0, depth: null, depthRange: [0, 1], depthRank: null, slopes: null,
+  sim: null, probe: 0, query: null, members: null, regionCount: 0,
+  patchDepth: null, patchColor: null,
+  density: 2, cut: 0.0642, iso: false, reading: 0,
+  width: 0, height: 0, count: 0,
+  rise: 0, mind: 0, light: 0, view: 0, exaggeration: 1, pinned: false,
+  mesh: null, points: null, topology: null, colors: null, photo: null
+};
+
+/* The reveal: the picture hands over to its pixels, the depth arrives, and the
+ * camera turns. One clock, always interruptible; the state control is what
+ * spends it. */
+const CLOCK = { dissolve: 900, depth: 3000, camera: 2200, mix: 900, yaw: -0.22 };
+const YAW = 0.436;   // 25°: enough parallax to read the depth, not enough to show the backside
+const PITCH = 0.262; // 15°
+const DEPTH_GAIN = 0.18; // display units of lift per unit of the depth model's own ordering
+const POINT_SIZE = 0.0036; // about two CSS pixels at the fitted distance
+const KEY = [0.42, 0.55, 0.72]; // the key light, upper left and in front
+
+let elapsedFeatures = 0;
+let elapsedDepth = 0;
+let featuresCached = false;
+let depthCached = false;
+const firstCalls = new Map();
+
+function setState(next, message) { showState(stateEl, next, message, () => { g.retry(); }); }
+
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+/* ── the model's arithmetic ───────────────────────────────────────────
+ * Every row is already a unit vector, so similarity is one dot product. It is
+ * not re-normalized here on purpose: re-normalizing would hide a server
+ * regression behind a picture that still looked right. */
+function dotAt(arr, off, vec, n) {
+  let s = 0;
+  for (let i = 0; i < n; i++) { s += arr[off + i] * vec[i]; }
+  return s;
+}
+
+function similaritiesTo(vec) {
+  const out = new Float32Array(S.rows);
+  for (let i = 0; i < S.rows; i++) { out[i] = dotAt(S.patches, i * S.dim, vec, S.dim); }
+  return out;
+}
+
+function similarities(index) {
+  return similaritiesTo(S.patches.subarray(index * S.dim, (index + 1) * S.dim));
+}
+
+/* The cut is a share of the grid, not a constant: the cosine a model calls
+ * "alike" drifts with the picture and the checkpoint. */
+function quantile(sim, share) {
+  const ranked = Array.from(sim).sort((a, b) => b - a);
+  const k = Math.min(ranked.length, Math.max(1, Math.round(S.rows * share)));
+  return ranked[k - 1];
+}
+
+/* One depth and one colour per patch, read once per sample so a hover can grow
+ * a region without touching the image or the map again. */
+function buildPatchStats() {
+  S.patchDepth = new Float32Array(S.rows);
+  S.patchColor = new Float32Array(S.rows * 3);
+  for (let r = 0; r < S.grid; r++) {
+    for (let c = 0; c < S.grid; c++) {
+      const t = r * S.grid + c;
+      const u = (c + 0.5) / S.grid;
+      const v = (r + 0.5) / S.grid;
+      S.patchDepth[t] = sampleDepth(u, v);
+      const i = (Math.min(S.height - 1, Math.floor(v * S.height)) * S.width +
+        Math.min(S.width - 1, Math.floor(u * S.width))) * 4;
+      S.patchColor[t * 3] = S.colors[i] / 255;
+      S.patchColor[t * 3 + 1] = S.colors[i + 1] / 255;
+      S.patchColor[t * 3 + 2] = S.colors[i + 2] / 255;
+    }
+  }
+}
+
+/* DINOv3 returns no masks, so the region is grown rather than claimed: from the
+ * probed patch over its four neighbours, and only where the model's cosine, the
+ * photograph's colour and the depth map agree. Anchored on the seed for one
+ * pass — a growth that re-anchored itself could oscillate between regions. The
+ * tolerances are fixed: the region is a reading of the pin, not a sixth control. */
+const DEPTH_TOL = 0.02 + 0.45 * 0.43;
+const COLOUR_TOL = 0.05 + 0.45 * 0.85;
+
+function growRegion(seed, sim, cut) {
+  const members = new Uint8Array(S.rows);
+  const queue = [seed];
+  members[seed] = 1;
+  const s0 = S.patchColor[seed * 3];
+  const s1 = S.patchColor[seed * 3 + 1];
+  const s2 = S.patchColor[seed * 3 + 2];
+  for (let h = 0; h < queue.length; h++) {
+    const p = queue[h];
+    const c = p % S.grid;
+    const r = (p - c) / S.grid;
+    for (let d = 0; d < 4; d++) {
+      const cc = c + (d === 0 ? 1 : d === 1 ? -1 : 0);
+      const rr = r + (d === 2 ? 1 : d === 3 ? -1 : 0);
+      if (cc < 0 || cc >= S.grid || rr < 0 || rr >= S.grid) { continue; }
+      const q = rr * S.grid + cc;
+      if (members[q] || sim[q] < cut) { continue; }
+      if (Math.abs(S.patchDepth[q] - S.patchDepth[seed]) > DEPTH_TOL) { continue; }
+      const dr = S.patchColor[q * 3] - s0;
+      const dg = S.patchColor[q * 3 + 1] - s1;
+      const db = S.patchColor[q * 3 + 2] - s2;
+      if (Math.sqrt(dr * dr + dg * dg + db * db) > COLOUR_TOL) { continue; }
+      members[q] = 1;
+      queue.push(q);
+    }
+  }
+  return members;
+}
+
+/* A region is a better query than one patch: average its unit vectors, then
+ * normalize — the model's own arithmetic, one step wider. */
+function regionQuery(members) {
+  const vec = new Float32Array(S.dim);
+  let n = 0;
+  for (let i = 0; i < S.rows; i++) {
+    if (!members[i]) { continue; }
+    n++;
+    const off = i * S.dim;
+    for (let t = 0; t < S.dim; t++) { vec[t] += S.patches[off + t]; }
+  }
+  let norm = 0;
+  for (let t = 0; t < S.dim; t++) { norm += vec[t] * vec[t]; }
+  norm = Math.sqrt(norm) || 1;
+  for (let t = 0; t < S.dim; t++) { vec[t] /= norm; }
+  return { vec, n };
+}
+
+function bestOther(sim) {
+  let best = -1;
+  for (let i = 0; i < S.rows; i++) {
+    if (i !== S.probe && (best < 0 || sim[i] > sim[best])) { best = i; }
+  }
+  return best;
+}
+
+function patchCell(patch) {
+  return '#' + patch + ' (' + (patch % S.grid) + ',' + Math.floor(patch / S.grid) + ')';
+}
+
+/* ── the depth map ────────────────────────────────────────────────────
+ * Relative depth, normalised by the map's own percentiles and then equalised by
+ * rank: the model's ordering, evenly spread, so the relief separates across the
+ * whole picture instead of stacking at one end. */
+function rankOf(raw) {
+  const [lo, hi] = S.depthRange;
+  const t = Math.min(1, Math.max(0, (raw - lo) / ((hi - lo) || 1)));
+  return S.depthRank ? S.depthRank[Math.min(255, Math.round(t * 255))] : t;
+}
+
+function depthRankMap(values, range) {
+  const [lo, hi] = range;
+  const span = (hi - lo) || 1;
+  const bins = new Uint32Array(256);
+  for (let i = 0; i < values.length; i++) {
+    const t = Math.min(1, Math.max(0, (values[i] - lo) / span));
+    bins[Math.min(255, Math.round(t * 255))]++;
+  }
+  const cdf = new Float32Array(256);
+  let acc = 0;
+  for (let b = 0; b < 256; b++) { acc += bins[b]; cdf[b] = acc / Math.max(1, values.length); }
+  return cdf;
+}
+
+/* Bilinear read of one map, by normalised position. */
+function bilinear(arr, rows, cols, stride, comp, u, v) {
+  const x = u * (cols - 1);
+  const y = v * (rows - 1);
+  const x0 = Math.max(0, Math.floor(x));
+  const y0 = Math.max(0, Math.floor(y));
+  const x1 = Math.min(cols - 1, x0 + 1);
+  const y1 = Math.min(rows - 1, y0 + 1);
+  const fx = x - x0;
+  const fy = y - y0;
+  const at = (r, c) => arr[(r * cols + c) * stride + comp];
+  const top = at(y0, x0) * (1 - fx) + at(y0, x1) * fx;
+  const bottom = at(y1, x0) * (1 - fx) + at(y1, x1) * fx;
+  return top * (1 - fy) + bottom * fy;
+}
+
+function sampleDepth(u, v) {
+  return rankOf(bilinear(S.depth, S.depthRows, S.depthDim, 1, 0, u, v));
+}
+
+function sampleSlope(u, v, comp) {
+  return bilinear(S.slopes, S.depthRows, S.depthDim, 2, comp, u, v);
+}
+
+/* The map as a normal map: the gradient a surface with this height would have.
+ * The shader scales it by the exaggeration control, so the relief is shaded at
+ * whatever strength the reader chose. World x spans the picture's aspect and y
+ * spans its height, so the step sizes are the picture's own. */
+function buildSlopes() {
+  const rows = S.depthRows;
+  const cols = S.depthDim;
+  const aspect = S.width / S.height;
+  const dx = aspect / Math.max(1, cols - 1);
+  const dy = 1 / Math.max(1, rows - 1);
+  // The map's height, blurred once: a monocular depth map is noisy at the cell
+  // level, and differentiating that noise gives a stipple, not a surface.
+  const height = new Float32Array(rows * cols);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      height[r * cols + c] = (rankOf(S.depth[r * cols + c]) - 0.5) * 0.18;
+    }
+  }
+  const h = new Float32Array(rows * cols);
+  const span = 2; // 5×5: the cell size is 266 across the picture, and the map's
+  const taps = (span * 2 + 1) * (span * 2 + 1); // error is larger than one cell
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let sum = 0;
+      for (let dr = -span; dr <= span; dr++) {
+        for (let dc = -span; dc <= span; dc++) {
+          const rr = Math.min(rows - 1, Math.max(0, r + dr));
+          const cc = Math.min(cols - 1, Math.max(0, c + dc));
+          sum += height[rr * cols + cc];
+        }
+      }
+      h[r * cols + c] = sum / taps;
+    }
+  }
+  const z = (r, c) => h[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
+  const slopes = new Float32Array(rows * cols * 2);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = (r * cols + c) * 2;
+      slopes[i] = (z(r, c + 1) - z(r, c - 1)) / (2 * dx);
+      // y runs up the picture, so a step down a row is a step down in y.
+      slopes[i + 1] = -(z(r + 1, c) - z(r - 1, c)) / (2 * dy);
+    }
+  }
+  return slopes;
+}
+
+/* A deterministic hash in [0,1): the dissolve stagger and the density sample must
+ * be the same on every visit, and neither may allocate. A murmur-style finalizer,
+ * because a multiply-and-shift pair alone left the top bits correlated: the
+ * values spanned 0..0.65, so the "low" tier kept two thirds of the pixels. */
+function hash01(i) {
+  let x = (i + 0x9e3779b9) | 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x85ebca6b);
+  x ^= x >>> 13;
+  x = Math.imul(x, 0xc2b2ae35);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+/* ── the reconstruction ───────────────────────────────────────────────
+ * One vertex per sampled pixel: a position on the image plane, the pixel's
+ * colour, its depth from the model, the gradient of that depth, and the image
+ * UV that indexes both the photograph and the DINOv3 patch grid. The three
+ * renderers — surface, wireframe, cloud — share these arrays and differ only
+ * by their index buffer and their fragment shader. */
+function buildReconstruction() {
+  const aspect = S.width / S.height;
+  const step = DENSITY[S.density];
+  const gw = Math.ceil(S.width / step);
+  const gh = Math.ceil(S.height / step);
+  const count = gw * gh;
+  const flat = new Float32Array(count * 3);
+  const uvs = new Float32Array(count * 2);
+  const colors = new Float32Array(count * 3);
+  const slope = new Float32Array(count * 2);
+  const patch = new Float32Array(count);
+  const depth = new Float32Array(count);
+  const seeds = new Float32Array(count);
+  for (let row = 0; row < gh; row++) {
+    for (let col = 0; col < gw; col++) {
+      const i = row * gw + col;
+      const px = Math.min(S.width - 1, col * step);
+      const py = Math.min(S.height - 1, row * step);
+      const u = (px + 0.5) / S.width;
+      const v = (py + 0.5) / S.height;
+      flat[i * 3] = (u - 0.5) * aspect;
+      flat[i * 3 + 1] = 0.5 - v;
+      flat[i * 3 + 2] = 0;
+      uvs[i * 2] = u;
+      uvs[i * 2 + 1] = v;
+      patch[i] = Math.min(S.grid - 1, Math.floor(v * S.grid)) * S.grid +
+        Math.min(S.grid - 1, Math.floor(u * S.grid));
+      depth[i] = sampleDepth(u, v);
+      slope[i * 2] = sampleSlope(u, v, 0);
+      slope[i * 2 + 1] = sampleSlope(u, v, 1);
+      seeds[i] = hash01(px * 65537 + py + 7919);
+      // The canvas is RGBA and sRGB; the attribute is linear RGB, which is what
+      // the renderer's output encoding expects.
+      const p = (py * S.width + px) * 4;
+      colors[i * 3] = Math.pow(S.colors[p] / 255, 2.2);
+      colors[i * 3 + 1] = Math.pow(S.colors[p + 1] / 255, 2.2);
+      colors[i * 3 + 2] = Math.pow(S.colors[p + 2] / 255, 2.2);
+    }
+  }
+  S.count = count;
+  S.mesh = { gw, gh, step };
+  S.points = { flat, uv: uvs, colors, slope, patch, depth, seeds };
+  buildTopology();
+}
+
+/* ── the topology ─────────────────────────────────────────────────────
+ * Two triangles per cell of the sampled grid. A cell is dropped when any of its
+ * edges crosses a depth step larger than the tolerance: joining a person's edge
+ * to the street behind them is what makes a single-view reconstruction look
+ * torn. The same rejection builds the edge list, so the wireframe never draws
+ * an edge the surface does not have. */
+function buildTopology() {
+  const W = S.mesh.gw;
+  const H = S.mesh.gh;
+  const depth = S.points.depth;
+  const cols = W - 1;
+  const cells = cols * (H - 1);
+  // A smooth depth ramp changes more across a coarse step than a fine one, while
+  // a real occlusion boundary changes by the same amount either way. Scaling the
+  // tolerance with the step keeps the cut about the same at every tier, which is
+  // what "the same surface at three resolutions" has to mean.
+  const limit = S.cut * S.mesh.step;
+  const accepted = new Uint8Array(cells);
+  let kept = 0;
+  for (let row = 0; row < H - 1; row++) {
+    for (let col = 0; col < cols; col++) {
+      const a = row * W + col;
+      const b = a + 1;
+      const c = a + W;
+      const d = c + 1;
+      if (Math.abs(depth[a] - depth[b]) > limit) { continue; }
+      if (Math.abs(depth[c] - depth[d]) > limit) { continue; }
+      if (Math.abs(depth[a] - depth[c]) > limit) { continue; }
+      if (Math.abs(depth[b] - depth[d]) > limit) { continue; }
+      if (Math.abs(depth[b] - depth[c]) > limit) { continue; }
+      accepted[row * cols + col] = 1;
+      kept++;
+    }
+  }
+  const tris = new Uint32Array(kept * 6);
+  let t = 0;
+  for (let row = 0; row < H - 1; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (!accepted[row * cols + col]) { continue; }
+      const a = row * W + col;
+      const b = a + 1;
+      const c = a + W;
+      const d = c + 1;
+      // Wound so the face points at the camera: +x right, +y up, +z toward it.
+      tris[t++] = a; tris[t++] = c; tris[t++] = b;
+      tris[t++] = b; tris[t++] = c; tris[t++] = d;
+    }
+  }
+  // The wireframe draws every stride-th grid line of the *same* mesh. At pixel
+  // resolution every edge would merge into a white sheet, and a wireframe that
+  // cannot be read is not a reading of the topology. Stride lines are real
+  // edges, and each stride cell also contributes its diagonal, so the triangles
+  // are visible where the grid is.
+  const stride = Math.max(1, Math.round(W / 96));
+  const live = (col, row) => (col < 0 || row < 0 || col >= cols || row >= H - 1)
+    ? 0 : accepted[row * cols + col];
+  const hLine = (row) => row % stride === 0;      // a horizontal edge
+  const vLine = (col) => col % stride === 0;      // a vertical edge
+  let edges = 0;
+  for (let row = 0; row < H; row++) {
+    for (let col = 0; col < W; col++) {
+      if (col < W - 1 && hLine(row) && (live(col, row - 1) || live(col, row))) { edges++; }
+      if (row < H - 1 && vLine(col) && (live(col - 1, row) || live(col, row))) { edges++; }
+    }
+  }
+  for (let row = 0; row < H - 1; row += stride) {
+    for (let col = 0; col < cols; col += stride) {
+      if (live(col, row)) { edges++; }
+    }
+  }
+  const edge = new Uint32Array(edges * 2);
+  let e = 0;
+  for (let row = 0; row < H; row++) {
+    for (let col = 0; col < W; col++) {
+      const i = row * W + col;
+      if (col < W - 1 && hLine(row) && (live(col, row - 1) || live(col, row))) { edge[e++] = i; edge[e++] = i + 1; }
+      if (row < H - 1 && vLine(col) && (live(col - 1, row) || live(col, row))) { edge[e++] = i; edge[e++] = i + W; }
+    }
+  }
+  for (let row = 0; row < H - 1; row += stride) {
+    for (let col = 0; col < cols; col += stride) {
+      if (!live(col, row)) { continue; }
+      const b = row * W + col + 1;
+      const c = b + W - 1;
+      edge[e++] = b; edge[e++] = c;
+    }
+  }
+  S.topology = { tris, edges: edge, cells, kept, cut: cells ? 1 - kept / cells : 0 };
+}
+
+/* ── the scene ────────────────────────────────────────────────────────
+ * One reconstruction, three renderers. The surface, the wireframe and the cloud
+ * read the same attribute buffers; only their index buffer and their fragment
+ * shader differ, so every reading is the same geometry understood differently. */
+let THREE = null;
+let renderer = null;
+let camera = null;
+let pivot = null;
+let surfaceMesh = null;
+let wireLines = null;
+let points = null;
+let photoPlane = null;
+let simTexture = null;
+let photoTexture = null;
+let U = null;
+let boxHelper = null;
+let scene = null;
+let frame = 0;
+let onScreen = true;
+let theta = 0;
+let phi = 0;
+let zoom = 2.2;
+let zoomMin = 1.2;
+let zoomMax = 6;
+const aim = { theta: 0, phi: 0, zoom: 2.2 };
+let dragging = null;
+let clockFrame = 0;
+
+/* The vertex program every renderer shares. The position is the image plane
+ * carried into camera space by the depth the model predicted; the normal is the
+ * gradient of that same map, which is the surface's normal to first order and
+ * is the only normal that cannot smooth across a rejected cell. */
+const VERT = `
+attribute vec3 color;
+attribute vec2 aSlope;
+attribute float aDepth;
+attribute float aSeed;
+uniform float uRise;
+uniform float uLight;
+uniform float uExag;
+uniform float uSize;
+uniform float uFocal;
+uniform float uDPR;
+uniform float uFit;
+uniform float uRelief;
+uniform float uScan;
+uniform float uLift;
+uniform vec3 uKey;
+uniform sampler2D uSim;
+varying vec2 vUv;
+varying vec3 vColor;
+varying vec3 vViewNormal;
+varying float vSim;
+varying float vMember;
+varying float vShade;
+varying float vFade;
+varying float vDepth;
+varying float vScan;
+void main() {
+  // The relief: the map's own ordering lifts the near parts forward and the far
+  // parts back. A fifth of the frame's height is enough parallax to read depth
+  // without tearing the picture apart.
+  float z = (aDepth - 0.5) * uExag * ${DEPTH_GAIN};
+  vec3 world = vec3(position.xy * (1.0 + z), z);
+
+  // The depth map as a normal map: the gradient of the height, lit by a key
+  // light from the upper left and a fill from the opposite side. The gradient is
+  // clamped because a cliff in a monocular map is not a wall: left unclamped it
+  // turns every depth edge into a black band.
+  vec2 g = clamp(aSlope * uExag * uRelief, -2.5, 2.5);
+  vec3 n = normalize(vec3(-g, 1.0));
+
+  // A deterministic per-vertex offset, so the reveal travels instead of
+  // snapping. It reaches zero at both ends, so the still and the world are
+  // exact: a stagger may delay a vertex, never leave it short.
+  float d = (aSeed - 0.5) * 0.35;
+  float k = clamp(uRise * (1.0 + d) - d, 0.0, 1.0);
+  vec3 p = mix(position.xyz, world, k);
+
+  vec3 L = normalize(uKey);
+  float key = max(dot(n, L), 0.0);
+  float fill = max(dot(n, normalize(vec3(-L.x, -L.y, 0.35))), 0.0);
+  // The light arrives after the lift, not with it: while the field is still
+  // travelling the frame keeps the photograph's own brightness, so the reveal is
+  // the depth arriving rather than a fade through black.
+  float lit = 0.42 + 0.66 * key + 0.20 * fill;
+  vShade = mix(1.0, lit, uLight);
+  vViewNormal = normalize(normalMatrix * n);
+
+  // The readings and the contours speak in view depth, from the camera out:
+  // the map's own ordering is inverted here, once, and nowhere else.
+  float viewD = 1.0 - aDepth;
+  vDepth = viewD;
+  vScan = 1.0 - smoothstep(0.0, 0.055, abs(viewD - uScan));
+
+  vColor = color;
+  vUv = uv;
+  // Red is the model's cosine, green is the grown region's membership. The
+  // patch grid is uniform over the picture, so the image UV is the grid UV and
+  // a bilinear read blends the same patch the nearest test would have picked.
+  vec2 s = texture2D(uSim, uv).rg;
+  vSim = s.r;
+  vMember = s.g;
+
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  float dist = max(0.001, -mv.z);
+  // Distance fades the far end into the ground, the way distance does — but only
+  // past the fitted plane, or the photograph would be dimmed by nothing more
+  // than being at the distance the camera was fitted to.
+  float haze = smoothstep(uFit + 0.06, uFit + 0.30, dist);
+  // Haze is depth shading, so it arrives with the light: while the field is
+  // still travelling it keeps the photograph's brightness.
+  vFade = mix(1.0, 1.0 - 0.35 * haze, uLight);
+  // Measured in CSS pixels, then scaled to the framebuffer, so a 2x display
+  // draws the same photograph instead of a sparse one.
+  float css = clamp(uSize * (uFocal / dist), 1.2, 2.8);
+  gl_PointSize = css * uDPR;
+  mv.z += uLift;
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const COMMON = `
+uniform float uMind;
+uniform float uIso;
+uniform float uNormals;
+uniform float uContour;
+uniform float uOpacity;
+uniform float uSpacing;
+uniform vec3 uAccent;
+varying vec2 vUv;
+varying vec3 vColor;
+varying vec3 vViewNormal;
+varying float vSim;
+varying float vMember;
+varying float vShade;
+varying float vFade;
+varying float vDepth;
+varying float vScan;
+float contourLine() {
+  float x = vDepth / max(uSpacing, 0.004);
+  float w = max(fwidth(x) * 1.4, 1e-4);
+  return 1.0 - smoothstep(0.0, w, abs(fract(x + 0.5) - 0.5));
+}
+/* The reading of the last two channels, shared by both renderers: the cosine as
+ * an accent over the photograph in look-alikes, camera-space orientation in
+ * normals, the photograph otherwise. Look-alikes used to replace the picture
+ * with the ramp, which at uMind 1 was a cream sheet: the state exists to show
+ * where the probe's part recurs, so the photograph stays the ground. The accent
+ * carries the picture's own luminance, so bright parts stay bright, and below
+ * the probe's own similarity nothing is painted at all. */
+vec3 reading(vec3 photo) {
+  float luma = dot(photo, vec3(0.2126, 0.7152, 0.0722));
+  // A steep ramp, not a line: the normalised cosine sits high nearly
+  // everywhere, so a gentle mix floods the frame. The photograph is dimmed only
+  // enough for the accent to read, and the accent carries the picture's own
+  // luminance, so texture survives in the patches that do look alike.
+  float alike = pow(clamp(vSim, 0.0, 1.0), 5.0);
+  float grown = smoothstep(0.5, 0.9, vMember) * 0.35;
+  vec3 ground = photo * (1.0 - 0.28 * uMind);
+  // Capped below 1: even the hottest patch keeps a little of its own colour.
+  vec3 c = mix(ground, uAccent * (0.3 + 1.25 * luma), clamp(alike * 0.88 + grown, 0.0, 0.86) * uMind);
+  if (uNormals > 0.5) { c = normalize(vViewNormal) * 0.5 + 0.5; }
+  return c + uAccent * contourLine() * uContour * 0.7 + uAccent * vScan * uContour * 0.5;
+}
+`;
+
+const SURFACE_FRAG = COMMON + `
+uniform sampler2D uMap;
+void main() {
+  // The photograph is the surface's colour, unlit apart from the relief's own
+  // shading: the still state has to be the bytes the browser sent.
+  vec3 c = texture2D(uMap, vUv).rgb * vShade * vFade;
+  float iso = mix(1.0, mix(0.12, 1.0, vMember), uIso);
+  gl_FragColor = vec4(reading(c), uOpacity * iso);
+  #include <colorspace_fragment>
+}`;
+
+const CLOUD_FRAG = COMMON + `
+void main() {
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d);
+  if (r > 0.5) { discard; }
+  float edge = smoothstep(0.5, 0.32, r);
+  float luma = dot(vColor, vec3(0.2126, 0.7152, 0.0722));
+  vec3 c = vColor * (0.9 + 0.35 * luma) * vShade * vFade;
+  float iso = mix(1.0, mix(0.12, 1.0, vMember), uIso);
+  gl_FragColor = vec4(reading(c), edge * uOpacity * iso);
+  #include <colorspace_fragment>
+}`;
+
+const WIRE_FRAG = COMMON + `
+uniform vec3 uRule;
+void main() {
+  // The rule colour, not a fourth hue: the wireframe is a reading of the
+  // topology, so it has to stay behind the photograph's own colours — and the
+  // cosine ramps over that ground instead of flooding it, the same reading the
+  // surface gets, so the topology still shows where nothing looks alike.
+  float alike = pow(clamp(vSim, 0.0, 1.0), 5.0);
+  float grown = smoothstep(0.5, 0.9, vMember);
+  vec3 c = mix(uRule * vFade, uAccent, clamp(alike * 0.9 + grown * 0.28, 0.0, 1.0) * uMind);
+  float iso = mix(1.0, mix(0.10, 1.0, vMember), uIso);
+  gl_FragColor = vec4(c, uOpacity * iso * (0.45 + 0.55 * vMember));
+  #include <colorspace_fragment>
+}`;
+
+function stageSize() {
+  const box = stage.getBoundingClientRect();
+  return { w: Math.max(1, Math.round(box.width)), h: Math.max(1, Math.round(box.height)) };
+}
+
+function flat(message) {
+  stage.textContent = message;
+  stage.classList.add('is-flat');
+  stage.removeAttribute('tabindex');
+  stage.removeAttribute('role');
+  stage.removeAttribute('aria-label');
+  renderer = null;
+}
+
+/* One frame loop for everything that moves: the reveal, the damped camera and
+ * the contour sweep. It stops when the scene is still and while the stage is
+ * off-screen (or scrolled past on a phone), so an idle plate costs nothing. */
+function renderScene() {
+  if (!renderer || !onScreen) { return; }
+  if (!frame) { frame = requestAnimationFrame(step); }
+}
+
+function animating() {
+  if (S.reading === 3 && motionAllowed()) { return true; }
+  return Math.abs(theta - aim.theta) > 1e-4 ||
+    Math.abs(phi - aim.phi) > 1e-4 ||
+    Math.abs(zoom - aim.zoom) > 1e-4;
+}
+
+function step(now) {
+  frame = 0;
+  if (!renderer) { return; }
+  theta += (aim.theta - theta) * 0.22;
+  phi += (aim.phi - phi) * 0.22;
+  zoom += (aim.zoom - zoom) * 0.22;
+  if (Math.abs(aim.theta - theta) < 1e-4) { theta = aim.theta; }
+  if (Math.abs(aim.phi - phi) < 1e-4) { phi = aim.phi; }
+  if (Math.abs(aim.zoom - zoom) < 1e-4) { zoom = aim.zoom; }
+  if (S.reading === 3 && U && motionAllowed()) { U.uScan.value = (now % 11000) / 11000; }
+  pivot.rotation.x = phi;
+  pivot.rotation.y = theta;
+  camera.position.z = zoom;
+  renderer.render(scene, camera);
+  if (animating() && onScreen) { frame = requestAnimationFrame(step); }
+}
+
+async function setupScene() {
+  if (!THREE) {
+    try {
+      THREE = await import('../assets/vendor/three-0.170.0/three.module.min.mjs');
+    } catch (err) {
+      THREE = null;
+      flat('the 3D module could not be loaded, so the field is not drawn; the plan and the readout still read the same two replies');
+      return;
+    }
+  }
+  if (!renderer) {
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
+    } catch (err) {
+      flat('this browser has no WebGL, so the field is not drawn; the plan and the readout still read the same two replies');
+      return;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const size = stageSize();
+    renderer.setSize(size.w, size.h, false);
+    stage.appendChild(renderer.domElement);
+    stage.setAttribute('role', 'application');
+    stage.setAttribute('tabindex', '0');
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(32, size.w / (size.h || 1), 0.05, 100);
+    camera.position.set(0, 0, zoom);
+    pivot = new THREE.Group();
+    scene.add(pivot);
+    new ResizeObserver(() => {
+      if (!renderer) { return; }
+      const next = stageSize();
+      renderer.setSize(next.w, next.h, false);
+      camera.aspect = next.w / (next.h || 1);
+      camera.updateProjectionMatrix();
+      fit();
+      renderScene();
+    }).observe(stage);
+    new IntersectionObserver((entries) => {
+      onScreen = entries[0].isIntersecting;
+      renderScene();
+    }).observe(stage);
+  }
+  // The stage is the photograph's aspect, so a new sample changes the box before
+  // this run: measure it now rather than wait for the observer, or the camera is
+  // fitted to the previous sample's frame and the field arrives cropped.
+  const box = stageSize();
+  renderer.setSize(box.w, box.h, false);
+  camera.aspect = box.w / (box.h || 1);
+  camera.updateProjectionMatrix();
+  buildScene();
+}
+
+function disposeScene() {
+  if (!pivot) { return; }
+  while (pivot.children.length) {
+    const child = pivot.children.pop();
+    child.traverse((node) => {
+      if (node.geometry) { node.geometry.dispose(); }
+      if (node.material) { node.material.dispose(); }
+    });
+  }
+  if (photoTexture) { photoTexture.dispose(); photoTexture = null; }
+  if (simTexture) { simTexture.dispose(); simTexture = null; }
+  surfaceMesh = null;
+  wireLines = null;
+  points = null;
+  photoPlane = null;
+  boxHelper = null;
+  U = null;
+}
+
+function buildScene() {
+  if (!renderer) { return; }
+  disposeScene();
+
+  // Three geometries, one set of buffers: the index is the only thing that
+  // differs between the surface and its wireframe.
+  const attributes = [
+    ['position', S.points.flat, 3],
+    ['uv', S.points.uv, 2],
+    ['color', S.points.colors, 3],
+    ['aSlope', S.points.slope, 2],
+    ['aDepth', S.points.depth, 1],
+    ['aSeed', S.points.seeds, 1]
+  ];
+  const geometry = (index) => {
+    const g = new THREE.BufferGeometry();
+    for (const [name, array, size] of attributes) {
+      g.setAttribute(name, new THREE.BufferAttribute(array, size));
+    }
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    return g;
+  };
+  const surfaceGeometry = geometry(S.topology.tris);
+  const wireGeometry = geometry(S.topology.edges);
+  const cloudGeometry = new THREE.BufferGeometry();
+  for (const [name, array, size] of attributes) {
+    cloudGeometry.setAttribute(name, new THREE.BufferAttribute(array, size));
+  }
+  surfaceGeometry.computeBoundingSphere();
+  cloudGeometry.computeBoundingSphere();
+
+  // The patch grid as a texture: the cosine in red, region membership in green.
+  const sim = new Float32Array(S.grid * S.grid * 2);
+  simTexture = new THREE.DataTexture(sim, S.grid, S.grid, THREE.RGFormat, THREE.FloatType);
+  simTexture.minFilter = THREE.LinearFilter;
+  simTexture.magFilter = THREE.LinearFilter;
+  simTexture.needsUpdate = true;
+
+  // The photograph, sampled by the same UV the fragment uses: no vertical flip,
+  // because the page's v runs from the top row down like the image itself.
+  photoTexture = new THREE.Texture(S.photo);
+  photoTexture.colorSpace = THREE.SRGBColorSpace;
+  photoTexture.flipY = false;
+  photoTexture.needsUpdate = true;
+
+  const color = (rgb) => new THREE.Color(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+  U = {
+    uRise: { value: S.rise },
+    uMind: { value: S.mind },
+    uLight: { value: S.light },
+    uExag: { value: S.exaggeration },
+    uSize: { value: POINT_SIZE },
+    uFocal: { value: 1 },
+    uDPR: { value: renderer.getPixelRatio() },
+    uFit: { value: 1 },
+    uKey: { value: new THREE.Vector3(KEY[0], KEY[1], KEY[2]).normalize() },
+    uRelief: { value: 1.35 },
+    uSpacing: { value: 0.14 },
+    uScan: { value: 0 },
+    uSim: { value: simTexture },
+    uMap: { value: photoTexture },
+    uIso: { value: S.iso ? 1 : 0 },
+    uNormals: { value: 0 },
+    uContour: { value: 0 },
+    uAccent: { value: color(ACCENT) },
+    uRule: { value: color(RULE) }
+  };
+
+  const material = (fragmentShader, lift, write) => new THREE.ShaderMaterial({
+    uniforms: Object.assign({ uLift: { value: lift }, uOpacity: { value: 1 } }, U),
+    vertexShader: VERT,
+    fragmentShader,
+    transparent: true,
+    depthWrite: write
+  });
+
+  surfaceMesh = new THREE.Mesh(surfaceGeometry, material(SURFACE_FRAG, 0, true));
+  surfaceMesh.renderOrder = 0;
+  pivot.add(surfaceMesh);
+
+  points = new THREE.Points(cloudGeometry, material(CLOUD_FRAG, 0, false));
+  points.renderOrder = 1;
+  pivot.add(points);
+
+  // The wireframe sits a hair in front of the surface it describes.
+  wireLines = new THREE.LineSegments(wireGeometry, material(WIRE_FRAG, 0.0025, false));
+  wireLines.renderOrder = 2;
+  pivot.add(wireLines);
+
+  // The still: the surface at rest is the photograph, but its cut cells are
+  // holes, so the exact image is drawn over it and leaves during the reveal.
+  // Same texture, plane UVs flipped because the plane's v runs upward.
+  const planeGeometry = new THREE.PlaneGeometry(S.width / S.height, 1);
+  const planeUv = planeGeometry.attributes.uv;
+  for (let i = 0; i < planeUv.count; i++) { planeUv.setY(i, 1 - planeUv.getY(i)); }
+  photoPlane = new THREE.Mesh(planeGeometry, new THREE.MeshBasicMaterial({
+    map: photoTexture, transparent: true, depthWrite: false
+  }));
+  photoPlane.position.z = -0.003;
+  photoPlane.renderOrder = -1;
+  pivot.add(photoPlane);
+
+  aim.zoom = fit();
+  if (!dragging) { zoom = aim.zoom; }
+  applyMode();
+  renderScene();
+}
+
+/* The still sits over the reconstruction until the field lifts, and leaves with
+ * the cloud, the cosine field or an isolation — those three read the geometry,
+ * and the flat photograph would answer over them. */
+function syncPlane() {
+  if (!photoPlane) { return; }
+  // The photograph plane hands over to the mesh: a quarter of it stays behind
+  // the raised surface to fill the holes the cut leaves, so the relief never
+  // floats over an un-warped rectangle of the same picture.
+  const opacity = S.iso || S.reading === 4 ? 0 : (1 - S.mind) * (1 - 0.75 * S.rise);
+  photoPlane.material.opacity = Math.min(1, Math.max(0, opacity));
+  photoPlane.visible = photoPlane.material.opacity > 0.02;
+}
+
+/* The discontinuity tolerance is a control, so the index buffers are rebuilt in
+ * place: the vertex arrays do not change, only which triangles survive. */
+function rebuildTopology() {
+  if (!S.points) { return; }
+  buildTopology();
+  // The vertex positions did not move, so the bounding sphere the geometry
+  // already has stays correct: recomputing it over half a million vertices on
+  // every slider step was the expensive half of this call.
+  if (surfaceMesh) { surfaceMesh.geometry.setIndex(new THREE.BufferAttribute(S.topology.tris, 1)); }
+  if (wireLines) { wireLines.geometry.setIndex(new THREE.BufferAttribute(S.topology.edges, 1)); }
+  captions();
+  renderScene();
+}
+
+/* The camera distance at which the photograph fills the stage in both axes: the
+ * front view has to read as the photograph, not as a picture in a window. */
+function fit() {
+  const half = Math.tan((camera.fov / 2) * Math.PI / 180);
+  // The CSS height, not the framebuffer's: the sprite reads the same at every
+  // device pixel ratio.
+  const focal = renderer ? renderer.domElement.clientHeight / (2 * half) : 1;
+  if (U) { U.uFocal.value = focal; }
+  const aspect = camera.aspect || 1.6;
+  const aspectPhoto = (S.width || 3) / (S.height || 2);
+  const depth = 1.16 * Math.max(0.5 / half, (aspectPhoto / 2) / (half * aspect));
+  zoomMin = depth * 0.6;
+  zoomMax = depth * 2.6;
+  if (U) { U.uFit.value = depth; }
+  return depth;
+}
+
+/* Every reading is one uniform set: the renderers never rebuild geometry to
+ * change a view. */
+function applyMode() {
+  if (U) {
+    U.uContour.value = S.reading === 3 ? 1 : 0;
+    U.uNormals.value = S.reading === 2 ? 1 : 0;
+    U.uIso.value = S.iso ? 1 : 0;
+  }
+  syncFigure();
+  syncPlane();
+  renderScene();
+}
+
+/* Which renderer is on screen, and whether the surface writes depth. The reveal
+ * moves the lift per frame, so this has to run with every look and not only when
+ * a state or a reading changes: a mesh switched on at the end of the sequence
+ * hides the whole transition behind a fading photograph. */
+function syncFigure() {
+  if (surfaceMesh) {
+    // A hair of lift turns the mesh on: at rest the photograph is the figure.
+    surfaceMesh.visible = S.reading !== 4 && S.rise > 0.004;
+    surfaceMesh.material.depthWrite = S.rise > 0.985;
+  }
+  if (points) { points.visible = S.reading === 4; }
+  if (wireLines) { wireLines.visible = S.reading === 1; }
+}
+
+/* Three scalars, so a state change is a mix and never a rebuild: rise is 0 for
+ * the photograph and 1 for the lifted reconstruction, mind is the cosine field's
+ * share of the colour, and light is the depth map's gradient used as light (0
+ * keeps the still unlit, 1 shades the relief). The reveal brings the light in
+ * with the camera, so the lift is first seen as the still's own displacement. */
+function applyLook(rise, mind, light) {
+  S.rise = Math.min(1, Math.max(0, rise));
+  S.mind = Math.min(1, Math.max(0, mind));
+  S.light = Math.min(1, Math.max(0, light));
+  if (!U) { return; }
+  U.uRise.value = S.rise;
+  U.uMind.value = S.mind;
+  U.uLight.value = S.light;
+  syncFigure();
+  syncPlane();
+  renderScene();
+}
+
+/* ── the one clock ──────────────────────────────────────────────────── */
+
+/* The cue is the replay affordance, never a requirement: the plate reveals every
+ * asset by itself, and the button is only on screen when the reader has gone
+ * back to the still and may want the sequence again. */
+function syncCue() {
+  if (cue) { cue.hidden = S.view !== 0; }
+}
+
+function stopClock() {
+  if (clockFrame) { cancelAnimationFrame(clockFrame); clockFrame = 0; }
+}
+
+/* The reveal: a dissolve, the depth arriving, and a bounded orbit that ends by
+ * handing the camera over. Any input cancels it, and the state it was heading
+ * for is the state the reader asked for. */
+function reveal() {
+  stopClock();
+  S.view = 1;
+  syncCue();
+  for (const radio of viewRadios) { radio.checked = Number(radio.value) === 1; }
+  // The caption describes what is being drawn: the lift starts now.
+  captions();
+  const from = { rise: S.rise, theta: aim.theta };
+  if (!motionAllowed()) {
+    applyLook(1, 0, 1);
+    theta = aim.theta = CLOCK.yaw;
+    applyMode();
+    captions();
+    return;
+  }
+  const total = CLOCK.dissolve + CLOCK.depth + CLOCK.camera;
+  const start = performance.now();
+  const turn = (now) => {
+    const ms = Math.min(total, now - start);
+    const dissolve = ease(Math.min(1, ms / CLOCK.dissolve));
+    const depth = ease(Math.max(0, Math.min(1, (ms - CLOCK.dissolve) / CLOCK.depth)));
+    const swing = ease(Math.max(0, Math.min(1, (ms - CLOCK.dissolve - CLOCK.depth) / CLOCK.camera)));
+    // The lift is seen unlit; the light arrives with the camera.
+    applyLook(from.rise + (1 - from.rise) * (0.12 * dissolve + 0.88 * depth), 0, swing);
+    theta = aim.theta = from.theta + (CLOCK.yaw - from.theta) * swing;
+    if (ms < total) { clockFrame = requestAnimationFrame(turn); return; }
+    clockFrame = 0;
+    applyMode();
+    captions();
+  };
+  clockFrame = requestAnimationFrame(turn);
+}
+
+/* The state control is the reveal's owner: picking a stop lands there in one
+ * mix, and picking the stop the plate is already on does nothing at all. */
+function setView(next) {
+  const view = Math.max(0, Math.min(2, next));
+  const same = view === S.view;
+  S.view = view;
+  for (const radio of viewRadios) { radio.checked = Number(radio.value) === view; }
+  // The photograph is the still, so it has no reading: the wireframe, normals,
+  // contours and cloud are readings of the reconstruction and would otherwise
+  // draw over the untouched picture.
+  if (view === 0 && S.reading !== 0) {
+    S.reading = 0;
+    for (const radio of readRadios) { radio.checked = radio.value === '0'; }
+  }
+  syncCue();
+  const rise = view === 0 ? 0 : 1;
+  const mind = view === 2 ? 1 : 0;
+  if (same || !motionAllowed()) {
+    if (clockFrame) { cancelAnimationFrame(clockFrame); clockFrame = 0; }
+    applyLook(rise, mind, view === 0 ? 0 : 1);
+    applyMode();
+    captions();
+    return;
+  }
+  stopClock();
+  const from = { rise: S.rise, mind: S.mind, light: S.light };
+  const light = view === 0 ? 0 : 1;
+  const start = performance.now();
+  const mix = (now) => {
+    const t = Math.min(1, (now - start) / CLOCK.mix);
+    const k = ease(t);
+    applyLook(from.rise + (rise - from.rise) * k, from.mind + (mind - from.mind) * k, from.light + (light - from.light) * k);
+    if (t < 1) { clockFrame = requestAnimationFrame(mix); return; }
+    clockFrame = 0;
+    applyMode();
+    captions();
+  };
+  clockFrame = requestAnimationFrame(mix);
+}
+
+function setReading(next) {
+  S.reading = Math.max(0, Math.min(READINGS.length - 1, next));
+  for (const radio of readRadios) { radio.checked = Number(radio.value) === S.reading; }
+  // Every reading but the surface is a reading of the reconstruction, so asking
+  // for one from the photograph means the field has to arrive first.
+  if (S.reading !== 0 && S.view === 0) { setView(1); }
+  applyMode();
+  captions();
+}
+
+/* The surface's own depth ordering, lifted: the shader scales the slope by the
+ * same control, so the light moves with the geometry. */
+function setExaggeration(value) {
+  S.exaggeration = Math.max(0, Math.min(1.5, value / 100));
+  exagInput.value = String(Math.round(S.exaggeration * 100));
+  if (U) { U.uExag.value = S.exaggeration; }
+  captions();
+  drawBox();
+  renderScene();
+}
+
+let breakFrame = 0;
+
+/* The discontinuity tolerance, in the same display-depth unit the shader
+ * displaces. Above it a cell is not triangulated at all. */
+function setCut(value) {
+  S.cut = 0.004 + (Math.max(0, Math.min(100, value)) / 100) * 0.086;
+  cutInput.value = String(Math.round(value));
+  if (breakFrame) { return; }
+  breakFrame = requestAnimationFrame(() => {
+    breakFrame = 0;
+    rebuildTopology();
+  });
+}
+
+/* The three tiers re-sample the same bounded photograph, so a tier change costs
+ * one array rebuild and never a model call. */
+function setDensity(level) {
+  const next = Math.max(0, Math.min(DENSITY.length - 1, level));
+  densityInput.value = String(next);
+  if (next === S.density || !S.depth) { return; }
+  S.density = next;
+  buildReconstruction();
+  buildScene();
+  select(S.probe, S.pinned);
+}
+
+function setIsolate(on) {
+  S.iso = Boolean(on);
+  isoInput.checked = S.iso;
+  if (S.iso && S.view === 0) { setView(1); }
+  applyMode();
+  drawBox();
+  captions();
+}
+
+/* ── the probe: the model's own similarity, here and in the other five ── */
+
+/* Upload the cosine and the membership for every patch: two floats per row, and
+ * the only thing a pointer moves. No particle attribute is rewritten. The cosine
+ * is normalised over this picture's own spread, so the ramp always reads. */
+function paintSim() {
+  if (!U || !simTexture || !S.members) { return; }
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < S.rows; i++) {
+    if (S.sim[i] < lo) { lo = S.sim[i]; }
+    if (S.sim[i] > hi) { hi = S.sim[i]; }
+  }
+  const span = (hi - lo) || 1;
+  const data = simTexture.image.data;
+  for (let i = 0; i < S.rows; i++) {
+    data[i * 2] = (S.sim[i] - lo) / span;
+    data[i * 2 + 1] = S.members[i];
+  }
+  simTexture.needsUpdate = true;
+}
+
+/* One pin: the region grown around the patch, the region's mean as the query,
+ * and the two figures that read them. `pinned` is a click (the strip ranks the
+ * patch); a hover asks the same question and is not worth a ranking. */
+function select(index, pinned) {
+  if (!S.rows) { return; }
+  S.probe = Math.max(0, Math.min(S.rows - 1, index));
+  S.pinned = Boolean(pinned);
+  const seed = similarities(S.probe);
+  const members = growRegion(S.probe, seed, quantile(seed, 0.5));
+  const query = regionQuery(members);
+  S.members = members;
+  S.query = query.vec;
+  S.regionCount = query.n;
+  S.sim = similaritiesTo(query.vec);
+  colInput.value = String(S.probe % S.grid);
+  rowInput.value = String(Math.floor(S.probe / S.grid));
+  paintSim();
+  drawPlan();
+  drawBox();
+  drawReadout();
+  captions();
+  renderScene();
+}
+
+/* The plan: the photograph, tinted where the model's region covers it. The
+ * photograph is the ground here too, so the tint is a wash a reader can still
+ * see the picture through, and the probe is a ring rather than an opaque cell
+ * that hid the very patch it pointed at. */
+function drawPlan() {
+  if (!S.rows) { return; }
+  plan.width = S.width;
+  plan.height = S.height;
+  const ctx = plan.getContext('2d');
+  ctx.clearRect(0, 0, plan.width, plan.height);
+  const cw = plan.width / S.grid;
+  const ch = plan.height / S.grid;
+  ctx.fillStyle = 'rgba(' + ACCENT.join(',') + ',0.22)';
+  for (let i = 0; i < S.rows; i++) {
+    if (i === S.probe || !S.members[i]) { continue; }
+    ctx.fillRect((i % S.grid) * cw, Math.floor(i / S.grid) * ch, cw, ch);
+  }
+  const col = S.probe % S.grid;
+  const row = Math.floor(S.probe / S.grid);
+  const line = Math.max(2, cw * 0.14);
+  ctx.lineWidth = line;
+  ctx.strokeStyle = 'rgba(' + ACCENT.join(',') + ',0.95)';
+  ctx.strokeRect(col * cw + line / 2, row * ch + line / 2, cw - line, ch - line);
+  const best = bestOther(S.sim);
+  plan.setAttribute('aria-label', 'The photograph tinted where the region grown from ' + patchCell(S.probe) +
+    ' covers it: ' + S.regionCount + ' patches, the probe ringed; best match ' + patchCell(best) + ' at cosine ' + S.sim[best].toFixed(3));
+}
+
+/* The isolated region's extent, in the same world positions the shader uses. The
+ * reconstruction has no hidden surfaces, so this is the box around pixels the
+ * photograph actually shows. */
+function drawBox() {
+  if (!pivot) { return; }
+  if (boxHelper) {
+    pivot.remove(boxHelper);
+    boxHelper.geometry.dispose();
+    boxHelper.material.dispose();
+    boxHelper = null;
+  }
+  if (!S.iso || !S.members || !S.count) { return; }
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  const exag = S.exaggeration;
+  for (let i = 0; i < S.count; i++) {
+    if (!S.members[S.points.patch[i]]) { continue; }
+    const z = (S.points.depth[i] - 0.5) * exag * DEPTH_GAIN;
+    const x = S.points.flat[i * 3] * (1 + z);
+    const y = S.points.flat[i * 3 + 1] * (1 + z);
+    if (x < lo[0]) { lo[0] = x; }
+    if (y < lo[1]) { lo[1] = y; }
+    if (z < lo[2]) { lo[2] = z; }
+    if (x > hi[0]) { hi[0] = x; }
+    if (y > hi[1]) { hi[1] = y; }
+    if (z > hi[2]) { hi[2] = z; }
+  }
+  if (!(lo[0] <= hi[0])) { return; }
+  const box = new THREE.Box3(
+    new THREE.Vector3(lo[0], lo[1], lo[2]),
+    new THREE.Vector3(hi[0], hi[1], hi[2])
+  );
+  boxHelper = new THREE.Box3Helper(box, new THREE.Color(ACCENT[0] / 255, ACCENT[1] / 255, ACCENT[2] / 255));
+  pivot.add(boxHelper);
+}
+
+/* ── the answer strip ───────────────────────────────────────────────────
+ * The same six photographs, ranked. With a patch pinned the question is "where
+ * does this part come back" — one dot product per row of every other grid. With
+ * none pinned it is "which picture is most like this one", which is the pooled
+ * vector's own cosine. Either way the ranking is arithmetic over replies the
+ * page already holds: no index, no ranking call. */
+const pictures = new Map();
+let answerToken = 0;
+let uploadUrl = null;
+
+function sampleId(btn) {
+  return btn.getAttribute('data-sample').split('/').pop().replace(/\.[^.]+$/, '');
+}
+
+function idFrom(key) {
+  return String(key).split('/').pop().replace(/\.[^.]+$/, '');
+}
+
+function buttonFor(id) {
+  return sampleButtons.find((btn) => sampleId(btn) === id) || null;
+}
+
+async function lookup(btn) {
+  const id = sampleId(btn);
+  if (pictures.has(id)) { return pictures.get(id); }
+  const resp = await fetch(btn.getAttribute('data-sample'));
+  if (!resp.ok) { throw new Error('the sample could not be loaded'); }
+  const boundedImage = await bounded(new Uint8Array(await resp.arrayBuffer()));
+  const shape = await g.imageShape(FEATURES);
+  const reply = await g.image(FEATURES, ['embedding', 'patches'], boundedImage.bytes);
+  const value = reply.values.patches;
+  if (!value || value.count !== shape.patches.rows * shape.patches.dim) {
+    throw new Error('the reply carries ' + (value ? value.count : 0) + ' numbers, but the model declares ' +
+      shape.patches.rows + ' rows of ' + shape.patches.dim);
+  }
+  const entry = {
+    id,
+    rows: shape.patches.rows,
+    dim: shape.patches.dim,
+    patches: value.data,
+    cls: reply.values.embedding ? reply.values.embedding.data : null,
+    src: btn.querySelector('img').getAttribute('src'),
+    title: btn.dataset.name
+  };
+  pictures.set(id, entry);
+  return entry;
+}
+
+function score(entry, query, pinned) {
+  if (!pinned) {
+    return S.cls && entry.cls ? dotAt(entry.cls, 0, query, entry.dim) : 0;
+  }
+  let top = 0;
+  let best = -Infinity;
+  for (let i = 0; i < entry.rows; i++) {
+    const s = dotAt(entry.patches, i * entry.dim, query, entry.dim);
+    if (s > best) { best = s; top = i; }
+  }
+  return { score: best, cell: top };
+}
+
+async function answer() {
+  if (!S.rows) { return; }
+  const token = ++answerToken;
+  const pinned = S.pinned;
+  const query = pinned ? S.query : S.cls;
+  for (const btn of sampleButtons) {
+    if (pictures.has(sampleId(btn))) { continue; }
+    try {
+      await lookup(btn);
+    } catch (err) {
+      // A picture that cannot be fetched is left out of the strip, never faked.
+    }
+    if (token !== answerToken) { return; }
+  }
+  if (token !== answerToken) { return; }
+  paintAnswers(pinned, query);
+  unfold(root, g.trace());
+}
+
+function paintAnswers(pinned, query) {
+  const rows = [];
+  for (const btn of sampleButtons) {
+    const id = sampleId(btn);
+    const entry = pictures.get(id);
+    if (!entry) { continue; }
+    if (id === S.id) {
+      const cell = bestOther(S.sim);
+      rows.push({ id, cell, here: true, score: S.sim[cell] });
+      continue;
+    }
+    const found = score(entry, query, pinned);
+    rows.push({
+      id,
+      here: false,
+      cell: pinned ? found.cell : -1,
+      score: pinned ? found.score : found
+    });
+  }
+  rows.sort((a, b) => (b.here ? 1 : 0) - (a.here ? 1 : 0) || b.score - a.score);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  for (const btn of sampleButtons) {
+    const row = byId.get(sampleId(btn));
+    if (!row) { continue; }
+    const entry = pictures.get(row.id);
+    btn.setAttribute('aria-pressed', String(Boolean(row.here)));
+    btn.setAttribute('title', entry.title + ' · cosine ' + row.score.toFixed(3));
+    if (row.here || !pinned) { delete btn.dataset.cell; } else { btn.dataset.cell = String(row.cell); }
+    const box = btn.querySelector('[data-answer]');
+    box.hidden = false;
+    box.replaceChildren(
+      el('b', { text: row.here ? 'here' : row.score.toFixed(3) }),
+      el('span', { text: row.here || pinned ? patchCell(row.cell) : 'whole picture' })
+    );
+  }
+  samplesEl.append(...rows.map((row) => buttonFor(row.id)));
+  stripHint.textContent = pinned
+    ? 'this patch, in the other five · cosine over the returned rows, no index'
+    : 'no patch pinned · whole pictures, by their pooled vector';
+}
+
+/* ── the words ──────────────────────────────────────────────────────── */
+
+function drawReadout() {
+  if (!S.rows || !S.sim) { return; }
+  const b = bestOther(S.sim);
+  readout.replaceChildren(
+    el('span', { class: 'k', text: 'probe ' }), el('b', { text: patchCell(S.probe) }),
+    el('span', { class: 'k', text: ' · region ' }), el('b', { text: S.regionCount + (S.regionCount === 1 ? ' patch' : ' patches') }),
+    el('span', { class: 'k', text: ' · alike here ' }), el('b', { text: patchCell(b) }),
+    el('span', { class: 'k', text: ' · cosine ' }), el('b', { text: S.sim[b].toFixed(3) }),
+    el('span', { class: 'k', text: ' · grid ' }), el('b', { text: S.rows + '×' + S.dim }),
+    el('span', { class: 'k', text: ' · depth ' }), el('b', { text: S.depthRows + '×' + S.depthDim }),
+    el('span', { class: 'k', text: ' · ' }), el('b', { text: S.count.toLocaleString('en-GB') + ' vertices' }),
+    el('span', { class: 'k', text: ' and ' }), el('b', { text: (S.topology.tris.length / 3).toLocaleString('en-GB') + ' triangles' }),
+    el('span', { class: 'k', text: ' · ' }), el('b', { text: duration(elapsedFeatures) }),
+    el('span', { class: 'k', text: ' + ' }), el('b', { text: duration(elapsedDepth) }),
+    el('span', { class: 'k', text: featuresCached && depthCached ? ' · both replies cached' : featuresCached ? ' · features cached' : depthCached ? ' · depth cached' : '' })
+  );
+}
+
+function captions() {
+  if (!S.count) { return; }
+  // The photograph is drawn, not reconstructed: the vertex and cell counts
+  // describe a surface that is not on screen in this state.
+  stageCap.textContent = S.view === 0
+    ? 'the photograph · ' + S.width + ' × ' + S.height + ' px · two calls'
+    : S.count.toLocaleString('en-GB') + ' vertices · ' +
+      (S.topology.tris.length / 3).toLocaleString('en-GB') + ' triangles · ' +
+      READINGS[S.reading] + ' · ×' + S.exaggeration.toFixed(2) + ' · ' +
+      (S.topology.cut * 100).toFixed(1) + '% cells cut' +
+      (S.iso ? ' · isolated · region ' + S.regionCount + (S.regionCount === 1 ? ' patch' : ' patches') : '');
+  stage.setAttribute('aria-label', S.view === 0
+    ? 'The photograph as itself. Drag to orbit, wheel to zoom, hover or click to probe a part.'
+    : 'The photograph reconstructed as a surface of ' + S.count.toLocaleString('en-GB') + ' vertices' +
+      (S.view === 2 ? ", coloured by the probe patch's cosine." : '. Drag to turn it, wheel to zoom, hover or click to probe a part.'));
+}
+
+/* ── interaction ───────────────────────────────────────────────────── */
+
+function pickAt(event) {
+  if (!renderer || !pivot) { return -1; }
+  const box = stage.getBoundingClientRect();
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(
+    ((event.clientX - box.left) / box.width) * 2 - 1,
+    -((event.clientY - box.top) / box.height) * 2 + 1
+  ), camera);
+  const ray = raycaster.ray.clone().applyMatrix4(
+    new THREE.Matrix4().copy(pivot.matrixWorld).invert()
+  );
+  const o = ray.origin;
+  const dir = ray.direction;
+  if (Math.abs(dir.z) < 1e-6) { return -1; }
+  const aspect = S.width / S.height;
+  // The surface is a height field over the image plane, so the ray meets it
+  // where p.z equals the model's depth at p's own (u, v). Eight rounds of that
+  // one equation converge; the constants are the vertex shader's, repeated
+  // here on purpose, because a pick that drifted from the shader would lie
+  // about the geometry it is reading.
+  let u = 0;
+  let v = 0;
+  let z = 0;
+  for (let i = 0; i < 8; i++) {
+    const t = (z - o.z) / dir.z;
+    const s = 1 + z;
+    u = (o.x + t * dir.x) / (s * aspect) + 0.5;
+    v = 0.5 - (o.y + t * dir.y) / s;
+    if (u < -0.02 || u > 1.02 || v < -0.02 || v > 1.02) { return -1; }
+    z = (sampleDepth(Math.min(1, Math.max(0, u)), Math.min(1, Math.max(0, v))) - 0.5) *
+      S.exaggeration * DEPTH_GAIN * S.rise;
+  }
+  if (u < 0 || u > 1 || v < 0 || v > 1) { return -1; }
+  const col = Math.min(S.grid - 1, Math.floor(u * S.grid));
+  const row = Math.min(S.grid - 1, Math.floor(v * S.grid));
+  return row * S.grid + col;
+}
+
+let hoverTimer = 0;
+stage.addEventListener('pointerdown', (event) => {
+  if (!renderer) { return; }
+  dragging = { x: event.clientX, y: event.clientY, moved: 0 };
+  stage.setPointerCapture(event.pointerId);
+  stopClock();
+  syncCue();
+});
+stage.addEventListener('pointermove', (event) => {
+  if (!renderer) { return; }
+  if (dragging) {
+    const dx = event.clientX - dragging.x;
+    const dy = event.clientY - dragging.y;
+    dragging.moved += Math.abs(dx) + Math.abs(dy);
+    dragging.x = event.clientX;
+    dragging.y = event.clientY;
+    aim.theta = Math.max(-YAW, Math.min(YAW, aim.theta + dx * 0.005));
+    aim.phi = Math.max(-PITCH, Math.min(PITCH, aim.phi + dy * 0.005));
+    renderScene();
+    return;
+  }
+  // Hover probes: the model's answer follows the pointer, which is the whole
+  // point of dense features. Debounced so a sweep is one question, not fifty.
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => {
+    const hit = pickAt(event);
+    if (hit >= 0 && hit !== S.probe) { select(hit, false); }
+  }, 160);
+});
+stage.addEventListener('pointerup', (event) => {
+  if (!renderer) { return; }
+  const moved = dragging ? dragging.moved : 0;
+  dragging = null;
+  if (moved >= 6) { return; }
+  const hit = pickAt(event);
+  if (hit < 0) { return; }
+  select(hit, true);
+  answer();
+});
+stage.addEventListener('pointercancel', () => { dragging = null; });
+stage.addEventListener('pointerleave', () => { clearTimeout(hoverTimer); });
+stage.addEventListener('dblclick', () => {
+  stopClock();
+  syncCue();
+  aim.theta = 0;
+  aim.phi = 0;
+  renderScene();
+});
+stage.addEventListener('wheel', (event) => {
+  if (!renderer) { return; }
+  event.preventDefault();
+  stopClock();
+  syncCue();
+  aim.zoom = Math.max(zoomMin, Math.min(zoomMax, aim.zoom + event.deltaY * 0.0012 * Math.max(1, aim.zoom)));
+  renderScene();
+}, { passive: false });
+stage.addEventListener('keydown', (event) => {
+  if (!renderer) { return; }
+  if (event.key === 'ArrowLeft') { aim.theta = Math.max(-YAW, aim.theta - 0.06); }
+  else if (event.key === 'ArrowRight') { aim.theta = Math.min(YAW, aim.theta + 0.06); }
+  else if (event.key === 'ArrowUp') { aim.phi = Math.max(-PITCH, aim.phi - 0.05); }
+  else if (event.key === 'ArrowDown') { aim.phi = Math.min(PITCH, aim.phi + 0.05); }
+  else if (event.key === '+' || event.key === '=') { aim.zoom = Math.max(zoomMin, aim.zoom - 0.2); }
+  else if (event.key === '-' || event.key === '_') { aim.zoom = Math.min(zoomMax, aim.zoom + 0.2); }
+  else if (event.key === '0') { aim.theta = 0; aim.phi = 0; aim.zoom = fit(); }
+  else { return; }
+  event.preventDefault();
+  stopClock();
+  syncCue();
+  renderScene();
+});
+
+/* The probe by keyboard: one patch per notch, clamped to the grid the server
+ * declared. */
+function probeFromControls() {
+  const col = Math.max(0, Math.min(S.grid - 1, Number(colInput.value)));
+  const row = Math.max(0, Math.min(S.grid - 1, Number(rowInput.value)));
+  select(row * S.grid + col, false);
+}
+
+colInput.addEventListener('input', probeFromControls);
+rowInput.addEventListener('input', probeFromControls);
+exagInput.addEventListener('input', () => { stopClock(); setExaggeration(Number(exagInput.value)); });
+cutInput.addEventListener('input', () => { setCut(Number(cutInput.value)); });
+densityInput.addEventListener('input', () => { setDensity(Number(densityInput.value)); });
+isoInput.addEventListener('change', () => { setIsolate(isoInput.checked); });
+for (const radio of viewRadios) {
+  radio.addEventListener('change', () => { if (radio.checked) { setView(Number(radio.value)); } });
+}
+for (const radio of readRadios) {
+  radio.addEventListener('change', () => { if (radio.checked) { setReading(Number(radio.value)); } });
+}
+if (cue) { cue.addEventListener('click', () => { reveal(); }); }
+
+uploadInput.addEventListener('change', async () => {
+  const file = uploadInput.files && uploadInput.files[0];
+  uploadInput.value = '';
+  if (!file) { return; }
+  stopClock();
+  // An upload is another asset: it is revealed from its own photograph too.
+  S.view = 0;
+  for (const radio of viewRadios) { radio.checked = radio.value === '0'; }
+  if (uploadUrl) { URL.revokeObjectURL(uploadUrl); }
+  uploadUrl = URL.createObjectURL(file);
+  try {
+    await run(new Uint8Array(await file.arrayBuffer()), 'upload:' + file.name, uploadUrl);
+  } catch (err) {
+    setState(err.state || 'error', err.message);
+    out.hidden = true;
+  }
+});
+
+/* ── the calls ─────────────────────────────────────────────────────── */
+
+/* encode re-encodes the bounded canvas as JPEG, stepping the quality down until
+ * the bytes fit under the sandbox's cap: a dense photograph can exceed 256 KiB
+ * at the quality the gallery keeps, and a refusal would cost the whole figure. */
+function encode(canvas) {
+  const qualities = [0.85, 0.7, 0.55, 0.45, 0.35];
+  const attempt = (i) => new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error('could not read the image')); return; }
+      if (blob.size <= MAX_IMAGE_BYTES || i === qualities.length - 1) { resolve(blob); return; }
+      resolve(attempt(i + 1));
+    }, 'image/jpeg', qualities[i]);
+  });
+  return attempt(0);
+}
+
+/* Downscale to a bounded JPEG before the bytes leave the browser, and keep the
+ * decoded element: the field samples its pixels. The long edge is 768 because
+ * the particle count is the photograph's own pixel count. */
+function bounded(bytes) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([bytes]));
+    const img = new Image();
+    img.onload = () => {
+      // The bitmap is decoded into the element, so the object URL has done its
+      // job: revoking it here is what kept a hover's lookups from leaking one.
+      URL.revokeObjectURL(url);
+      const scale = MAX_EDGE / Math.max(img.width, img.height);
+      let w = Math.max(1, Math.round(img.width * scale));
+      let h = Math.max(1, Math.round(img.height * scale));
+      if (w * h > MAX_PARTICLES) {
+        const shrink = Math.sqrt(MAX_PARTICLES / (w * h));
+        w = Math.max(1, Math.floor(w * shrink));
+        h = Math.max(1, Math.floor(h * shrink));
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const pixels = ctx.getImageData(0, 0, w, h).data;
+      encode(canvas).then((blob) => {
+        blob.arrayBuffer().then((buffer) => {
+          resolve({ bytes: new Uint8Array(buffer), image: img, width: w, height: h, pixels });
+        });
+      }, reject);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('that file is not an image the browser can read')); };
+    img.src = url;
+  });
+}
+
+function percentiles(values) {
+  const sorted = Array.from(values).sort((a, b) => a - b);
+  const at = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
+  return [at(0.01), at(0.99)];
+}
+
+async function run(raw, key, src) {
+  g.begin();
+  setState('running');
+  out.hidden = true;
+  try {
+    const boundedImage = await bounded(raw);
+    const featuresShape = await g.imageShape(FEATURES);
+    const depthShape = await g.imageShape(DEPTH);
+    const gridShape = featuresShape.patches;
+    const mapShape = depthShape.depth;
+    if (!gridShape || !gridShape.rows || !gridShape.dim) {
+      throw new Error('the model declares no patch grid');
+    }
+    if (!mapShape || !mapShape.rows || !mapShape.dim) {
+      throw new Error('the depth model declares no map');
+    }
+    const grid = gridShape.grid || Math.round(Math.sqrt(gridShape.rows));
+    if (grid * grid !== gridShape.rows) {
+      throw new Error('the declared grid of ' + grid + ' × ' + grid + ' does not hold ' + gridShape.rows + ' patches');
+    }
+    // The reply is only drawable if its element count is the shape the server
+    // declared: a number the page did not read is a number it cannot print.
+    const expect = (value, shape, what) => {
+      if (!value || !value.data) { throw new Error('the sandbox returned no ' + what); }
+      if (value.count !== shape.rows * shape.dim) {
+        throw new Error('the ' + what + ' carries ' + value.count + ' numbers, but the model declares ' +
+          shape.rows + ' of ' + shape.dim);
+      }
+      return value.data;
+    };
+    const features = await g.image(FEATURES, ['embedding', 'patches'], boundedImage.bytes);
+    const patches = expect(features.values.patches, gridShape, 'patch grid');
+    const depthReply = await g.image(DEPTH, ['depth'], boundedImage.bytes);
+    const map = expect(depthReply.values.depth, mapShape, 'depth map');
+
+    S.rows = gridShape.rows;
+    S.dim = gridShape.dim;
+    S.grid = grid;
+    S.patches = patches;
+    S.cls = features.values.embedding ? features.values.embedding.data : null;
+    S.depthRows = mapShape.rows;
+    S.depthDim = mapShape.dim;
+    S.depth = map;
+    S.depthRange = percentiles(map);
+    S.depthRank = depthRankMap(map, S.depthRange);
+    S.width = boundedImage.width;
+    S.height = boundedImage.height;
+    S.colors = boundedImage.pixels;
+    S.photo = boundedImage.image;
+    S.id = idFrom(key);
+    S.slopes = buildSlopes();
+    buildPatchStats();
+    elapsedFeatures = features.elapsed_us;
+    elapsedDepth = depthReply.elapsed_us;
+
+    buildReconstruction();
+
+    preview.src = src;
+    root.style.setProperty('--aspect', String(S.width / S.height));
+    colInput.max = String(grid - 1);
+    rowInput.max = String(grid - 1);
+    out.hidden = false;
+    await setupScene();
+    select(Math.floor(grid / 2) * grid + Math.floor(grid / 2), false);
+    applyLook(S.view === 0 ? 0 : 1, S.view === 2 ? 1 : 0, S.view === 0 ? 0 : 1);
+    applyMode();
+    // The ready line states what the run did that the readout does not: the
+    // picture was resampled and re-encoded in this tab before it was sent, and
+    // those bytes are all either call ever saw.
+    stateEl.textContent = 'ready — the photograph resampled to ' + S.width + ' × ' + S.height +
+      ' px and re-encoded as JPEG here; those bytes are everything either call saw';
+
+    // A repeat of the same bytes is the server's cache, and the only honest way
+    // to say so is to measure it: an answer an order of magnitude faster than
+    // this image's first call is a lookup, not an inference.
+    const first = firstCalls.get(key) || {};
+    featuresCached = Boolean(first.features) && elapsedFeatures * 10 < first.features;
+    depthCached = Boolean(first.depth) && elapsedDepth * 10 < first.depth;
+    if (!first.features) { first.features = elapsedFeatures; }
+    if (!first.depth) { first.depth = elapsedDepth; }
+    firstCalls.set(key, first);
+    drawReadout();
+
+    const figure = (name, text) => {
+      const node = document.querySelector(name);
+      if (node) { node.textContent = text; }
+    };
+    figure('[data-fig-rows]', String(S.rows));
+    figure('[data-fig-dim]', String(S.dim));
+    figure('[data-fig-depth]', S.depthRows + '×' + S.depthDim);
+    // The plate's caption writes its numbers the way its markup does, in groups
+    // of three held together by a non-breaking space, not the readout's commas.
+    figure('[data-fig-bytes]', String(S.rows * S.dim * 4).replace(/\B(?=(\d{3})+$)/g, '\u00a0'));
+
+    const own = buttonFor(S.id);
+    pictures.set(S.id, {
+      id: S.id,
+      rows: S.rows,
+      dim: S.dim,
+      patches: S.patches,
+      cls: S.cls,
+      src,
+      title: own ? own.dataset.name : 'this picture'
+    });
+    answer();
+
+    // The plate reveals every asset by itself: the new field is drawn as its own
+    // photograph and the depth then arrives on the clock. A reader who moved to
+    // another state during the run keeps that state.
+    syncCue();
+    if (S.view === 0) { reveal(); }
+  } catch (err) {
+    setState(err.state || 'error', err.message);
+    out.hidden = true;
+    return null;
+  } finally {
+    unfold(root, g.trace());
+  }
+}
+
+/* The samples ship with the page. Each is fetched, bounded, and sent as bytes
+ * for the two calls; nothing is stored. */
+async function sample(btn) {
+  const url = btn.getAttribute('data-sample');
+  sampleButtons.forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  stopClock();
+  // Every asset is revealed from its own photograph: a switch starts the
+  // sequence again instead of inheriting the surface the last one left.
+  S.view = 0;
+  for (const radio of viewRadios) { radio.checked = radio.value === '0'; }
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) { throw new Error('the sample could not be loaded'); }
+    await run(new Uint8Array(await resp.arrayBuffer()), url, url);
+  } catch (err) {
+    setState(err.state || 'error', err.message);
+    out.hidden = true;
+  }
+}
+
+sampleButtons.forEach((btn) => { btn.dataset.name = btn.getAttribute('title') || sampleId(btn); });
+sampleButtons.forEach((btn) => btn.addEventListener('click', async () => {
+  const id = sampleId(btn);
+  if (id === S.id) { return; }
+  const cell = Number(btn.dataset.cell);
+  history.replaceState(null, '', '#' + id);
+  await sample(btn);
+  // The strip is the plate's climax: a tile opens that photograph at the cell
+  // the model chose, when a patch was pinned to choose it.
+  if (S.id === id && Number.isInteger(cell) && cell >= 0) { select(cell, true); answer(); }
+}));
+
+window.addEventListener('hashchange', () => {
+  const btn = buttonFor(decodeURIComponent(location.hash.slice(1)));
+  if (btn) { sample(btn); }
+});
+
+const chosen = buttonFor(decodeURIComponent(location.hash.slice(1))) || sampleButtons[0];
+if (chosen) { sample(chosen); }
+</script>
+<script src="../assets/js/nav.js" defer></script>
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>

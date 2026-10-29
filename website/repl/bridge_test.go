@@ -21,6 +21,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // fakeEmb is a minimal RESP listener: enough of emb's surface for the bridge's
@@ -35,6 +36,7 @@ type fakeEmb struct {
 	mu    sync.Mutex
 	seen  [][]string
 	conns []net.Conn
+	proto int // the version the last HELLO negotiated, so a reply matches it
 }
 
 func startFakeEmb(t *testing.T) *fakeEmb {
@@ -169,8 +171,14 @@ func (f *fakeEmb) reply(args []string) []byte {
 	switch name {
 	case "hello":
 		if len(args) > 1 && args[1] == "3" {
+			f.mu.Lock()
+			f.proto = 3
+			f.mu.Unlock()
 			return []byte("%4\r\n$6\r\nserver\r\n$5\r\nredis\r\n$5\r\nproto\r\n:3\r\n$4\r\nmode\r\n$10\r\nstandalone\r\n$4\r\nrole\r\n$6\r\nmaster\r\n")
 		}
+		f.mu.Lock()
+		f.proto = 2
+		f.mu.Unlock()
 		return []byte("*2\r\n$5\r\nproto\r\n:2\r\n")
 	case "ping":
 		return []byte("+PONG\r\n")
@@ -184,6 +192,18 @@ func (f *fakeEmb) reply(args []string) []byte {
 		return bulkReply(blob())
 	case "emb.multi":
 		return append([]byte("*2\r\n"), append(bulkReply(blob()), bulkReply(blob())...)...)
+	case "emb.img":
+		// Both values' bytes are valid UTF-8 on purpose: binary-ness must follow
+		// from the command's BLOB, never from a UTF-8 probe over the payload. The
+		// reply's shape follows the negotiated version: RESP3's map, RESP2's flat
+		// pairs.
+		f.mu.Lock()
+		proto := f.proto
+		f.mu.Unlock()
+		if proto == 3 {
+			return []byte("%2\r\n$9\r\nembedding\r\n$8\r\n01234567\r\n$7\r\npatches\r\n$8\r\nabcdefgh\r\n")
+		}
+		return []byte("*4\r\n$9\r\nembedding\r\n$8\r\n01234567\r\n$7\r\npatches\r\n$8\r\nabcdefgh\r\n")
 	case "emb.evsha":
 		return []byte("%3\r\n$5\r\nlabel\r\n$8\r\nPOSITIVE\r\n$10\r\nconfidence\r\n,0.99\r\n$6\r\nscores\r\n*2\r\n,0.01\r\n,0.99\r\n")
 	case "emb.models":
@@ -386,38 +406,48 @@ func TestProtocolIsNegotiatedPerRequest(t *testing.T) {
 
 func TestValidateArgvRefusesOutsideSurface(t *testing.T) {
 	p := presets{"sst2": {"gooddigest": "classify"}}
+	framed := func(extra ...string) []string {
+		return append([]string{"EMB.IMG", "dinov3", "BLOB"}, extra...)
+	}
 	for _, tc := range []struct {
 		name string
 		args []string
+		bin  map[int]bool
 	}{
-		{"configuration", []string{"CONFIG", "SET", "cache", "1GB"}},
-		{"credentials", []string{"AUTH", "hunter2"}},
-		{"traffic stream", []string{"MONITOR"}},
-		{"shutdown", []string{"SHUTDOWN"}},
-		{"persistence", []string{"EMB.SAVE"}},
-		{"cache mutation", []string{"EMB.CACHE.FLUSH"}},
-		{"script load", []string{"EMB.SCRIPT", "LOAD", "minilm", "return 1"}},
-		{"script flush", []string{"EMB.SCRIPT", "FLUSH"}},
-		{"raw lua", []string{"EMB.EVAL", "minilm", "return 1", "1", "hi"}},
-		{"image decode", []string{"EMB.IMG", "minilm", "aGk="}},
-		{"image multi", []string{"EMB.IMGMULTI", "minilm", "aGk="}},
-		{"unknown", []string{"FLUSHALL"}},
+		{"configuration", []string{"CONFIG", "SET", "cache", "1GB"}, nil},
+		{"credentials", []string{"AUTH", "hunter2"}, nil},
+		{"traffic stream", []string{"MONITOR"}, nil},
+		{"shutdown", []string{"SHUTDOWN"}, nil},
+		{"persistence", []string{"EMB.SAVE"}, nil},
+		{"cache mutation", []string{"EMB.CACHE.FLUSH"}, nil},
+		{"script load", []string{"EMB.SCRIPT", "LOAD", "minilm", "return 1"}, nil},
+		{"script flush", []string{"EMB.SCRIPT", "FLUSH"}, nil},
+		{"raw lua", []string{"EMB.EVAL", "minilm", "return 1", "1", "hi"}, nil},
+		{"image decode", []string{"EMB.IMG", "minilm", "aGk="}, nil},
+		{"image multi", []string{"EMB.IMGMULTI", "minilm", "aGk="}, nil},
+		{"image other model", []string{"EMB.IMG", "minilm", "BLOB", "aGk="}, nil},
+		{"image values", []string{"EMB.IMG", "dinov3", "VALUES", ""}, map[int]bool{3: true}},
+		{"image unknown output", framed("OUTPUTS", "nope", ""), map[int]bool{4: true}},
+		{"image two images", framed("", ""), map[int]bool{3: true, 4: true}},
+		{"image not binary", framed("aGk="), nil},
+		{"image no image", framed(), nil},
+		{"unknown", []string{"FLUSHALL"}, nil},
 		// Widened permitted commands.
-		{"models widened", []string{"EMB.MODELS", "extra"}},
-		{"info widened", []string{"EMB.INFO", "minilm", "extra"}},
-		{"info missing model", []string{"EMB.INFO"}},
-		{"ping widened", []string{"PING", "a", "b"}},
-		{"hello wrong version", []string{"HELLO", "4"}},
-		{"emb without text", []string{"EMB", "minilm"}},
-		{"emb values without text", []string{"EMB", "minilm", "VALUES"}},
-		{"emb.multi odd pairs", []string{"EMB.MULTI", "minilm", "a", "bge"}},
-		{"emb.multi no pairs", []string{"EMB.MULTI", "minilm"}},
-		{"evsha unknown digest", []string{"EMB.EVSHA", "sst2", "baddigest", "1", "hi"}},
-		{"evsha zero texts", []string{"EMB.EVSHA", "sst2", "gooddigest", "0"}},
-		{"evsha short texts", []string{"EMB.EVSHA", "sst2", "gooddigest", "2", "one"}},
+		{"models widened", []string{"EMB.MODELS", "extra"}, nil},
+		{"info widened", []string{"EMB.INFO", "minilm", "extra"}, nil},
+		{"info missing model", []string{"EMB.INFO"}, nil},
+		{"ping widened", []string{"PING", "a", "b"}, nil},
+		{"hello wrong version", []string{"HELLO", "4"}, nil},
+		{"emb without text", []string{"EMB", "minilm"}, nil},
+		{"emb values without text", []string{"EMB", "minilm", "VALUES"}, nil},
+		{"emb.multi odd pairs", []string{"EMB.MULTI", "minilm", "a", "bge"}, nil},
+		{"emb.multi no pairs", []string{"EMB.MULTI", "minilm"}, nil},
+		{"evsha unknown digest", []string{"EMB.EVSHA", "sst2", "baddigest", "1", "hi"}, nil},
+		{"evsha zero texts", []string{"EMB.EVSHA", "sst2", "gooddigest", "0"}, nil},
+		{"evsha short texts", []string{"EMB.EVSHA", "sst2", "gooddigest", "2", "one"}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateArgv(tc.args, p)
+			err := validateArgv(tc.args, p, tc.bin)
 			if err == nil {
 				t.Fatalf("validateArgv(%v) = nil, want a refusal", tc.args)
 			}
@@ -433,7 +463,7 @@ func TestValidateArgvRefusesOutsideSurface(t *testing.T) {
 // The sandbox now persists its own warm cache, so the EMB.SAVE refusal must
 // describe who may trigger a write rather than claiming nothing is kept.
 func TestEmbSaveRefusalNamesTheBoundaryNotStatelessness(t *testing.T) {
-	err := validateArgv([]string{"EMB.SAVE"}, nil)
+	err := validateArgv([]string{"EMB.SAVE"}, nil, nil)
 	if err == nil {
 		t.Fatal("EMB.SAVE was not refused")
 	}
@@ -447,27 +477,37 @@ func TestEmbSaveRefusalNamesTheBoundaryNotStatelessness(t *testing.T) {
 
 func TestValidateArgvPermitsSurface(t *testing.T) {
 	p := presets{"sst2": {"gooddigest": "classify"}}
-	for _, args := range [][]string{
-		{"PING"},
-		{"PING", "hello"},
-		{"HELLO", "3"},
-		{"HELLO"},
-		{"INFO"},
-		{"INFO", "server"},
-		{"EMB.MODELS"},
-		{"EMB.STATS"},
-		{"EMB.READY"},
-		{"EMB.HELP"},
-		{"EMB.HELP", "EMB"},
-		{"EMB.INFO", "minilm"},
-		{"EMB", "minilm", "hello world"},
-		{"EMB", "minilm", "VALUES", "hello world"},
-		{"EMB.MULTI", "minilm", "a", "sst2", "b"},
-		{"EMB.MULTI", "VALUES", "minilm", "a", "sst2", "b"},
-		{"EMB.EVSHA", "sst2", "gooddigest", "1", "this is great", "NEGATIVE", "POSITIVE"},
+	image := map[int]bool{3: true}
+	imageOutputs := map[int]bool{5: true}
+	for _, tc := range []struct {
+		args []string
+		bin  map[int]bool
+	}{
+		{[]string{"PING"}, nil},
+		{[]string{"PING", "hello"}, nil},
+		{[]string{"HELLO", "3"}, nil},
+		{[]string{"HELLO"}, nil},
+		{[]string{"INFO"}, nil},
+		{[]string{"INFO", "server"}, nil},
+		{[]string{"EMB.MODELS"}, nil},
+		{[]string{"EMB.STATS"}, nil},
+		{[]string{"EMB.READY"}, nil},
+		{[]string{"EMB.HELP"}, nil},
+		{[]string{"EMB.HELP", "EMB"}, nil},
+		{[]string{"EMB.INFO", "minilm"}, nil},
+		{[]string{"EMB", "minilm", "hello world"}, nil},
+		{[]string{"EMB", "minilm", "VALUES", "hello world"}, nil},
+		{[]string{"EMB.MULTI", "minilm", "a", "sst2", "b"}, nil},
+		{[]string{"EMB.MULTI", "VALUES", "minilm", "a", "sst2", "b"}, nil},
+		{[]string{"EMB.EVSHA", "sst2", "gooddigest", "1", "this is great", "NEGATIVE", "POSITIVE"}, nil},
+		{[]string{"EMB.IMG", "dinov3", "BLOB", "<bytes>"}, image},
+		{[]string{"EMB.IMG", "dinov3", "blob", "OUTPUTS", "embedding,patches", "<bytes>"}, imageOutputs},
+		{[]string{"EMB.IMG", "DINOV3", "BLOB", "OUTPUTS", "patches", "<bytes>"}, imageOutputs},
+		{[]string{"EMB.IMG", "depth", "BLOB", "<bytes>"}, image},
+		{[]string{"EMB.IMG", "depth", "BLOB", "OUTPUTS", "depth", "<bytes>"}, imageOutputs},
 	} {
-		if err := validateArgv(args, p); err != nil {
-			t.Fatalf("validateArgv(%v) = %v, want permitted", args, err)
+		if err := validateArgv(tc.args, p, tc.bin); err != nil {
+			t.Fatalf("validateArgv(%v) = %v, want permitted", tc.args, err)
 		}
 	}
 }
@@ -479,6 +519,106 @@ func TestExecuteRefusalNeverReachesTheServer(t *testing.T) {
 	env, status := mustExec(t, b, []string{"CONFIG", "SET", "cache", "1GB"}, 2)
 	if env.Kind != kindError || env.Code != codeRefused || status != http.StatusOK {
 		t.Fatalf("refusal = %+v (status %d), want a refused error envelope at 200", env, status)
+	}
+	if got := f.received(); len(got) != 0 {
+		t.Fatalf("server received %v, want nothing", got)
+	}
+}
+
+// A patch grid can be valid UTF-8 by accident. The image command's values must
+// still arrive as bytes because the command asked for BLOB, not because a UTF-8
+// probe happened to fail — and the reply's names stay text in both protocols.
+func TestImageReplyIsBinaryByCommandNotByBytes(t *testing.T) {
+	f := startFakeEmb(t)
+	b := newTestBridge(t, f.addr(), presets{}, testLimits())
+
+	for _, proto := range []int{3, 2} {
+		t.Run("proto "+strconv.Itoa(proto), func(t *testing.T) {
+			env, status := b.execute([]string{"EMB.IMG", "dinov3", "BLOB", "OUTPUTS", "embedding,patches", string([]byte{0xff, 0xd8})}, proto, "test-client", map[int]bool{5: true})
+			if status != http.StatusOK {
+				t.Fatalf("image reply status = %d, want 200", status)
+			}
+			wantKind := kindMap
+			if proto == 2 {
+				wantKind = kindArray
+			}
+			if env.Kind != wantKind {
+				t.Fatalf("image reply kind = %q, want %q", env.Kind, wantKind)
+			}
+			if len(env.Elems) != 4 {
+				t.Fatalf("image reply has %d elements, want two name/value pairs", len(env.Elems))
+			}
+			names := []string{"embedding", "patches"}
+			for i, name := range names {
+				key, value := env.Elems[i*2], env.Elems[i*2+1]
+				if key.Kind != kindBulk || key.Text != name || key.B64 != "" {
+					t.Fatalf("pair %d name = %+v, want the text name %q", i, key, name)
+				}
+				if value.Kind != kindBulk || value.Text != "" {
+					t.Fatalf("pair %d value = %+v, want bytes rather than text", i, value)
+				}
+				raw, err := base64.StdEncoding.DecodeString(value.B64)
+				if err != nil {
+					t.Fatalf("pair %d value is not base64: %v", i, err)
+				}
+				if !utf8.Valid(raw) {
+					t.Fatalf("fixture is not valid UTF-8, so the test cannot prove the command decides")
+				}
+				if value.Vector == nil || value.Vector.Dtype != "float32" || value.Vector.Count != len(raw)/4 {
+					t.Fatalf("pair %d descriptor = %+v, want float32 × %d", i, value.Vector, len(raw)/4)
+				}
+			}
+		})
+	}
+}
+
+// The image command costs one work unit — the same as the image preset — and its
+// binary argument is bounded by the image cap, not the 2 KiB text cap.
+func TestImageCommandCostsOneWorkUnitAndSkipsTheTextCap(t *testing.T) {
+	b := newTestBridge(t, "127.0.0.1:1", presets{}, testLimits())
+	img := string(bytes.Repeat([]byte{0x89}, 4096))
+	args := []string{"EMB.IMG", "dinov3", "BLOB", img}
+
+	if got := textsIn(args); got != 1 {
+		t.Fatalf("textsIn(image) = %d, want one work unit", got)
+	}
+	if _, err := b.lim.chargeShape(args, map[int]bool{3: true}); err != nil {
+		t.Fatalf("binary image hit the text cap: %v", err)
+	}
+	if _, err := b.lim.chargeShape(args, nil); err == nil {
+		t.Fatal("the same bytes as text were not refused, so the cap test proves nothing")
+	}
+}
+
+// Every widening of the image shape is refused before the server sees a byte.
+func TestWidenedImageCommandNeverReachesTheServer(t *testing.T) {
+	f := startFakeEmb(t)
+	b := newTestBridge(t, f.addr(), presets{}, testLimits())
+	img := string(bytes.Repeat([]byte{0x89}, 8))
+	for _, tc := range []struct {
+		name string
+		args []string
+		bin  map[int]bool
+	}{
+		{"values", []string{"EMB.IMG", "dinov3", "VALUES", img}, map[int]bool{3: true}},
+		{"other model", []string{"EMB.IMG", "minilm", "BLOB", img}, map[int]bool{3: true}},
+		{"third model", []string{"EMB.IMG", "clip", "BLOB", img}, map[int]bool{3: true}},
+		{"two images", []string{"EMB.IMG", "dinov3", "BLOB", img, img}, map[int]bool{3: true, 4: true}},
+		{"unknown output", []string{"EMB.IMG", "dinov3", "BLOB", "OUTPUTS", "logits", img}, map[int]bool{5: true}},
+		{"depth asked for a patch grid", []string{"EMB.IMG", "depth", "BLOB", "OUTPUTS", "patches", img}, map[int]bool{5: true}},
+		{"dinov3 asked for a map", []string{"EMB.IMG", "dinov3", "BLOB", "OUTPUTS", "depth", img}, map[int]bool{5: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, status := b.execute(tc.args, 3, "test-client", tc.bin)
+			if env.Kind != kindError || env.Code != codeRefused || status != http.StatusOK {
+				t.Fatalf("%s = %+v (status %d), want a refused error envelope at 200", tc.name, env, status)
+			}
+			for _, want := range []string{"sandbox permits only", "EMB.IMG"} {
+				if !strings.Contains(env.Text, want) {
+					t.Fatalf("%s refusal %q does not name the surface (missing %q)", tc.name, env.Text, want)
+				}
+			}
+		})
 	}
 	if got := f.received(); len(got) != 0 {
 		t.Fatalf("server received %v, want nothing", got)
@@ -1130,10 +1270,27 @@ func TestDecodeBinaryOnlyForAllowlistedPresets(t *testing.T) {
 			t.Fatal("binary accepted for a text preset")
 		}
 	})
+	t.Run("a widened image command names the one shape", func(t *testing.T) {
+		values := []string{"EMB.IMG", "dinov3", "VALUES", encoded}
+		_, _, err := b.decodeBinary(execRequest{Args: values, Bin: []int{3}})
+		if err == nil || !strings.Contains(err.Error(), "EMB.IMG accepts only") {
+			t.Fatalf("widened image err = %v, want the image shape named", err)
+		}
+	})
 	t.Run("not a preset command", func(t *testing.T) {
 		raw := []string{"EMB.IMG", "clip", encoded}
 		if _, _, err := b.decodeBinary(execRequest{Args: raw, Bin: []int{2}}); err == nil {
 			t.Fatal("binary accepted for a non-preset command")
+		}
+	})
+	t.Run("the framed image command is admitted", func(t *testing.T) {
+		framed := []string{"EMB.IMG", "dinov3", "BLOB", encoded}
+		got, bin, err := b.decodeBinary(execRequest{Args: framed, Bin: []int{3}})
+		if err != nil {
+			t.Fatalf("framed image refused: %v", err)
+		}
+		if !bytes.Equal([]byte(got[3]), img) || !bin[3] {
+			t.Fatal("framed image was not decoded back to raw bytes")
 		}
 	})
 	t.Run("over the image cap", func(t *testing.T) {

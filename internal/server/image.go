@@ -111,6 +111,23 @@ func selectImageOutputs(configured []registry.ImageOutput, names []string) ([]re
 	return selected, nil
 }
 
+// mapUnderValues refuses a map output asked for as VALUES. A map is a 2-D
+// tensor with one number per element — 70 756 of them for a 266-pixel depth
+// map — so its only reply form is the packed float32 bulk. The check runs
+// before the cache and before any inference, so a refused request costs
+// nothing.
+func mapUnderValues(format replyFormat, outputs []registry.ImageOutput) error {
+	if format != formatVALUES {
+		return nil
+	}
+	for _, o := range outputs {
+		if o.Select == "map" {
+			return fmt.Errorf("image output %q is a map; request it with BLOB (%d float32 values)", o.Name, o.Rows*o.Dim)
+		}
+	}
+	return nil
+}
+
 // handleIMG implements EMB.IMG <model> [BLOB|VALUES] [OUTPUTS <name>[,...]]
 // <bytes> [<bytes>...]. Each trailing argument is the raw encoded content of an
 // image; the reply is one map from output name to value per image (a map of
@@ -174,6 +191,11 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	}
 	outputs, err := selectImageOutputs(res.Outputs, kw.names)
 	if err != nil {
+		failed = true
+		conn.WriteError(fmt.Sprintf("ERR %v", err))
+		return
+	}
+	if err := mapUnderValues(kw.format, outputs); err != nil {
 		failed = true
 		conn.WriteError(fmt.Sprintf("ERR %v", err))
 		return
@@ -455,6 +477,13 @@ func (s *Server) handleIMGMULTI(conn redcon.Conn, cmd redcon.Command) {
 		}
 	}
 
+	// A map under VALUES is the command's refusal, not one slot's: it is decided
+	// before any pair is inferred, so a client learns the reply form to use.
+	if err := s.mapUnderValuesPairs(pairs, kw); err != nil {
+		conn.WriteError(fmt.Sprintf("ERR %v", err))
+		return
+	}
+
 	total := len(pairs) / 2
 	n := total
 	if limit := s.maxImages.Load(); limit > 0 && int64(n) > limit {
@@ -485,6 +514,34 @@ func (s *Server) handleIMGMULTI(conn redcon.Conn, cmd redcon.Command) {
 	wg.Wait()
 
 	writeIMGMULTIResult(conn, kw.format, pairs, pairOutputs, results, n, total)
+}
+
+// mapUnderValuesPairs applies mapUnderValues to every pair's projection: each
+// pair may target a different model, so the refusal depends on that model's
+// configured outputs. A pair that would fail on its own path — an unknown model,
+// no image block, an unknown output name — is left to fail there.
+func (s *Server) mapUnderValuesPairs(pairs [][]byte, kw imageKeywords) error {
+	if kw.format != formatVALUES {
+		return nil
+	}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		entry, err := s.reg.Resolve(string(pairs[i]))
+		if err != nil {
+			continue
+		}
+		res, err := entry.ImageResources()
+		if err != nil || res == nil {
+			continue
+		}
+		outputs, err := selectImageOutputs(res.Outputs, kw.names)
+		if err != nil {
+			continue
+		}
+		if err := mapUnderValues(kw.format, outputs); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) processIMGMultiPair(pairs [][]byte, names []string, results []map[string][]byte, pairOutputs [][]registry.ImageOutput, idx int) {

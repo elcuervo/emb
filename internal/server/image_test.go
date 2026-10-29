@@ -153,6 +153,20 @@ func serveImage(t *testing.T, cacheConfig string, opts ...Option) (string, *Serv
 	}
 	reg.Add("textonly", &registry.ModelEntry{Name: "textonly", Dim: testImageDim})
 
+	// depthlike carries a 2-D map output: rows×cols one image, whose only reply
+	// form is the packed float32 bulk.
+	depth := &fakeImageSession{dim: testImageDim, tensors: []fakeTensorSpec{{name: "predicted_depth", rows: 2}}}
+	sessions["depthlike"] = depth
+	reg.Add("depthlike", &registry.ModelEntry{
+		Name: "depthlike",
+		Dim:  testImageDim,
+		ImageRes: &registry.ImageResources{
+			Sessions: []onnx.NamedSession{depth},
+			Plan:     testImagePlan(4),
+			Outputs:  []registry.ImageOutput{{Name: "depth", Tensor: "predicted_depth", Select: "map", Rows: 2, Dim: testImageDim}},
+		},
+	})
+
 	addr := getFreeAddr()
 	srv := New(addr, reg, "", cacheConfig, nil, opts...)
 	go srv.ListenAndServe()
@@ -851,6 +865,36 @@ func serveImageMulti(t *testing.T, cacheConfig string) (string, *Server, map[str
 	t.Cleanup(func() { srv.Close() })
 	time.Sleep(50 * time.Millisecond)
 	return addr, srv, sessions
+}
+
+// TestEMBIMGMapRefusesValues proves a map output's only reply form is the
+// packed bulk: a VALUES request is refused before the cache or a session run, for
+// both image commands, and the refusal names the form to use.
+func TestEMBIMGMapRefusesValues(t *testing.T) {
+	addr, _, sessions := serveImage(t, "")
+	png := solidImagePNG(t, color.NRGBA{R: 9, A: 255})
+
+	for _, args := range [][]string{
+		{"EMB.IMG", "depthlike", "VALUES", png},
+		{"EMB.IMGMULTI", "VALUES", "depthlike", png},
+	} {
+		tok := redisCmd(t, addr, args...)
+		if tok.kind != "error" {
+			t.Fatalf("%s VALUES = %#v, want an error refusing the map", args[0], tok)
+		}
+		if msg, _ := tok.val.(string); !strings.Contains(msg, "BLOB") {
+			t.Fatalf("%s VALUES error = %q, want it to name BLOB", args[0], msg)
+		}
+	}
+	if got := sessions["depthlike"].callCount(); got != 0 {
+		t.Fatalf("the refused map ran %d session(s), want none", got)
+	}
+
+	// BLOB is the form: rows×cols float32, no envelope.
+	blob := imageValueOf(t, redisCmd(t, addr, "EMB.IMG", "depthlike", "BLOB", png), "depth")
+	if len(blob) != 2*testImageDim*4 {
+		t.Fatalf("map blob = %d bytes, want %d", len(blob), 2*testImageDim*4)
+	}
 }
 
 // TestEMBIMGPartialCacheMissIsNull proves a failed miss cannot leave the map a

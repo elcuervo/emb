@@ -727,3 +727,88 @@ func TestImageResourcesTokenGridValidation(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveImageOutputsMap covers the map selector: a rank-3 or rank-4 2-D
+// tensor resolves to the configured edge, and the fields that describe token
+// rows are refused with it rather than silently ignored.
+func TestResolveImageOutputsMap(t *testing.T) {
+	info := map[string]onnx.OutputInfo{
+		"rank3_map": {Name: "rank3_map", Rank: 3, Dim: 32},
+		"rank4_map": {Name: "rank4_map", Rank: 4, Dim: 32},
+		"rank2_map": {Name: "rank2_map", Rank: 2, Dim: 32},
+		"narrow":    {Name: "narrow", Rank: 3, Dim: 16},
+	}
+	resolve := func(o config.ImageOutputConfig) ([]ImageOutput, error) {
+		return resolveImageOutputs(imageOutputFixture(o), "m", 32, imagePreset{}, false, info, modelImageMetadata{})
+	}
+	outs, err := resolve(config.ImageOutputConfig{Name: "depth", Tensor: "rank3_map", Select: "map"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outs[0].Select != "map" || outs[0].Rows != 32 || outs[0].Dim != 32 || outs[0].Grid != 0 || outs[0].Start != 0 {
+		t.Fatalf("map output = %+v, want 32×32 with no grid/start", outs[0])
+	}
+	if _, err := resolve(config.ImageOutputConfig{Name: "depth", Tensor: "rank4_map", Select: "map"}); err != nil {
+		t.Fatalf("rank-4 map refused: %v", err)
+	}
+	start := 1
+	for _, tc := range []struct {
+		name string
+		o    config.ImageOutputConfig
+		want string
+	}{
+		{"rank 2", config.ImageOutputConfig{Name: "depth", Tensor: "rank2_map", Select: "map"}, "selects map from a rank-2 tensor"},
+		{"start", config.ImageOutputConfig{Name: "depth", Tensor: "rank3_map", Select: "map", Start: &start}, "no start or grid"},
+		{"grid", config.ImageOutputConfig{Name: "depth", Tensor: "rank3_map", Select: "map", Grid: 2}, "no start or grid"},
+		{"width", config.ImageOutputConfig{Name: "depth", Tensor: "narrow", Select: "map"}, "maps a width of 16"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := resolve(tc.o); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestExtractMapIsNeverNormalized proves the map path is a pure buffer export:
+// the model's normalization setting must not touch it, and a shape that
+// disagrees with the declared rows/dim is refused before a byte is read.
+func TestExtractMapIsNeverNormalized(t *testing.T) {
+	res := &ImageResources{Normalize: true}
+	src := []float32{3, -1, 0.5, 42, 0, -7}
+	blobs, err := res.extract(onnx.NamedTensor{Name: "depth", Shape: []int64{1, 2, 3}, Float: src}, 1,
+		ImageOutput{Name: "depth", Select: "map", Rows: 2, Dim: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blobs) != 1 || len(blobs[0]) != len(src)*4 {
+		t.Fatalf("blobs = %d × %d bytes, want 1 × %d", len(blobs), len(blobs[0]), len(src)*4)
+	}
+	for i, want := range src {
+		if got := math.Float32frombits(binary.LittleEndian.Uint32(blobs[0][i*4:])); got != want {
+			t.Fatalf("value %d = %v, want %v (map values must not be normalized)", i, got, want)
+		}
+	}
+	// A rank-4 map with a single channel axis flattens to the same bytes.
+	blobs4, err := res.extract(onnx.NamedTensor{Name: "depth", Shape: []int64{1, 1, 2, 3}, Float: src}, 1,
+		ImageOutput{Name: "depth", Select: "map", Rows: 2, Dim: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(blobs4[0]) != string(blobs[0]) {
+		t.Fatal("rank-3 and rank-4 maps produced different bytes")
+	}
+	// A shape that contradicts the declaration is refused (the width matches,
+	// the height does not, so the row count is what the check names).
+	_, err = res.extract(onnx.NamedTensor{Name: "depth", Shape: []int64{1, 3, 3}, Float: make([]float32, 9)}, 1,
+		ImageOutput{Name: "depth", Select: "map", Rows: 2, Dim: 3})
+	if err == nil || !strings.Contains(err.Error(), "3×3") {
+		t.Fatalf("mismatched map error = %v, want the shape named", err)
+	}
+	// A channel axis that is not 1 is refused rather than read.
+	_, err = res.extract(onnx.NamedTensor{Name: "depth", Shape: []int64{1, 3, 2, 3}, Float: make([]float32, 18)}, 1,
+		ImageOutput{Name: "depth", Select: "map", Rows: 2, Dim: 3})
+	if err == nil || !strings.Contains(err.Error(), "channels") {
+		t.Fatalf("multi-channel map error = %v, want the channel axis refused", err)
+	}
+}

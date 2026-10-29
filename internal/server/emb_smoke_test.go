@@ -1474,6 +1474,10 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 		begin := time.Now()
 		probe, err := embAsk(arm.addr, time.Now().Add(30*time.Second), "EMB", embModelName, short)
 		probeLatency := time.Since(begin)
+		// Sample the queue before draining it: once holder() and wide() return,
+		// every waiter has been admitted and the depth reads zero whatever the
+		// probe actually met.
+		afterProbe := embTake(t, arm.addr)
 		_, holderLatency, holderErr := holder()
 		wideReply, wideLatency, wideErr := wide()
 		after := embTake(t, arm.addr)
@@ -1491,7 +1495,7 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 		// probe reached the gate, the probe is measuring the wide run instead. A
 		// head still queued when the probe returned was parked for the whole probe,
 		// which is the state the property is about.
-		if after.waiters == 0 && probeLatency <= bound {
+		if afterProbe.waiters == 0 && probeLatency <= bound {
 			detail = fmt.Sprintf("attempt %d: the holder released before the probe reached the gate (probe %s)", attempt, probeLatency)
 			continue
 		}

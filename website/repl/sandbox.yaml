@@ -35,9 +35,10 @@ max_texts: 8
 max_pairs: 8
 max_command_bytes: 1048576
 
-# The image surface is enabled for one demo and bounded before decode: at most
-# two images per command, a quarter of a megabyte each on the wire, and one
-# megapixel of decoded pixels. The bridge enforces the same counts (see
+# The image surface is enabled for two plates — the preloaded zeroshot preset and
+# PLATE VII's own dense-features model — and bounded before decode: at most two
+# images per command (the plate sends one), a quarter of a megabyte each on the
+# wire, and one megapixel of decoded pixels. The bridge enforces the same counts (see
 # `Limits.MaxImages`/`MaxImageBytes`), and only the preloaded image preset may
 # carry a binary argument at all.
 max_images: 2
@@ -142,6 +143,62 @@ models:
     scripts:
       - presets/zeroshot.lua
       - presets/clip_text.lua
+
+  # The dense-features model behind PLATE VII. One run of this graph answers with
+  # two products: the pooled CLS vector (`pooler_output`) and the patch grid
+  # (`last_hidden_state` — 1 CLS + 4 registers + 196 patches at 224). The
+  # `dinov3` preset supplies preprocessing and token layout, and the export's own
+  # `config.json`/`preprocessor_config.json` pin the rest, so no constant is
+  # typed here that the model already ships. A DINOv3 export has no tokenizer:
+  # text commands on it fail by name, and loading does not need one.
+  #
+  # Cost: ~4.6 GMACs an image, and the CPU provider's dequantized copy of the
+  # int8 weights is ~90 MB resident — noise beside laya-real's ~2.3 GB. The
+  # bridge serializes requests, so intra-op threads are the only parallelism and
+  # the reason a cold call stays inside the bridge's deadline.
+  #
+  # Weights are under the DINOv3 License
+  # (https://ai.meta.com/resources/models-and-libraries/dinov3-license): the
+  # volume downloads them on first boot, and the repository ships none.
+  dinov3:
+    model_repo: onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX
+    workers: 1
+    onnx: /data/models/int8/dinov3/model.onnx
+    quantize: auto
+    intra_op_threads: 4
+    # Both products are unit vectors: the page draws cosines, and the plate's
+    # claim ("a dot product, because the server normalized every row") is only
+    # true with this on.
+    normalize: true
+    image:
+      preset: dinov3
+      outputs:
+        - name: embedding
+          tensor: pooler_output
+        - name: patches
+          tensor: last_hidden_state
+          select: tokens
+
+  # The depth half of PLATE VII: a real monocular depth model, because a dense
+  # feature map is not a depth map (docs/image-models.md). Depth Anything V2
+  # Small is Apache-2.0, 25M parameters; the int8 member is 27 MB on disk and
+  # ~100 MB resident once the CPU provider dequantizes it — noise beside
+  # laya-real. `size: 266` is 19 x 14, the export's multiple-of-14 rule, and it
+  # keeps one map at 283 024 B packed (377 KB base64) instead of the 518
+  # dialect's 1.43 MB. The map is relative depth; the page normalizes it.
+  depth:
+    model_repo: onnx-community/depth-anything-v2-small
+    workers: 1
+    onnx: /data/models/int8/depth/model.onnx
+    quantize: auto
+    intra_op_threads: 4
+    image:
+      preset: imagenet
+      size: 266
+      outputs:
+        - name: depth
+          tensor: predicted_depth
+          select: map
 
   # The real audio and video models: CLAP (text-audio) and X-CLIP (text-video),
   # each a pair of towers sharing one 512-d space. CLAP's text tower takes only

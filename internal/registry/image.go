@@ -25,17 +25,20 @@ type ImageOutput struct {
 	Name string
 	// Tensor is the graph output tensor it is read from.
 	Tensor string
-	// Select is the reduction: "none", "cls", "mean", or "tokens".
+	// Select is the reduction: "none", "cls", "mean", "tokens", or "map" (a
+	// 2-D tensor emitted flat, never normalized).
 	Select string
 	// Start is the first row of a "tokens" output (1 CLS + register tokens for
 	// a DINOv3-family export).
 	Start int
 	// Grid is the patch edge of a "tokens" output; Rows is grid*grid. Both are
-	// 0 for pooled outputs.
+	// 0 for pooled and map outputs.
 	Grid int
-	// Rows is how many vectors one image yields for this output.
+	// Rows is how many vectors one image yields for this output, or a map's
+	// height.
 	Rows int
-	// Dim is the output tensor's last dimension.
+	// Dim is the output tensor's last dimension: a row's width for tokens, a
+	// map's width for map.
 	Dim int
 }
 
@@ -283,6 +286,23 @@ func (r *ImageResources) extract(out onnx.NamedTensor, batch int, o ImageOutput)
 			masks[i] = 1
 		}
 		return pipeline.MeanPoolAndNormalize(out.Float, masks, dim, seq, batch, r.Normalize), nil
+	case "map":
+		var rows, cols int
+		switch rank {
+		case 3:
+			rows, cols = int(out.Shape[1]), int(out.Shape[2])
+		case 4:
+			if ch := int(out.Shape[1]); ch != 1 {
+				return nil, fmt.Errorf("image output %q maps %d channels, want 1", o.Name, ch)
+			}
+			rows, cols = int(out.Shape[2]), int(out.Shape[3])
+		default:
+			return nil, fmt.Errorf("image output %q selects map from a rank-%d tensor", o.Name, rank)
+		}
+		if rows != o.Rows || cols != o.Dim {
+			return nil, fmt.Errorf("image output %q is %d×%d, want %d×%d (image.size)", o.Name, rows, cols, o.Rows, o.Dim)
+		}
+		return pipeline.ExtractMap(out.Float, batch, o.Rows*o.Dim), nil
 	default: // "none": the graph already pooled the rows
 		return pipeline.ExtractPrePooled(out.Float, batch, dim, r.Normalize), nil
 	}
@@ -874,19 +894,30 @@ func resolveImageOutputs(cfg config.ModelConfig, name string, size int, preset i
 			}
 		}
 		switch select_ {
-		case "none", "cls", "mean", "tokens":
+		case "none", "cls", "mean", "tokens", "map":
 		default:
-			return nil, fmt.Errorf("model %q: image output %q has unknown select %q (want none|cls|mean|tokens)", name, oc.Name, select_)
+			return nil, fmt.Errorf("model %q: image output %q has unknown select %q (want none|cls|mean|tokens|map)", name, oc.Name, select_)
 		}
 
 		rank := int(oi.Rank)
-		if select_ == "none" && rank != 2 {
-			return nil, fmt.Errorf("model %q: image output %q selects none from a rank-%d tensor (want a pre-pooled rank-2 tensor or select cls|mean|tokens)",
-				name, oc.Name, rank)
-		}
-		if select_ != "none" && rank != 3 {
-			return nil, fmt.Errorf("model %q: image output %q selects %s from a rank-%d tensor (want a rank-3 sequence)",
-				name, oc.Name, select_, rank)
+		if select_ == "map" {
+			// A map is the tensor's own 2-D shape: [1,H,W], or [1,1,H,W] for a
+			// convolutional head that keeps a channel axis.
+			if rank != 3 && rank != 4 {
+				return nil, fmt.Errorf("model %q: image output %q selects map from a rank-%d tensor (want [1,H,W] or [1,1,H,W])", name, oc.Name, rank)
+			}
+			if oc.Start != nil || oc.Grid != 0 {
+				return nil, fmt.Errorf("model %q: image output %q selects map, which takes no start or grid", name, oc.Name)
+			}
+		} else {
+			if select_ == "none" && rank != 2 {
+				return nil, fmt.Errorf("model %q: image output %q selects none from a rank-%d tensor (want a pre-pooled rank-2 tensor or select cls|mean|tokens)",
+					name, oc.Name, rank)
+			}
+			if select_ != "none" && rank != 3 {
+				return nil, fmt.Errorf("model %q: image output %q selects %s from a rank-%d tensor (want a rank-3 sequence)",
+					name, oc.Name, select_, rank)
+			}
 		}
 
 		out := ImageOutput{
@@ -896,7 +927,17 @@ func resolveImageOutputs(cfg config.ModelConfig, name string, size int, preset i
 			Rows:   1,
 			Dim:    int(oi.Dim),
 		}
-		if err := checkImagePairing(name, oc.Name, cfg.Dim, out.Dim); err != nil {
+		if select_ == "map" {
+			// A fully-convolutional map head emits at the input edge, so the
+			// square shape is the configured size; a graph whose width is
+			// static must agree with it. The request re-checks the real shape
+			// before a byte is read.
+			out.Rows = size
+			out.Dim = size
+			if oi.Dim > 0 && int(oi.Dim) != size {
+				return nil, fmt.Errorf("model %q: image output %q maps a width of %d, but image.size is %d", name, oc.Name, oi.Dim, size)
+			}
+		} else if err := checkImagePairing(name, oc.Name, cfg.Dim, out.Dim); err != nil {
 			return nil, err
 		}
 

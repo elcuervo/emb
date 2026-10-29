@@ -134,8 +134,9 @@ type ImageOutputConfig struct {
 	// Tensor is the graph output tensor this product is read from.
 	Tensor string `yaml:"tensor"`
 	// Select is how the tensor's rows are reduced: "none" (already pooled),
-	// "cls", "mean", or "tokens" (every row from Start onward, normalized per
-	// row). Empty uses the model's pooling mode.
+	// "cls", "mean", "tokens" (every row from Start onward, normalized per
+	// row), or "map" (a 2-D [1,H,W] / [1,1,H,W] tensor, emitted flat and
+	// never normalized). Empty uses the model's pooling mode.
 	Select string `yaml:"select"`
 	// Start is the first token row of a "tokens" output. nil means 0, or the
 	// model's own layout metadata when its config.json declares register
@@ -206,9 +207,19 @@ func validateImageOutputsConfig(name string, img ImageConfig) error {
 		}
 		seen[o.Name] = struct{}{}
 		switch o.Select {
-		case "", "none", "cls", "mean", "tokens":
+		case "", "none", "cls", "mean", "tokens", "map":
 		default:
-			return fmt.Errorf("model %q: image output %q has unknown select %q (want none|cls|mean|tokens or unset)", name, o.Name, o.Select)
+			return fmt.Errorf("model %q: image output %q has unknown select %q (want none|cls|mean|tokens|map or unset)", name, o.Name, o.Select)
+		}
+		// A map is a shape, not a sequence: start/grid describe token rows and
+		// would contradict it.
+		if o.Select == "map" {
+			if o.Start != nil {
+				return fmt.Errorf("model %q: image output %q selects map, which takes no start", name, o.Name)
+			}
+			if o.Grid != 0 {
+				return fmt.Errorf("model %q: image output %q selects map, which takes no grid", name, o.Name)
+			}
 		}
 		if o.Start != nil && *o.Start < 0 {
 			return fmt.Errorf("model %q: image output %q start must be non-negative, got %d", name, o.Name, *o.Start)

@@ -3,14 +3,22 @@
     "origin": "https://emb.is",
     "site_name": "emb",
     "social_image": "/assets/img/og.png",
-    "social_image_size": [1200, 630],
+    "social_image_size": [
+      1200,
+      630
+    ],
     "theme_color": "bg",
     "favicon": {
       "size": 32,
       "fill": "bg",
       "stroke": "fg",
       "bar": "accent",
-      "bar_box": [14, 4, 4, 24]
+      "bar_box": [
+        14,
+        4,
+        4,
+        24
+      ]
     },
     "tokens": {
       "bg": "#F3F0E8",
@@ -25,11 +33,31 @@
       "dark": "#111110"
     },
     "contrast": [
-      {"fg": "fg", "bg": "bg", "min": 4.5},
-      {"fg": "muted", "bg": "bg", "min": 4.5},
-      {"fg": "accent-ink", "bg": "bg", "min": 4.5},
-      {"fg": "bg", "bg": "dark", "min": 4.5},
-      {"fg": "accent", "bg": "dark", "min": 3.0}
+      {
+        "fg": "fg",
+        "bg": "bg",
+        "min": 4.5
+      },
+      {
+        "fg": "muted",
+        "bg": "bg",
+        "min": 4.5
+      },
+      {
+        "fg": "accent-ink",
+        "bg": "bg",
+        "min": 4.5
+      },
+      {
+        "fg": "bg",
+        "bg": "dark",
+        "min": 4.5
+      },
+      {
+        "fg": "accent",
+        "bg": "dark",
+        "min": 3.0
+      }
     ]
   },
   "pages": [
@@ -63,6 +91,14 @@
       "title": "emb — demos: the cache — the second call is already answered",
       "description": "The same passage embedded twice. The first call fills emb's cache; the second is a hit, and the server's own counters show it.",
       "social_description": "Ask once, ask again: emb memoizes the vector, and the second answer is a lookup instead of a model pass."
+    },
+    {
+      "file": "demos/perception.html",
+      "path": "/demos/perception.html",
+      "indexable": true,
+      "title": "emb — demos: the perception — depth says where, DINOv3 says what",
+      "description": "One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with five readings — textured, wireframe, camera-space normals, depth contours, dense cloud — plus a probe that finds any part again in the other five photographs.",
+      "social_description": "Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, contour by depth, cut in half and search — from two live calls."
     },
     {
       "file": "demos/dns.html",
@@ -100,9 +136,9 @@
       "file": "demos/index.html",
       "path": "/demos/",
       "indexable": true,
-      "title": "emb — the demos gallery: vectors, similarity, search, the atlas, the image, the graph, the decision, the zone",
-      "description": "Fourteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute — and decide — beside the model, how a DNS zone asks the same model a question, and how a fingerprint names a recording while an embedding only describes it.",
-      "social_description": "A gallery of fourteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus."
+      "title": "emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium",
+      "description": "Fifteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute — and decide — beside the model, how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one image becomes a grid of vectors whose parts match by meaning.",
+      "social_description": "A gallery of fifteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus."
     },
     {
       "file": "demos/laya.html",

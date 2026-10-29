@@ -113,6 +113,18 @@ func ExtractPrePooled(hidden []float32, batchSize, dim int, normalize bool) [][]
 	return rowViews(out, batchSize, dim)
 }
 
+// ExtractMap returns a two-dimensional output's values (batch×elems, row-major)
+// as little-endian float32 bytes, one blob per image, with no arithmetic: a
+// map's values are not a unit vector, so normalization is never applied.
+func ExtractMap(hidden []float32, batchSize, elems int) [][]byte {
+	if batchSize == 0 || elems == 0 {
+		return nil
+	}
+	out := make([]byte, batchSize*elems*4)
+	marshalRows(out, hidden, batchSize, elems)
+	return rowViews(out, batchSize, elems)
+}
+
 // ExtractCLS returns the first-token (CLS) embedding of each sequence of a 3D
 // output tensor (batch×seq×dim) as little-endian float32 bytes.
 func ExtractCLS(hidden []float32, batchSize, dim, seqLen int, normalize bool) [][]byte {

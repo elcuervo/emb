@@ -1094,6 +1094,8 @@ func TestValidateImageOutputs(t *testing.T) {
 		{"negative grid", []ImageOutputConfig{{Name: "patches", Tensor: "t", Select: "tokens", Grid: -2}}, 0, "grid must be non-negative"},
 		{"grid does not divide size", []ImageOutputConfig{{Name: "patches", Tensor: "t", Select: "tokens", Grid: 5}}, 224, "does not divide image.size"},
 		{"duplicate name", []ImageOutputConfig{{Name: "a", Tensor: "t"}, {Name: "a", Tensor: "u"}}, 0, "duplicate image output name"},
+		{"map with start", []ImageOutputConfig{{Name: "depth", Tensor: "t", Select: "map", Start: new(1)}}, 0, "takes no start"},
+		{"map with grid", []ImageOutputConfig{{Name: "depth", Tensor: "t", Select: "map", Grid: 2}}, 0, "takes no grid"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1102,6 +1104,10 @@ func TestValidateImageOutputs(t *testing.T) {
 				t.Fatalf("error = %v, want it to mention %q", err, tc.want)
 			}
 		})
+	}
+	// A map is a shape, so the selector alone is a complete declaration.
+	if err := validateImageConfig("m", ImageConfig{Size: 266, Outputs: []ImageOutputConfig{{Name: "depth", Tensor: "t", Select: "map"}}}); err != nil {
+		t.Fatalf("map output refused: %v", err)
 	}
 }
 

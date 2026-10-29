@@ -148,6 +148,25 @@ export function pairsToObject(items) {
   return out;
 }
 
+/* Every map in a reply — including a nested one, like EMB.INFO's output table —
+ * is a flat name/value array under RESP2, because RESP2 has no map type. Pairing
+ * recursively is what lets a plate read `info.image_outputs.patches.rows` the
+ * same way under both protocols. Anything that is not a flat pair list (an array
+ * of numbers, say) is left as it is rather than guessed at. */
+function deepPairs(value) {
+  if (Array.isArray(value)) {
+    const items = value.map(deepPairs);
+    const paired = pairsToObject(items);
+    return paired === null ? items : paired;
+  }
+  if (value && typeof value === 'object') {
+    const out = {};
+    Object.keys(value).forEach((k) => { out[k] = deepPairs(value[k]); });
+    return out;
+  }
+  return value;
+}
+
 /* ── the lazy wasm + index ──────────────────────────────────────────── */
 
 let indexPromise = null;
@@ -275,6 +294,25 @@ export function gallery() {
   function send(args, bin) {
     trace.push({ args: args.slice(), bin: bin ? bin.slice() : [] });
     return exec(args, bin);
+  }
+
+  /* The declared image shape is memoized per gallery instance (see
+   * `imageShape`); this is the one read that fills it. */
+  const shapes = new Map();
+  async function readShape(model) {
+    const info = deepPairs(envelopeValue(await run(() => send(['EMB.INFO', model]))));
+    const outputs = (info && info.image_outputs) || {};
+    const out = {};
+    Object.keys(outputs).forEach((name) => {
+      const f = outputs[name] || {};
+      out[name] = {
+        select: f.select,
+        rows: Number(f.rows),
+        dim: Number(f.dim),
+        grid: Array.isArray(f.grid) ? Number(f.grid[0]) : null
+      };
+    });
+    return out;
   }
 
   async function embed(model, text) {
@@ -460,6 +498,49 @@ export function gallery() {
       const argv = ['EMB.EVSHA', model, sha, '1', toBase64(bytes)].concat(labels);
       const reply = envelopeValue(await run(() => send(argv, [4])));
       return pairsToObject(reply) || reply;
+    },
+
+    /* The image command: one image in, the model's named products out. Unlike
+     * the preset it is the raw command, so a plate asks for the subset it draws.
+     * Values stay envelopes until the plate decodes them: the element count in
+     * the descriptor is what proves the reply against the server's metadata. */
+    async image(model, names, bytes) {
+      const argv = ['EMB.IMG', model, 'BLOB'];
+      if (names && names.length) { argv.push('OUTPUTS', names.join(',')); }
+      argv.push(toBase64(bytes));
+      const env = await run(() => send(argv, [argv.length - 1]));
+      const elems = env.kind === 'map' || env.kind === 'array' ? env.elems || [] : null;
+      if (!elems || elems.length % 2 !== 0) {
+        throw new SandboxError('error', 'the sandbox returned no image reply');
+      }
+      const values = {};
+      for (let i = 0; i + 1 < elems.length; i += 2) {
+        const key = elems[i];
+        const value = elems[i + 1];
+        values[key && key.text !== undefined ? key.text : String(key && key.int)] = {
+          data: value && value.kind === 'bulk' ? b64Float32(value.b64) : null,
+          count: value && value.vector ? value.vector.count : null,
+          dtype: value && value.vector ? value.vector.dtype : null
+        };
+      }
+      // The bridge's measured answer time travels with the values: a plate that
+      // prints a duration prints the server's, never its own.
+      return { values: values, elapsed_us: env.elapsed_us || 0 };
+    },
+
+    /* The declared shape of each image product, read from the server rather than
+     * typed into the page: its rows, its dimension, and the patch grid's edge.
+     * It is the model's, not the request's, so it is read once per page: a plate
+     * that switches samples must not spend the rate limit on a constant. A
+     * failed read is dropped from the cache, so a boot-time refusal is retried. */
+    imageShape(model) {
+      if (!shapes.has(model)) {
+        shapes.set(model, readShape(model).catch((err) => {
+          shapes.delete(model);
+          throw err;
+        }));
+      }
+      return shapes.get(model);
     },
 
     /* The raw reply envelope, for a plate that shows the reply's shape. */

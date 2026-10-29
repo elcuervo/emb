@@ -13,6 +13,29 @@ visitor uploads nothing.
 | `ship.jpg` | Fitz Henry Lane, *The Ships "Winged Arrow" and "Southern Cross" in Boston Harbor* (1853) | Wikimedia Commons |
 | `flowers.jpg` | Vincent van Gogh, *Sunflowers* (1888) | Wikimedia Commons |
 
+# PLATE VII samples — photographs
+
+Six photographs — four CC0, two public domain — chosen by measurement rather
+than by eye. Each was run through the plate's own depth model (Depth Anything V2
+Small, relative inverse depth) and kept only where the map carries a wide,
+fully occupied range: a near foreground, a middle ground and a far background
+the model separates, not a flat frame, a night frame or one all in the far
+field. All fetched from Wikimedia Commons at a 768-pixel long edge in their
+native aspect, re-encoded as JPEG for the gallery, and served from
+`samples/parts/`. A visitor uploads nothing.
+
+| File | Work | Author | Licence | Source |
+|---|---|---|---|---|
+| `parts/autumn-road.jpg` | *Road curve in the autumn (Unsplash)* | Aaron Burden | CC0 | [Commons](https://commons.wikimedia.org/wiki/File:Road_curve_in_the_autumn_(Unsplash).jpg) |
+| `parts/nave.jpg` | *Lincoln Cathedral nave* | Michael D Beckwith | CC0 | [Commons](https://commons.wikimedia.org/wiki/File:Lincoln_Cathedral_Nave_1.jpg) |
+| `parts/forest.jpg` | *Autumn Forest Path with Tall Trees* | Vovogov90 | CC0 | [Commons](https://commons.wikimedia.org/wiki/File:Autumn_Forest_Path_with_Tall_Trees.jpg) |
+| `parts/castle-courtyard.jpg` | *Courtyard of the Pieskowa Skała Castle (014)* | Michał Bulsa | CC0 | [Commons](https://commons.wikimedia.org/wiki/File:Courtyard_of_the_Pieskowa_Ska%C5%82a_Castle_(014).jpg) |
+| `parts/yellowstone-canyon.jpg` | *Yellowstone River and canyon walls* | Jacob W. Frank, National Park Service | Public domain | [Commons](https://commons.wikimedia.org/wiki/File:Yellowstone_River_and_canyon_walls_(37088501045).jpg) |
+| `parts/seven-arches.jpg` | *SevenArches2240* | Chemical Engineer | Public domain | [Commons](https://commons.wikimedia.org/wiki/File:SevenArches2240.jpg) |
+
+Neither licence carries an attribution obligation; the authors are credited here
+anyway.
+
 # Media-plate assets
 
 The media plate (`demos/medium.html`) ships every medium it reads and plays; a

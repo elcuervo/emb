@@ -40,6 +40,10 @@ website/
 │   ├── js/tldr.js          the read-mode switch on /demos, /docs and /gem:
 │   │                       one remembered preference that reveals each
 │   │                       surface's `.tldr` gist and hides its long form
+│   ├── vendor/three-0.170.0/ three.js r170's ESM build, vendored from the npm
+│   │                       release beside its MIT licence; the plate renders its
+│   │                       layer stack with it, and the directory carries the
+│   │                       release, so a new one is a new file
 │   ├── vendor/sqlite-wasm-vec-0.1.9/
 │   │                       sqlite-vec in the browser, vendored from the npm
 │   │                       release pinned in `flake.nix` and re-vendored by
@@ -1274,6 +1278,22 @@ left out. Every rendered control is at least 44px tall at 320–834px.
   modifications, Latin-only). A font subset is versioned by its file, which is
   why `_headers` may pin `/assets/fonts/*` immutable: re-vendoring a face means
   a new file beside it, never new bytes under the same name.
+- `assets/vendor/three-0.170.0/three.module.min.mjs` is **three.js r170**
+  (`three@0.170.0/build/three.module.min.js`, MIT, `LICENSE` beside it). It is
+  the only third-party script the plates import, and it is committed rather than
+  loaded from a CDN:
+
+  ```bash
+  curl -fsSL -o website/assets/vendor/three-0.170.0/three.module.min.mjs \
+    https://unpkg.com/three@0.170.0/build/three.module.min.js
+  # sha256 08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7
+  ```
+
+  One plate uses it, so it is imported by that page's module alone and never by
+  the shared gallery client. It is `.mjs` on purpose: `/assets/vendor/*` is
+  pinned immutable because its directory name carries the release, and the
+  published-tree check refuses an immutable `.js` under a stable name — the
+  release directory plus a non-`.js` suffix is what keeps both true.
 - `terrain-v2.png` was made with the built-in image generation tool using the
   supplied poster as a visual reference. Prompts and provenance are recorded
   in [`assets/img/terrain-v2.md`](assets/img/terrain-v2.md). It is kept as the
