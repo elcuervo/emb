@@ -65,14 +65,14 @@
       "file": "404.html",
       "path": "/404.html",
       "indexable": false,
-      "title": "emb — no route here",
+      "title": "emb \u2014 no route here",
       "description": "This address is not served by this site. The landing page and the documentation are one link away."
     },
     {
       "file": "demos/atlas.html",
       "path": "/demos/atlas.html",
       "indexable": true,
-      "title": "emb — demos: the atlas — a corpus laid out by meaning",
+      "title": "emb \u2014 demos: the atlas \u2014 a corpus laid out by meaning",
       "description": "2 782 passages from one author's collected works, drawn as they sit in the model's space: named regions, a query that lands among its neighbours, and an order switch that separates meaning from chronology.",
       "social_description": "The corpus drawn by meaning: named regions, a live query landing among its neighbours, and the space between two passages."
     },
@@ -80,7 +80,7 @@
       "file": "demos/batch.html",
       "path": "/demos/batch.html",
       "indexable": true,
-      "title": "emb — demos: the batch — one call, many texts",
+      "title": "emb \u2014 demos: the batch \u2014 one call, many texts",
       "description": "Six passages embedded two ways against the same server: six separate EMB calls, then one call carrying all six. The server's own timings show what batching buys.",
       "social_description": "Six texts, two ways: six round trips versus one. Measured on the server, drawn to scale."
     },
@@ -88,7 +88,7 @@
       "file": "demos/cache.html",
       "path": "/demos/cache.html",
       "indexable": true,
-      "title": "emb — demos: the cache — the second call is already answered",
+      "title": "emb \u2014 demos: the cache \u2014 the second call is already answered",
       "description": "The same passage embedded twice. The first call fills emb's cache; the second is a hit, and the server's own counters show it.",
       "social_description": "Ask once, ask again: emb memoizes the vector, and the second answer is a lookup instead of a model pass."
     },
@@ -96,23 +96,23 @@
       "file": "demos/perception.html",
       "path": "/demos/perception.html",
       "indexable": true,
-      "title": "emb — demos: the perception — depth says where, DINOv3 says what",
-      "description": "One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with four readings — textured, wireframe, camera-space normals, dense cloud — plus a probe that finds any part again in the other five photographs.",
-      "social_description": "Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, cut in half and search — from two live calls."
+      "title": "emb \u2014 demos: The perception \u2014 one photograph, one depth map",
+      "description": "One photograph, one call: a monocular depth model answers a 266 \u00d7 266 map of relative distance. The same reply becomes a lit surface you can turn, the map drawn as itself, a profile along a line you drag, and a depth of field that refocuses the photograph.",
+      "social_description": "One photograph, one depth map: 70 756 relative distances become a lit relief, a dragged profile and a depth of field."
     },
     {
       "file": "demos/dns.html",
       "path": "/demos/dns.html",
       "indexable": true,
-      "title": "emb — demos: the zone — a DNS name is a sentence, a TXT record is the answer",
-      "description": "dns.emb.is, a DNS zone where every name is a sentence: the query, the ranked emoji, and the same answer printed twice — the escaped TXT data a resolver hands back and the glyph it stands for.",
+      "title": "emb \u2014 demos: the zone \u2014 a DNS name is a sentence, a TXT record is the answer",
+      "description": "dns.emb.is, a DNS zone where every name is a sentence: the query, the ranked emoji, and the same answer printed twice \u2014 the escaped TXT data a resolver hands back and the glyph it stands for.",
       "social_description": "Semantic retrieval over DNS: every name under dns.emb.is is a query, and the reply is one TXT record per ranked emoji."
     },
     {
       "file": "demos/function.html",
       "path": "/demos/function.html",
       "indexable": true,
-      "title": "emb — demos: the model is a function — one primitive, four answers",
+      "title": "emb \u2014 demos: the model is a function \u2014 one primitive, four answers",
       "description": "The same passage through the raw command and two preloaded Lua presets: bytes, a typed vector, a similarity and a label. The server runs scripts it preloaded; raw Lua stays refused.",
       "social_description": "One primitive, four answers: raw bytes, a typed vector, a similarity and a label from the same server."
     },
@@ -120,7 +120,7 @@
       "file": "demos/graph.html",
       "path": "/demos/graph.html",
       "indexable": true,
-      "title": "emb — demos: the graph — a similarity graph built by a script",
+      "title": "emb \u2014 demos: the graph \u2014 a similarity graph built by a script",
       "description": "Eight passages from the corpus, embedded in one batch and linked to their nearest neighbours by a Lua script on the server. A directed graph of the space, computed next to the model.",
       "social_description": "The scripting layer computes an N-by-N similarity graph next to the model and returns edges, not a matrix. Drawn as a directed graph."
     },
@@ -128,7 +128,7 @@
       "file": "demos/image.html",
       "path": "/demos/image.html",
       "indexable": true,
-      "title": "emb — demos: the image — a photo, matched to words",
+      "title": "emb \u2014 demos: the image \u2014 a photo, matched to words",
       "description": "Drop an image on the sandbox and watch a vision model place it in the same space as text: eight candidate labels, scored live, in one shared graph.",
       "social_description": "One model, two modalities: an image and eight labels scored in the same space, live on the sandbox."
     },
@@ -136,24 +136,24 @@
       "file": "demos/index.html",
       "path": "/demos/",
       "indexable": true,
-      "title": "emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium",
-      "description": "Fifteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute — and decide — beside the model, how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one image becomes a grid of vectors whose parts match by meaning.",
+      "title": "emb \u2014 the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium",
+      "description": "Fifteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute \u2014 and decide \u2014 beside the model, how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.",
       "social_description": "A gallery of fifteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus."
     },
     {
       "file": "demos/laya.html",
       "path": "/demos/laya.html",
       "indexable": true,
-      "title": "emb — the decision engine: typed questions, one forward pass",
-      "description": "Laya is a decision model. A state goes in; a tree of typed questions — choice, score, noul — is answered by one forward pass. See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.",
-      "social_description": "One state, a tree of typed questions, one forward pass, typed answers. Snake, Pac-Man, an inbox, and the smallest round — with the model's own probabilities.",
+      "title": "emb \u2014 the decision engine: typed questions, one forward pass",
+      "description": "Laya is a decision model. A state goes in; a tree of typed questions \u2014 choice, score, noul \u2014 is answered by one forward pass. See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.",
+      "social_description": "One state, a tree of typed questions, one forward pass, typed answers. Snake, Pac-Man, an inbox, and the smallest round \u2014 with the model's own probabilities.",
       "twitter_description": "One state, a tree of typed questions, one forward pass, typed answers."
     },
     {
       "file": "demos/lens.html",
       "path": "/demos/lens.html",
       "indexable": true,
-      "title": "emb — demos: the model lens — two models, two spaces",
+      "title": "emb \u2014 demos: the model lens \u2014 two models, two spaces",
       "description": "The same corpus, the same query, two embedding models. The rankings differ, the projections differ, and neither one is wrong: vectors from two models are not comparable.",
       "social_description": "One corpus under two models: the same query returns different neighbours, because each model defines its own space."
     },
@@ -161,9 +161,9 @@
       "file": "demos/medium.html",
       "path": "/demos/medium.html",
       "indexable": true,
-      "title": "emb — demos: the medium — identify the tune, describe the music and the footage",
+      "title": "emb \u2014 demos: the medium \u2014 identify the tune, describe the music and the footage",
       "description": "A Shazam-style fingerprint names the exact recording from a noisy four-second excerpt, computed live in the browser. Beside it, real models answer the semantic question: CLAP retrieves music by a phrase, and X-CLIP retrieves footage by a phrase, both over an index built offline and queried live.",
-      "social_title": "emb — demos: the medium — name the tune, find the moment",
+      "social_title": "emb \u2014 demos: the medium \u2014 name the tune, find the moment",
       "social_description": "A fingerprint names the exact recording; an embedding says what kind of thing it is. Then a clip is searched frame by frame by a phrase.",
       "twitter_description": "A fingerprint names the exact recording; an embedding says what kind of thing it is."
     },
@@ -171,7 +171,7 @@
       "file": "demos/multilingual.html",
       "path": "/demos/multilingual.html",
       "indexable": true,
-      "title": "emb — demos: the languages — one space for six of them",
+      "title": "emb \u2014 demos: the languages \u2014 one space for six of them",
       "description": "One sentence and its translations in five languages, each compared with the English original by a multilingual model in the sandbox. No translator runs; the model reads every language itself.",
       "social_description": "A multilingual model puts translations and unrelated sentences in one space; the plate shows which ones land together."
     },
@@ -179,7 +179,7 @@
       "file": "demos/search.html",
       "path": "/demos/search.html",
       "indexable": true,
-      "title": "emb — demos: the search — a question answered by meaning",
+      "title": "emb \u2014 demos: the search \u2014 a question answered by meaning",
       "description": "A query phrased in words the corpus never contains, answered with the passages that mean it: an exact vector search over a committed index, reranked by the sandbox's own Lua.",
       "social_description": "Retrieval by meaning: one query embedded live, thousands of passages searched in the browser, and the result reranked by the server."
     },
@@ -187,7 +187,7 @@
       "file": "demos/similarity.html",
       "path": "/demos/similarity.html",
       "indexable": true,
-      "title": "emb — demos: the similarity — one number between two texts",
+      "title": "emb \u2014 demos: the similarity \u2014 one number between two texts",
       "description": "Two passages through the sandbox's own preloaded Lua preset: the dimension, the norm, and the cosine similarity, with the script's source and digest beside the reply.",
       "social_description": "Similarity as a single number, computed by the server's own script and shown with the script's bytes."
     },
@@ -195,7 +195,7 @@
       "file": "demos/vector.html",
       "path": "/demos/vector.html",
       "indexable": true,
-      "title": "emb — demos: the vector — text becomes 384 numbers",
+      "title": "emb \u2014 demos: the vector \u2014 text becomes 384 numbers",
       "description": "Watch a sentence become an embedding: the dimension, the L2 norm and the bytes of the vector a real model returned, from a real server.",
       "social_description": "One passage through a real embeddings server, showing the vector itself: dimension, norm and bytes."
     },
@@ -203,7 +203,7 @@
       "file": "docs/index.html",
       "path": "/docs/",
       "indexable": true,
-      "title": "emb — documentation: install, commands, replies, Lua",
+      "title": "emb \u2014 documentation: install, commands, replies, Lua",
       "description": "Reference for emb, a simple yet powerful self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.",
       "social_description": "Reference for emb, a simple yet powerful self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.",
       "twitter_description": "The hosted reference for emb: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks."
@@ -212,7 +212,7 @@
       "file": "gem/index.html",
       "path": "/gem/",
       "indexable": true,
-      "title": "emb — the Ruby client: one call, one command, and the shape of your call site",
+      "title": "emb \u2014 the Ruby client: one call, one command, and the shape of your call site",
       "description": "How the emb Ruby gem turns a call site into one EMB or one EMB.MULTI: the four wire shapes, the create-then-consume rule, fail-closed batches, and the emb-server gem that ships the server as a precompiled binary.",
       "social_description": "Four execution modes, four wire shapes, and the one rule that decides how many commands a scope costs."
     },
@@ -220,7 +220,7 @@
       "file": "index.html",
       "path": "/",
       "indexable": true,
-      "title": "emb — a fast embedding server that speaks the Redis protocol",
+      "title": "emb \u2014 a fast embedding server that speaks the Redis protocol",
       "description": "emb is a simple yet powerful inference server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache, multi-model queries.",
       "social_description": "A fast embedding server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache.",
       "twitter_description": "A fast embedding server that speaks the Redis protocol."
@@ -229,7 +229,7 @@
       "file": "scripting/index.html",
       "path": "/scripting/",
       "indexable": true,
-      "title": "emb — scripting: the Lua host API, sandbox, budgets, reply grammar",
+      "title": "emb \u2014 scripting: the Lua host API, sandbox, budgets, reply grammar",
       "description": "Reference for emb's scripting engine: EMB.EVAL, EMB.EVSHA and EMB.SCRIPT, the sandbox, the complete emb.* host API, tensor specs, the Lua-to-RESP reply grammar, evaluation budgets and reply-cache identity.",
       "social_description": "Reference for emb's scripting engine: EMB.EVAL, EMB.EVSHA and EMB.SCRIPT, the sandbox, the complete emb.* host API, tensor specs, the reply grammar, budgets and cache identity.",
       "twitter_description": "The complete scripting reference for emb: commands, sandbox, host API, tensors, replies, budgets and cache identity."

@@ -4,21 +4,21 @@
 <!-- meta:start -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>emb — demos: the perception — depth says where, DINOv3 says what</title>
+<title>emb — demos: The perception — one photograph, one depth map</title>
 <link rel="canonical" href="https://emb.is/demos/perception.html">
-<meta name="description" content="One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with four readings — textured, wireframe, camera-space normals, dense cloud — plus a probe that finds any part again in the other five photographs.">
+<meta name="description" content="One photograph, one call: a monocular depth model answers a 266 × 266 map of relative distance. The same reply becomes a lit surface you can turn, the map drawn as itself, a profile along a line you drag, and a depth of field that refocuses the photograph.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="emb — demos: the perception — depth says where, DINOv3 says what">
+<meta property="og:title" content="emb — demos: The perception — one photograph, one depth map">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, cut in half and search — from two live calls.">
+<meta property="og:description" content="One photograph, one depth map: 70 756 relative distances become a lit relief, a dragged profile and a depth of field.">
 <meta property="og:url" content="https://emb.is/demos/perception.html">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="emb — demos: the perception — depth says where, DINOv3 says what">
-<meta name="twitter:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, cut in half and search — from two live calls.">
+<meta name="twitter:title" content="emb — demos: The perception — one photograph, one depth map">
+<meta name="twitter:description" content="One photograph, one depth map: 70 756 relative distances become a lit relief, a dragged profile and a depth of field.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 <!-- meta:end -->
@@ -81,22 +81,20 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">VII.</span>The perception</h1>
           <p class="plate__teaches">
-            A photograph read by two models: one measures where everything is, the
-            other says what looks alike. One surface comes back, with four readings —
-            surface, wireframe, normals, cloud — and a probe that finds the
-            same patch in the other five photographs.
+            One photograph, one call: a monocular depth model answers a
+            266 × 266 map of relative distance, and the page reads that same map
+            three ways — as a lit surface you can turn, as a picture of itself,
+            and as a depth of field you can focus.
           </p>
-          <p class="tldr">Depth puts the pixels in space and DINOv3 gives each patch a vector, so one photograph becomes something you can orbit, cut and search by the part you point at.</p>
+          <p class="tldr">A depth model turns one photograph into 70 756 relative distances, and one reply becomes a relief, a profile and a focus.</p>
         </div>
         <div class="plate__ledger">
-          <p class="fig fig--as-written"><b>THE TWO</b>
-            · <b>DINOv3&nbsp;ViT-S/16</b>
-            · <b data-fig-rows>196</b>&nbsp;PATCHES
-            · <b data-fig-dim>384</b>&nbsp;DIMENSIONS
-            · <b>Depth&nbsp;Anything&nbsp;V2</b>
-            · <b data-fig-depth>266×266</b>&nbsp;DEPTH
-            · <b data-fig-bytes>301&nbsp;056</b>&nbsp;B
-            · <b>2</b>&nbsp;CALLS</p>
+          <p class="fig fig--as-written"><b>THE MODEL</b>
+            · <b>Depth&nbsp;Anything&nbsp;V2&nbsp;Small</b>
+            · <b data-fig-depth>266×266</b>&nbsp;MAP
+            · <b data-fig-count>70&nbsp;756</b>&nbsp;VALUES
+            · <b data-fig-bytes>283&nbsp;024</b>&nbsp;B
+            · <b>1</b>&nbsp;CALL</p>
         </div>
       </div>
     </section>
@@ -104,7 +102,7 @@
 
   <!-- THE STAGE. The figure is the page: one photograph, one reveal, one state
        control, and the long form is a disclosure below. -->
-  <section class="block block--dark stage-block" aria-label="Try it — one photograph, two calls">
+  <section class="block block--dark stage-block" aria-label="Try it — one photograph, one call">
     <div class="shell">
       <div data-live class="rig" data-rig="perception">
         <div class="stage__view">
@@ -114,17 +112,15 @@
           <div class="stage__pair">
             <figure class="perception__shot">
               <div class="perception__frame">
-                <img class="drop__img" data-preview src="samples/parts/autumn-road.jpg" alt="">
-                <canvas class="perception__plan" data-plan role="img" aria-label="The photograph, tinted where the region grown from the probe covers it"></canvas>
+                <img class="drop__img" data-preview src="samples/parts/pier-corridor.jpg" alt="">
+                <!-- The profile's own line, in the same percentages the chart
+                     samples: the two ends of the measurement, on the picture. -->
+                <svg class="perception__prof" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line data-profile-line stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="3 2"></line><circle data-profile-a r="1.4" fill="currentColor"></circle><circle data-profile-b r="1.4" fill="currentColor"></circle></svg>
               </div>
-              <figcaption class="perception__cap">the still, flat · the region the model grows is tinted over it</figcaption>
+              <figcaption class="perception__cap">the still, flat · drag across it to place the profile</figcaption>
             </figure>
             <div class="stage__slot">
               <div class="perception__stage" data-stage></div>
-              <button class="stage__cue" type="button" data-reveal hidden>
-                <span class="stage__cue-k">one photograph · two calls</span>
-                <span class="stage__cue-t">Reveal perception</span>
-              </button>
               <p class="stage__hud" data-stage-cap aria-hidden="true"></p>
             </div>
           </div>
@@ -132,14 +128,14 @@
 
         <div class="stage__film">
           <div class="samples" data-samples role="group" aria-label="Sample images">
-            <button type="button" data-sample="samples/parts/autumn-road.jpg" aria-pressed="false" title="Road curve in the autumn"><img src="samples/parts/autumn-road.jpg" alt="A road curving through a tunnel of autumn trees, leaves overhead and tall trunks beyond"><span class="samples__a" data-answer hidden></span></button>
-            <button type="button" data-sample="samples/parts/nave.jpg" aria-pressed="false" title="Lincoln Cathedral nave"><img src="samples/parts/nave.jpg" alt="A cathedral nave: near columns, rows of chairs, and the altar far down the aisle"><span class="samples__a" data-answer hidden></span></button>
-            <button type="button" data-sample="samples/parts/forest.jpg" aria-pressed="false" title="Autumn forest path"><img src="samples/parts/forest.jpg" alt="A path through tall trees in autumn"><span class="samples__a" data-answer hidden></span></button>
-            <button type="button" data-sample="samples/parts/castle-courtyard.jpg" aria-pressed="false" title="Pieskowa Skała castle courtyard"><img src="samples/parts/castle-courtyard.jpg" alt="A castle courtyard seen through a near stone arch, arcaded galleries on three sides"><span class="samples__a" data-answer hidden></span></button>
-            <button type="button" data-sample="samples/parts/yellowstone-canyon.jpg" aria-pressed="false" title="Yellowstone River and canyon walls"><img src="samples/parts/yellowstone-canyon.jpg" alt="Near rock ledges, a river winding through the middle distance, and pale canyon walls beyond"><span class="samples__a" data-answer hidden></span></button>
-            <button type="button" data-sample="samples/parts/seven-arches.jpg" aria-pressed="false" title="Seven Arches aqueduct, Leeds"><img src="samples/parts/seven-arches.jpg" alt="A stone aqueduct on arches receding along a wooded valley"><span class="samples__a" data-answer hidden></span></button>
+            <button type="button" data-sample="samples/parts/pier-corridor.jpg" aria-pressed="false" title="Wooden pier at sunset"><img src="samples/parts/pier-corridor.jpg" alt="A long wooden pier walkway receding between rows of posts, its floor reflecting the sunset over the water"></button>
+            <button type="button" data-sample="samples/parts/canyon-layers.jpg" aria-pressed="false" title="Canyon de Chelly"><img src="samples/parts/canyon-layers.jpg" alt="Red canyon walls in layers, with a sandstone spire in the foreground and the valley floor far below"></button>
+            <button type="button" data-sample="samples/parts/sea-cave.jpg" aria-pressed="false" title="View from a beach cave"><img src="samples/parts/sea-cave.jpg" alt="A dark rock arch framing a turquoise bay, a sea stack and two people on the beach"></button>
+            <button type="button" data-sample="samples/parts/forest-path.jpg" aria-pressed="false" title="Woodland path"><img src="samples/parts/forest-path.jpg" alt="A gravel path curving away between tall straight pine trunks and green undergrowth"></button>
+            <button type="button" data-sample="samples/parts/spiral-stairs.jpg" aria-pressed="false" title="Infinite spiral stairs"><img src="samples/parts/spiral-stairs.jpg" alt="A stone spiral staircase seen from above, its steps winding down to a bright centre"></button>
+            <button type="button" data-sample="samples/parts/rail-tunnel.jpg" aria-pressed="false" title="Railway through a tunnel"><img src="samples/parts/rail-tunnel.jpg" alt="Two railway tracks running out of a dark tunnel towards a sunlit cutting between trees"></button>
           </div>
-          <p class="drop__hint" data-strip-hint>Samples · CC0 + public domain · Aaron Burden · Michael D Beckwith · Vovogov90 · Michał Bulsa · NPS/Jacob W. Frank · Chemical Engineer · two calls each</p>
+          <p class="drop__hint">Samples · Unsplash, CC0 mirrors on Commons · Ishan · Ben Esteves · Jasper van der Meij · Caspe Sparsoe · Ludde Lorentz · chuttersnap · one call each</p>
         </div>
 
         <p class="rig__state" data-state>pick a sample</p>
@@ -147,15 +143,12 @@
         <div class="rig__out" data-out hidden>
           <div class="stage__ctrls">
             <div class="perception__states" role="radiogroup" aria-label="State">
-              <label><input type="radio" name="perception-view" value="0" data-view checked>photograph</label>
-              <label><input type="radio" name="perception-view" value="1" data-view>relief</label>
-              <label><input type="radio" name="perception-view" value="2" data-view>look-alikes</label>
+              <label><input type="radio" name="perception-view" value="0" data-view>photograph</label>
+              <label><input type="radio" name="perception-view" value="1" data-view checked>relief</label>
             </div>
             <div class="perception__states" role="radiogroup" aria-label="Reading">
               <label><input type="radio" name="perception-reading" value="0" data-reading checked>surface</label>
-              <label><input type="radio" name="perception-reading" value="1" data-reading>wireframe</label>
-              <label><input type="radio" name="perception-reading" value="2" data-reading>normals</label>
-              <label><input type="radio" name="perception-reading" value="3" data-reading>cloud</label>
+              <label><input type="radio" name="perception-reading" value="1" data-reading>normals</label>
             </div>
           </div>
 
@@ -168,14 +161,11 @@
                 <label class="perception__count">exaggeration <input type="range" min="0" max="150" step="1" value="100" data-exag></label>
                 <label class="perception__count">cut <input type="range" min="0" max="100" step="1" value="70" data-cut></label>
                 <label class="perception__count">density <input type="range" min="0" max="2" step="1" value="2" data-density></label>
-                <label class="perception__count">isolate <input type="checkbox" data-iso></label>
-                <label class="perception__count">column <input type="range" min="0" max="13" step="1" value="7" data-col></label>
-                <label class="perception__count">row <input type="range" min="0" max="13" step="1" value="7" data-row></label>
                 <label class="perception__count">upload <input type="file" accept="image/*" data-upload></label>
               </div>
             </details>
-            <p class="drop__hint">drag to orbit · wheel to zoom · click to pin a patch · double-click resets · arrow keys and + − 0 turn and zoom</p>
-            <p class="perception__cap">relative, monocular depth — no metres, one face · the box is the region's extent, not a detector's output</p>
+            <p class="drop__hint">drag to orbit · wheel to zoom · double-click resets · arrow keys and + − 0 turn and zoom</p>
+            <p class="perception__cap">relative, monocular depth — no metres, one face · the profile is in frame-heights</p>
           </div>
 
           <details class="cmds" data-cmds hidden>
@@ -191,8 +181,9 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-        <p class="block__deck">The stage holds one photograph and its surface, side by side: the still, flat, on the left; the reconstruction on the right, so the depth lines can be read against the picture they came from. Each cell of a regular grid becomes two triangles, its corners carried into camera space by the depth the model predicted. The photograph supplies the colour; a cell whose corners disagree is left out, which is where one object ends.</p>
-        <p class="block__deck">Everything else is a reading of the same buffers. Wireframe: every stride line and each cell's diagonal, so the topology is visible. Normals: the depth gradient's orientation, in camera space. Cloud: the same vertices as points. Across all of them one band of light travels the view depth every 11 seconds, bright as it leaves the camera and settled as it runs out, so the direction of the relief is read from the light moving through it rather than from a line ruled over it.</p>
+        <p class="block__deck">The still sits on the left, its reconstruction on the right, so the depth reads against the picture it came from. Each grid cell becomes two triangles, its corners carried into camera space by the predicted depth; the photograph supplies the colour.</p>
+        <p class="block__deck">Two readings of that one buffer: surface, the photograph lit by the map's own gradient, and normals, the orientation of that gradient in camera space. One band of light travels the view depth every 11 seconds, bright as it leaves and settled as it runs out, so the direction is watched rather than drawn.</p>
+        <p class="block__deck">The six photographs are six kinds of depth: a pier walkway, a curving forest path and a spiral staircase, where one-point perspective converges; layered canyon walls, where geology stacks three planes; a sea cave, where a rock arch occludes a bright bay; and rails leaving a dark tunnel.</p>
       </div></div>
     </section>
 
@@ -200,34 +191,96 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-        <p class="block__deck">The browser bounded the sample to 768 pixels and base64-encoded it, because JSON cannot carry bytes; the bridge decoded it and the sandbox ran two graphs over the same pixels. DINOv3 answered 196 rows of 384, Depth Anything V2 a 266×266 relative map, both packed float32, both cached.</p>
-        <p class="block__deck">The page built the index: one grid, two triangles per cell, five depth tests per cell. One buffer feeds three renderers, so a view change is a uniform, never a rebuild. The probe is a dot product over the rows; the region grows outward from the pinned patch, not predicted.</p>
+        <p class="block__deck">The browser bounded the sample and base64-encoded it, because JSON cannot carry bytes; the bridge decoded it and the sandbox ran one graph over those pixels. Depth Anything V2 answered a 266 × 266 relative map, packed float32, cached by a hash of the bytes.</p>
+        <p class="block__deck">The page built the index once: one grid, two triangles per cell, a depth test per cell. Surface and normals read the same buffer, so a reading change is a uniform and never a rebuild.</p>
+        <p class="block__deck">The trace and the three figures below read that same reply. The trace is the run's own numbers. The <em>map</em> is the reply drawn as itself, one cell per value, with the transform the geometry uses one toggle away. The <em>profile</em> is the depth along a line you drag, in the shader's own display units. The <em>focus</em> is the map used as a lens, with the sharpness it achieves measured rather than asserted. None of them sends a command.</p>
+
+        <!-- THREE READINGS, ONE REPLY. Every figure is arithmetic over the map
+             the page already holds and the pixels the browser sent: no call, no
+             stored asset. They live below the stage because the first screen is
+             the photograph. -->
+        <div class="pfigs" data-figs hidden>
+          <figure class="pfig">
+            <div class="pfig__head">
+              <p class="pfig__t">the map, as it arrived</p>
+              <label class="pfig__rev"><input type="checkbox" data-map-rank> rank-equalised</label>
+            </div>
+            <canvas class="pfig__c" data-map width="532" height="532" tabindex="0" role="img" aria-label="The relative depth map drawn as a raster, one cell per value"></canvas>
+            <p class="pfig__read" data-map-read aria-live="polite">reading the map…</p>
+            <figcaption class="pfig__cap">One cell is one value the server sent, on a ramp between the map's own p5 and p95. Raw, most of a scene can sit at one end of the range; rank-equalised is the transform the relief displaces by, which is why the geometry needs it.</figcaption>
+          </figure>
+
+          <figure class="pfig">
+            <div class="pfig__head">
+              <p class="pfig__t">the profile</p>
+            </div>
+            <div class="pfig__pick">
+              <label class="perception__count">from <input type="range" min="0" max="100" step="1" value="8" data-prof-from></label>
+              <label class="perception__count">to <input type="range" min="0" max="100" step="1" value="92" data-prof-to></label>
+              <label class="perception__count">row <input type="range" min="0" max="100" step="1" value="50" data-prof-row></label>
+            </div>
+            <canvas class="pfig__c" data-profile width="760" height="300" role="img" aria-label="The depth along the dragged line, in the shader's own display units"></canvas>
+            <p class="pfig__read" data-profile-read aria-live="polite">drag across the photograph, or set the line here</p>
+            <figcaption class="pfig__cap">The vertical axis is relative depth in frame-heights, the same number the vertex shader displaces by, not metres. The two ends are marked on the photograph and drawn on the relief; this line is the same one you can drag on the still above.</figcaption>
+          </figure>
+
+          <figure class="pfig pfig--wide">
+            <div class="pfig__head">
+              <p class="pfig__t">the map as a depth of field</p>
+            </div>
+            <div class="pfig__pick">
+              <label class="perception__count">focus <input type="range" min="0" max="100" step="1" value="35" data-focus></label>
+              <label class="perception__count">aperture <input type="range" min="2" max="60" step="1" value="18" data-aperture></label>
+            </div>
+            <canvas class="pfig__c pfig__c--smooth" data-focus-canvas width="640" height="428" role="img" aria-label="The photograph blurred by its distance from the focused depth band"></canvas>
+            <p class="pfig__read" data-focus-read aria-live="polite">refocusing…</p>
+            <figcaption class="pfig__cap">The map used as a lens: the band at the chosen depth stays sharp and everything else is blurred in six quantised steps. Where the map is wrong — a window, a thin branch, a tunnel's mouth — the blur follows the mistake, and it is left on screen.</figcaption>
+          </figure>
+        </div>
+
+        <!-- THE RUN, DRAWN FROM ITS OWN NUMBERS. Every label below is written
+             when the reply lands: bytes from the reply's count x 4, the shape
+             from EMB.INFO, the time from the bridge. Nothing typed twice. -->
+        <figure class="trace" data-trace hidden>
+          <div class="trace__top">
+            <p class="pfig__t">what came back</p>
+            <p class="trace__req"><b data-trace-req>—</b> B · one bounded JPEG · one call</p>
+          </div>
+          <div class="trace__lane">
+            <p class="trace__model">Depth Anything V2 Small · one pass · <b data-trace-time="d">—</b></p>
+            <button class="trace__reply" type="button" data-trace-go="stage">
+              <span class="trace__track"><span class="trace__bar" data-trace-bar="depth"></span></span>
+              <span class="trace__lab">depth · <b data-trace-shape="depth">—</b> · <b data-trace-bytes="depth">—</b> B</span>
+            </button>
+          </div>
+          <figcaption class="pfig__cap">One lane, one reply, one bar at 100% by construction. Press the reply to jump to the figure that reads it; nothing here asks the sandbox anything.</figcaption>
+        </figure>
 
         <details class="perception__fold perception__fold--prose">
-          <summary class="perception__fold-h">the two calls, byte for byte</summary>
+          <summary class="perception__fold-h">the one call, byte for byte</summary>
           <div class="perception__fold-body">
-            <p class="block__deck"><span class="t-dim">1</span> The browser bounds the picture: drawn to a canvas at no more than 768 pixels on the long edge, re-encoded as JPEG at quality 0.85. What leaves the page is that encode, not the file in the repository.</p>
+            <p class="block__deck"><span class="t-dim">1</span> The browser bounds the picture: drawn to a canvas at no more than 768 pixels on the long edge, re-encoded as JPEG at quality 0.85, stepped down if that is over the cap. What leaves the page is that encode, not the file in the repository.</p>
             <p class="block__deck"><span class="t-dim">2</span> JSON carries no bytes, so the encode goes into argument 5 as base64 and <span class="t-cmd">bin: [5]</span> names it; <span class="t-cmd">proto: 2</span> asks for a keyed reply. The bridge decodes argument 5 back to bytes and sends one binary-safe RESP bulk, so emb never sees base64.</p>
-            <p class="block__deck"><span class="t-dim">3</span> The sandbox takes SHA-256 of the bytes first and looks up <span class="t-cmd">img:&lt;model&gt;:&lt;sha256&gt;:&lt;output&gt;</span>, one entry per output. A miss is decoded, squashed to 224 pixels square for <span class="t-cmd">dinov3</span> — 266 for <span class="t-cmd">depth</span> — rescaled 1/255 and normalised per channel.</p>
-            <p class="block__deck"><span class="t-dim">4</span> One run answers every output. <span class="t-cmd">pooler_output</span> and <span class="t-cmd">last_hidden_state</span> leave the same forward pass, so two products cost one inference.</p>
-            <p class="block__deck"><span class="t-dim">5</span> <span class="t-cmd">select</span> decides what leaves the graph. <span class="t-cmd">none</span> is the rank-2 pooled vector, 1 × 384. <span class="t-cmd">tokens</span> with <span class="t-cmd">start: 5</span> and <span class="t-cmd">grid: 14</span> drops the CLS row and the four register rows and keeps 196 patch rows, because 196 = 14². <span class="t-cmd">map</span> reduces nothing: 266 × 266, flat.</p>
-            <p class="block__deck"><span class="t-dim">6</span> Both numbers come from the export's own <span class="t-cmd">config.json</span> — <span class="t-cmd">start = 1 + num_register_tokens</span>, <span class="t-cmd">grid = size / patch_size</span> — and the server re-checks the row count against the tensor, so a wrong <span class="t-cmd">start</span> is refused instead of returning a grid shifted by one patch.</p>
-            <p class="block__deck"><span class="t-dim">7</span> <span class="t-cmd">BLOB</span> is row-major little-endian float32, no header and no shape: 384 × 4 = 1 536 B for the vector, 196 × 384 × 4 = 301 056 B for the grid, 266 × 266 × 4 = 283 024 B for the map. The shape is read once, from <span class="t-cmd">EMB.INFO</span>.</p>
-            <p class="block__deck"><span class="t-dim">8</span> The bridge carries each bulk as base64, and base64 spends four characters for every three bytes: the grid and the map cross it as 401 408 and 377 368 characters. RESP framing adds a few dozen header bytes on the server side; the payload arithmetic above is what dominates the wire.</p>
-            <p class="block__deck"><span class="t-dim">9</span> The second call repeats 2 to 8 against another model; the bridge takes one command at a time, so the two are sequential. The cache identity is the bytes, not the picture: the same image again is a lookup, and the same photograph re-encoded at another quality is a fresh run.</p>
+            <p class="block__deck"><span class="t-dim">3</span> The sandbox takes SHA-256 of the bytes first and looks up <span class="t-cmd">img:depth:&lt;sha256&gt;:depth</span>, one entry per output. A miss is decoded, squashed to 266 pixels square, rescaled 1/255 and normalised per channel.</p>
+            <p class="block__deck"><span class="t-dim">4</span> One forward pass answers the one output. <span class="t-cmd">select: map</span> reduces nothing: the tensor is 266 × 266 and 266 = 19 × 14, the export's multiple-of-14 rule, so nothing is sliced and no row is dropped.</p>
+            <p class="block__deck"><span class="t-dim">5</span> <span class="t-cmd">BLOB</span> is row-major little-endian float32, no header and no shape: 266 × 266 × 4 = 283 024 B, 70 756 values in the order the graph produced them. The shape is read once, from <span class="t-cmd">EMB.INFO</span>, so a model served at another size does not falsify anything the page prints.</p>
+            <p class="block__deck"><span class="t-dim">6</span> The bridge carries the bulk as base64, and base64 spends four characters for every three bytes: the map crosses it as 377 368 characters. RESP framing adds a few dozen header bytes on the server side; the payload arithmetic above dominates the wire.</p>
+            <p class="block__deck"><span class="t-dim">7</span> The map is never normalised by the server, because depth is not a unit vector. The page owns the transform: it reads the 1st and 99th percentiles once, equalises by rank, blurs the result before differentiating it, and displaces the relief by that height. Every figure here reads that same field.</p>
+            <p class="block__deck"><span class="t-dim">8</span> The cache identity is the bytes, not the picture: the same image again is a lookup, and the same photograph re-encoded at another quality is a fresh run. Measured on the development host, a cold call answers in about 265 ms and a repeat in about 194 µs; the readout prints whichever the bridge measured, and says so when the answer was cached.</p>
           </div>
         </details>
 
         <details class="perception__fold perception__fold--prose">
           <summary class="perception__fold-h">the index, the tolerances and the limits</summary>
           <div class="perception__fold-body">
-            <p class="block__deck">DINOv3 was trained without captions, labels or a text tower. One run of its graph answers with two things: a pooled vector for the whole image, and a hidden state of tokens — 201 rows at 224 pixels, five reserved and the other 196 the picture itself, one vector per 16-pixel patch. emb slices the patch rows out from row 5, normalises every row, and hands the grid over as flat float32. Both products come back from the one call, so the page ranks whole pictures by the pooled vector and parts inside a picture by the grid, without a second pass.</p>
+            <p class="block__deck">A depth model is not a feature model. It is trained to predict one number per pixel, so its map has no vector to compare and no label to print: the plate never claims an object, a name or a class. What it has is an ordering — which pixel is nearer than which — and that ordering is what every figure here draws.</p>
             <p class="block__deck">The mesh is one regular grid at the density the reader picks, and the readout under the stage carries the vertex count of the tier drawn. A cell survives when its four edges and its diagonal each change the display depth by less than the cut tolerance, and the tolerance scales with the step, so the same surface survives at every tier: a smooth ramp changes more across a coarse step than a fine one, while a real occlusion boundary changes by the same amount either way. Refused cells leave a hole, which is the honest shape of an unknown surface.</p>
-            <p class="block__deck">The relief is lit, not painted: one key light from the upper left, a fill from the opposite side and a specular that follows the camera, with the normals taken from the depth map's own gradient. The shadows come from that same map — a cast term that walks each cell along the light and stops at taller terrain, and a contact term that darkens wherever the surface sits below its own neighbourhood. Both are baked once per sample, 70 756 cells each, because the depth is the terrain and the renderer only has to shade it.</p>
-            <p class="block__deck">Elevation is the rank-equalised depth times a single gain, so the exaggeration slider scales the geometry without touching the buffer. The reading, the normals, the flow and the region are uniforms over that buffer, which is why they compose: a reader can pin a patch, isolate it and watch the matching structures fall into different depth layers. The camera is clamped to 25° of yaw and 15° of pitch, because a single-view reconstruction has one face.</p>
-            <p class="block__deck">The chosen sample is sent to the sandbox for two calls; the models' weights are downloaded by the sandbox on boot, and this page ships none of them. A photograph you upload goes the same way: bounded to 768 pixels in the browser, sent as bytes, answered by the same two graphs. The picture itself is never stored; the sandbox keeps the two replies in a cache keyed by a hash of those bytes, so a repeat is a lookup rather than another run. The other five pictures are looked up once each, so the strip can rank them — one call per picture, then it is memory.</p>
-            <p class="block__deck">The strip asks two different questions of the replies already in hand. With no patch pinned it asks which picture is most like this one, and that is the pooled vector's cosine: 1 × 384 against 1 × 384. With a patch pinned it asks where that part comes back, which is one dot product per row of every other grid — 196 rows a picture — keeping each picture's best row and the cell it came from. Neither question sends a command.</p>
-            <p class="block__deck">The six photographs were not chosen by subject. Sixty-nine candidates cleared the licence filter — CC0 or public domain from Wikimedia Commons, every original at least 1800 pixels on the long edge — and each went through the plate's own depth call as <span class="t-cmd">EMB.IMG depth BLOB OUTPUTS depth</span>. The 283 024-byte map was min-max normalised and reduced to the p5 and p95 spread, the share below 0.10 and above 0.90, and the gradient energy; the six kept reach both ends of the range, so the mesh has a near foreground, a middle ground and a far background to cut between. Four are CC0, two public domain, and the strip names each author.</p>
+            <p class="block__deck">The relief is lit, not painted: one key light from the upper left, a fill from the opposite side and a specular that follows the camera, with the normals taken from the depth map's own gradient. The shadows come from that same map — a cast term that walks each cell along the light and stops at taller terrain, and a contact term that darkens wherever the surface sits below its own neighbourhood. Both are baked once per sample, 70 756 cells each.</p>
+            <p class="block__deck">Elevation is the rank-equalised depth times a single gain, so the exaggeration slider scales the geometry without touching the buffer. The reading is a uniform over that buffer, which is why it composes with the camera: turn the surface and the normals turn with it. The camera is clamped to 25° of yaw and 15° of pitch, because a single-view reconstruction has one face.</p>
+            <p class="block__deck">The chosen sample is sent to the sandbox for one call; the model's weights are downloaded by the sandbox on boot, and this page ships none of them. A photograph you upload goes the same way: bounded to 768 pixels in the browser, sent as bytes, answered by the same graph. The picture itself is never stored; the sandbox keeps the reply in a cache keyed by a hash of those bytes, so a repeat is a lookup rather than another run.</p>
+            <p class="block__deck">The profile is not a second interpretation of the map. It samples the same bilinear reader the vertex shader displaces by, in the same units, so a point on the chart and a point on the relief are the same number: the reader can check one against the other and find no drift. What it cannot give is a distance in metres — a monocular model predicts an ordering, not a scale.</p>
+            <p class="block__deck">The focus is the map used as a photographic tool rather than as a measurement. The photograph is blurred by its distance from a band of the rank map, in six quantised steps drawn with <span class="t-cmd">ctx.filter</span> and masked by the map's own band, and a Laplacian variance on a 192-pixel copy reports how much sharper the band is than everything outside it. Where the map is wrong the blur follows the mistake: a window, a thin branch and the mouth of the tunnel stay wrong on screen, because correcting them by hand would make the figure a claim instead of a demonstration.</p>
+            <p class="block__deck">The six photographs are Unsplash, reached through their CC0 mirrors on Wikimedia Commons, and 352 candidates from that import were measured before six were kept. Each went through the plate's own call as <span class="t-cmd">EMB.IMG depth BLOB OUTPUTS depth</span>: the 283 024-byte map was min-max normalised and reduced to the p5 and p95 spread, the share below 0.10 and above 0.90, and the gradient energy. The six kept span 0.69–0.95 of the range with 1.1–36.2% of the frame near and 2.0–12.7% far, so every one of them has a foreground, a middle ground and a background for the relief to separate.</p>
           </div>
         </details>
       </div></div>
@@ -237,18 +290,18 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-        <p class="block__deck">A single-view reconstruction is a shell of what one camera saw, and a shell is worth more than a picture once it is a real mesh: geometry can be measured, cut, wireframed and lit without a second model.</p>
-        <p class="block__deck">A vector per image answers which image; a vector per patch answers where in the image, which is where copy detection, region search and "find this part in that photo" begin. One model measures, one holds meaning, and the page says which number came from which.</p>
+        <p class="block__deck">A single-view reconstruction is a shell of what one camera saw, and it is worth more than a picture once it is a real mesh: geometry can be measured, cut and lit without a second model.</p>
+        <p class="block__deck">A depth map is also the one model output a reader can check with their own eyes. The near end of a corridor, the chair at the end of a pier, the valley behind a tunnel: the map either puts them in that order or it does not, and the profile prints the numbers behind the answer.</p>
 
         <details class="perception__fold perception__fold--prose">
-          <summary class="perception__fold-h">what one inference buys</summary>
+          <summary class="perception__fold-h">what one call buys</summary>
           <div class="perception__fold-body">
-            <p class="block__deck">One pass, one space. The pooled vector is 384 wide and a patch row is 384 wide because they come out of the same graph — row 0 before pooling — so a single run yields a point for the picture and a grid for its parts in one metric. Rank whole pictures by the vector, rank parts by the grid, re-run nothing.</p>
-            <p class="block__deck">Those 196 rows are an index nobody had to build. <span class="t-cmd">normalize: true</span> makes every row a unit vector, so a dot product is a cosine: inside a picture that is the similarity field the relief is drawn from, and between two pictures it is still a cosine, because every grid here left the same graph on the same 14 × 14 lattice at the same 384 dimensions. Six pictures are six calls, 1 176 patch vectors and 1 806 336 bytes of grid held in the page; the ranking is arithmetic over them, not a query.</p>
-            <p class="block__deck">The map is a different kind of output, not a wider one. <span class="t-cmd">select: map</span> reduces no rows: 266 × 266 = 70 756 numbers, never normalised, declared as <span class="t-cmd">rows: 266, dim: 266</span> rather than as a grid. A dot product between two maps means nothing, so the declared shape is the whole contract and the client owns the transform.</p>
-            <p class="block__deck">The second graph is not free. It has its own session — <span class="t-cmd">EMB.INFO depth</span> reports <span class="t-cmd">image_sessions: 1</span> — 27 MB of int8 weights on disk and about 100 MB resident once the CPU provider dequantises them, beside DINOv3's 22 MB on disk and about 90 MB resident. Both stay warm, which is why a picture already seen is a lookup instead of a second wait.</p>
-            <p class="block__deck">No vector database is involved. Beyond the sandbox's content-hash entries nothing is stored, the six grids live in the page's own memory, and one ranking is 196 dot products of 384 multiplies a picture. A second service would hold an index the inference already delivered.</p>
-            <p class="block__deck">One grid is what the four readings share: surface, wireframe, normals and cloud read the same vertices and the same index, and the probe composes with any of them. The depth map is the other buffer, and the only thing the second model contributes.</p>
+            <p class="block__deck">One pass, one map, three readings. The reply is 70 756 numbers and nothing else: no vector, no label, no second service. The relief is those numbers as a height field, the map figure is the same numbers drawn directly, the profile is one line through them, and the focus is the same line turned into a photographic control. One reply is enough for all four because none of them is a different measurement.</p>
+            <p class="block__deck">The declared shape is the contract. <span class="t-cmd">select: map</span> reports <span class="t-cmd">rows</span> and <span class="t-cmd">dim</span> in <span class="t-cmd">EMB.INFO</span>, and the page refuses to draw when the reply's element count disagrees with it, so a mis-shaped or truncated reply becomes a stated error instead of a picture that looks plausible.</p>
+            <p class="block__deck">A map is not a vector, and the plate never pretends otherwise. There is no similarity score here and no ranking: a dot product between two depth maps would mean nothing. What the map supports is comparison along its own axes — near against far along a line, this band against that one — and that is exactly what the profile and the focus do.</p>
+            <p class="block__deck">The model is not free. It has its own session, which <span class="t-cmd">EMB.INFO depth</span> reports as <span class="t-cmd">image_sessions: 1</span>, 27 MB of int8 weights on disk and about 100 MB resident once the CPU provider dequantises them. It stays warm, which is why a picture already seen is a lookup instead of a second wait.</p>
+            <p class="block__deck">No stored asset is involved. The page does not ship a precomputed map or a screenshot of one, because a figure drawn from a file cannot be checked against a reply. Every number on this page is written when the reply lands or measured in the browser, and the six photographs are the only committed assets.</p>
+            <p class="block__deck">The limits are the honest part. The depth is monocular: one camera, one face, no invented backside. It is relative: the profile's axis is frame-heights, not metres, and a different photograph has a different scale. It is approximate: the cut leaves holes at real occlusion boundaries, and the focus inherits every place the map is wrong.</p>
           </div>
         </details>
       </div></div>
@@ -258,11 +311,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-        <p class="block__deck">Two commands, two graphs, packed float32. <span class="t-cmd">BLOB</span> is the reply form: four bytes per number, so a 196×384 grid crosses as 301 056 bytes instead of decimal text.</p>
-<figure class="code"><pre class="code__body"><code>EMB.IMG dinov3 BLOB OUTPUTS embedding,patches &lt;image bytes&gt;
-# -> ["embedding", &lt;1536 B: 384 float32&gt;, "patches", &lt;196 x 384 float32&gt;]
-
-EMB.IMG depth BLOB OUTPUTS depth &lt;image bytes&gt;
+        <p class="block__deck">One command, one graph, packed float32. <span class="t-cmd">BLOB</span> is the reply form: four bytes per number, so a 266 × 266 map crosses as 283 024 bytes instead of 70 756 decimal numbers.</p>
+<figure class="code"><pre class="code__body"><code>EMB.IMG depth BLOB OUTPUTS depth &lt;image bytes&gt;
 # -> ["depth", &lt;283 024 B: 266 x 266 float32, relative&gt;]
 
 # the bridge request: `bin` names argument 5 as base64 bytes
@@ -270,56 +320,44 @@ EMB.IMG depth BLOB OUTPUTS depth &lt;image bytes&gt;
   "bin": [5], "proto": 2 }
 
 # what the server declares, read once per page
-EMB.INFO dinov3
-# -> image_outputs.patches = { tensor: "last_hidden_state", select: "tokens",
-#                              rows: 196, dim: 384, grid: [14, 14] }
 EMB.INFO depth
-# -> image_outputs.depth  = { tensor: "predicted_depth", select: "map",
-#                             rows: 266, dim: 266 }
+# -> image_outputs.depth = { tensor: "predicted_depth", select: "map",
+#                            rows: 266, dim: 266 }
 
-# the config that names both products (one `image:` block each)
-image:
-  preset: dinov3
-  outputs:
-    - { name: embedding, tensor: pooler_output }
-    - { name: patches, tensor: last_hidden_state, select: tokens }
-# rows 0..4 = CLS + 4 registers · rows 5.. = the 196 patches
-# start=5 and grid=14 resolved from the export's config.json, not typed here
-
+# the config that names the one output
 image:
   preset: imagenet
   size: 266
   outputs:
     - { name: depth, tensor: predicted_depth, select: map }
 # 266 = 19 x 14, the export's multiple-of-14 rule; the map is never normalized</code></pre>
-        <figcaption class="code__cap">The grid's layout is read from the model's own <span class="t-cmd">config.json</span>; the map's shape is declared by the server. The page refuses to draw if either reply's byte count disagrees.</figcaption>
+        <figcaption class="code__cap">The map's shape is declared by the server; the page refuses to draw if the reply's byte count disagrees, and the boot fails if the tensor name is wrong rather than answering an empty map.</figcaption>
       </figure>
 
         <p class="block__deck">One row per output: the tensor it leaves, the selector that shapes it, its rows × dim and its bytes.</p>
 
         <dl class="api">
-          <dt>embedding</dt><dd><span class="t-cmd">pooler_output</span> · select <span class="t-cmd">none</span> (rank 2) · 1 × 384 · 1 536 B</dd>
-          <dt>patches</dt><dd><span class="t-cmd">last_hidden_state</span> · select <span class="t-cmd">tokens</span>, <span class="t-cmd">start 5</span>, <span class="t-cmd">grid 14</span> · 196 × 384 · 301 056 B</dd>
           <dt>depth</dt><dd><span class="t-cmd">predicted_depth</span> · select <span class="t-cmd">map</span> · 266 × 266 · 283 024 B</dd>
+          <dt>the map crosses as</dt><dd>377 368 base64 characters on the bridge, 283 024 bytes on the wire between the bridge and the server.</dd>
         </dl>
 
         <dl class="api">
-          <dt>VALUES on a map</dt><dd>The bridge refuses the keyword for either call; the server beneath it refuses a map's <span class="t-cmd">VALUES</span>, naming <span class="t-cmd">BLOB</span> and its 70 756 numbers.</dd>
+          <dt>VALUES on a map</dt><dd>Refused: the bridge refuses the keyword for the image command, and the server beneath it refuses a map's <span class="t-cmd">VALUES</span>, naming <span class="t-cmd">BLOB</span> and its 70 756 numbers.</dd>
           <dt>a second image</dt><dd>Refused by the bridge: <span class="t-cmd">EMB.IMG takes exactly one image per call</span>.</dd>
+          <dt>any other model</dt><dd>The sandbox's image surface is one model. An image command naming anything else is refused before the server is called, and the refusal names <span class="t-cmd">depth</span>.</dd>
         </dl>
 
 <dl class="api">
-  <dt>two products, one run</dt><dd>DINOv3 answers the pooled vector and the patch grid from the same forward pass. The pooled vector ranks images; the grid localises inside one.</dd>
-  <dt>depth is another model</dt><dd>A dense feature map is not a depth map: monocular depth needs a trained decoder. The plate runs Depth Anything V2 beside DINOv3 and never lets one answer for the other.</dd>
-  <dt>the cut is topology, not a filter</dt><dd>A cell is refused before any triangle exists, so the wireframe cannot draw an edge the surface does not have. The tolerance is a control — lower it and the mesh spends its triangles on the material, raise it and only real object edges open.</dd>
-  <dt>four readings, one geometry</dt><dd>Surface, wireframe, normals and cloud share one vertex buffer and one index, and the probe composes with all of them. The fill rate changes, the geometry does not.</dd>
+  <dt>the map is data, not a vector</dt><dd>266 × 266 numbers in row-major order, never normalised, never pooled. The server reports the shape; the client owns the transform.</dd>
+  <dt>the cut is topology, not a filter</dt><dd>A cell is refused before any triangle exists, so no triangle spans two objects. The tolerance is a control: lower it and the mesh spends its triangles on the material, raise it and only real object edges open.</dd>
+  <dt>two readings, one geometry</dt><dd>Surface and normals share one vertex buffer and one index; the colour changes, the geometry does not.</dd>
   <dt>the normals are the map's</dt><dd>Each normal is the gradient of the depth model's own ordering, clamped so a cliff reads as a steep ramp instead of a black band. It is a convincing orientation, not a recovered surface normal.</dd>
-  <dt>a region is not a mask</dt><dd>The grown region is connectivity plus three tolerances — the model's cosine, the photograph's colour, the depth map — not a segmentation: it can leak along a wall and stop at a shadow. The box is the region's extent, not a detector's output.</dd>
-  <dt>one model, six pictures</dt><dd>The strip ranks across pictures because every grid came out of the same graph: same patch size, same 384 dimensions, so the dot products mean something. Ask a different checkpoint and the numbers are not comparable.</dd>
-  <dt>what it is not</dt><dd>No labels, no attention maps, no segmentation head, and no metric scale: the reconstruction has one face, the depth is monocular and relative, and the box is in display units.</dd>
+  <dt>the profile is the shader's own function</dt><dd>It samples the same bilinear reader and rank equalisation the vertices are displaced by, in display units, so the chart and the relief cannot disagree.</dd>
+  <dt>the focus is not a lens</dt><dd>It is the map used as a depth of field: six bands, blur by distance from the chosen one, and a measured sharpness ratio. The places the map is wrong stay wrong on screen.</dd>
+  <dt>what it is not</dt><dd>No labels, no segmentation head, no metric scale and no invented geometry: the reconstruction has one face, the depth is monocular and relative, and the profile's axis is in frame-heights.</dd>
 </dl>
 
-        <p class="block__deck">DINOv3's weights are under the <a href="https://ai.meta.com/resources/models-and-libraries/dinov3-license" rel="noopener">DINOv3 License</a> (Meta), restricted from military and ITAR use; the graph served here is the <span class="t-cmd">onnx-community</span> conversion of ViT-S/16, quantized. Depth Anything V2 Small is Apache-2.0. Both are downloaded by the sandbox on boot; the six photographs are CC0 or public domain.</p>
+        <p class="block__deck">Depth Anything V2 Small is Apache-2.0. The graph is downloaded by the sandbox on boot and this repository ships no weights. The six photographs arrive as their Wikimedia Commons CC0 mirrors, credited per file in <span class="t-cmd">website/demos/samples/CREDITS.md</span>.</p>
       </div></div>
     </section>
   <div class="shell">
@@ -342,7 +380,6 @@ image:
 import { gallery, el, showState, unfold, duration, motionAllowed } from '../assets/js/demos.js';
 
 const g = gallery();
-const FEATURES = 'dinov3';
 const DEPTH = 'depth';
 const MAX_EDGE = 768;
 const MAX_PARTICLES = 600000;
@@ -350,32 +387,46 @@ const MAX_PARTICLES = 600000;
  * server's `max_image_bytes`), so the browser aims well under it and steps the
  * JPEG quality down until it is there: 768 pixels at 0.85 is not always small. */
 const MAX_IMAGE_BYTES = 200000;
-/* Pixels per grid step for the three tiers: one regular grid feeds the mesh and
- * the cloud, so a tier change re-samples the same bounded photograph and never
- * issues a command. */
+/* Pixels per grid step for the three tiers: one regular grid feeds the mesh, so
+ * a tier change re-samples the same bounded photograph and never issues a
+ * command. */
 const DENSITY = [3, 2, 1];
-const READINGS = ['surface', 'wireframe', 'normals', 'cloud'];
+const READINGS = ['surface', 'normals'];
 const root = document.querySelector('[data-rig="perception"]');
 const stage = root.querySelector('[data-stage]');
 const stageCap = root.querySelector('[data-stage-cap]');
 const preview = root.querySelector('[data-preview]');
-const plan = root.querySelector('[data-plan]');
-const cue = root.querySelector('[data-reveal]');
 const stateEl = root.querySelector('[data-state]');
 const out = root.querySelector('[data-out]');
 const readout = root.querySelector('[data-readout]');
-const stripHint = root.querySelector('[data-strip-hint]');
-const samplesEl = root.querySelector('[data-samples]');
 const sampleButtons = Array.from(root.querySelectorAll('[data-sample]'));
 const viewRadios = Array.from(root.querySelectorAll('[data-view]'));
 const readRadios = Array.from(root.querySelectorAll('[data-reading]'));
 const exagInput = root.querySelector('[data-exag]');
 const cutInput = root.querySelector('[data-cut]');
 const densityInput = root.querySelector('[data-density]');
-const isoInput = root.querySelector('[data-iso]');
-const colInput = root.querySelector('[data-col]');
-const rowInput = root.querySelector('[data-row]');
+/* The profile's controls live in its own figure, outside the stage's rig. */
+const profFrom = document.querySelector('[data-prof-from]');
+const profTo = document.querySelector('[data-prof-to]');
+const profRow = document.querySelector('[data-prof-row]');
 const uploadInput = root.querySelector('[data-upload]');
+const profileLine = root.querySelector('[data-profile-line]');
+const profileA = root.querySelector('[data-profile-a]');
+const profileB = root.querySelector('[data-profile-b]');
+const frameEl = preview.parentElement;
+
+/* The figures live in the prose block, outside the stage's rig element, so they
+ * are read from the document rather than from `root`. */
+const figWrap = document.querySelector('[data-figs]');
+const mapCanvas = document.querySelector('[data-map]');
+const mapRead = document.querySelector('[data-map-read]');
+const mapRank = document.querySelector('[data-map-rank]');
+const profileCanvas = document.querySelector('[data-profile]');
+const profileRead = document.querySelector('[data-profile-read]');
+const focusCanvas = document.querySelector('[data-focus-canvas]');
+const focusRead = document.querySelector('[data-focus-read]');
+const focusInput = document.querySelector('[data-focus]');
+const apertureInput = document.querySelector('[data-aperture]');
 
 /* The plate's colours are the stylesheet's tokens, read once. */
 const token = (name) => {
@@ -383,21 +434,31 @@ const token = (name) => {
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 };
 const ACCENT = token('--accent');
-const RULE = token('--rule');
+const MUTED = token('--muted');
+/* The map's ramp: far is the site's own warm grey, near is the accent ink. Both
+ * are tokens, so the figure cannot drift from the palette. */
+const MAP_FAR = token('--rule');
+const MAP_NEAR = token('--accent-ink');
+
+const tint = (a, b, t) => [
+  Math.round(a[0] + (b[0] - a[0]) * t),
+  Math.round(a[1] + (b[1] - a[1]) * t),
+  Math.round(a[2] + (b[2] - a[2]) * t)
+];
 
 /* ── the derived state ─────────────────────────────────────────────────
- * One object per sample: the depth map and its gradient, the patch grid, the
- * probe's similarities, and the figure's own arrays. Every number printed
- * comes from here. */
+ * One object per sample: the depth map, its rank transform, the height field the
+ * geometry and the figures both read, and the figure's own arrays. Every number
+ * the page prints comes from here. */
 const S = {
-  id: '', rows: 0, dim: 0, grid: 0, patches: null, cls: null,
-  depthRows: 0, depthDim: 0, depth: null, depthRange: [0, 1], depthRank: null, slopes: null,
-  sim: null, probe: 0, query: null, members: null, regionCount: 0,
-  patchDepth: null, patchColor: null,
-  density: 2, cut: 0.0642, iso: false, reading: 0,
+  id: '', depthRows: 0, depthDim: 0, depth: null, depthRange: [0, 1], depthRank: null,
+  depthP5P95: [0, 1], depthStats: null, slopes: null, heights: null, shadow: null,
+  mapBuf: null, mapRankBuf: null, points: null,
+  profile: { y: 0.5, x0: 0.08, x1: 0.92 },
+  density: 2, cut: 0.0642, reading: 0,
   width: 0, height: 0, count: 0,
-  rise: 0, mind: 0, light: 0, view: 0, exaggeration: 1, pinned: false,
-  mesh: null, points: null, topology: null, colors: null, photo: null
+  rise: 0, light: 0, view: 1, exaggeration: 1,
+  mesh: null, topology: null, colors: null, photo: null
 };
 
 /* The reveal: the picture hands over to its pixels, the depth arrives, and the
@@ -407,133 +468,15 @@ const CLOCK = { dissolve: 900, depth: 3000, camera: 2200, mix: 900, yaw: -0.22 }
 const YAW = 0.436;   // 25°: enough parallax to read the depth, not enough to show the backside
 const PITCH = 0.262; // 15°
 const DEPTH_GAIN = 0.26; // display units of lift per unit of the depth model's own ordering
-const POINT_SIZE = 0.0036; // about two CSS pixels at the fitted distance
-const KEY = [0.42, 0.55, 0.72]; // the key light, upper left and in front
+const KEY = [0.40, 0.52, 0.36]; // the key light: upper left, in front, low enough to rake the relief
 
-let elapsedFeatures = 0;
 let elapsedDepth = 0;
-let featuresCached = false;
 let depthCached = false;
 const firstCalls = new Map();
 
 function setState(next, message) { showState(stateEl, next, message, () => { g.retry(); }); }
 
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-
-/* ── the model's arithmetic ───────────────────────────────────────────
- * Every row is already a unit vector, so similarity is one dot product. It is
- * not re-normalized here on purpose: re-normalizing would hide a server
- * regression behind a picture that still looked right. */
-function dotAt(arr, off, vec, n) {
-  let s = 0;
-  for (let i = 0; i < n; i++) { s += arr[off + i] * vec[i]; }
-  return s;
-}
-
-function similaritiesTo(vec) {
-  const out = new Float32Array(S.rows);
-  for (let i = 0; i < S.rows; i++) { out[i] = dotAt(S.patches, i * S.dim, vec, S.dim); }
-  return out;
-}
-
-function similarities(index) {
-  return similaritiesTo(S.patches.subarray(index * S.dim, (index + 1) * S.dim));
-}
-
-/* The cut is a share of the grid, not a constant: the cosine a model calls
- * "alike" drifts with the picture and the checkpoint. */
-function quantile(sim, share) {
-  const ranked = Array.from(sim).sort((a, b) => b - a);
-  const k = Math.min(ranked.length, Math.max(1, Math.round(S.rows * share)));
-  return ranked[k - 1];
-}
-
-/* One depth and one colour per patch, read once per sample so a click can grow
- * a region without touching the image or the map again. */
-function buildPatchStats() {
-  S.patchDepth = new Float32Array(S.rows);
-  S.patchColor = new Float32Array(S.rows * 3);
-  for (let r = 0; r < S.grid; r++) {
-    for (let c = 0; c < S.grid; c++) {
-      const t = r * S.grid + c;
-      const u = (c + 0.5) / S.grid;
-      const v = (r + 0.5) / S.grid;
-      S.patchDepth[t] = sampleDepth(u, v);
-      const i = (Math.min(S.height - 1, Math.floor(v * S.height)) * S.width +
-        Math.min(S.width - 1, Math.floor(u * S.width))) * 4;
-      S.patchColor[t * 3] = S.colors[i] / 255;
-      S.patchColor[t * 3 + 1] = S.colors[i + 1] / 255;
-      S.patchColor[t * 3 + 2] = S.colors[i + 2] / 255;
-    }
-  }
-}
-
-/* DINOv3 returns no masks, so the region is grown rather than claimed: from the
- * probed patch over its four neighbours, and only where the model's cosine, the
- * photograph's colour and the depth map agree. Anchored on the seed for one
- * pass — a growth that re-anchored itself could oscillate between regions. The
- * tolerances are fixed: the region is a reading of the pin, not a sixth control. */
-const DEPTH_TOL = 0.02 + 0.45 * 0.43;
-const COLOUR_TOL = 0.05 + 0.45 * 0.85;
-
-function growRegion(seed, sim, cut) {
-  const members = new Uint8Array(S.rows);
-  const queue = [seed];
-  members[seed] = 1;
-  const s0 = S.patchColor[seed * 3];
-  const s1 = S.patchColor[seed * 3 + 1];
-  const s2 = S.patchColor[seed * 3 + 2];
-  for (let h = 0; h < queue.length; h++) {
-    const p = queue[h];
-    const c = p % S.grid;
-    const r = (p - c) / S.grid;
-    for (let d = 0; d < 4; d++) {
-      const cc = c + (d === 0 ? 1 : d === 1 ? -1 : 0);
-      const rr = r + (d === 2 ? 1 : d === 3 ? -1 : 0);
-      if (cc < 0 || cc >= S.grid || rr < 0 || rr >= S.grid) { continue; }
-      const q = rr * S.grid + cc;
-      if (members[q] || sim[q] < cut) { continue; }
-      if (Math.abs(S.patchDepth[q] - S.patchDepth[seed]) > DEPTH_TOL) { continue; }
-      const dr = S.patchColor[q * 3] - s0;
-      const dg = S.patchColor[q * 3 + 1] - s1;
-      const db = S.patchColor[q * 3 + 2] - s2;
-      if (Math.sqrt(dr * dr + dg * dg + db * db) > COLOUR_TOL) { continue; }
-      members[q] = 1;
-      queue.push(q);
-    }
-  }
-  return members;
-}
-
-/* A region is a better query than one patch: average its unit vectors, then
- * normalize — the model's own arithmetic, one step wider. */
-function regionQuery(members) {
-  const vec = new Float32Array(S.dim);
-  let n = 0;
-  for (let i = 0; i < S.rows; i++) {
-    if (!members[i]) { continue; }
-    n++;
-    const off = i * S.dim;
-    for (let t = 0; t < S.dim; t++) { vec[t] += S.patches[off + t]; }
-  }
-  let norm = 0;
-  for (let t = 0; t < S.dim; t++) { norm += vec[t] * vec[t]; }
-  norm = Math.sqrt(norm) || 1;
-  for (let t = 0; t < S.dim; t++) { vec[t] /= norm; }
-  return { vec, n };
-}
-
-function bestOther(sim) {
-  let best = -1;
-  for (let i = 0; i < S.rows; i++) {
-    if (i !== S.probe && (best < 0 || sim[i] > sim[best])) { best = i; }
-  }
-  return best;
-}
-
-function patchCell(patch) {
-  return '#' + patch + ' (' + (patch % S.grid) + ',' + Math.floor(patch / S.grid) + ')';
-}
 
 /* ── the depth map ────────────────────────────────────────────────────
  * Relative depth, normalised by the map's own percentiles and then equalised by
@@ -557,6 +500,12 @@ function depthRankMap(values, range) {
   let acc = 0;
   for (let b = 0; b < 256; b++) { acc += bins[b]; cdf[b] = acc / Math.max(1, values.length); }
   return cdf;
+}
+
+/* One percentile of the map, read once per sample. */
+function pct(values, p) {
+  const sorted = Float32Array.from(values).sort();
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
 }
 
 /* Bilinear read of one map, by normalised position. */
@@ -583,14 +532,81 @@ function sampleSlope(u, v, comp) {
   return bilinear(S.slopes, S.depthRows, S.depthDim, 2, comp, u, v);
 }
 
+/* The map's own ordering as a height field in display units, blurred once: a
+ * monocular depth map is noisy at the cell level, and differentiating that noise
+ * gives a stipple, not a surface. Both the normals, the cast shadows and the
+ * profile read it, so no figure can disagree with the geometry. */
+function blurField(h, passes) {
+  const rows = S.depthRows;
+  const cols = S.depthDim;
+  const span = 2; // 5×5: the cell size is 266 across the picture, and the map's
+  const taps = (span * 2 + 1) * (span * 2 + 1); // error is larger than one cell
+  let field = h;
+  for (let pass = 0; pass < passes; pass++) {
+    const next = new Float32Array(rows * cols);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        let sum = 0;
+        for (let dr = -span; dr <= span; dr++) {
+          for (let dc = -span; dc <= span; dc++) {
+            sum += field[Math.min(rows - 1, Math.max(0, r + dr)) * cols + Math.min(cols - 1, Math.max(0, c + dc))];
+          }
+        }
+        next[r * cols + c] = sum / taps;
+      }
+    }
+    field = next;
+  }
+  return field;
+}
+
+function heightField() {
+  const rows = S.depthRows;
+  const cols = S.depthDim;
+  const height = new Float32Array(rows * cols);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      height[r * cols + c] = (rankOf(S.depth[r * cols + c]) - 0.5) * DEPTH_GAIN;
+    }
+  }
+  return blurField(height, 1);
+}
+
+/* The height the mesh is displaced by, in display units — the same blurred
+ * field the normals, the shadows and the profile read. */
+function depthHeight(u, v) {
+  if (S.heights) { return bilinear(S.heights, S.depthRows, S.depthDim, 1, 0, u, v); }
+  return (sampleDepth(u, v) - 0.5) * DEPTH_GAIN;
+}
+
+/* The map as a normal map: the gradient a surface with this height would have.
+ * The shader scales it by the exaggeration control, so the relief is shaded at
+ * whatever strength the reader chose. World x spans the picture's aspect and y
+ * spans its height, so the step sizes are the picture's own. */
+function buildSlopes(h) {
+  const rows = S.depthRows;
+  const cols = S.depthDim;
+  const aspect = S.width / S.height;
+  const dx = aspect / Math.max(1, cols - 1);
+  const dy = 1 / Math.max(1, rows - 1);
+  const z = (r, c) => h[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
+  const slopes = new Float32Array(rows * cols * 2);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = (r * cols + c) * 2;
+      slopes[i] = (z(r, c + 1) - z(r, c - 1)) / (2 * dx);
+      // y runs up the picture, so a step down a row is a step down in y.
+      slopes[i + 1] = -(z(r + 1, c) - z(r - 1, c)) / (2 * dy);
+    }
+  }
+  return slopes;
+}
+
 /* The key light's shadows on the same blurred height field the normals come
  * from, in two parts. Cast: every cell looks along the light's screen direction
- * for terrain taller than its shadow ray — a shallow relief at a high sun only
- * blocks close to a ridge, so this is soft and short. Contact: where the terrain
- * sits below its own wider neighbourhood the light cannot reach it at all, which
- * is what a crease looks like at every light angle. Baked once per sample at the
- * base exaggeration: the slider changes the relief's depth more than either edge,
- * and a rebuild per slider step is not worth that. */
+ * for terrain taller than its shadow ray. Contact: where the terrain sits below
+ * its own wider neighbourhood the light cannot reach it at all, which is what a
+ * crease looks like at every light angle. Baked once per sample. */
 function buildShadow(h) {
   const rows = S.depthRows;
   const cols = S.depthDim;
@@ -598,13 +614,9 @@ function buildShadow(h) {
   const horizontal = Math.hypot(KEY[0], KEY[1]) || 1;
   const dx = KEY[0] / horizontal;
   const dy = KEY[1] / horizontal;
-  // World x spans the picture's aspect and y its height, so a step of d display
-  // units moves d/aspect in u and d in v; the ray climbs Lz/|Lxy| per unit.
   const climb = KEY[2] / horizontal;
-  const steps = 10;
-  const reach = 0.025;
-  // Two more blurs of the same field: the wider neighbourhood the contact term
-  // compares against. Blurring the blur is the cheap way to widen the kernel.
+  const steps = 14;
+  const reach = 0.03;
   let wide = h;
   for (let pass = 0; pass < 2; pass++) {
     const next = new Float32Array(rows * cols);
@@ -638,72 +650,16 @@ function buildShadow(h) {
         // lee, and a hard threshold there reads as stipple, not as light.
         if (over > 0) { lit = Math.min(lit, Math.max(0, 1 - over / (0.02 + 0.09 * d))); }
       }
-      const pit = Math.min(1, Math.max(0, (wide[r * cols + c] - z0) / 0.006));
-      shadow[r * cols + c] = lit * (1 - 0.8 * pit);
+      const pit = Math.min(1, Math.max(0, (wide[r * cols + c] - z0) / 0.005));
+      shadow[r * cols + c] = lit * (1 - 0.86 * pit);
     }
   }
   return shadow;
 }
 
-/* The map's own ordering as a height field in display units, blurred once: a
- * monocular depth map is noisy at the cell level, and differentiating that noise
- * gives a stipple, not a surface. Both the normals and the cast shadows read it,
- * so they agree on where the terrain is. */
-function heightField() {
-  const rows = S.depthRows;
-  const cols = S.depthDim;
-  const height = new Float32Array(rows * cols);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      height[r * cols + c] = (rankOf(S.depth[r * cols + c]) - 0.5) * DEPTH_GAIN;
-    }
-  }
-  const h = new Float32Array(rows * cols);
-  const span = 2; // 5×5: the cell size is 266 across the picture, and the map's
-  const taps = (span * 2 + 1) * (span * 2 + 1); // error is larger than one cell
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      let sum = 0;
-      for (let dr = -span; dr <= span; dr++) {
-        for (let dc = -span; dc <= span; dc++) {
-          const rr = Math.min(rows - 1, Math.max(0, r + dr));
-          const cc = Math.min(cols - 1, Math.max(0, c + dc));
-          sum += height[rr * cols + cc];
-        }
-      }
-      h[r * cols + c] = sum / taps;
-    }
-  }
-  return h;
-}
-
-/* The map as a normal map: the gradient a surface with this height would have.
- * The shader scales it by the exaggeration control, so the relief is shaded at
- * whatever strength the reader chose. World x spans the picture's aspect and y
- * spans its height, so the step sizes are the picture's own. */
-function buildSlopes(h) {
-  const rows = S.depthRows;
-  const cols = S.depthDim;
-  const aspect = S.width / S.height;
-  const dx = aspect / Math.max(1, cols - 1);
-  const dy = 1 / Math.max(1, rows - 1);
-  const z = (r, c) => h[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
-  const slopes = new Float32Array(rows * cols * 2);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = (r * cols + c) * 2;
-      slopes[i] = (z(r, c + 1) - z(r, c - 1)) / (2 * dx);
-      // y runs up the picture, so a step down a row is a step down in y.
-      slopes[i + 1] = -(z(r + 1, c) - z(r - 1, c)) / (2 * dy);
-    }
-  }
-  return slopes;
-}
-
-/* A deterministic hash in [0,1): the dissolve stagger and the density sample must
- * be the same on every visit, and neither may allocate. A murmur-style finalizer,
- * because a multiply-and-shift pair alone left the top bits correlated: the
- * values spanned 0..0.65, so the "low" tier kept two thirds of the pixels. */
+/* A deterministic hash in [0,1): the dissolve stagger must be the same on every
+ * visit, and it may not allocate. A murmur-style finalizer, because a
+ * multiply-and-shift pair alone left the top bits correlated. */
 function hash01(i) {
   let x = (i + 0x9e3779b9) | 0;
   x ^= x >>> 16;
@@ -716,12 +672,19 @@ function hash01(i) {
 
 /* ── the reconstruction ───────────────────────────────────────────────
  * One vertex per sampled pixel: a position on the image plane, the pixel's
- * colour, its depth from the model, the gradient of that depth, and the image
- * UV that indexes both the photograph and the DINOv3 patch grid. The three
- * renderers — surface, wireframe, cloud — share these arrays and differ only
- * by their index buffer and their fragment shader. */
+ * colour, its depth from the model, the gradient of that depth and a seed. The
+ * two readings — surface and normals — share these arrays and differ only by
+ * their fragment program. */
 function buildReconstruction() {
   const aspect = S.width / S.height;
+  // The stage is 350 px wide on a phone: a 768-px photograph at one vertex per
+  // pixel is four times the geometry that screen can show, so the finest tier
+  // is not offered there. The slider still moves within the cap.
+  S.densityCap = (stage.clientWidth || window.innerWidth) < 520 ? 1 : DENSITY.length - 1;
+  if (S.density > S.densityCap) {
+    S.density = S.densityCap;
+    densityInput.value = String(S.density);
+  }
   const step = DENSITY[S.density];
   const gw = Math.ceil(S.width / step);
   const gh = Math.ceil(S.height / step);
@@ -730,7 +693,7 @@ function buildReconstruction() {
   const uvs = new Float32Array(count * 2);
   const colors = new Float32Array(count * 3);
   const slope = new Float32Array(count * 2);
-  const patch = new Float32Array(count);
+  const raw = new Float32Array(count);
   const depth = new Float32Array(count);
   const seeds = new Float32Array(count);
   const shade = new Float32Array(count);
@@ -746,9 +709,10 @@ function buildReconstruction() {
       flat[i * 3 + 2] = 0;
       uvs[i * 2] = u;
       uvs[i * 2 + 1] = v;
-      patch[i] = Math.min(S.grid - 1, Math.floor(v * S.grid)) * S.grid +
-        Math.min(S.grid - 1, Math.floor(u * S.grid));
-      depth[i] = sampleDepth(u, v);
+      // Displacement from the smooth field, topology from the raw map: the
+      // shape has to be clean, and the cut has to see the real step.
+      raw[i] = sampleDepth(u, v);
+      depth[i] = depthHeight(u, v) / DEPTH_GAIN + 0.5;
       slope[i * 2] = sampleSlope(u, v, 0);
       slope[i * 2 + 1] = sampleSlope(u, v, 1);
       seeds[i] = hash01(px * 65537 + py + 7919);
@@ -765,7 +729,7 @@ function buildReconstruction() {
   }
   S.count = count;
   S.mesh = { gw, gh, step };
-  S.points = { flat, uv: uvs, colors, slope, patch, depth, seeds, shadow: shade };
+  S.points = { flat, uv: uvs, colors, slope, raw, depth, seeds, shadow: shade };
   buildTopology();
 }
 
@@ -773,18 +737,16 @@ function buildReconstruction() {
  * Two triangles per cell of the sampled grid. A cell is dropped when any of its
  * edges crosses a depth step larger than the tolerance: joining a person's edge
  * to the street behind them is what makes a single-view reconstruction look
- * torn. The same rejection builds the edge list, so the wireframe never draws
- * an edge the surface does not have. */
+ * torn. */
 function buildTopology() {
   const W = S.mesh.gw;
   const H = S.mesh.gh;
-  const depth = S.points.depth;
+  const depth = S.points.raw;
   const cols = W - 1;
   const cells = cols * (H - 1);
   // A smooth depth ramp changes more across a coarse step than a fine one, while
   // a real occlusion boundary changes by the same amount either way. Scaling the
-  // tolerance with the step keeps the cut about the same at every tier, which is
-  // what "the same surface at three resolutions" has to mean.
+  // tolerance with the step keeps the cut about the same at every tier.
   const limit = S.cut * S.mesh.step;
   const accepted = new Uint8Array(cells);
   let kept = 0;
@@ -817,64 +779,20 @@ function buildTopology() {
       tris[t++] = b; tris[t++] = c; tris[t++] = d;
     }
   }
-  // The wireframe draws every stride-th grid line of the *same* mesh. At pixel
-  // resolution every edge would merge into a white sheet, and a wireframe that
-  // cannot be read is not a reading of the topology. Stride lines are real
-  // edges, and each stride cell also contributes its diagonal, so the triangles
-  // are visible where the grid is.
-  const stride = Math.max(1, Math.round(W / 96));
-  const live = (col, row) => (col < 0 || row < 0 || col >= cols || row >= H - 1)
-    ? 0 : accepted[row * cols + col];
-  const hLine = (row) => row % stride === 0;      // a horizontal edge
-  const vLine = (col) => col % stride === 0;      // a vertical edge
-  let edges = 0;
-  for (let row = 0; row < H; row++) {
-    for (let col = 0; col < W; col++) {
-      if (col < W - 1 && hLine(row) && (live(col, row - 1) || live(col, row))) { edges++; }
-      if (row < H - 1 && vLine(col) && (live(col - 1, row) || live(col, row))) { edges++; }
-    }
-  }
-  for (let row = 0; row < H - 1; row += stride) {
-    for (let col = 0; col < cols; col += stride) {
-      if (live(col, row)) { edges++; }
-    }
-  }
-  const edge = new Uint32Array(edges * 2);
-  let e = 0;
-  for (let row = 0; row < H; row++) {
-    for (let col = 0; col < W; col++) {
-      const i = row * W + col;
-      if (col < W - 1 && hLine(row) && (live(col, row - 1) || live(col, row))) { edge[e++] = i; edge[e++] = i + 1; }
-      if (row < H - 1 && vLine(col) && (live(col - 1, row) || live(col, row))) { edge[e++] = i; edge[e++] = i + W; }
-    }
-  }
-  for (let row = 0; row < H - 1; row += stride) {
-    for (let col = 0; col < cols; col += stride) {
-      if (!live(col, row)) { continue; }
-      const b = row * W + col + 1;
-      const c = b + W - 1;
-      edge[e++] = b; edge[e++] = c;
-    }
-  }
-  S.topology = { tris, edges: edge, cells, kept, cut: cells ? 1 - kept / cells : 0 };
+  S.topology = { tris, cells, kept, cut: cells ? 1 - kept / cells : 0 };
 }
-
 /* ── the scene ────────────────────────────────────────────────────────
- * One reconstruction, three renderers. The surface, the wireframe and the cloud
- * read the same attribute buffers; only their index buffer and their fragment
- * shader differ, so every reading is the same geometry understood differently. */
+ * One reconstruction, one buffer. The surface and the normals read the same
+ * attributes; a reading changes a uniform, never the geometry. */
 let THREE = null;
 let renderer = null;
 let camera = null;
 let pivot = null;
 let surfaceMesh = null;
-let wireLines = null;
-let points = null;
 let photoPlane = null;
-let simTexture = null;
 let photoTexture = null;
+let profileGroup = null;
 let U = null;
-let boxHelper = null;
 let scene = null;
 let frame = 0;
 let onScreen = true;
@@ -888,10 +806,10 @@ let dragging = null;
 let clockFrame = 0;
 let eyeTurn = null;
 
-/* The vertex program every renderer shares. The position is the image plane
- * carried into camera space by the depth the model predicted; the normal is the
- * gradient of that same map, which is the surface's normal to first order and
- * is the only normal that cannot smooth across a rejected cell. */
+/* The vertex program. The position is the image plane carried into camera space
+ * by the depth the model predicted; the normal is the gradient of that same map,
+ * which is the surface's normal to first order and is the only normal that
+ * cannot smooth across a rejected cell. */
 const VERT = `
 attribute vec3 color;
 attribute vec2 aSlope;
@@ -901,21 +819,15 @@ attribute float aShadow;
 uniform float uRise;
 uniform float uLight;
 uniform float uExag;
-uniform float uSize;
-uniform float uFocal;
-uniform float uDPR;
 uniform float uFit;
 uniform float uRelief;
 uniform float uScan;
 uniform float uLift;
 uniform vec3 uKey;
 uniform vec3 uEye;
-uniform sampler2D uSim;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec3 vViewNormal;
-varying float vSim;
-varying float vMember;
 varying float vShade;
 varying float vFade;
 varying float vDepth;
@@ -948,32 +860,22 @@ void main() {
   // between the key and the eye gives the sheen: the eye is a uniform because the
   // camera turns and a highlight fixed to the surface would swim.
   float spec = pow(max(dot(n, normalize(L + uEye)), 0.0), 28.0);
-  float shaded = mix(0.45, 1.0, aShadow);
-  float lit = 0.56 + 0.52 * key * shaded + 0.18 * fill + 0.22 * spec * shaded;
+  float shaded = mix(0.40, 1.0, aShadow);
+  float lit = 0.52 + 0.42 * key * shaded + 0.16 * fill + 0.16 * spec * shaded;
   // The light arrives after the lift, not with it: while the field is still
   // travelling the frame keeps the photograph's own brightness.
   vShade = mix(1.0, lit, uLight);
   vViewNormal = normalize(normalMatrix * n);
 
-  // The readings and the flow speak in view depth, from the camera out:
-  // the map's own ordering is inverted here, once, and nowhere else.
+  // The flow speaks in view depth, from the camera out: the map's own ordering
+  // is inverted here, once, and nowhere else.
   float viewD = 1.0 - aDepth;
   vDepth = viewD;
-  // The flow: a front of light travelling out through the view depth, with the
-  // trail behind it. Asymmetric on purpose — a symmetric band reads as a stripe
-  // sitting on the surface, while a front with a tail reads as travel, and the
-  // travel is what says which way the depth runs.
   float ahead = viewD - uScan;
-  vScan = smoothstep(-0.11, 0.0, ahead) * (1.0 - smoothstep(0.0, 0.02, ahead));
+  vScan = smoothstep(-0.07, 0.0, ahead) * (1.0 - smoothstep(0.0, 0.018, ahead));
 
   vColor = color;
   vUv = uv;
-  // Red is the model's cosine, green is the grown region's membership. The
-  // patch grid is uniform over the picture, so the image UV is the grid UV and
-  // a bilinear read blends the same patch the nearest test would have picked.
-  vec2 s = texture2D(uSim, uv).rg;
-  vSim = s.r;
-  vMember = s.g;
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   float dist = max(0.001, -mv.z);
@@ -981,97 +883,35 @@ void main() {
   // past the fitted plane, or the photograph would be dimmed by nothing more
   // than being at the distance the camera was fitted to.
   float haze = smoothstep(uFit + 0.06, uFit + 0.30, dist);
-  // Haze is depth shading, so it arrives with the light: while the field is
-  // still travelling it keeps the photograph's brightness.
   vFade = mix(1.0, 1.0 - 0.35 * haze, uLight);
-  // Measured in CSS pixels, then scaled to the framebuffer, so a 2x display
-  // draws the same photograph instead of a sparse one.
-  float css = clamp(uSize * (uFocal / dist), 1.2, 2.8);
-  gl_PointSize = css * uDPR;
   mv.z += uLift;
   gl_Position = projectionMatrix * mv;
 }`;
 
-const COMMON = `
-uniform float uMind;
-uniform float uIso;
+const FRAG = `
 uniform float uNormals;
 uniform float uOpacity;
-uniform vec3 uAccent;
+uniform sampler2D uMap;
 varying vec2 vUv;
 varying vec3 vColor;
 varying vec3 vViewNormal;
-varying float vSim;
-varying float vMember;
 varying float vShade;
 varying float vFade;
 varying float vDepth;
 varying float vScan;
-/* The reading of the last two channels, shared by both renderers: the cosine as
- * an accent over the photograph in look-alikes, camera-space orientation in
- * normals, the photograph otherwise. Look-alikes used to replace the picture
- * with the ramp, which at uMind 1 was a cream sheet: the state exists to show
- * where the probe's part recurs, so the photograph stays the ground. The accent
- * carries the picture's own luminance, so bright parts stay bright, and below
- * the probe's own similarity nothing is painted at all. */
-vec3 reading(vec3 photo) {
-  float luma = dot(photo, vec3(0.2126, 0.7152, 0.0722));
-  // A steep ramp, not a line: the normalised cosine sits high nearly
-  // everywhere, so a gentle mix floods the frame. The photograph is dimmed only
-  // enough for the accent to read, and the accent carries the picture's own
-  // luminance, so texture survives in the patches that do look alike.
-  float alike = pow(clamp(vSim, 0.0, 1.0), 5.0);
-  float grown = smoothstep(0.5, 0.9, vMember) * 0.35;
-  vec3 ground = photo * (1.0 - 0.28 * uMind);
-  // Capped below 1: even the hottest patch keeps a little of its own colour.
-  vec3 c = mix(ground, uAccent * (0.3 + 1.25 * luma), clamp(alike * 0.88 + grown, 0.0, 0.86) * uMind);
-  if (uNormals > 0.5) { c = normalize(vViewNormal) * 0.5 + 0.5; }
-  // The flow is the plate's depth cue, and it is one light: a band travelling
-  // from the camera out through the view depth, brightest where it leaves the
-  // camera and settled where it runs out. The rim rides it so a turned surface
-  // keeps an edge.
-  float near = 1.0 - clamp(vDepth, 0.0, 1.0);
-  float rim = pow(1.0 - abs(normalize(vViewNormal).z), 3.0);
-  return c + vec3(vScan * mix(0.20, 0.52, near) * vShade + rim * 0.12);
-}
-`;
-
-const SURFACE_FRAG = COMMON + `
-uniform sampler2D uMap;
 void main() {
   // The photograph is the surface's colour, unlit apart from the relief's own
   // shading: the still state has to be the bytes the browser sent.
   vec3 c = texture2D(uMap, vUv).rgb * vShade * vFade;
-  float iso = mix(1.0, mix(0.12, 1.0, vMember), uIso);
-  gl_FragColor = vec4(reading(c), uOpacity * iso);
-  #include <colorspace_fragment>
-}`;
-
-const CLOUD_FRAG = COMMON + `
-void main() {
-  vec2 d = gl_PointCoord - 0.5;
-  float r = length(d);
-  if (r > 0.5) { discard; }
-  float edge = smoothstep(0.5, 0.32, r);
-  float luma = dot(vColor, vec3(0.2126, 0.7152, 0.0722));
-  vec3 c = vColor * (0.9 + 0.35 * luma) * vShade * vFade;
-  float iso = mix(1.0, mix(0.12, 1.0, vMember), uIso);
-  gl_FragColor = vec4(reading(c), edge * uOpacity * iso);
-  #include <colorspace_fragment>
-}`;
-
-const WIRE_FRAG = COMMON + `
-uniform vec3 uRule;
-void main() {
-  // The rule colour, not a fourth hue: the wireframe is a reading of the
-  // topology, so it has to stay behind the photograph's own colours — and the
-  // cosine ramps over that ground instead of flooding it, the same reading the
-  // surface gets, so the topology still shows where nothing looks alike.
-  float alike = pow(clamp(vSim, 0.0, 1.0), 5.0);
-  float grown = smoothstep(0.5, 0.9, vMember);
-  vec3 c = mix(uRule * vFade, uAccent, clamp(alike * 0.9 + grown * 0.28, 0.0, 1.0) * uMind);
-  float iso = mix(1.0, mix(0.10, 1.0, vMember), uIso);
-  gl_FragColor = vec4(c, uOpacity * iso * (0.45 + 0.55 * vMember));
+  // The normals reading is camera-space orientation: the gradient's own answer,
+  // not a second interpretation of it.
+  if (uNormals > 0.5) { c = normalize(vViewNormal) * 0.5 + 0.5; }
+  // The flow is the plate's depth cue, and it is one light: a band travelling
+  // from the camera out through the view depth. The rim rides it so a turned
+  // surface keeps an edge.
+  float near = 1.0 - clamp(vDepth, 0.0, 1.0);
+  float rim = pow(1.0 - abs(normalize(vViewNormal).z), 3.0);
+  gl_FragColor = vec4(c + vec3(vScan * mix(0.12, 0.32, near) * vShade + rim * 0.10), uOpacity);
   #include <colorspace_fragment>
 }`;
 
@@ -1090,15 +930,15 @@ function flat(message) {
 }
 
 /* One frame loop for everything that moves: the reveal, the damped camera and
- * the flow. It stops when the scene is still and while the stage is
- * off-screen (or scrolled past on a phone), so an idle plate costs nothing. */
+ * the flow. It stops when the scene is still and while the stage is off-screen,
+ * so an idle plate costs nothing. */
 function renderScene() {
   if (!renderer || !onScreen) { return; }
   if (!frame) { frame = requestAnimationFrame(step); }
 }
 
 function animating() {
-  if (S.view !== 0 && motionAllowed()) { return true; }
+  if (S.view === 1 && motionAllowed()) { return true; }
   return Math.abs(theta - aim.theta) > 1e-4 ||
     Math.abs(phi - aim.phi) > 1e-4 ||
     Math.abs(zoom - aim.zoom) > 1e-4;
@@ -1113,7 +953,7 @@ function step(now) {
   if (Math.abs(aim.theta - theta) < 1e-4) { theta = aim.theta; }
   if (Math.abs(aim.phi - phi) < 1e-4) { phi = aim.phi; }
   if (Math.abs(aim.zoom - zoom) < 1e-4) { zoom = aim.zoom; }
-  if (S.view !== 0 && U && motionAllowed()) { U.uScan.value = (now % 11000) / 11000; }
+  if (S.view === 1 && U && motionAllowed()) { U.uScan.value = (now % 11000) / 11000; }
   pivot.rotation.x = phi;
   pivot.rotation.y = theta;
   camera.position.z = zoom;
@@ -1130,7 +970,7 @@ async function setupScene() {
       THREE = await import('../assets/vendor/three-0.170.0/three.module.min.mjs');
     } catch (err) {
       THREE = null;
-      flat('the 3D module could not be loaded, so the field is not drawn; the plan and the readout still read the same two replies');
+      flat('the 3D module could not be loaded, so the field is not drawn; the map, the profile and the focus still read the same reply');
       return;
     }
   }
@@ -1138,7 +978,7 @@ async function setupScene() {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
     } catch (err) {
-      flat('this browser has no WebGL, so the field is not drawn; the plan and the readout still read the same two replies');
+      flat('this browser has no WebGL, so the field is not drawn; the map, the profile and the focus still read the same reply');
       return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -1168,7 +1008,7 @@ async function setupScene() {
   }
   // The stage is the photograph's aspect, so a new sample changes the box before
   // this run: measure it now rather than wait for the observer, or the camera is
-  // fitted to the previous sample's frame and the field arrives cropped.
+  // fitted to the previous sample's frame and the field arrives cut off.
   const box = stageSize();
   renderer.setSize(box.w, box.h, false);
   camera.aspect = box.w / (box.h || 1);
@@ -1186,12 +1026,9 @@ function disposeScene() {
     });
   }
   if (photoTexture) { photoTexture.dispose(); photoTexture = null; }
-  if (simTexture) { simTexture.dispose(); simTexture = null; }
   surfaceMesh = null;
-  wireLines = null;
-  points = null;
   photoPlane = null;
-  boxHelper = null;
+  profileGroup = null;
   U = null;
 }
 
@@ -1199,8 +1036,6 @@ function buildScene() {
   if (!renderer) { return; }
   disposeScene();
 
-  // Three geometries, one set of buffers: the index is the only thing that
-  // differs between the surface and its wireframe.
   const attributes = [
     ['position', S.points.flat, 3],
     ['uv', S.points.uv, 2],
@@ -1219,20 +1054,7 @@ function buildScene() {
     return g;
   };
   const surfaceGeometry = geometry(S.topology.tris);
-  const wireGeometry = geometry(S.topology.edges);
-  const cloudGeometry = new THREE.BufferGeometry();
-  for (const [name, array, size] of attributes) {
-    cloudGeometry.setAttribute(name, new THREE.BufferAttribute(array, size));
-  }
   surfaceGeometry.computeBoundingSphere();
-  cloudGeometry.computeBoundingSphere();
-
-  // The patch grid as a texture: the cosine in red, region membership in green.
-  const sim = new Float32Array(S.grid * S.grid * 2);
-  simTexture = new THREE.DataTexture(sim, S.grid, S.grid, THREE.RGFormat, THREE.FloatType);
-  simTexture.minFilter = THREE.LinearFilter;
-  simTexture.magFilter = THREE.LinearFilter;
-  simTexture.needsUpdate = true;
 
   // The photograph, sampled by the same UV the fragment uses: no vertical flip,
   // because the page's v runs from the top row down like the image itself.
@@ -1241,49 +1063,31 @@ function buildScene() {
   photoTexture.flipY = false;
   photoTexture.needsUpdate = true;
 
-  const color = (rgb) => new THREE.Color(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
   eyeTurn = new THREE.Quaternion();
   U = {
     uRise: { value: S.rise },
-    uMind: { value: S.mind },
     uLight: { value: S.light },
     uExag: { value: S.exaggeration },
-    uSize: { value: POINT_SIZE },
-    uFocal: { value: 1 },
-    uDPR: { value: renderer.getPixelRatio() },
     uFit: { value: 1 },
     uKey: { value: new THREE.Vector3(KEY[0], KEY[1], KEY[2]).normalize() },
     uEye: { value: new THREE.Vector3(0, 0, 1) },
     uRelief: { value: 1.35 },
     uScan: { value: 0 },
-    uSim: { value: simTexture },
     uMap: { value: photoTexture },
-    uIso: { value: S.iso ? 1 : 0 },
-    uNormals: { value: 0 },
-    uAccent: { value: color(ACCENT) },
-    uRule: { value: color(RULE) }
+    uNormals: { value: 0 }
   };
 
-  const material = (fragmentShader, lift, write) => new THREE.ShaderMaterial({
+  const material = (lift, write) => new THREE.ShaderMaterial({
     uniforms: Object.assign({ uLift: { value: lift }, uOpacity: { value: 1 } }, U),
     vertexShader: VERT,
-    fragmentShader,
+    fragmentShader: FRAG,
     transparent: true,
     depthWrite: write
   });
 
-  surfaceMesh = new THREE.Mesh(surfaceGeometry, material(SURFACE_FRAG, 0, true));
+  surfaceMesh = new THREE.Mesh(surfaceGeometry, material(0, true));
   surfaceMesh.renderOrder = 0;
   pivot.add(surfaceMesh);
-
-  points = new THREE.Points(cloudGeometry, material(CLOUD_FRAG, 0, false));
-  points.renderOrder = 1;
-  pivot.add(points);
-
-  // The wireframe sits a hair in front of the surface it describes.
-  wireLines = new THREE.LineSegments(wireGeometry, material(WIRE_FRAG, 0.0025, false));
-  wireLines.renderOrder = 2;
-  pivot.add(wireLines);
 
   // The still: the surface at rest is the photograph, but its cut cells are
   // holes, so the exact image is drawn over it and leaves during the reveal.
@@ -1298,35 +1102,29 @@ function buildScene() {
   photoPlane.renderOrder = -1;
   pivot.add(photoPlane);
 
+  buildProfileLine();
   aim.zoom = fit();
   if (!dragging) { zoom = aim.zoom; }
   applyMode();
   renderScene();
 }
 
-/* The still sits over the reconstruction until the field lifts, and leaves with
- * the cloud, the cosine field or an isolation — those three read the geometry,
- * and the flat photograph would answer over them. */
+/* The still sits over the reconstruction until the field lifts, and a quarter of
+ * it stays behind the raised surface to fill the holes the cut leaves, so the
+ * relief never floats over an un-warped rectangle of the same picture. */
 function syncPlane() {
   if (!photoPlane) { return; }
-  // The photograph plane hands over to the mesh: a quarter of it stays behind
-  // the raised surface to fill the holes the cut leaves, so the relief never
-  // floats over an un-warped rectangle of the same picture.
-  const opacity = S.iso || S.reading === 3 ? 0 : (1 - S.mind) * (1 - 0.75 * S.rise);
+  const opacity = 1 - 0.75 * S.rise;
   photoPlane.material.opacity = Math.min(1, Math.max(0, opacity));
   photoPlane.visible = photoPlane.material.opacity > 0.02;
 }
 
-/* The discontinuity tolerance is a control, so the index buffers are rebuilt in
+/* The discontinuity tolerance is a control, so the index buffer is rebuilt in
  * place: the vertex arrays do not change, only which triangles survive. */
 function rebuildTopology() {
   if (!S.points) { return; }
   buildTopology();
-  // The vertex positions did not move, so the bounding sphere the geometry
-  // already has stays correct: recomputing it over half a million vertices on
-  // every slider step was the expensive half of this call.
   if (surfaceMesh) { surfaceMesh.geometry.setIndex(new THREE.BufferAttribute(S.topology.tris, 1)); }
-  if (wireLines) { wireLines.geometry.setIndex(new THREE.BufferAttribute(S.topology.edges, 1)); }
   captions();
   renderScene();
 }
@@ -1335,10 +1133,6 @@ function rebuildTopology() {
  * front view has to read as the photograph, not as a picture in a window. */
 function fit() {
   const half = Math.tan((camera.fov / 2) * Math.PI / 180);
-  // The CSS height, not the framebuffer's: the sprite reads the same at every
-  // device pixel ratio.
-  const focal = renderer ? renderer.domElement.clientHeight / (2 * half) : 1;
-  if (U) { U.uFocal.value = focal; }
   const aspect = camera.aspect || 1.6;
   const aspectPhoto = (S.width || 3) / (S.height || 2);
   const depth = 1.16 * Math.max(0.5 / half, (aspectPhoto / 2) / (half * aspect));
@@ -1348,13 +1142,10 @@ function fit() {
   return depth;
 }
 
-/* Every reading is one uniform set: the renderers never rebuild geometry to
- * change a view. */
+/* Every reading is one uniform: the renderer never rebuilds geometry to change a
+ * view. */
 function applyMode() {
-  if (U) {
-    U.uNormals.value = S.reading === 2 ? 1 : 0;
-    U.uIso.value = S.iso ? 1 : 0;
-  }
+  if (U) { U.uNormals.value = S.reading === 1 ? 1 : 0; }
   syncFigure();
   syncPlane();
   renderScene();
@@ -1367,25 +1158,22 @@ function applyMode() {
 function syncFigure() {
   if (surfaceMesh) {
     // A hair of lift turns the mesh on: at rest the photograph is the figure.
-    surfaceMesh.visible = S.reading !== 4 && S.rise > 0.004;
+    surfaceMesh.visible = S.rise > 0.004;
     surfaceMesh.material.depthWrite = S.rise > 0.985;
   }
-  if (points) { points.visible = S.reading === 3; }
-  if (wireLines) { wireLines.visible = S.reading === 1; }
 }
 
-/* Three scalars, so a state change is a mix and never a rebuild: rise is 0 for
- * the photograph and 1 for the lifted reconstruction, mind is the cosine field's
- * share of the colour, and light is the depth map's gradient used as light (0
- * keeps the still unlit, 1 shades the relief). The reveal brings the light in
- * with the camera, so the lift is first seen as the still's own displacement. */
-function applyLook(rise, mind, light) {
+/* Two scalars, so a state change is a mix and never a rebuild: rise is 0 for the
+ * photograph and 1 for the lifted reconstruction, and light is the depth map's
+ * gradient used as light (0 keeps the still unlit, 1 shades the relief). The
+ * reveal brings the light in with the camera, so the lift is first seen as the
+ * still's own displacement. */
+function applyLook(rise, light) {
   S.rise = Math.min(1, Math.max(0, rise));
-  S.mind = Math.min(1, Math.max(0, mind));
   S.light = Math.min(1, Math.max(0, light));
+  syncProfileMarkers();
   if (!U) { return; }
   U.uRise.value = S.rise;
-  U.uMind.value = S.mind;
   U.uLight.value = S.light;
   syncFigure();
   syncPlane();
@@ -1393,13 +1181,6 @@ function applyLook(rise, mind, light) {
 }
 
 /* ── the one clock ──────────────────────────────────────────────────── */
-
-/* The cue is the replay affordance, never a requirement: the plate reveals every
- * asset by itself, and the button is only on screen when the reader has gone
- * back to the still and may want the sequence again. */
-function syncCue() {
-  if (cue) { cue.hidden = S.view !== 0; }
-}
 
 function stopClock() {
   if (clockFrame) { cancelAnimationFrame(clockFrame); clockFrame = 0; }
@@ -1412,13 +1193,11 @@ function reveal() {
   stopClock();
   S.view = 1;
   applyMode();
-  syncCue();
   for (const radio of viewRadios) { radio.checked = Number(radio.value) === 1; }
-  // The caption describes what is being drawn: the lift starts now.
   captions();
   const from = { rise: S.rise, theta: aim.theta };
   if (!motionAllowed()) {
-    applyLook(1, 0, 1);
+    applyLook(1, 1);
     theta = aim.theta = CLOCK.yaw;
     applyMode();
     captions();
@@ -1432,7 +1211,7 @@ function reveal() {
     const depth = ease(Math.max(0, Math.min(1, (ms - CLOCK.dissolve) / CLOCK.depth)));
     const swing = ease(Math.max(0, Math.min(1, (ms - CLOCK.dissolve - CLOCK.depth) / CLOCK.camera)));
     // The lift is seen unlit; the light arrives with the camera.
-    applyLook(from.rise + (1 - from.rise) * (0.12 * dissolve + 0.88 * depth), 0, swing);
+    applyLook(from.rise + (1 - from.rise) * (0.12 * dissolve + 0.88 * depth), swing);
     theta = aim.theta = from.theta + (CLOCK.yaw - from.theta) * swing;
     if (ms < total) { clockFrame = requestAnimationFrame(turn); return; }
     clockFrame = 0;
@@ -1445,35 +1224,26 @@ function reveal() {
 /* The state control is the reveal's owner: picking a stop lands there in one
  * mix, and picking the stop the plate is already on does nothing at all. */
 function setView(next) {
-  const view = Math.max(0, Math.min(2, next));
+  const view = Math.max(0, Math.min(1, next));
   const same = view === S.view;
   S.view = view;
   for (const radio of viewRadios) { radio.checked = Number(radio.value) === view; }
-  // The photograph is the still, so it has no reading: the wireframe, normals
-  // and cloud are readings of the reconstruction and would otherwise draw over
-  // the untouched picture.
-  if (view === 0 && S.reading !== 0) {
-    S.reading = 0;
-    for (const radio of readRadios) { radio.checked = radio.value === '0'; }
-  }
-  syncCue();
-  const rise = view === 0 ? 0 : 1;
-  const mind = view === 2 ? 1 : 0;
   if (same || !motionAllowed()) {
-    if (clockFrame) { cancelAnimationFrame(clockFrame); clockFrame = 0; }
-    applyLook(rise, mind, view === 0 ? 0 : 1);
+    stopClock();
+    applyLook(view === 1 ? 1 : 0, view === 1 ? 1 : 0);
     applyMode();
     captions();
     return;
   }
   stopClock();
-  const from = { rise: S.rise, mind: S.mind, light: S.light };
-  const light = view === 0 ? 0 : 1;
+  const from = { rise: S.rise, light: S.light };
+  const rise = view === 1 ? 1 : 0;
+  const light = view === 1 ? 1 : 0;
   const start = performance.now();
   const mix = (now) => {
     const t = Math.min(1, (now - start) / CLOCK.mix);
     const k = ease(t);
-    applyLook(from.rise + (rise - from.rise) * k, from.mind + (mind - from.mind) * k, from.light + (light - from.light) * k);
+    applyLook(from.rise + (rise - from.rise) * k, from.light + (light - from.light) * k);
     if (t < 1) { clockFrame = requestAnimationFrame(mix); return; }
     clockFrame = 0;
     applyMode();
@@ -1485,9 +1255,6 @@ function setView(next) {
 function setReading(next) {
   S.reading = Math.max(0, Math.min(READINGS.length - 1, next));
   for (const radio of readRadios) { radio.checked = Number(radio.value) === S.reading; }
-  // Every reading but the surface is a reading of the reconstruction, so asking
-  // for one from the photograph means the field has to arrive first.
-  if (S.reading !== 0 && S.view === 0) { setView(1); }
   applyMode();
   captions();
 }
@@ -1498,8 +1265,8 @@ function setExaggeration(value) {
   S.exaggeration = Math.max(0, Math.min(1.5, value / 100));
   exagInput.value = String(Math.round(S.exaggeration * 100));
   if (U) { U.uExag.value = S.exaggeration; }
+  syncProfileMarkers();
   captions();
-  drawBox();
   renderScene();
 }
 
@@ -1520,338 +1287,597 @@ function setCut(value) {
 /* The three tiers re-sample the same bounded photograph, so a tier change costs
  * one array rebuild and never a model call. */
 function setDensity(level) {
-  const next = Math.max(0, Math.min(DENSITY.length - 1, level));
+  const next = Math.max(0, Math.min(S.densityCap ?? DENSITY.length - 1, level));
   densityInput.value = String(next);
   if (next === S.density || !S.depth) { return; }
   S.density = next;
   buildReconstruction();
   buildScene();
-  select(S.probe, S.pinned);
 }
-
-function setIsolate(on) {
-  S.iso = Boolean(on);
-  isoInput.checked = S.iso;
-  if (S.iso && S.view === 0) { setView(1); }
-  applyMode();
-  drawBox();
-  captions();
-}
-
-/* ── the probe: the model's own similarity, here and in the other five ── */
-
-/* Upload the cosine and the membership for every patch: two floats per row, and
- * the only thing a pointer moves. No particle attribute is rewritten. The cosine
- * is normalised over this picture's own spread, so the ramp always reads. */
-function paintSim() {
-  if (!U || !simTexture || !S.members) { return; }
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (let i = 0; i < S.rows; i++) {
-    if (S.sim[i] < lo) { lo = S.sim[i]; }
-    if (S.sim[i] > hi) { hi = S.sim[i]; }
-  }
+/* ── the map, drawn as itself ─────────────────────────────────────────
+ * One cell per value the server sent, on a ramp between the map's own p5 and
+ * p95. The toggle swaps in the rank map the relief already displaces by, which
+ * is what explains why the geometry needs it: raw, most of a corridor sits at
+ * the near end; equalised, the deciles are even. */
+function buildMap() {
+  if (!S.depth) { return; }
+  const rows = S.depthRows;
+  const cols = S.depthDim;
+  const [lo, hi] = S.depthP5P95;
   const span = (hi - lo) || 1;
-  const data = simTexture.image.data;
-  for (let i = 0; i < S.rows; i++) {
-    data[i * 2] = (S.sim[i] - lo) / span;
-    data[i * 2 + 1] = S.members[i];
+  const raw = new ImageData(cols, rows);
+  const ranked = new ImageData(cols, rows);
+  for (let i = 0; i < rows * cols; i++) {
+    const t = Math.min(1, Math.max(0, (S.depth[i] - lo) / span));
+    const a = tint(MAP_FAR, MAP_NEAR, t);
+    const b = tint(MAP_FAR, MAP_NEAR, rankOf(S.depth[i]));
+    raw.data[i * 4] = a[0]; raw.data[i * 4 + 1] = a[1]; raw.data[i * 4 + 2] = a[2]; raw.data[i * 4 + 3] = 255;
+    ranked.data[i * 4] = b[0]; ranked.data[i * 4 + 1] = b[1]; ranked.data[i * 4 + 2] = b[2]; ranked.data[i * 4 + 3] = 255;
   }
-  simTexture.needsUpdate = true;
-}
-
-/* One pin: the region grown around the patch, the region's mean as the query,
- * and the two figures that read them. The plate does not probe on hover — the
- * grid is what builds the figure, and a click is what asks the strip. */
-function select(index, pinned) {
-  if (!S.rows) { return; }
-  S.probe = Math.max(0, Math.min(S.rows - 1, index));
-  S.pinned = Boolean(pinned);
-  const seed = similarities(S.probe);
-  const members = growRegion(S.probe, seed, quantile(seed, 0.5));
-  const query = regionQuery(members);
-  S.members = members;
-  S.query = query.vec;
-  S.regionCount = query.n;
-  S.sim = similaritiesTo(query.vec);
-  colInput.value = String(S.probe % S.grid);
-  rowInput.value = String(Math.floor(S.probe / S.grid));
-  paintSim();
-  drawPlan();
-  drawBox();
-  drawReadout();
-  captions();
-  renderScene();
-}
-
-/* The plan: the photograph, tinted where the model's region covers it. The
- * photograph is the ground here too, so the tint is a wash a reader can still
- * see the picture through, and the probe is a ring rather than an opaque cell
- * that hid the very patch it pointed at. */
-function drawPlan() {
-  if (!S.rows) { return; }
-  plan.width = S.width;
-  plan.height = S.height;
-  const ctx = plan.getContext('2d');
-  ctx.clearRect(0, 0, plan.width, plan.height);
-  const cw = plan.width / S.grid;
-  const ch = plan.height / S.grid;
-  ctx.fillStyle = 'rgba(' + ACCENT.join(',') + ',0.22)';
-  for (let i = 0; i < S.rows; i++) {
-    if (i === S.probe || !S.members[i]) { continue; }
-    ctx.fillRect((i % S.grid) * cw, Math.floor(i / S.grid) * ch, cw, ch);
-  }
-  const col = S.probe % S.grid;
-  const row = Math.floor(S.probe / S.grid);
-  const line = Math.max(2, cw * 0.14);
-  ctx.lineWidth = line;
-  ctx.strokeStyle = 'rgba(' + ACCENT.join(',') + ',0.95)';
-  ctx.strokeRect(col * cw + line / 2, row * ch + line / 2, cw - line, ch - line);
-  const best = bestOther(S.sim);
-  plan.setAttribute('aria-label', 'The photograph tinted where the region grown from ' + patchCell(S.probe) +
-    ' covers it: ' + S.regionCount + ' patches, the probe ringed; best match ' + patchCell(best) + ' at cosine ' + S.sim[best].toFixed(3));
-}
-
-/* The isolated region's extent, in the same world positions the shader uses. The
- * reconstruction has no hidden surfaces, so this is the box around pixels the
- * photograph actually shows. */
-function drawBox() {
-  if (!pivot) { return; }
-  if (boxHelper) {
-    pivot.remove(boxHelper);
-    boxHelper.geometry.dispose();
-    boxHelper.material.dispose();
-    boxHelper = null;
-  }
-  if (!S.iso || !S.members || !S.count) { return; }
-  const lo = [Infinity, Infinity, Infinity];
-  const hi = [-Infinity, -Infinity, -Infinity];
-  const exag = S.exaggeration;
-  for (let i = 0; i < S.count; i++) {
-    if (!S.members[S.points.patch[i]]) { continue; }
-    const z = (S.points.depth[i] - 0.5) * exag * DEPTH_GAIN;
-    const x = S.points.flat[i * 3] * (1 + z);
-    const y = S.points.flat[i * 3 + 1] * (1 + z);
-    if (x < lo[0]) { lo[0] = x; }
-    if (y < lo[1]) { lo[1] = y; }
-    if (z < lo[2]) { lo[2] = z; }
-    if (x > hi[0]) { hi[0] = x; }
-    if (y > hi[1]) { hi[1] = y; }
-    if (z > hi[2]) { hi[2] = z; }
-  }
-  if (!(lo[0] <= hi[0])) { return; }
-  const box = new THREE.Box3(
-    new THREE.Vector3(lo[0], lo[1], lo[2]),
-    new THREE.Vector3(hi[0], hi[1], hi[2])
-  );
-  boxHelper = new THREE.Box3Helper(box, new THREE.Color(ACCENT[0] / 255, ACCENT[1] / 255, ACCENT[2] / 255));
-  pivot.add(boxHelper);
-}
-
-/* ── the answer strip ───────────────────────────────────────────────────
- * The same six photographs, ranked. With a patch pinned the question is "where
- * does this part come back" — one dot product per row of every other grid. With
- * none pinned it is "which picture is most like this one", which is the pooled
- * vector's own cosine. Either way the ranking is arithmetic over replies the
- * page already holds: no index, no ranking call. */
-const pictures = new Map();
-let answerToken = 0;
-let uploadUrl = null;
-
-function sampleId(btn) {
-  return btn.getAttribute('data-sample').split('/').pop().replace(/\.[^.]+$/, '');
-}
-
-function idFrom(key) {
-  return String(key).split('/').pop().replace(/\.[^.]+$/, '');
-}
-
-function buttonFor(id) {
-  return sampleButtons.find((btn) => sampleId(btn) === id) || null;
-}
-
-async function lookup(btn) {
-  const id = sampleId(btn);
-  if (pictures.has(id)) { return pictures.get(id); }
-  const resp = await fetch(btn.getAttribute('data-sample'));
-  if (!resp.ok) { throw new Error('the sample could not be loaded'); }
-  const boundedImage = await bounded(new Uint8Array(await resp.arrayBuffer()));
-  const shape = await g.imageShape(FEATURES);
-  const reply = await g.image(FEATURES, ['embedding', 'patches'], boundedImage.bytes);
-  const value = reply.values.patches;
-  if (!value || value.count !== shape.patches.rows * shape.patches.dim) {
-    throw new Error('the reply carries ' + (value ? value.count : 0) + ' numbers, but the model declares ' +
-      shape.patches.rows + ' rows of ' + shape.patches.dim);
-  }
-  const entry = {
-    id,
-    rows: shape.patches.rows,
-    dim: shape.patches.dim,
-    patches: value.data,
-    cls: reply.values.embedding ? reply.values.embedding.data : null,
-    src: btn.querySelector('img').getAttribute('src'),
-    title: btn.dataset.name
+  const canvas = (img) => {
+    const c = document.createElement('canvas');
+    c.width = cols;
+    c.height = rows;
+    c.getContext('2d').putImageData(img, 0, 0);
+    return c;
   };
-  pictures.set(id, entry);
-  return entry;
+  S.mapBuf = canvas(raw);
+  S.mapRankBuf = canvas(ranked);
+  drawMap();
 }
 
-function score(entry, query, pinned) {
-  if (!pinned) {
-    return S.cls && entry.cls ? dotAt(entry.cls, 0, query, entry.dim) : 0;
-  }
-  let top = 0;
-  let best = -Infinity;
-  for (let i = 0; i < entry.rows; i++) {
-    const s = dotAt(entry.patches, i * entry.dim, query, entry.dim);
-    if (s > best) { best = s; top = i; }
-  }
-  return { score: best, cell: top };
+function drawMap(hover) {
+  if (!S.mapBuf) { return; }
+  const buf = mapRank.checked ? S.mapRankBuf : S.mapBuf;
+  const ctx = mapCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+  ctx.drawImage(buf, 0, 0, mapCanvas.width, mapCanvas.height);
+  const { min, median, max } = S.depthStats;
+  const [p5, p95] = S.depthP5P95;
+  const shape = S.depthRows + ' × ' + S.depthDim + ' · ' + (S.depthRows * S.depthDim).toLocaleString('en-GB') + ' values';
+  mapRead.textContent = (hover
+    ? 'pointer ' + hover.value.toFixed(3) + ' at row ' + hover.row + ', column ' + hover.col + ' · depth[' + (hover.row * S.depthDim + hover.col) + '] · '
+    : '') + shape + ' · raw ' + min.toFixed(3) + ' / ' + median.toFixed(3) + ' / ' + max.toFixed(3) +
+    ' · p5–p95 ' + p5.toFixed(3) + '–' + p95.toFixed(3) +
+    ' · ' + (mapRank.checked ? 'rank-equalised, the relief’s own transform' : 'raw, as the server sent it');
+  mapCanvas.setAttribute('aria-label', 'The relative depth map, ' + shape + ', ranging ' + min.toFixed(3) +
+    ' to ' + max.toFixed(3) + ' with p5 to p95 at ' + p5.toFixed(3) + ' to ' + p95.toFixed(3) +
+    ', drawn ' + (mapRank.checked ? 'rank-equalised' : 'raw') + '.');
 }
 
-async function answer() {
-  if (!S.rows) { return; }
-  const token = ++answerToken;
-  const pinned = S.pinned;
-  const query = pinned ? S.query : S.cls;
-  for (const btn of sampleButtons) {
-    if (pictures.has(sampleId(btn))) { continue; }
-    try {
-      await lookup(btn);
-    } catch (err) {
-      // A picture that cannot be fetched is left out of the strip, never faked.
+function mapFromEvent(event) {
+  const box = mapCanvas.getBoundingClientRect();
+  const col = Math.max(0, Math.min(S.depthDim - 1,
+    Math.floor(((event.clientX - box.left) / (box.width || 1)) * S.depthDim)));
+  const row = Math.max(0, Math.min(S.depthRows - 1,
+    Math.floor(((event.clientY - box.top) / (box.height || 1)) * S.depthRows)));
+  return { row, col, value: S.depth[row * S.depthDim + col] };
+}
+
+mapCanvas.addEventListener('pointermove', (event) => {
+  if (!S.depth) { return; }
+  drawMap(mapFromEvent(event));
+});
+mapCanvas.addEventListener('pointerleave', () => { if (S.depth) { drawMap(); } });
+mapRank.addEventListener('change', () => { if (S.depth) { drawMap(); } });
+/* The canvas is a tab stop because the trace focuses it, so it answers the keys:
+ * arrows walk the readout's cell, Home returns it to the middle. */
+mapCanvas.addEventListener('keydown', (event) => {
+  if (!S.depth) { return; }
+  const step = event.key === 'ArrowLeft' ? [-1, 0] : event.key === 'ArrowRight' ? [1, 0]
+    : event.key === 'ArrowUp' ? [0, -1] : event.key === 'ArrowDown' ? [0, 1] : null;
+  if (event.key === 'Home') {
+    S.mapCursor = { row: Math.floor(S.depthRows / 2), col: Math.floor(S.depthDim / 2) };
+  } else if (step) {
+    const at = S.mapCursor || { row: Math.floor(S.depthRows / 2), col: Math.floor(S.depthDim / 2) };
+    S.mapCursor = {
+      row: Math.max(0, Math.min(S.depthRows - 1, at.row + step[1])),
+      col: Math.max(0, Math.min(S.depthDim - 1, at.col + step[0])),
+    };
+  } else {
+    return;
+  }
+  event.preventDefault();
+  drawMap({ ...S.mapCursor, value: S.depth[S.mapCursor.row * S.depthDim + S.mapCursor.col] });
+});
+
+/* ── the profile ──────────────────────────────────────────────────────
+ * A line across the still, sampled with the same bilinear reader and rank
+ * equalisation the vertex shader displaces by: the chart cannot disagree with
+ * the geometry, because it is the geometry's own function. The y axis is display
+ * depth in frame-heights — the model has no metres. */
+const PROFILE_SAMPLES = 266;
+let profileDrag = null;
+
+function profilePoint(event) {
+  const box = frameEl.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(1, (event.clientX - box.left) / (box.width || 1))),
+    y: Math.max(0, Math.min(1, (event.clientY - box.top) / (box.height || 1)))
+  };
+}
+
+function setProfile(next) {
+  const y = Math.max(0, Math.min(1, next.y));
+  let x0 = Math.max(0, Math.min(1, next.x0));
+  let x1 = Math.max(0, Math.min(1, next.x1));
+  if (x1 < x0) { const t = x0; x0 = x1; x1 = t; }
+  if (x1 - x0 < 0.02) { x1 = Math.min(1, x0 + 0.02); }
+  S.profile = { y, x0, x1 };
+  profFrom.value = String(Math.round(x0 * 100));
+  profTo.value = String(Math.round(x1 * 100));
+  profRow.value = String(Math.round(y * 100));
+  syncProfileOverlay();
+  buildProfile();
+  if (THREE && pivot) { buildProfileLine(); }
+}
+
+function syncProfileOverlay() {
+  const p = S.profile;
+  const x0 = (p.x0 * 100).toFixed(2);
+  const x1 = (p.x1 * 100).toFixed(2);
+  const y = (p.y * 100).toFixed(2);
+  profileLine.setAttribute('x1', x0);
+  profileLine.setAttribute('y1', y);
+  profileLine.setAttribute('x2', x1);
+  profileLine.setAttribute('y2', y);
+  profileA.setAttribute('cx', x0);
+  profileA.setAttribute('cy', y);
+  profileB.setAttribute('cx', x1);
+  profileB.setAttribute('cy', y);
+}
+
+/* The line on the relief: the same samples, at the height the shader displaces
+ * by, so the two ends are marked on the surface as well as on the picture. The
+ * geometry is built when the line or the sample changes; the reveal and the
+ * exaggeration only scale it, so a frame allocates nothing. */
+function buildProfileLine() {
+  if (!pivot || !S.depth || !THREE) { return; }
+  if (!profileGroup) {
+    profileGroup = new THREE.Group();
+    pivot.add(profileGroup);
+  }
+  const p = S.profile;
+  const n = 96;
+  const pts = new Float32Array((n + 1) * 3);
+  const aspect = S.width / S.height;
+  for (let i = 0; i <= n; i++) {
+    const u = p.x0 + (p.x1 - p.x0) * (i / n);
+    pts[i * 3] = (u - 0.5) * aspect;
+    pts[i * 3 + 1] = 0.5 - p.y;
+    pts[i * 3 + 2] = depthHeight(u, p.y);
+  }
+  const line = new THREE.BufferGeometry();
+  line.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+  const ends = new THREE.BufferGeometry();
+  ends.setAttribute('position', new THREE.BufferAttribute(
+    new Float32Array([pts[0], pts[1], pts[2], pts[n * 3], pts[n * 3 + 1], pts[n * 3 + 2]]), 3));
+  const colour = new THREE.Color(ACCENT[0] / 255, ACCENT[1] / 255, ACCENT[2] / 255);
+  while (profileGroup.children.length) {
+    const child = profileGroup.children.pop();
+    child.geometry.dispose();
+    child.material.dispose();
+  }
+  profileGroup.add(new THREE.Line(line, new THREE.LineBasicMaterial({ color: colour, transparent: true, depthWrite: false })));
+  profileGroup.add(new THREE.Points(ends, new THREE.PointsMaterial({ color: colour, size: 0.022, transparent: true, depthWrite: false })));
+  syncProfileMarkers();
+}
+
+/* The height field is in display units at exaggeration 1, so the lift is one
+ * scale away: the line rides the relief exactly, at any slider setting. */
+function syncProfileMarkers() {
+  if (!profileGroup) { return; }
+  profileGroup.scale.z = Math.max(0.0001, S.rise * S.exaggeration);
+}
+
+function profileSamples() {
+  const p = S.profile;
+  const n = PROFILE_SAMPLES;
+  const heights = new Float32Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    heights[i] = depthHeight(p.x0 + (p.x1 - p.x0) * (i / n), p.y);
+  }
+  return heights;
+}
+
+/* The chart, the numbers, and the label: the same heights the mesh is displaced
+ * by, printed rather than paraphrased. */
+function buildProfile() {
+  if (!S.depth || !S.heights) { return; }
+  const heights = profileSamples();
+  const n = heights.length;
+  let hi = -Infinity;
+  let lo = Infinity;
+  let slope = 0;
+  for (let i = 0; i < n; i++) {
+    if (heights[i] > hi) { hi = heights[i]; }
+    if (heights[i] < lo) { lo = heights[i]; }
+    if (i) { slope += Math.abs(heights[i] - heights[i - 1]); }
+  }
+  const du = (S.profile.x1 - S.profile.x0) / (n - 1);
+  const meanSlope = slope / (n - 1) / (du || 1);
+  const span = hi - lo;
+  const ctx = profileCanvas.getContext('2d');
+  const w = profileCanvas.width;
+  const h = profileCanvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const pad = 6;
+  const mid = h / 2;
+  // The chart's window is the line's own 2nd–98th percentile: one outlier cell
+  // would otherwise flatten every other point into a straight run.
+  const sorted = Array.from(heights).sort((a, b) => a - b);
+  const at = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
+  const top = at(0.98);
+  const bottom = at(0.02);
+  const window = (top - bottom) || 0.06;
+  const scale = (h - pad * 2) / window;
+  const zero = mid + ((top + bottom) / 2) * scale;
+  ctx.strokeStyle = 'rgba(' + MUTED.join(',') + ',0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, zero);
+  ctx.lineTo(w, zero);
+  ctx.stroke();
+  // The area under the line, then the line: one fill so the profile reads as a
+  // shape and not as a stray stroke across the panel.
+  const path = () => {
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * (w - 1);
+      const y = zero - heights[i] * scale;
+      if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
     }
-    if (token !== answerToken) { return; }
+  };
+  path();
+  ctx.lineTo(w - 1, zero);
+  ctx.lineTo(0, zero);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(' + ACCENT.join(',') + ',0.14)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(' + ACCENT.join(',') + ',0.95)';
+  ctx.lineWidth = Math.max(1, Math.round(h / 90));
+  path();
+  ctx.stroke();
+  // The two ends, marked: the same two points the overlay and the relief draw.
+  ctx.fillStyle = 'rgba(' + ACCENT.join(',') + ',1)';
+  for (const i of [0, n - 1]) {
+    const x = (i / (n - 1)) * (w - 1);
+    const y = zero - heights[i] * scale;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
-  if (token !== answerToken) { return; }
-  paintAnswers(pinned, query);
-  unfold(root, g.trace());
+  // The reply's own values at the two ends, for a reader who wants to check the
+  // chart against the map: the profile is the shader's field, the map is raw.
+  const rawAt = (u) => S.depth[Math.min(S.depthRows - 1, Math.round(S.profile.y * (S.depthRows - 1))) * S.depthDim +
+    Math.min(S.depthDim - 1, Math.round(u * (S.depthDim - 1)))];
+  profileRead.textContent = 'near ' + hi.toFixed(3) + ' · far ' + lo.toFixed(3) +
+    ' · mean |slope| ' + meanSlope.toFixed(3) + ' per frame-width' +
+    ' · span ' + span.toFixed(3) + ' frame-heights' +
+    ' · ' + n + ' samples along v ' + S.profile.y.toFixed(2) +
+    ', x ' + S.profile.x0.toFixed(2) + '–' + S.profile.x1.toFixed(2) +
+    ' · the map there reads ' + rawAt(S.profile.x0).toFixed(3) + ' and ' + rawAt(S.profile.x1).toFixed(3);
+  profileCanvas.setAttribute('aria-label', 'The depth along the line: near ' + hi.toFixed(3) +
+    ', far ' + lo.toFixed(3) + ', mean absolute slope ' + meanSlope.toFixed(3) +
+    ' per frame-width, spanning ' + span.toFixed(3) + ' frame-heights.');
 }
 
-function paintAnswers(pinned, query) {
-  const rows = [];
-  for (const btn of sampleButtons) {
-    const id = sampleId(btn);
-    const entry = pictures.get(id);
-    if (!entry) { continue; }
-    if (id === S.id) {
-      const cell = bestOther(S.sim);
-      rows.push({ id, cell, here: true, score: S.sim[cell] });
-      continue;
+frameEl.addEventListener('pointerdown', (event) => {
+  if (!S.depth) { return; }
+  stopClock();
+  const p = profilePoint(event);
+  // Six pixels of travel before a press counts, the same rule the stage uses: a
+  // scroll that starts on the photograph must not rewrite the profile.
+  profileDrag = { x: p.x, y: p.y, moved: 0, px: event.clientX, py: event.clientY };
+  frameEl.setPointerCapture(event.pointerId);
+});
+frameEl.addEventListener('pointermove', (event) => {
+  if (!profileDrag) { return; }
+  const p = profilePoint(event);
+  profileDrag.moved = Math.max(profileDrag.moved,
+    Math.abs(event.clientX - profileDrag.px) + Math.abs(event.clientY - profileDrag.py));
+  if (profileDrag.moved < 6) { return; }
+  setProfile({ y: profileDrag.y, x0: profileDrag.x, x1: p.x });
+});
+frameEl.addEventListener('pointerup', () => { profileDrag = null; });
+frameEl.addEventListener('pointercancel', () => { profileDrag = null; });
+
+/* ── the focus: the map used as a lens ────────────────────────────────
+ * Six quantised bands of the rank map. Every band takes its pixels from one of
+ * six pre-blurred copies of the photograph, chosen per pixel — no canvas
+ * compositing, so a band edge is a step in the defocus and never a seam — and
+ * the whole figure is one pass over an `ImageData` at the canvas's own size.
+ *
+ * Everything that belongs to the sample is built once: the blurred levels, the
+ * band each pixel belongs to, the pixels far enough from a band edge to be
+ * trusted, and each band's own Laplacian variance in the untouched photograph.
+ * A slider change then costs one selection pass and one measurement, which is
+ * what keeps it inside the figure's budget.
+ *
+ * The readout is the detail each region keeps, not the detail it happens to
+ * have: the sharp bands' variance over their own variance in the photograph, and
+ * the same figure for the defocused bands. Content cancels, so a smooth wall
+ * cannot read as defocused and a busy foreground cannot win by having more edges. */
+const FOCUS_BANDS = 6;
+const FOCUS_RADII = [0, 2, 3.5, 5, 7, 9]; // px, at the canvas the figure draws
+/* Canvas 2D blur is not universal (Safari before 18 has no `filter`). Without it
+ * every band would be the sharp photograph and the readout would report a ratio
+ * of 1, so the figure states the limit instead of drawing a lie. */
+const CAN_BLUR = typeof CanvasRenderingContext2D !== 'undefined' &&
+  'filter' in CanvasRenderingContext2D.prototype;
+const FOCUS_MEASURE = 256;               // the width the sharpness is read at
+const FOCUS_RIM = 2;                     // measurement pixels ignored at a band edge
+
+/* The band each pixel belongs to, at a given size, and the trusted interior. */
+function bandLayout(w, h) {
+  const bands = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = rankOf(bilinear(S.depth, S.depthRows, S.depthDim, 1, 0, (x + 0.5) / w, (y + 0.5) / h));
+      bands[y * w + x] = Math.min(FOCUS_BANDS - 1, Math.floor(t * FOCUS_BANDS));
     }
-    const found = score(entry, query, pinned);
-    rows.push({
-      id,
-      here: false,
-      cell: pinned ? found.cell : -1,
-      score: pinned ? found.score : found
-    });
   }
-  rows.sort((a, b) => (b.here ? 1 : 0) - (a.here ? 1 : 0) || b.score - a.score);
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  for (const btn of sampleButtons) {
-    const row = byId.get(sampleId(btn));
-    if (!row) { continue; }
-    const entry = pictures.get(row.id);
-    btn.setAttribute('aria-pressed', String(Boolean(row.here)));
-    btn.setAttribute('title', entry.title + ' · cosine ' + row.score.toFixed(3));
-    if (row.here || !pinned) { delete btn.dataset.cell; } else { btn.dataset.cell = String(row.cell); }
-    const box = btn.querySelector('[data-answer]');
-    box.hidden = false;
-    box.replaceChildren(
-      el('b', { text: row.here ? 'here' : row.score.toFixed(3) }),
-      el('span', { text: row.here || pinned ? patchCell(row.cell) : 'whole picture' })
-    );
+  const seam = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const b = bands[i];
+      seam[i] = bands[i - 1] !== b || bands[i + 1] !== b || bands[i - w] !== b || bands[i + w] !== b ? 1 : 0;
+    }
   }
-  samplesEl.append(...rows.map((row) => buttonFor(row.id)));
-  stripHint.textContent = pinned
-    ? 'this patch, in the other five · cosine over the returned rows, no index'
-    : 'no patch pinned · whole pictures, by their pooled vector';
+  let front = seam;
+  for (let pass = 0; pass < FOCUS_RIM; pass++) {
+    const next = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        next[i] = front[i] || (x > 0 && front[i - 1]) || (x < w - 1 && front[i + 1]) ||
+          (y > 0 && front[i - w]) || (y < h - 1 && front[i + w]) ? 1 : 0;
+      }
+    }
+    front = next;
+  }
+  const solid = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) { solid[i] = front[i] ? 0 : 1; }
+  return { bands, solid };
 }
 
-/* ── the words ──────────────────────────────────────────────────────── */
+/* Each band's Laplacian variance in the untouched photograph. */
+function bandSource(level0, bands, solid, w, h) {
+  const luma = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    luma[i] = 0.2126 * level0[i * 4] + 0.7152 * level0[i * 4 + 1] + 0.0722 * level0[i * 4 + 2];
+  }
+  const lap2 = new Float64Array(FOCUS_BANDS);
+  const lap = new Float64Array(FOCUS_BANDS);
+  const n = new Float64Array(FOCUS_BANDS);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (!solid[i]) { continue; }
+      const b = bands[i];
+      const v = 4 * luma[i] - luma[i - 1] - luma[i + 1] - luma[i - w] - luma[i + w];
+      lap2[b] += v * v;
+      lap[b] += v;
+      n[b]++;
+    }
+  }
+  return { lap, lap2, n };
+}
+
+function focusCache() {
+  if (S.focusCache) { return S.focusCache; }
+  const W = focusCanvas.width;
+  const H = focusCanvas.height;
+  const base = document.createElement('canvas');
+  base.width = W;
+  base.height = H;
+  base.getContext('2d').drawImage(S.photo, 0, 0, W, H);
+  const levels = FOCUS_RADII.map((r) => {
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d');
+    if (r > 0) { ctx.filter = 'blur(' + r + 'px)'; }
+    ctx.drawImage(base, 0, 0);
+    ctx.filter = 'none';
+    return ctx.getImageData(0, 0, W, H).data;
+  });
+  const screen = bandLayout(W, H);
+  const mw = FOCUS_MEASURE;
+  const mh = Math.max(1, Math.round((H / W) * mw));
+  const small = bandLayout(mw, mh);
+  // The measurement's source detail, from the photograph at the measured size.
+  const sc = document.createElement('canvas');
+  sc.width = mw;
+  sc.height = mh;
+  const sctx = sc.getContext('2d');
+  sctx.drawImage(base, 0, 0, mw, mh);
+  const source = bandSource(sctx.getImageData(0, 0, mw, mh).data, small.bands, small.solid, mw, mh);
+  const measure = document.createElement('canvas');
+  measure.width = mw;
+  measure.height = mh;
+  // The paint target and its luminance buffer belong to the sample too: a
+  // slider move rewrites them in place instead of allocating a megabyte a event.
+  S.focusCache = {
+    W, H, levels, screen,
+    out: new ImageData(W, H),
+    measure: { canvas: measure, width: mw, height: mh, luma: new Float32Array(mw * mh), ...small, source },
+  };
+  return S.focusCache;
+}
+
+/* The figure, one pass: every pixel takes its level from its own band. */
+function paintFocus(cache, levelOfBand) {
+  const { W, H, levels, screen } = cache;
+  const img = cache.out;
+  const out = img.data;
+  const { bands } = screen;
+  for (let i = 0, p = 0; i < W * H; i++, p += 4) {
+    const src = levels[levelOfBand[bands[i]]];
+    out[p] = src[p];
+    out[p + 1] = src[p + 1];
+    out[p + 2] = src[p + 2];
+    out[p + 3] = 255;
+  }
+  focusCanvas.getContext('2d').putImageData(img, 0, 0);
+}
+
+/* Detail kept by two sets of bands, in one pass over the measured copy. */
+function focusKept(cache, levelOfBand) {
+  const m = cache.measure;
+  const ctx = m.canvas.getContext('2d');
+  ctx.clearRect(0, 0, m.width, m.height);
+  ctx.drawImage(focusCanvas, 0, 0, m.width, m.height);
+  const data = ctx.getImageData(0, 0, m.width, m.height).data;
+  const luma = m.luma;
+  for (let i = 0; i < luma.length; i++) {
+    luma[i] = 0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2];
+  }
+  const acc = (pick) => {
+    const lap2 = new Float64Array(FOCUS_BANDS);
+    const lap = new Float64Array(FOCUS_BANDS);
+    const n = new Float64Array(FOCUS_BANDS);
+    for (let y = 1; y < m.height - 1; y++) {
+      for (let x = 1; x < m.width - 1; x++) {
+        const i = y * m.width + x;
+        if (!m.solid[i]) { continue; }
+        const b = m.bands[i];
+        if (!pick(levelOfBand[b])) { continue; }
+        const v = 4 * luma[i] - luma[i - 1] - luma[i + 1] - luma[i - m.width] - luma[i + m.width];
+        lap2[b] += v * v;
+        lap[b] += v;
+        n[b]++;
+      }
+    }
+    let after = 0;
+    let before = 0;
+    for (let b = 0; b < FOCUS_BANDS; b++) {
+      if (!n[b]) { continue; }
+      after += lap2[b] - (lap[b] * lap[b]) / n[b];
+      before += m.source.lap2[b] - (m.source.lap[b] * m.source.lap[b]) / m.source.n[b];
+    }
+    if (before < 1e-6) { return after > 0 ? Infinity : 0; }
+    return Math.max(0, after) / before;
+  };
+  return {
+    inside: acc((level) => level === 0),
+    outside: acc((level) => level >= 2)
+  };
+}
+
+function buildFocus() {
+  if (!S.depth || !S.photo) { return; }
+  if (!CAN_BLUR) {
+    focusCanvas.hidden = true;
+    focusRead.textContent = 'this browser cannot blur a canvas, so the depth of field is not drawn; the map and the profile still read the same reply';
+    return;
+  }
+  focusCanvas.hidden = false;
+  const t0 = performance.now();
+  const cache = focusCache();
+  const focus = Math.min(1, Math.max(0, Number(focusInput.value) / 100));
+  const aperture = Math.min(0.6, Math.max(0.02, Number(apertureInput.value) / 100));
+  const lo = Math.max(0, focus - aperture / 2);
+  const hi = Math.min(1, focus + aperture / 2);
+  const levelOfBand = new Uint8Array(FOCUS_BANDS);
+  for (let k = 0; k < FOCUS_BANDS; k++) {
+    const mid = (k + 0.5) / FOCUS_BANDS;
+    const distance = mid < lo ? lo - mid : mid > hi ? mid - hi : 0;
+    // The bands on the focus plane keep the photograph, the ones beside them
+    // carry the transition, and the rest are defocused.
+    levelOfBand[k] = distance <= 1 / FOCUS_BANDS
+      ? 0
+      : Math.min(FOCUS_RADII.length - 1,
+        1 + Math.round(((distance - 1 / FOCUS_BANDS) / (1 - 1 / FOCUS_BANDS)) * (FOCUS_RADII.length - 2)));
+  }
+  paintFocus(cache, levelOfBand);
+  const kept = focusKept(cache, levelOfBand);
+  const value = kept.outside > 0 ? kept.inside / kept.outside : (kept.inside > 0 ? Infinity : 0);
+  const ms = performance.now() - t0;
+  focusRead.textContent = 'focus ' + Math.round(focus * 100) + 'th percentile · aperture ' +
+    Math.round(aperture * 100) + ' points · detail kept ' +
+    (Number.isFinite(kept.inside) ? Math.round(kept.inside * 100) + '%' : 'all') + ' inside, ' +
+    (Number.isFinite(kept.outside) ? Math.round(kept.outside * 100) + '%' : 'none') + ' outside' +
+    ' · sharpness ' + (Number.isFinite(value) ? value.toFixed(1) + '×' : 'no comparison') +
+    ' · ' + Math.round(ms) + ' ms on this machine';
+  focusCanvas.setAttribute('aria-label', 'The photograph with the depth band at the ' +
+    Math.round(focus * 100) + 'th percentile left sharp: it keeps ' +
+    (Number.isFinite(kept.inside) ? Math.round(kept.inside * 100) + '%' : 'all') + ' of its own detail, the defocused bands keep ' +
+    (Number.isFinite(kept.outside) ? Math.round(kept.outside * 100) + '%' : 'none') +
+    ', a ratio of ' + (Number.isFinite(value) ? value.toFixed(1) : 'no comparison') + '.');
+}
+
+/* A drag can fire more input events than the screen has frames. One render per
+ * frame is the whole budget: the readout still shows the value under the thumb,
+ * and the figure stops doing the same work twice between two paints. */
+let focusFrame = 0;
+function scheduleFocus() {
+  if (focusFrame) { return; }
+  focusFrame = requestAnimationFrame(() => {
+    focusFrame = 0;
+    if (S.depth) { buildFocus(); }
+  });
+}
+focusInput.addEventListener('input', scheduleFocus);
+apertureInput.addEventListener('input', scheduleFocus);
+
+/* ── the trace: the run drawn from its own numbers ───────────────────
+ * Request bytes from the encode, reply bytes from the output's count x 4, the
+ * shape from EMB.INFO, the time from the bridge. Nothing typed twice. */
+function buildTrace(requestBytes) {
+  const trace = document.querySelector('[data-trace]');
+  if (!trace) { return; }
+  const bytes = S.depthRows * S.depthDim * 4;
+  const group = (n) => n.toLocaleString('en-GB').replace(/,/g, '\u00a0');
+  trace.querySelector('[data-trace-bar="depth"]').style.width = '100%';
+  trace.querySelector('[data-trace-shape="depth"]').textContent = S.depthRows + ' × ' + S.depthDim;
+  trace.querySelector('[data-trace-bytes="depth"]').textContent = group(bytes);
+  trace.querySelector('[data-trace-req]').textContent = group(requestBytes);
+  trace.querySelector('[data-trace-time="d"]').textContent = duration(elapsedDepth) + (depthCached ? ' · cached' : '');
+  trace.hidden = false;
+}
+
+/* One reply, one figure: the trace's button jumps to the stage that draws it. */
+for (const button of document.querySelectorAll('[data-trace-go]')) {
+  button.addEventListener('click', () => {
+    stage.scrollIntoView({ block: 'center' });
+    stage.focus({ preventScroll: true });
+  });
+}
+
+/* ── the words under the stage ─────────────────────────────────────── */
 
 function drawReadout() {
-  if (!S.rows || !S.sim) { return; }
-  const b = bestOther(S.sim);
+  if (!S.depthStats) { return; }
   readout.replaceChildren(
-    el('span', { class: 'k', text: 'probe ' }), el('b', { text: patchCell(S.probe) }),
-    el('span', { class: 'k', text: ' · region ' }), el('b', { text: S.regionCount + (S.regionCount === 1 ? ' patch' : ' patches') }),
-    el('span', { class: 'k', text: ' · alike here ' }), el('b', { text: patchCell(b) }),
-    el('span', { class: 'k', text: ' · cosine ' }), el('b', { text: S.sim[b].toFixed(3) }),
-    el('span', { class: 'k', text: ' · grid ' }), el('b', { text: S.rows + '×' + S.dim }),
-    el('span', { class: 'k', text: ' · depth ' }), el('b', { text: S.depthRows + '×' + S.depthDim }),
+    el('span', { class: 'k', text: 'map ' }), el('b', { text: S.depthRows + '×' + S.depthDim }),
+    el('span', { class: 'k', text: ' · ' }), el('b', { text: (S.depthRows * S.depthDim).toLocaleString('en-GB') + ' values' }),
     el('span', { class: 'k', text: ' · ' }), el('b', { text: S.count.toLocaleString('en-GB') + ' vertices' }),
     el('span', { class: 'k', text: ' and ' }), el('b', { text: (S.topology.tris.length / 3).toLocaleString('en-GB') + ' triangles' }),
-    el('span', { class: 'k', text: ' · ' }), el('b', { text: duration(elapsedFeatures) }),
-    el('span', { class: 'k', text: ' + ' }), el('b', { text: duration(elapsedDepth) }),
-    el('span', { class: 'k', text: featuresCached && depthCached ? ' · both replies cached' : featuresCached ? ' · features cached' : depthCached ? ' · depth cached' : '' })
+    el('span', { class: 'k', text: ' · ' }), el('b', { text: duration(elapsedDepth) }),
+    el('span', { class: 'k', text: depthCached ? ' · reply cached' : '' })
   );
 }
 
 function captions() {
   if (!S.count) { return; }
-  // The photograph is drawn, not reconstructed: the vertex and cell counts
-  // describe a surface that is not on screen in this state.
-  stageCap.textContent = S.view === 0
-    ? 'the photograph · ' + S.width + ' × ' + S.height + ' px · two calls'
-    : S.count.toLocaleString('en-GB') + ' vertices · ' +
-      (S.topology.tris.length / 3).toLocaleString('en-GB') + ' triangles · ' +
-      READINGS[S.reading] + ' · ×' + S.exaggeration.toFixed(2) + ' · ' +
-      (S.topology.cut * 100).toFixed(1) + '% cells cut' +
-      (S.iso ? ' · isolated · region ' + S.regionCount + (S.regionCount === 1 ? ' patch' : ' patches') : '');
-  stage.setAttribute('aria-label', S.view === 0
-    ? 'The photograph as itself. Drag to orbit, wheel to zoom, click to pin a patch.'
-    : 'The photograph reconstructed as a surface of ' + S.count.toLocaleString('en-GB') + ' vertices' +
-      (S.view === 2 ? ", coloured by the probe patch's cosine." : '. Drag to turn it, wheel to zoom, click to pin a patch.'));
+  stageCap.textContent = S.count.toLocaleString('en-GB') + ' vertices · ' +
+    (S.topology.tris.length / 3).toLocaleString('en-GB') + ' triangles · ' +
+    READINGS[S.reading] + ' · ×' + S.exaggeration.toFixed(2) + ' · ' +
+    (S.topology.cut * 100).toFixed(1) + '% cells cut';
+  stage.setAttribute('aria-label', 'The photograph reconstructed as a surface of ' +
+    S.count.toLocaleString('en-GB') + ' vertices from the depth model\u2019s own map. Drag to turn it, wheel to zoom.');
 }
 
 /* ── interaction ───────────────────────────────────────────────────── */
-
-function pickAt(event) {
-  if (!renderer || !pivot) { return -1; }
-  const box = stage.getBoundingClientRect();
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(new THREE.Vector2(
-    ((event.clientX - box.left) / box.width) * 2 - 1,
-    -((event.clientY - box.top) / box.height) * 2 + 1
-  ), camera);
-  const ray = raycaster.ray.clone().applyMatrix4(
-    new THREE.Matrix4().copy(pivot.matrixWorld).invert()
-  );
-  const o = ray.origin;
-  const dir = ray.direction;
-  if (Math.abs(dir.z) < 1e-6) { return -1; }
-  const aspect = S.width / S.height;
-  // The surface is a height field over the image plane, so the ray meets it
-  // where p.z equals the model's depth at p's own (u, v). Eight rounds of that
-  // one equation converge; the constants are the vertex shader's, repeated
-  // here on purpose, because a pick that drifted from the shader would lie
-  // about the geometry it is reading.
-  let u = 0;
-  let v = 0;
-  let z = 0;
-  for (let i = 0; i < 8; i++) {
-    const t = (z - o.z) / dir.z;
-    const s = 1 + z;
-    u = (o.x + t * dir.x) / (s * aspect) + 0.5;
-    v = 0.5 - (o.y + t * dir.y) / s;
-    if (u < -0.02 || u > 1.02 || v < -0.02 || v > 1.02) { return -1; }
-    z = (sampleDepth(Math.min(1, Math.max(0, u)), Math.min(1, Math.max(0, v))) - 0.5) *
-      S.exaggeration * DEPTH_GAIN * S.rise;
-  }
-  if (u < 0 || u > 1 || v < 0 || v > 1) { return -1; }
-  const col = Math.min(S.grid - 1, Math.floor(u * S.grid));
-  const row = Math.min(S.grid - 1, Math.floor(v * S.grid));
-  return row * S.grid + col;
-}
 
 stage.addEventListener('pointerdown', (event) => {
   if (!renderer) { return; }
   dragging = { x: event.clientX, y: event.clientY, moved: 0 };
   stage.setPointerCapture(event.pointerId);
   stopClock();
-  syncCue();
 });
 stage.addEventListener('pointermove', (event) => {
   if (!renderer || !dragging) { return; }
@@ -1864,20 +1890,10 @@ stage.addEventListener('pointermove', (event) => {
   aim.phi = Math.max(-PITCH, Math.min(PITCH, aim.phi + dy * 0.005));
   renderScene();
 });
-stage.addEventListener('pointerup', (event) => {
-  if (!renderer) { return; }
-  const moved = dragging ? dragging.moved : 0;
-  dragging = null;
-  if (moved >= 6) { return; }
-  const hit = pickAt(event);
-  if (hit < 0) { return; }
-  select(hit, true);
-  answer();
-});
+stage.addEventListener('pointerup', () => { dragging = null; });
 stage.addEventListener('pointercancel', () => { dragging = null; });
 stage.addEventListener('dblclick', () => {
   stopClock();
-  syncCue();
   aim.theta = 0;
   aim.phi = 0;
   renderScene();
@@ -1886,7 +1902,6 @@ stage.addEventListener('wheel', (event) => {
   if (!renderer) { return; }
   event.preventDefault();
   stopClock();
-  syncCue();
   aim.zoom = Math.max(zoomMin, Math.min(zoomMax, aim.zoom + event.deltaY * 0.0012 * Math.max(1, aim.zoom)));
   renderScene();
 }, { passive: false });
@@ -1902,31 +1917,42 @@ stage.addEventListener('keydown', (event) => {
   else { return; }
   event.preventDefault();
   stopClock();
-  syncCue();
   renderScene();
 });
 
-/* The probe by keyboard: one patch per notch, clamped to the grid the server
- * declared. */
-function probeFromControls() {
-  const col = Math.max(0, Math.min(S.grid - 1, Number(colInput.value)));
-  const row = Math.max(0, Math.min(S.grid - 1, Number(rowInput.value)));
-  select(row * S.grid + col, false);
-}
-
-colInput.addEventListener('input', probeFromControls);
-rowInput.addEventListener('input', probeFromControls);
+/* The profile's two ends by keyboard: the same line the drag draws, at the row it
+ * was last placed on. */
+/* The profile is operable from its own figure: two ends and the row they sit on,
+ * with no need to reach the stage above. The drag on the still is the same
+ * state, not a second one. */
+/* Each end moves on its own: `from` stops a step short of `to` instead of
+ * swapping the pair, so a drag never reverses under the pointer. */
+const profileRow = () => Number(profRow.value) / 100;
+profFrom.addEventListener('input', () => {
+  if (!S.depth) { return; }
+  const x1 = Number(profTo.value) / 100;
+  setProfile({ y: profileRow(), x0: Math.min(Number(profFrom.value) / 100, x1 - 0.02), x1 });
+});
+profTo.addEventListener('input', () => {
+  if (!S.depth) { return; }
+  const x0 = Number(profFrom.value) / 100;
+  setProfile({ y: profileRow(), x0, x1: Math.max(Number(profTo.value) / 100, x0 + 0.02) });
+});
+profRow.addEventListener('input', () => {
+  if (!S.depth) { return; }
+  setProfile({ y: profileRow(), x0: Number(profFrom.value) / 100, x1: Number(profTo.value) / 100 });
+});
 exagInput.addEventListener('input', () => { stopClock(); setExaggeration(Number(exagInput.value)); });
 cutInput.addEventListener('input', () => { setCut(Number(cutInput.value)); });
 densityInput.addEventListener('input', () => { setDensity(Number(densityInput.value)); });
-isoInput.addEventListener('change', () => { setIsolate(isoInput.checked); });
 for (const radio of viewRadios) {
   radio.addEventListener('change', () => { if (radio.checked) { setView(Number(radio.value)); } });
 }
 for (const radio of readRadios) {
   radio.addEventListener('change', () => { if (radio.checked) { setReading(Number(radio.value)); } });
 }
-if (cue) { cue.addEventListener('click', () => { reveal(); }); }
+
+let uploadUrl = null;
 
 uploadInput.addEventListener('change', async () => {
   const file = uploadInput.files && uploadInput.files[0];
@@ -1934,12 +1960,14 @@ uploadInput.addEventListener('change', async () => {
   if (!file) { return; }
   stopClock();
   // An upload is another asset: it is revealed from its own photograph too.
-  S.view = 0;
-  for (const radio of viewRadios) { radio.checked = radio.value === '0'; }
+  S.view = 1;
+  for (const radio of viewRadios) { radio.checked = radio.value === '1'; }
+  // The preview needs a live URL, so the previous one is released here, on the
+  // next upload, and never straight after being handed to `run`.
   if (uploadUrl) { URL.revokeObjectURL(uploadUrl); }
   uploadUrl = URL.createObjectURL(file);
   try {
-    await run(new Uint8Array(await file.arrayBuffer()), 'upload:' + file.name, uploadUrl);
+    await run(new Uint8Array(await file.arrayBuffer()), 'upload:' + file.name, uploadUrl, ++runs);
   } catch (err) {
     setState(err.state || 'error', err.message);
     out.hidden = true;
@@ -1972,7 +2000,7 @@ function bounded(bytes) {
     const img = new Image();
     img.onload = () => {
       // The bitmap is decoded into the element, so the object URL has done its
-      // job: revoking it here is what kept a sample's lookups from leaking one.
+      // job: revoking it here is what keeps a sample's lookups from leaking one.
       URL.revokeObjectURL(url);
       const scale = MAX_EDGE / Math.max(img.width, img.height);
       let w = Math.max(1, Math.round(img.width * scale));
@@ -1999,125 +2027,95 @@ function bounded(bytes) {
   });
 }
 
-function percentiles(values) {
-  const sorted = Array.from(values).sort((a, b) => a - b);
-  const at = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
-  return [at(0.01), at(0.99)];
-}
+/* One run at a time: a second sample (or an upload) bumps `runs`, and every
+ * awaited step of an older run gives up instead of writing over the newer one. */
+let runs = 0;
 
-async function run(raw, key, src) {
+async function run(raw, key, src, token) {
   g.begin();
   setState('running');
   out.hidden = true;
   try {
     const boundedImage = await bounded(raw);
-    const featuresShape = await g.imageShape(FEATURES);
-    const depthShape = await g.imageShape(DEPTH);
-    const gridShape = featuresShape.patches;
-    const mapShape = depthShape.depth;
-    if (!gridShape || !gridShape.rows || !gridShape.dim) {
-      throw new Error('the model declares no patch grid');
-    }
+    if (token !== runs) { return null; }
+    const shape = await g.imageShape(DEPTH);
+    const mapShape = shape.depth;
     if (!mapShape || !mapShape.rows || !mapShape.dim) {
       throw new Error('the depth model declares no map');
     }
-    const grid = gridShape.grid || Math.round(Math.sqrt(gridShape.rows));
-    if (grid * grid !== gridShape.rows) {
-      throw new Error('the declared grid of ' + grid + ' × ' + grid + ' does not hold ' + gridShape.rows + ' patches');
-    }
     // The reply is only drawable if its element count is the shape the server
     // declared: a number the page did not read is a number it cannot print.
-    const expect = (value, shape, what) => {
-      if (!value || !value.data) { throw new Error('the sandbox returned no ' + what); }
-      if (value.count !== shape.rows * shape.dim) {
-        throw new Error('the ' + what + ' carries ' + value.count + ' numbers, but the model declares ' +
-          shape.rows + ' of ' + shape.dim);
-      }
-      return value.data;
-    };
-    const features = await g.image(FEATURES, ['embedding', 'patches'], boundedImage.bytes);
-    const patches = expect(features.values.patches, gridShape, 'patch grid');
-    const depthReply = await g.image(DEPTH, ['depth'], boundedImage.bytes);
-    const map = expect(depthReply.values.depth, mapShape, 'depth map');
+    const reply = await g.image(DEPTH, ['depth'], boundedImage.bytes);
+    if (token !== runs) { return null; }
+    const value = reply.values.depth;
+    if (!value || !value.data) { throw new Error('the sandbox returned no depth map'); }
+    if (value.count !== mapShape.rows * mapShape.dim) {
+      throw new Error('the map carries ' + value.count + ' numbers, but the model declares ' +
+        mapShape.rows + ' of ' + mapShape.dim);
+    }
+    const map = value.data;
 
-    S.rows = gridShape.rows;
-    S.dim = gridShape.dim;
-    S.grid = grid;
-    S.patches = patches;
-    S.cls = features.values.embedding ? features.values.embedding.data : null;
     S.depthRows = mapShape.rows;
     S.depthDim = mapShape.dim;
     S.depth = map;
-    S.depthRange = percentiles(map);
+    S.depthRange = [pct(map, 0.01), pct(map, 0.99)];
+    S.depthP5P95 = [pct(map, 0.05), pct(map, 0.95)];
+    S.depthStats = { min: pct(map, 0), median: pct(map, 0.5), max: pct(map, 1) };
     S.depthRank = depthRankMap(map, S.depthRange);
     S.width = boundedImage.width;
     S.height = boundedImage.height;
     S.colors = boundedImage.pixels;
     S.photo = boundedImage.image;
-    S.id = idFrom(key);
+    S.id = key.split('/').pop().replace(/\.[^.]+$/, '');
+    S.focusCache = null;
     const heights = heightField();
+    // Displacement is smoothed one pass further than the normals: a map's cell
+    // noise that shading can carry turns into a shred when it moves geometry.
+    S.heights = blurField(heights, 1);
     S.slopes = buildSlopes(heights);
     S.shadow = buildShadow(heights);
-    buildPatchStats();
-    elapsedFeatures = features.elapsed_us;
-    elapsedDepth = depthReply.elapsed_us;
+    elapsedDepth = reply.elapsed_us;
 
     buildReconstruction();
 
     preview.src = src;
     root.style.setProperty('--aspect', String(S.width / S.height));
-    colInput.max = String(grid - 1);
-    rowInput.max = String(grid - 1);
+    focusCanvas.width = 640;
+    focusCanvas.height = Math.max(1, Math.round((S.height / S.width) * 640));
     out.hidden = false;
     await setupScene();
-    select(Math.floor(grid / 2) * grid + Math.floor(grid / 2), false);
-    applyLook(S.view === 0 ? 0 : 1, S.view === 2 ? 1 : 0, S.view === 0 ? 0 : 1);
+    if (token !== runs) { return null; }
+    figuresReset();
+    applyLook(0, 0);
     applyMode();
     // The ready line states what the run did that the readout does not: the
     // picture was resampled and re-encoded in this tab before it was sent, and
-    // those bytes are all either call ever saw.
+    // those bytes are all the call ever saw.
     stateEl.textContent = 'ready — the photograph resampled to ' + S.width + ' × ' + S.height +
-      ' px and re-encoded as JPEG here; those bytes are everything either call saw';
+      ' px and re-encoded as JPEG here; those bytes are everything the call saw';
 
     // A repeat of the same bytes is the server's cache, and the only honest way
     // to say so is to measure it: an answer an order of magnitude faster than
     // this image's first call is a lookup, not an inference.
-    const first = firstCalls.get(key) || {};
-    featuresCached = Boolean(first.features) && elapsedFeatures * 10 < first.features;
-    depthCached = Boolean(first.depth) && elapsedDepth * 10 < first.depth;
-    if (!first.features) { first.features = elapsedFeatures; }
-    if (!first.depth) { first.depth = elapsedDepth; }
-    firstCalls.set(key, first);
+    const first = firstCalls.get(key) || 0;
+    depthCached = Boolean(first) && elapsedDepth * 10 < first;
+    if (!first) { firstCalls.set(key, elapsedDepth); }
     drawReadout();
+    buildTrace(boundedImage.bytes.length);
 
     const figure = (name, text) => {
       const node = document.querySelector(name);
       if (node) { node.textContent = text; }
     };
-    figure('[data-fig-rows]', String(S.rows));
-    figure('[data-fig-dim]', String(S.dim));
     figure('[data-fig-depth]', S.depthRows + '×' + S.depthDim);
     // The plate's caption writes its numbers the way its markup does, in groups
     // of three held together by a non-breaking space, not the readout's commas.
-    figure('[data-fig-bytes]', String(S.rows * S.dim * 4).replace(/\B(?=(\d{3})+$)/g, '\u00a0'));
-
-    const own = buttonFor(S.id);
-    pictures.set(S.id, {
-      id: S.id,
-      rows: S.rows,
-      dim: S.dim,
-      patches: S.patches,
-      cls: S.cls,
-      src,
-      title: own ? own.dataset.name : 'this picture'
-    });
-    answer();
+    figure('[data-fig-count]', String(S.depthRows * S.depthDim).replace(/\B(?=(\d{3})+$)/g, '\u00a0'));
+    figure('[data-fig-bytes]', String(S.depthRows * S.depthDim * 4).replace(/\B(?=(\d{3})+$)/g, '\u00a0'));
 
     // The plate reveals every asset by itself: the new field is drawn as its own
-    // photograph and the depth then arrives on the clock. A reader who moved to
-    // another state during the run keeps that state.
-    syncCue();
-    if (S.view === 0) { reveal(); }
+    // photograph and the depth then arrives on the clock.
+    reveal();
   } catch (err) {
     setState(err.state || 'error', err.message);
     out.hidden = true;
@@ -2127,45 +2125,52 @@ async function run(raw, key, src) {
   }
 }
 
+/* The figures are arithmetic over the reply: the map as a raster, the profile
+ * along its line, and the focus. Reset after every reply, never a call. */
+function figuresReset() {
+  buildMap();
+  setProfile(S.profile);
+  buildFocus();
+  figWrap.hidden = false;
+}
+
 /* The samples ship with the page. Each is fetched, bounded, and sent as bytes
- * for the two calls; the page keeps nothing and the sandbox caches the replies by a
+ * for the one call; the page keeps nothing and the sandbox caches the reply by a
  * hash of the bytes, so the picture itself is never written. */
 async function sample(btn) {
   const url = btn.getAttribute('data-sample');
-  sampleButtons.forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  const token = ++runs;
+  sampleButtons.forEach((b) => { b.setAttribute('aria-pressed', String(b === btn)); });
   stopClock();
   // Every asset is revealed from its own photograph: a switch starts the
   // sequence again instead of inheriting the surface the last one left.
-  S.view = 0;
-  for (const radio of viewRadios) { radio.checked = radio.value === '0'; }
+  S.view = 1;
+  for (const radio of viewRadios) { radio.checked = radio.value === '1'; }
   try {
     const resp = await fetch(url);
     if (!resp.ok) { throw new Error('the sample could not be loaded'); }
-    await run(new Uint8Array(await resp.arrayBuffer()), url, url);
+    await run(new Uint8Array(await resp.arrayBuffer()), url, url, token);
   } catch (err) {
     setState(err.state || 'error', err.message);
     out.hidden = true;
   }
 }
 
-sampleButtons.forEach((btn) => { btn.dataset.name = btn.getAttribute('title') || sampleId(btn); });
 sampleButtons.forEach((btn) => btn.addEventListener('click', async () => {
-  const id = sampleId(btn);
+  const id = btn.getAttribute('data-sample').split('/').pop().replace(/\.[^.]+$/, '');
   if (id === S.id) { return; }
-  const cell = Number(btn.dataset.cell);
   history.replaceState(null, '', '#' + id);
   await sample(btn);
-  // The strip is the plate's climax: a tile opens that photograph at the cell
-  // the model chose, when a patch was pinned to choose it.
-  if (S.id === id && Number.isInteger(cell) && cell >= 0) { select(cell, true); answer(); }
 }));
 
 window.addEventListener('hashchange', () => {
-  const btn = buttonFor(decodeURIComponent(location.hash.slice(1)));
+  const id = decodeURIComponent(location.hash.slice(1));
+  const btn = sampleButtons.find((b) => b.getAttribute('data-sample').split('/').pop().replace(/\.[^.]+$/, '') === id);
   if (btn) { sample(btn); }
 });
 
-const chosen = buttonFor(decodeURIComponent(location.hash.slice(1))) || sampleButtons[0];
+const initial = decodeURIComponent(location.hash.slice(1));
+const chosen = sampleButtons.find((b) => b.getAttribute('data-sample').split('/').pop().replace(/\.[^.]+$/, '') === initial) || sampleButtons[0];
 if (chosen) { sample(chosen); }
 </script>
 <script src="../assets/js/nav.js" defer></script>

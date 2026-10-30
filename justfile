@@ -1012,6 +1012,15 @@ website-examples-check:
 # `sitemap.xml`. The site has no build step, so what it emits is committed and
 # `--check` -- the drift guard CI runs -- is what keeps a hand-edited page from
 # disagreeing with the sitemap, the theme colour or the favicon.
+# Measure image files through the sandbox's depth model and apply PLATE VII's
+# depth gate: p5–p95 spread, near and far decile occupancy, gradient energy.
+# Needs `just website-dev` in another shell (emb + bridge). Exits 1 on a frame
+# that does not carry depth.
+#   just website-depth-gate                                  # the shipped six
+#   just website-depth-gate /tmp/candidates                  # a candidate pool
+website-depth-gate dir="website/demos/samples/parts":
+    python3 website/tools/depth-gate.py {{dir}}
+
 website-pages:
     python3 website/tools/stamp-pages.py
 

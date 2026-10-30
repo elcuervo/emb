@@ -78,23 +78,24 @@ producing `[1, 3, size, size]` float32 RGB.
 
 ## Layer one: a call, end to end
 
-The site's plate makes two calls, one picture each:
+The site's plate makes one call on one picture:
 
 ```
-EMB.IMG dinov3 BLOB OUTPUTS embedding,patches <image bytes>
-EMB.IMG depth  BLOB OUTPUTS depth            <image bytes>
+EMB.IMG depth BLOB OUTPUTS depth <image bytes>
 ```
 
 What happens between a file and the numbers, in the order it happens. Every
 figure below was measured on the sandbox at `127.0.0.1:6379` with the six
-`demos/samples/parts/` photographs, using these commands:
+`demos/samples/parts/` photographs, using this command:
 
 ```bash
-cat samples/parts/nave.jpg | redis-cli -x EMB.IMG dinov3 BLOB OUTPUTS embedding,patches
-cat samples/parts/nave.jpg | redis-cli -x EMB.IMG depth  BLOB OUTPUTS depth
-redis-cli EMB.INFO dinov3      # embedding 1x384, patches 196x384, grid 14x14
+cat website/demos/samples/parts/pier-corridor.jpg | redis-cli -x EMB.IMG depth BLOB OUTPUTS depth
 redis-cli EMB.INFO depth       # depth 266x266, select map, image_sessions 1
 ```
+
+The same grammar serves any model a configuration exposes: the sections below
+also cover the DINOv3 export, whose two products the server still publishes for
+clients that configure it.
 
 The wire sizes are the RESP reply's own byte count; the JSON sizes are what
 `POST /api/exec` on the bridge at `127.0.0.1:8081` returns for the same bytes.
@@ -107,35 +108,37 @@ sees, so a sample's stored size is not its request size. JSON carries no bytes,
 so the encoded image is base64'd and named by index:
 
 ```json
-{ "args": ["EMB.IMG", "dinov3", "BLOB", "OUTPUTS", "embedding,patches", "<base64>"],
+{ "args": ["EMB.IMG", "depth", "BLOB", "OUTPUTS", "depth", "<base64>"],
   "bin": [5], "proto": 2 }
 ```
 
-`nave.jpg` is 169 846 bytes in the repository; the request carries the base64 of
-the plate's own bounded re-encode, a different file, so the request body is 4/3 of
-that encode's size (the stored file alone would be 226 464 characters).
+`pier-corridor.jpg` is 76 594 bytes in the repository; the request carries the
+base64 of the plate's own bounded re-encode, a different file, so the request
+body is 4/3 of that encode's size.
 
 **2. The bridge admits one shape and re-encodes it.** `website/repl/allowlist.go`
 accepts exactly `EMB.IMG <model> BLOB [OUTPUTS <name>[,...]] <one image>`, the
-model in `dinov3 | depth`, and every requested name one that model's config
-declares. `website/repl/bridge.go` then decodes argument 5 from base64 back to
-bytes (refusing above `max_image_bytes: 262144`), and sends them to emb as a
-binary-safe RESP bulk. Base64 exists for the JSON hop only; emb never sees it.
+model `depth` (the sandbox's one image model), and every requested name that
+model's config declares. `website/repl/bridge.go` then decodes argument 5 from
+base64 back to bytes (refusing above `max_image_bytes: 262144`), and sends them
+to emb as a binary-safe RESP bulk. Base64 exists for the JSON hop only; emb never
+sees it.
 
 **3. The server decodes, preprocesses, and hashes.** `internal/server/image.go`
 takes SHA-256 of the bytes first and consults `img:<model>:<sha256>:<output>` for
 each requested output. A miss is decoded (JPEG, PNG, GIF, WebP), squashed to
 `size × size` in uint8, rescaled 1/255, normalized per channel, and stacked with
 the other misses of the command into one `[n, 3, size, size]` float32 batch —
-`224` for `dinov3`, `266` for `depth`.
+`266` for `depth`.
 
 **4. One run answers every output.** `ImageResources.Embed` calls the session
 once per batch chunk and reads every requested output from that one result map:
-`pooler_output` and `last_hidden_state` for `dinov3`, `predicted_depth` for
-`depth`. Two products are not two inferences. Measured on one picture, cold, on
-`EMB.IMG dinov3 BLOB OUTPUTS embedding` against `... OUTPUTS embedding,patches`
-(same pixels, a trailing byte added so the cache could not answer): 33 072 µs and
-34 902 µs. The grid is 401 KB of reply, not a second pass.
+`predicted_depth` for `depth`, `pooler_output` and `last_hidden_state` for a
+DINOv3 configuration. Two products are not two inferences. Measured on one
+picture, cold, on `EMB.IMG dinov3 BLOB OUTPUTS embedding` against
+`... OUTPUTS embedding,patches` (same pixels, a trailing byte added so the cache
+could not answer): 33 072 µs and 34 902 µs. The grid is 401 KB of reply, not a
+second pass.
 
 **5. `select`, `start` and `grid` decide what leaves the graph.**
 
@@ -195,7 +198,7 @@ by the vector, rank parts by the grid, without re-running anything.
 
 **The patch grid is an index nobody had to build.** With `normalize: true` every
 row is a unit vector, so a dot product is a cosine. Inside one picture that is a
-patch-to-patch similarity field — what the plate's relief is drawn from. Across
+patch-to-patch similarity field — a client's own index over the reply. Across
 two pictures it is still a cosine, because both grids live in the same 384-d
 space and the same 14 × 14 lattice, so a patch from one photograph is comparable
 with a patch from another by position and by content. There is no index to build
@@ -209,30 +212,29 @@ numbers are never normalized and are not a unit vector: a dot product between tw
 maps means nothing, and the declared shape is the whole contract. The client owns
 the transform.
 
-**Why depth is a second graph.** A dense feature is not a distance. A principal
+**Why depth is its own graph.** A dense feature is not a distance. A principal
 component of `last_hidden_state` is an axis of variation — it orders patches by
 appearance, not by metres, and no rotation of the 384-d space turns it into a
 depth map. Monocular depth needs a decoder trained for it, which is why the plate
-runs two models over the same pixels. That second model is not free: its own
-session (`EMB.INFO depth` → `image_sessions: 1`, `intra_op_threads: 4`), 27 MB of
-int8 weights on disk and ~100 MB resident once the CPU provider dequantizes them,
-beside DINOv3's 22 MB of int8 weights on disk
-(`models/int8/dinov3/model_quantized.onnx` and its 21.8 MB sidecar) and ~90 MB
-resident (`website/repl/sandbox.yaml`). The bridge carries one command at a time,
-so the two calls are sequential from one page.
+runs one depth model and nothing else. That model is not free: its own session
+(`EMB.INFO depth` → `image_sessions: 1`, `intra_op_threads: 4`), 27 MB of int8
+weights on disk and ~100 MB resident once the CPU provider dequantizes them
+(`website/repl/sandbox.yaml`). A DINOv3 configuration beside it would add its own
+22 MB of int8 weights and ~90 MB resident for a second vocabulary the plate no
+longer asks for.
 
 ## Layer three: what would break it
 
 - **No metres.** The map is monocular and relative — inverse depth, one image,
   no camera intrinsics. Nothing in the reply is a distance, and nothing in the
-  reply is comparable across pictures: the plate normalizes by percentiles, so
+  reply is comparable across pictures: the page normalizes by percentiles, so
   two photographs come back on two unrelated scales.
 - **One face.** The bridge admits exactly one image per call, and the two calls
   are independent. Two views of the same scene would come back as two maps with
   no shared scale, so nothing here supports stereo, multi-view consistency or a
   change in viewpoint.
 - **224 against 336.** 196 rows of 384 (294 KiB) against 441 rows of 384
-  (661 KiB), for 3× the resident weights and a grid the plate draws at 320 px.
+  (661 KiB), for 3× the resident weights.
   The 336 export is also static batch 1, so it cannot batch.
 - **The uint8-resize parity gap.** emb resizes in uint8 and then rescales; the
   published processors rescale first. Cosine against independent references is
@@ -241,7 +243,7 @@ so the two calls are sequential from one page.
   sensitivity — not a wiring error.
 - **Normalisation is the model's, not the request's.** `normalize: true` (set for
   `dinov3`, unset for `depth`) L2-normalizes the pooled vector and every patch
-  row; a map is never touched. Turn it off and the plate's cosine reading — a dot
+  row; a map is never touched. Turn it off and a client's cosine — a dot
   product over the returned rows — stops being a cosine, because the rows are no
   longer unit vectors.
 - **The space is per checkpoint.** Two grids are comparable because both came
@@ -258,7 +260,8 @@ so the two calls are sequential from one page.
 | attempted | refused by | reply |
 |---|---|---|
 | `OUTPUTS depth` on `dinov3` | server | `-ERR unknown image output "depth"; configured outputs: embedding, patches` |
-| `VALUES` anywhere in the image family | bridge | `EMB.IMG accepts only <model> BLOB [OUTPUTS <name>[,...]] with one image, for the sandbox's dinov3, depth models` |
+| `VALUES` anywhere in the image family | bridge | `EMB.IMG accepts only <model> BLOB [OUTPUTS <name>[,...]] with one image, for the sandbox's depth models` |
+| an image model the sandbox does not serve | bridge | `EMB.IMG serves only the sandbox's own image models (depth), not "dinov3"` |
 | a second image | bridge | `EMB.IMG takes exactly one image per call` |
 | `EMB.IMGMULTI` with image bytes | bridge | `binary arguments are accepted only by the sandbox's image or audio preset` |
 | a map whose tensor is not `size × size` | server | refused rather than shifted; `start` or `grid` on a map fails the boot |

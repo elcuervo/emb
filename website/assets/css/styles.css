@@ -2751,26 +2751,6 @@ html.js.is-ready .hero__prose{
   display: grid; place-items: center; padding: 12px; cursor: default;
   font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--rule);
 }
-/* The cue: one action over the photograph, spent on first press. */
-.stage__cue{
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  display: grid; gap: 4px; padding: 14px 22px;
-  border: 1px solid var(--accent); background: var(--dark);
-  color: var(--bg); cursor: pointer; text-align: left;
-}
-.stage__cue-k{
-  font-family: var(--mono); font-size: 12px; letter-spacing: .04em;
-  text-transform: uppercase; color: var(--rule);
-}
-.stage__cue-t{
-  font-family: var(--display), var(--sans), sans-serif;
-  font-size: clamp(17px, 1.7vw, 24px); letter-spacing: -.01em; color: var(--bg);
-}
-.stage__cue:hover{ background: var(--accent); }
-.stage__cue:hover .stage__cue-k,
-.stage__cue:hover .stage__cue-t{ color: var(--dark); }
-.stage__cue:focus-visible{ outline: 2px solid var(--bg); outline-offset: 3px; }
-.stage__cue[hidden]{ display: none; }
 /* The measured line over the canvas's foot: vertices, triangles, reading. It is
    read, not decoration, so it sits on the dark ground the samples' answers use:
    over a bright photograph a bare grey line disappeared. */
@@ -2781,19 +2761,16 @@ html.js.is-ready .hero__prose{
   font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
   color: var(--rule); pointer-events: none;
 }
-/* The answer strip: each sample tile carries the model's own answer for it, a
-   cosine and the cell it landed on. Hidden until there is an answer to carry. */
-.samples__a{
-  position: absolute; left: 0; right: 0; bottom: 0;
-  display: grid; gap: 1px; padding: 4px 5px 5px;
-  background: var(--dark);
-  font-family: var(--mono); font-size: 12px; line-height: 1.25;
-  letter-spacing: .02em; color: var(--rule); text-align: left;
-  font-variant-numeric: tabular-nums;
+/* The profile's line over the photograph: the same percentages the chart
+   samples, so the measurement and the picture cannot disagree about where it
+   came from. A drag places it, so the frame shows a crosshair. */
+.perception__frame{ cursor: crosshair; }
+.perception__prof{
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  color: var(--accent); pointer-events: none;
 }
-.samples__a[hidden]{ display: none; }
-.samples__a b{ font-weight: 500; color: var(--bg); }
-.samples__a span{ color: var(--rule); }
+/* The model's own answer chips and the crop box belonged to the removed
+   second model; the plate is one map now, and its figures are below. */
 .stage__film{
   display: grid; gap: 8px; margin-top: clamp(14px, 1.6vw, 22px);
 }
@@ -2827,10 +2804,6 @@ html.js.is-ready .hero__prose{
 .perception__shot{ position: relative; width: 100%; margin: 0; }
 .perception__frame{ position: relative; width: 100%; aspect-ratio: var(--aspect); }
 .perception__frame img{ display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; }
-.perception__plan{
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  image-rendering: pixelated;
-}
 /* One disclosure per quiet control group: native, so it opens without this
    sheet and a reader without a pointer can still reach every input. */
 .perception__fold{
@@ -2889,6 +2862,107 @@ html.js.is-ready .hero__prose{
   font-family: var(--mono); font-size: 12px; line-height: 1.5;
   letter-spacing: .02em; color: var(--rule);
 }
+/* THE TRACE. The run's own numbers: request bytes, the head's measured time,
+   and one bar for the reply, scaled by its own byte count. DOM text, so it reads
+   at 350 px where an SVG's labels do not. */
+.trace{
+  display: grid; gap: 6px; margin: clamp(18px, 2.2vw, 26px) 0 0;
+  border-top: 1px solid var(--rule); padding-top: 12px;
+}
+.trace[hidden]{ display: none; }
+.trace__top{
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: 4px 16px;
+}
+.trace__req{
+  margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.trace__lane{ display: grid; gap: 2px; margin-top: 6px; }
+.trace__model{
+  margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.trace__reply{
+  display: grid; gap: 4px; min-height: 44px; padding: 4px 0;
+  border: 0; background: none; text-align: left; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.trace__reply:hover .trace__lab{ color: var(--accent-ink); }
+.trace__reply:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.trace__track{ display: block; width: 100%; height: 8px; background: var(--rule-soft); }
+.trace__bar{ display: block; height: 100%; width: 0; background: var(--accent-ink); }
+.trace__lab{ display: block; }
+
+/* THE THREE FIGURES. One row of figures over one reply: a raster, a matrix and
+   a field. They sit below the stage, so the first screen stays the photograph,
+   and every control is the site's own mono button at 44px. */
+.pfigs{
+  display: grid; gap: clamp(18px, 2.4vw, 32px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  margin-top: clamp(22px, 2.6vw, 34px);
+}
+.pfigs[hidden]{ display: none; }
+.pfig{
+  display: grid; gap: 10px; align-content: start; margin: 0;
+  border-top: 1px solid var(--rule); padding-top: 12px;
+}
+/* The field needs width to read: two grids and the arrows between them. On a
+   wide screen it takes the full row under the raster and the matrix. */
+@media (min-width: 1100px){
+  .pfigs{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pfig--wide{ grid-column: 1 / -1; }
+}
+.pfig__head{ display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pfig__t{
+  margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--accent-ink);
+}
+.pfig__play{
+  min-height: 44px; min-width: 44px; padding-inline: 12px;
+  border: 1px solid var(--rule); background: transparent; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em; color: var(--muted);
+}
+.pfig__play:hover{ color: var(--accent-ink); border-color: var(--accent-ink); }
+.pfig__play:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.pfig__play[aria-pressed="false"]{ color: var(--accent-ink); border-color: var(--accent-ink); }
+.pfig__c{
+  display: block; width: 100%; height: auto; background: var(--bg);
+  border: 1px solid var(--rule-soft);
+  image-rendering: pixelated;
+}
+.pfig__spark{ display: block; width: 100%; height: auto; }
+/* The focus canvas holds a blurred photograph, not a raster: scaling it down to
+   a phone should smooth it, while the map's cells stay square. */
+.pfig__c--smooth{ image-rendering: auto; }
+.pfig__c:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.pfig__read{
+  margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--muted); font-variant-numeric: tabular-nums;
+  min-height: 3em;
+}
+.pfig__cap{
+  margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--muted);
+}
+.pfig__pick{
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em; color: var(--muted);
+}
+.pfig__pick select{
+  min-height: 44px; max-width: 100%; padding-inline: 8px;
+  border: 1px solid var(--rule); background: var(--bg); color: var(--fg);
+  font-family: var(--mono); font-size: 12px;
+}
+.pfig__rev{ display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.pfig__rev input{ width: 20px; height: 20px; accent-color: var(--accent); }
+.pfig__pick select:focus-visible,
+.pfig__rev input:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The tuning labels were written for the dark stage; inside the paper figures
+   they take the paper's own caption colour, or they read as disabled. */
+.pfig__pick .perception__count{ color: var(--muted); }
+
 /* The photograph picker keeps each sample's own shape: the frame is letterboxed
    on the dark ground instead of cropped, so a portrait stays a portrait. */
 .rig[data-rig="perception"] .samples img{ object-fit: contain; }
@@ -2898,7 +2972,11 @@ html.js.is-ready .hero__prose{
   display: flex; flex-wrap: wrap; gap: 2px;
   border: 0; background: transparent; margin-bottom: 0;
 }
-.rig[data-rig="perception"] .samples button{ width: 96px; flex: 0 0 auto; }
+/* The strip is a gallery of photographs, not a set of swatches: the tiles are
+   wide enough to tell the six apart without opening one. */
+.rig[data-rig="perception"] .samples button{
+  width: clamp(112px, 12vw, 168px); flex: 0 0 auto;
+}
 /* The plate's hints are sentences in the mono voice, not tracked caps: they
    carry a measurement each, and 12px caps are a label's voice. */
 .rig[data-rig="perception"] .drop__hint{

@@ -9,7 +9,7 @@ import (
 
 // surface is the permitted command set, quoted in every refusal so a refusal
 // points at what is available rather than being silent.
-const surface = "PING, HELLO 2|3, EMB, EMB.MULTI, EMB.MODELS, EMB.INFO, EMB.STATS, EMB.READY, EMB.HELP, EMB.EVSHA (preloaded presets only), EMB.IMG (one image, the sandbox's dinov3 or depth model, BLOB only), INFO"
+const surface = "PING, HELLO 2|3, EMB, EMB.MULTI, EMB.MODELS, EMB.INFO, EMB.STATS, EMB.READY, EMB.HELP, EMB.EVSHA (preloaded presets only), EMB.IMG (one image, the sandbox's depth model, BLOB only), INFO"
 
 // presets maps a model to the digests the server preloaded for it, each to the
 // preset's name. A preset is callable only when its model and digest both
@@ -31,20 +31,17 @@ var refusedFamilies = map[string]string{
 	"emb.imgmulti":    "one image per call is the whole image surface",
 }
 
-// imageModels is the pair of image branches the site exposes, each with the
-// outputs its sandbox config declares: the dense-features entry (a pooled
-// vector and a patch grid) and the depth entry (one 2-D map). The plate names
-// them; a model the sandbox serves for text is not an image surface, and a
-// third name is a config-and-allowlist change, not a widening at runtime.
+// imageModels is the single image branch the site exposes, with the outputs its
+// sandbox config declares: the depth entry (one 2-D map). The plate names it; a
+// model the sandbox serves for text is not an image surface, and a second name
+// is a config-and-allowlist change, not a widening at runtime.
 var imageModels = map[string]map[string]bool{
-	"dinov3": {"embedding": true, "patches": true},
-	"depth":  {"depth": true},
+	"depth": {"depth": true},
 }
 
-// imageModelNames lists the permitted models for a refusal, sorted so the
-// message is stable.
+// imageModelNames lists the permitted models for a refusal.
 func imageModelNames() string {
-	return "dinov3, depth"
+	return "depth"
 }
 
 // imageOutputList lists a model's outputs for a refusal, sorted.

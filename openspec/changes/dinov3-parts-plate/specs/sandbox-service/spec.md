@@ -12,15 +12,15 @@ configuration, mutate shared state, load or flush scripts, persist state, stream
 other visitors' requests, carry credentials, fetch a URL, or decode images
 directly MUST be refused. Image bytes reach the server through two calls the
 sandbox owns and no others: its **preloaded image preset**, and one shaped
-`EMB.IMG` form naming one of the sandbox's **two image models** — the
-dense-features model (outputs `embedding`, `patches`) or the depth model
+`EMB.IMG` form naming the sandbox's **one image model** — the depth model
 (output `depth`) — its `BLOB` representation, an optional subset of that
-model's configured outputs, and exactly one image. `EMB.IMGMULTI`, `VALUES`, any
-other model, and any widening of that shape remain refused.
+model's configured outputs, and exactly one image. `EMB.IMGMULTI`, `VALUES`, the
+dense-features model and every other name, and any widening of that shape remain
+refused, and the refusal names `depth`.
 
 #### Scenario: A permitted command runs
 
-- **WHEN** a visitor sends an embedding, a multi-model call, a metadata read, a preset script call, or the shaped image command for either image model
+- **WHEN** a visitor sends an embedding, a multi-model call, a metadata read, a preset script call, or the shaped image command for the depth model
 - **THEN** the bridge forwards it and returns the server's reply
 
 #### Scenario: A configuration change is refused
@@ -45,8 +45,8 @@ other model, and any widening of that shape remain refused.
 
 #### Scenario: The shaped image command cannot be widened
 
-- **WHEN** a visitor sends `EMB.IMGMULTI`, a `VALUES` image reply, an image command for a model outside the sandbox's two image models, an output name that model does not configure, or more than one image in one call
-- **THEN** the bridge refuses it and names the one image form and the two permitted models, and the server receives no widened command
+- **WHEN** a visitor sends `EMB.IMGMULTI`, a `VALUES` image reply, an image command naming the dense-features model or any other, an output name the depth model does not configure, or more than one image in one call
+- **THEN** the bridge refuses it and names the one image form and the one permitted model, and the server receives no widened command
 
 #### Scenario: An image reaches the server only as bounded bytes
 
@@ -110,12 +110,12 @@ answer inside the bridge's per-command deadline.
 - **WHEN** the sandbox boots with the shipped configuration and its models already on the volume
 - **THEN** it reaches ready without the platform killing the server for memory, and it stays up while the preloaded presets warm their replies
 
-#### Scenario: A cold dense-features call answers on the shared machine
+#### Scenario: A cold image call answers on the shared machine
 
-- **WHEN** the dense-features model is called through the bridge for the first time since boot
+- **WHEN** the depth model is called through the bridge for the first time since boot
 - **THEN** the reply arrives inside the bridge's deadline, and the reply reports the server-measured call time rather than a client estimate
 
-#### Scenario: The depth model is accounted for beside it
+#### Scenario: The image model set is one, and its cost is accounted for
 
-- **WHEN** the depth model is added to the sandbox
-- **THEN** its resident cost is accounted for beside the dense-features model's, its quantized export is the one mounted, and its first call through the bridge answers inside the deadline
+- **WHEN** the sandbox boots with the shipped configuration
+- **THEN** `EMB.MODELS` lists one image model, its resident cost is accounted for in the CPU plan, its quantized export is the one mounted, and the dense-features model is absent from the configuration and from the bridge's surface

@@ -366,15 +366,19 @@ than enforced by a job. On the tree this change ships:
 
 ```bash
 ~/.pi/agent/skills/impeccable/scripts/impeccable detect website
-# 2 anti-patterns found.
+# 199 anti-patterns found.
 # 12 advisory notes (not counted).
 ```
 
-Every rule is at zero except the two `cream-palette` warnings, and they are the
-world's own ground rather than a defect: `#F3F0E8` is the beige the site is built
-on, and the rule fires on the two files that declare a *page* background
-(`tools/ink-probe.html`, `tools/og-card.html`) — the served pages take their
-ground from `styles.css`, which the rule does not read as a page background. The
+The 199 are the shell's own set, repeated per page: `cramped-padding` 110 (the
+`.block` insets), `clipped-overflow-container` 43 (the skip link against the
+`html`/`body` clip), `wide-tracking` 25 (the shell's tracked label rule),
+`all-caps-body` 19 (the plates' short uppercase heads read as body by the rule)
+and 2 `cream-palette` warnings, which are the world's own ground rather than a
+defect: `#F3F0E8` is the beige the site is built on, and the rule fires on the two
+files that declare a *page* background (`tools/ink-probe.html`,
+`tools/og-card.html`) — the served pages take their ground from `styles.css`,
+which the rule does not read as a page background. The
 ground is a decision, so it is left standing and not silenced with an
 `impeccable ignores` entry: an ignore rule would also hide the next real finding
 on those two files. The twelve advisories are `em-dash-overuse`, advisory by the
