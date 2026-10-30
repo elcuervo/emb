@@ -97,8 +97,8 @@
       "path": "/demos/perception.html",
       "indexable": true,
       "title": "emb — demos: the perception — depth says where, DINOv3 says what",
-      "description": "One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with five readings — textured, wireframe, camera-space normals, depth contours, dense cloud — plus a probe that finds any part again in the other five photographs.",
-      "social_description": "Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, contour by depth, cut in half and search — from two live calls."
+      "description": "One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with four readings — textured, wireframe, camera-space normals, dense cloud — plus a probe that finds any part again in the other five photographs.",
+      "social_description": "Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, cut in half and search — from two live calls."
     },
     {
       "file": "demos/dns.html",

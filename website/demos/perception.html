@@ -6,19 +6,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — demos: the perception — depth says where, DINOv3 says what</title>
 <link rel="canonical" href="https://emb.is/demos/perception.html">
-<meta name="description" content="One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with five readings — textured, wireframe, camera-space normals, depth contours, dense cloud — plus a probe that finds any part again in the other five photographs.">
+<meta name="description" content="One photograph, two calls: a depth model puts every pixel in space and DINOv3 answers with a vector per patch. The result is one indexed surface with four readings — textured, wireframe, camera-space normals, dense cloud — plus a probe that finds any part again in the other five photographs.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — demos: the perception — depth says where, DINOv3 says what">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, contour by depth, cut in half and search — from two live calls.">
+<meta property="og:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, cut in half and search — from two live calls.">
 <meta property="og:url" content="https://emb.is/demos/perception.html">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="emb — demos: the perception — depth says where, DINOv3 says what">
-<meta name="twitter:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, contour by depth, cut in half and search — from two live calls.">
+<meta name="twitter:description" content="Depth says where. DINOv3 says what. One reconstructed surface you can turn, wireframe, shade by normal, cut in half and search — from two live calls.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 <!-- meta:end -->
@@ -82,8 +82,8 @@
           <h1 class="plate__title" id="plate-h"><span class="plate__num">VII.</span>The perception</h1>
           <p class="plate__teaches">
             A photograph read by two models: one measures where everything is, the
-            other says what looks alike. One surface comes back, with five readings —
-            surface, wireframe, normals, contours, cloud — and a probe that finds the
+            other says what looks alike. One surface comes back, with four readings —
+            surface, wireframe, normals, cloud — and a probe that finds the
             same patch in the other five photographs.
           </p>
           <p class="tldr">Depth puts the pixels in space and DINOv3 gives each patch a vector, so one photograph becomes something you can orbit, cut and search by the part you point at.</p>
@@ -108,12 +108,26 @@
     <div class="shell">
       <div data-live class="rig" data-rig="perception">
         <div class="stage__view">
-          <div class="perception__stage" data-stage></div>
-          <button class="stage__cue" type="button" data-reveal hidden>
-            <span class="stage__cue-k">one photograph · two calls</span>
-            <span class="stage__cue-t">Reveal perception</span>
-          </button>
-          <p class="stage__hud" data-stage-cap aria-hidden="true"></p>
+          <!-- Side by side: the still on the left, the reconstruction on the
+               right. Both reserve the photograph's aspect, so neither column
+               jumps when the first reply lands. -->
+          <div class="stage__pair">
+            <figure class="perception__shot">
+              <div class="perception__frame">
+                <img class="drop__img" data-preview src="samples/parts/autumn-road.jpg" alt="">
+                <canvas class="perception__plan" data-plan role="img" aria-label="The photograph, tinted where the region grown from the probe covers it"></canvas>
+              </div>
+              <figcaption class="perception__cap">the still, flat · the region the model grows is tinted over it</figcaption>
+            </figure>
+            <div class="stage__slot">
+              <div class="perception__stage" data-stage></div>
+              <button class="stage__cue" type="button" data-reveal hidden>
+                <span class="stage__cue-k">one photograph · two calls</span>
+                <span class="stage__cue-t">Reveal perception</span>
+              </button>
+              <p class="stage__hud" data-stage-cap aria-hidden="true"></p>
+            </div>
+          </div>
         </div>
 
         <div class="stage__film">
@@ -141,35 +155,27 @@
               <label><input type="radio" name="perception-reading" value="0" data-reading checked>surface</label>
               <label><input type="radio" name="perception-reading" value="1" data-reading>wireframe</label>
               <label><input type="radio" name="perception-reading" value="2" data-reading>normals</label>
-              <label><input type="radio" name="perception-reading" value="3" data-reading>contours</label>
-              <label><input type="radio" name="perception-reading" value="4" data-reading>cloud</label>
+              <label><input type="radio" name="perception-reading" value="3" data-reading>cloud</label>
             </div>
           </div>
 
           <p class="rig__readout" data-readout aria-live="polite"></p>
 
-          <div class="stage__under">
-            <figure class="perception__shot">
-              <img class="drop__img" data-preview src="samples/parts/autumn-road.jpg" alt="">
-              <canvas class="perception__plan" data-plan role="img" aria-label="The photograph, tinted where the region grown from the probe covers it"></canvas>
-              <figcaption class="perception__cap">the region the model grows, tinted over the photograph</figcaption>
-            </figure>
-            <div class="stage__read">
-              <details class="perception__fold">
-                <summary class="perception__fold-h">adjust</summary>
-                <div class="perception__fold-body">
-                  <label class="perception__count">exaggeration <input type="range" min="0" max="150" step="1" value="100" data-exag></label>
-                  <label class="perception__count">cut <input type="range" min="0" max="100" step="1" value="70" data-cut></label>
-                  <label class="perception__count">density <input type="range" min="0" max="2" step="1" value="2" data-density></label>
-                  <label class="perception__count">isolate <input type="checkbox" data-iso></label>
-                  <label class="perception__count">column <input type="range" min="0" max="13" step="1" value="7" data-col></label>
-                  <label class="perception__count">row <input type="range" min="0" max="13" step="1" value="7" data-row></label>
-                  <label class="perception__count">upload <input type="file" accept="image/*" data-upload></label>
-                </div>
-              </details>
-              <p class="drop__hint">drag to orbit · wheel to zoom · hover to probe · click to pin · double-click resets · arrow keys and + − 0 turn and zoom</p>
-              <p class="perception__cap">relative, monocular depth — no metres, one face · the box is the region's extent, not a detector's output</p>
-            </div>
+          <div class="stage__read">
+            <details class="perception__fold">
+              <summary class="perception__fold-h">adjust</summary>
+              <div class="perception__fold-body">
+                <label class="perception__count">exaggeration <input type="range" min="0" max="150" step="1" value="100" data-exag></label>
+                <label class="perception__count">cut <input type="range" min="0" max="100" step="1" value="70" data-cut></label>
+                <label class="perception__count">density <input type="range" min="0" max="2" step="1" value="2" data-density></label>
+                <label class="perception__count">isolate <input type="checkbox" data-iso></label>
+                <label class="perception__count">column <input type="range" min="0" max="13" step="1" value="7" data-col></label>
+                <label class="perception__count">row <input type="range" min="0" max="13" step="1" value="7" data-row></label>
+                <label class="perception__count">upload <input type="file" accept="image/*" data-upload></label>
+              </div>
+            </details>
+            <p class="drop__hint">drag to orbit · wheel to zoom · click to pin a patch · double-click resets · arrow keys and + − 0 turn and zoom</p>
+            <p class="perception__cap">relative, monocular depth — no metres, one face · the box is the region's extent, not a detector's output</p>
           </div>
 
           <details class="cmds" data-cmds hidden>
@@ -185,8 +191,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-        <p class="block__deck">The stage holds one photograph and its surface: each cell of a regular grid becomes two triangles, its corners carried into camera space by the depth the model predicted. The photograph supplies the colour; a cell whose corners disagree is left out, which is where one object ends.</p>
-        <p class="block__deck">Everything else is a reading of the same buffers. Wireframe: every stride line and each cell's diagonal, so the topology is visible. Normals: the depth gradient's orientation, in camera space. Contours: isolines of view depth, one swept every 11 seconds. Cloud: the same vertices as points.</p>
+        <p class="block__deck">The stage holds one photograph and its surface, side by side: the still, flat, on the left; the reconstruction on the right, so the depth lines can be read against the picture they came from. Each cell of a regular grid becomes two triangles, its corners carried into camera space by the depth the model predicted. The photograph supplies the colour; a cell whose corners disagree is left out, which is where one object ends.</p>
+        <p class="block__deck">Everything else is a reading of the same buffers. Wireframe: every stride line and each cell's diagonal, so the topology is visible. Normals: the depth gradient's orientation, in camera space. Cloud: the same vertices as points. Across all of them one band of light travels the view depth every 11 seconds, bright as it leaves the camera and settled as it runs out, so the direction of the relief is read from the light moving through it rather than from a line ruled over it.</p>
       </div></div>
     </section>
 
@@ -217,7 +223,8 @@
           <div class="perception__fold-body">
             <p class="block__deck">DINOv3 was trained without captions, labels or a text tower. One run of its graph answers with two things: a pooled vector for the whole image, and a hidden state of tokens — 201 rows at 224 pixels, five reserved and the other 196 the picture itself, one vector per 16-pixel patch. emb slices the patch rows out from row 5, normalises every row, and hands the grid over as flat float32. Both products come back from the one call, so the page ranks whole pictures by the pooled vector and parts inside a picture by the grid, without a second pass.</p>
             <p class="block__deck">The mesh is one regular grid at the density the reader picks, and the readout under the stage carries the vertex count of the tier drawn. A cell survives when its four edges and its diagonal each change the display depth by less than the cut tolerance, and the tolerance scales with the step, so the same surface survives at every tier: a smooth ramp changes more across a coarse step than a fine one, while a real occlusion boundary changes by the same amount either way. Refused cells leave a hole, which is the honest shape of an unknown surface.</p>
-            <p class="block__deck">Elevation is the rank-equalised depth times a single gain, so the exaggeration slider scales the geometry without touching the buffer. The reading, the contours, the normals and the region are uniforms over that buffer, which is why they compose: a reader can pin a patch, isolate it, ask for contours and watch the matching structures fall into different depth layers. The camera is clamped to 25° of yaw and 15° of pitch, because a single-view reconstruction has one face.</p>
+            <p class="block__deck">The relief is lit, not painted: one key light from the upper left, a fill from the opposite side and a specular that follows the camera, with the normals taken from the depth map's own gradient. The shadows come from that same map — a cast term that walks each cell along the light and stops at taller terrain, and a contact term that darkens wherever the surface sits below its own neighbourhood. Both are baked once per sample, 70 756 cells each, because the depth is the terrain and the renderer only has to shade it.</p>
+            <p class="block__deck">Elevation is the rank-equalised depth times a single gain, so the exaggeration slider scales the geometry without touching the buffer. The reading, the normals, the flow and the region are uniforms over that buffer, which is why they compose: a reader can pin a patch, isolate it and watch the matching structures fall into different depth layers. The camera is clamped to 25° of yaw and 15° of pitch, because a single-view reconstruction has one face.</p>
             <p class="block__deck">The chosen sample is sent to the sandbox for two calls; the models' weights are downloaded by the sandbox on boot, and this page ships none of them. A photograph you upload goes the same way: bounded to 768 pixels in the browser, sent as bytes, answered by the same two graphs. The picture itself is never stored; the sandbox keeps the two replies in a cache keyed by a hash of those bytes, so a repeat is a lookup rather than another run. The other five pictures are looked up once each, so the strip can rank them — one call per picture, then it is memory.</p>
             <p class="block__deck">The strip asks two different questions of the replies already in hand. With no patch pinned it asks which picture is most like this one, and that is the pooled vector's cosine: 1 × 384 against 1 × 384. With a patch pinned it asks where that part comes back, which is one dot product per row of every other grid — 196 rows a picture — keeping each picture's best row and the cell it came from. Neither question sends a command.</p>
             <p class="block__deck">The six photographs were not chosen by subject. Sixty-nine candidates cleared the licence filter — CC0 or public domain from Wikimedia Commons, every original at least 1800 pixels on the long edge — and each went through the plate's own depth call as <span class="t-cmd">EMB.IMG depth BLOB OUTPUTS depth</span>. The 283 024-byte map was min-max normalised and reduced to the p5 and p95 spread, the share below 0.10 and above 0.90, and the gradient energy; the six kept reach both ends of the range, so the mesh has a near foreground, a middle ground and a far background to cut between. Four are CC0, two public domain, and the strip names each author.</p>
@@ -241,7 +248,7 @@
             <p class="block__deck">The map is a different kind of output, not a wider one. <span class="t-cmd">select: map</span> reduces no rows: 266 × 266 = 70 756 numbers, never normalised, declared as <span class="t-cmd">rows: 266, dim: 266</span> rather than as a grid. A dot product between two maps means nothing, so the declared shape is the whole contract and the client owns the transform.</p>
             <p class="block__deck">The second graph is not free. It has its own session — <span class="t-cmd">EMB.INFO depth</span> reports <span class="t-cmd">image_sessions: 1</span> — 27 MB of int8 weights on disk and about 100 MB resident once the CPU provider dequantises them, beside DINOv3's 22 MB on disk and about 90 MB resident. Both stay warm, which is why a picture already seen is a lookup instead of a second wait.</p>
             <p class="block__deck">No vector database is involved. Beyond the sandbox's content-hash entries nothing is stored, the six grids live in the page's own memory, and one ranking is 196 dot products of 384 multiplies a picture. A second service would hold an index the inference already delivered.</p>
-            <p class="block__deck">One grid is what the five readings share: surface, wireframe, normals, contours and cloud read the same vertices and the same index, and the probe composes with any of them. The depth map is the other buffer, and the only thing the second model contributes.</p>
+            <p class="block__deck">One grid is what the four readings share: surface, wireframe, normals and cloud read the same vertices and the same index, and the probe composes with any of them. The depth map is the other buffer, and the only thing the second model contributes.</p>
           </div>
         </details>
       </div></div>
@@ -305,7 +312,7 @@ image:
   <dt>two products, one run</dt><dd>DINOv3 answers the pooled vector and the patch grid from the same forward pass. The pooled vector ranks images; the grid localises inside one.</dd>
   <dt>depth is another model</dt><dd>A dense feature map is not a depth map: monocular depth needs a trained decoder. The plate runs Depth Anything V2 beside DINOv3 and never lets one answer for the other.</dd>
   <dt>the cut is topology, not a filter</dt><dd>A cell is refused before any triangle exists, so the wireframe cannot draw an edge the surface does not have. The tolerance is a control — lower it and the mesh spends its triangles on the material, raise it and only real object edges open.</dd>
-  <dt>five readings, one geometry</dt><dd>Surface, wireframe, normals, contours and cloud share one vertex buffer and one index, and the probe composes with all of them. The fill rate changes, the geometry does not.</dd>
+  <dt>four readings, one geometry</dt><dd>Surface, wireframe, normals and cloud share one vertex buffer and one index, and the probe composes with all of them. The fill rate changes, the geometry does not.</dd>
   <dt>the normals are the map's</dt><dd>Each normal is the gradient of the depth model's own ordering, clamped so a cliff reads as a steep ramp instead of a black band. It is a convincing orientation, not a recovered surface normal.</dd>
   <dt>a region is not a mask</dt><dd>The grown region is connectivity plus three tolerances — the model's cosine, the photograph's colour, the depth map — not a segmentation: it can leak along a wall and stop at a shadow. The box is the region's extent, not a detector's output.</dd>
   <dt>one model, six pictures</dt><dd>The strip ranks across pictures because every grid came out of the same graph: same patch size, same 384 dimensions, so the dot products mean something. Ask a different checkpoint and the numbers are not comparable.</dd>
@@ -347,7 +354,7 @@ const MAX_IMAGE_BYTES = 200000;
  * the cloud, so a tier change re-samples the same bounded photograph and never
  * issues a command. */
 const DENSITY = [3, 2, 1];
-const READINGS = ['surface', 'wireframe', 'normals', 'contours', 'cloud'];
+const READINGS = ['surface', 'wireframe', 'normals', 'cloud'];
 const root = document.querySelector('[data-rig="perception"]');
 const stage = root.querySelector('[data-stage]');
 const stageCap = root.querySelector('[data-stage-cap]');
@@ -399,7 +406,7 @@ const S = {
 const CLOCK = { dissolve: 900, depth: 3000, camera: 2200, mix: 900, yaw: -0.22 };
 const YAW = 0.436;   // 25°: enough parallax to read the depth, not enough to show the backside
 const PITCH = 0.262; // 15°
-const DEPTH_GAIN = 0.18; // display units of lift per unit of the depth model's own ordering
+const DEPTH_GAIN = 0.26; // display units of lift per unit of the depth model's own ordering
 const POINT_SIZE = 0.0036; // about two CSS pixels at the fitted distance
 const KEY = [0.42, 0.55, 0.72]; // the key light, upper left and in front
 
@@ -441,7 +448,7 @@ function quantile(sim, share) {
   return ranked[k - 1];
 }
 
-/* One depth and one colour per patch, read once per sample so a hover can grow
+/* One depth and one colour per patch, read once per sample so a click can grow
  * a region without touching the image or the map again. */
 function buildPatchStats() {
   S.patchDepth = new Float32Array(S.rows);
@@ -576,22 +583,79 @@ function sampleSlope(u, v, comp) {
   return bilinear(S.slopes, S.depthRows, S.depthDim, 2, comp, u, v);
 }
 
-/* The map as a normal map: the gradient a surface with this height would have.
- * The shader scales it by the exaggeration control, so the relief is shaded at
- * whatever strength the reader chose. World x spans the picture's aspect and y
- * spans its height, so the step sizes are the picture's own. */
-function buildSlopes() {
+/* The key light's shadows on the same blurred height field the normals come
+ * from, in two parts. Cast: every cell looks along the light's screen direction
+ * for terrain taller than its shadow ray — a shallow relief at a high sun only
+ * blocks close to a ridge, so this is soft and short. Contact: where the terrain
+ * sits below its own wider neighbourhood the light cannot reach it at all, which
+ * is what a crease looks like at every light angle. Baked once per sample at the
+ * base exaggeration: the slider changes the relief's depth more than either edge,
+ * and a rebuild per slider step is not worth that. */
+function buildShadow(h) {
   const rows = S.depthRows;
   const cols = S.depthDim;
   const aspect = S.width / S.height;
-  const dx = aspect / Math.max(1, cols - 1);
-  const dy = 1 / Math.max(1, rows - 1);
-  // The map's height, blurred once: a monocular depth map is noisy at the cell
-  // level, and differentiating that noise gives a stipple, not a surface.
+  const horizontal = Math.hypot(KEY[0], KEY[1]) || 1;
+  const dx = KEY[0] / horizontal;
+  const dy = KEY[1] / horizontal;
+  // World x spans the picture's aspect and y its height, so a step of d display
+  // units moves d/aspect in u and d in v; the ray climbs Lz/|Lxy| per unit.
+  const climb = KEY[2] / horizontal;
+  const steps = 10;
+  const reach = 0.025;
+  // Two more blurs of the same field: the wider neighbourhood the contact term
+  // compares against. Blurring the blur is the cheap way to widen the kernel.
+  let wide = h;
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Float32Array(rows * cols);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        let sum = 0;
+        for (let dr = -2; dr <= 2; dr++) {
+          for (let dc = -2; dc <= 2; dc++) {
+            sum += wide[Math.min(rows - 1, Math.max(0, r + dr)) * cols + Math.min(cols - 1, Math.max(0, c + dc))];
+          }
+        }
+        next[r * cols + c] = sum / 25;
+      }
+    }
+    wide = next;
+  }
+  const shadow = new Float32Array(rows * cols);
+  for (let r = 0; r < rows; r++) {
+    const v0 = (r + 0.5) / rows;
+    for (let c = 0; c < cols; c++) {
+      const u0 = (c + 0.5) / cols;
+      const z0 = h[r * cols + c];
+      let lit = 1;
+      for (let k = 1; k <= steps; k++) {
+        const d = k * reach;
+        const u = u0 + (d * dx) / aspect;
+        const v = v0 - d * dy;
+        if (u < 0 || u > 1 || v < 0 || v > 1) { break; }
+        const over = bilinear(h, rows, cols, 1, 0, u, v) - (z0 + d * climb);
+        // The penumbra widens with the distance: a shallow relief shadows its own
+        // lee, and a hard threshold there reads as stipple, not as light.
+        if (over > 0) { lit = Math.min(lit, Math.max(0, 1 - over / (0.02 + 0.09 * d))); }
+      }
+      const pit = Math.min(1, Math.max(0, (wide[r * cols + c] - z0) / 0.006));
+      shadow[r * cols + c] = lit * (1 - 0.8 * pit);
+    }
+  }
+  return shadow;
+}
+
+/* The map's own ordering as a height field in display units, blurred once: a
+ * monocular depth map is noisy at the cell level, and differentiating that noise
+ * gives a stipple, not a surface. Both the normals and the cast shadows read it,
+ * so they agree on where the terrain is. */
+function heightField() {
+  const rows = S.depthRows;
+  const cols = S.depthDim;
   const height = new Float32Array(rows * cols);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      height[r * cols + c] = (rankOf(S.depth[r * cols + c]) - 0.5) * 0.18;
+      height[r * cols + c] = (rankOf(S.depth[r * cols + c]) - 0.5) * DEPTH_GAIN;
     }
   }
   const h = new Float32Array(rows * cols);
@@ -610,6 +674,19 @@ function buildSlopes() {
       h[r * cols + c] = sum / taps;
     }
   }
+  return h;
+}
+
+/* The map as a normal map: the gradient a surface with this height would have.
+ * The shader scales it by the exaggeration control, so the relief is shaded at
+ * whatever strength the reader chose. World x spans the picture's aspect and y
+ * spans its height, so the step sizes are the picture's own. */
+function buildSlopes(h) {
+  const rows = S.depthRows;
+  const cols = S.depthDim;
+  const aspect = S.width / S.height;
+  const dx = aspect / Math.max(1, cols - 1);
+  const dy = 1 / Math.max(1, rows - 1);
   const z = (r, c) => h[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
   const slopes = new Float32Array(rows * cols * 2);
   for (let r = 0; r < rows; r++) {
@@ -656,6 +733,7 @@ function buildReconstruction() {
   const patch = new Float32Array(count);
   const depth = new Float32Array(count);
   const seeds = new Float32Array(count);
+  const shade = new Float32Array(count);
   for (let row = 0; row < gh; row++) {
     for (let col = 0; col < gw; col++) {
       const i = row * gw + col;
@@ -674,6 +752,9 @@ function buildReconstruction() {
       slope[i * 2] = sampleSlope(u, v, 0);
       slope[i * 2 + 1] = sampleSlope(u, v, 1);
       seeds[i] = hash01(px * 65537 + py + 7919);
+      shade[i] = S.shadow
+        ? bilinear(S.shadow, S.depthRows, S.depthDim, 1, 0, u, v)
+        : 1;
       // The canvas is RGBA and sRGB; the attribute is linear RGB, which is what
       // the renderer's output encoding expects.
       const p = (py * S.width + px) * 4;
@@ -684,7 +765,7 @@ function buildReconstruction() {
   }
   S.count = count;
   S.mesh = { gw, gh, step };
-  S.points = { flat, uv: uvs, colors, slope, patch, depth, seeds };
+  S.points = { flat, uv: uvs, colors, slope, patch, depth, seeds, shadow: shade };
   buildTopology();
 }
 
@@ -805,6 +886,7 @@ let zoomMax = 6;
 const aim = { theta: 0, phi: 0, zoom: 2.2 };
 let dragging = null;
 let clockFrame = 0;
+let eyeTurn = null;
 
 /* The vertex program every renderer shares. The position is the image plane
  * carried into camera space by the depth the model predicted; the normal is the
@@ -815,6 +897,7 @@ attribute vec3 color;
 attribute vec2 aSlope;
 attribute float aDepth;
 attribute float aSeed;
+attribute float aShadow;
 uniform float uRise;
 uniform float uLight;
 uniform float uExag;
@@ -826,6 +909,7 @@ uniform float uRelief;
 uniform float uScan;
 uniform float uLift;
 uniform vec3 uKey;
+uniform vec3 uEye;
 uniform sampler2D uSim;
 varying vec2 vUv;
 varying vec3 vColor;
@@ -838,8 +922,8 @@ varying float vDepth;
 varying float vScan;
 void main() {
   // The relief: the map's own ordering lifts the near parts forward and the far
-  // parts back. A fifth of the frame's height is enough parallax to read depth
-  // without tearing the picture apart.
+  // parts back. A quarter of the frame's height is enough parallax to read
+  // depth without tearing the picture apart.
   float z = (aDepth - 0.5) * uExag * ${DEPTH_GAIN};
   vec3 world = vec3(position.xy * (1.0 + z), z);
 
@@ -860,18 +944,27 @@ void main() {
   vec3 L = normalize(uKey);
   float key = max(dot(n, L), 0.0);
   float fill = max(dot(n, normalize(vec3(-L.x, -L.y, 0.35))), 0.0);
+  // The key casts, the fill is the bounce and never does, and the half-vector
+  // between the key and the eye gives the sheen: the eye is a uniform because the
+  // camera turns and a highlight fixed to the surface would swim.
+  float spec = pow(max(dot(n, normalize(L + uEye)), 0.0), 28.0);
+  float shaded = mix(0.45, 1.0, aShadow);
+  float lit = 0.56 + 0.52 * key * shaded + 0.18 * fill + 0.22 * spec * shaded;
   // The light arrives after the lift, not with it: while the field is still
-  // travelling the frame keeps the photograph's own brightness, so the reveal is
-  // the depth arriving rather than a fade through black.
-  float lit = 0.42 + 0.66 * key + 0.20 * fill;
+  // travelling the frame keeps the photograph's own brightness.
   vShade = mix(1.0, lit, uLight);
   vViewNormal = normalize(normalMatrix * n);
 
-  // The readings and the contours speak in view depth, from the camera out:
+  // The readings and the flow speak in view depth, from the camera out:
   // the map's own ordering is inverted here, once, and nowhere else.
   float viewD = 1.0 - aDepth;
   vDepth = viewD;
-  vScan = 1.0 - smoothstep(0.0, 0.055, abs(viewD - uScan));
+  // The flow: a front of light travelling out through the view depth, with the
+  // trail behind it. Asymmetric on purpose — a symmetric band reads as a stripe
+  // sitting on the surface, while a front with a tail reads as travel, and the
+  // travel is what says which way the depth runs.
+  float ahead = viewD - uScan;
+  vScan = smoothstep(-0.11, 0.0, ahead) * (1.0 - smoothstep(0.0, 0.02, ahead));
 
   vColor = color;
   vUv = uv;
@@ -903,9 +996,7 @@ const COMMON = `
 uniform float uMind;
 uniform float uIso;
 uniform float uNormals;
-uniform float uContour;
 uniform float uOpacity;
-uniform float uSpacing;
 uniform vec3 uAccent;
 varying vec2 vUv;
 varying vec3 vColor;
@@ -916,11 +1007,6 @@ varying float vShade;
 varying float vFade;
 varying float vDepth;
 varying float vScan;
-float contourLine() {
-  float x = vDepth / max(uSpacing, 0.004);
-  float w = max(fwidth(x) * 1.4, 1e-4);
-  return 1.0 - smoothstep(0.0, w, abs(fract(x + 0.5) - 0.5));
-}
 /* The reading of the last two channels, shared by both renderers: the cosine as
  * an accent over the photograph in look-alikes, camera-space orientation in
  * normals, the photograph otherwise. Look-alikes used to replace the picture
@@ -940,7 +1026,13 @@ vec3 reading(vec3 photo) {
   // Capped below 1: even the hottest patch keeps a little of its own colour.
   vec3 c = mix(ground, uAccent * (0.3 + 1.25 * luma), clamp(alike * 0.88 + grown, 0.0, 0.86) * uMind);
   if (uNormals > 0.5) { c = normalize(vViewNormal) * 0.5 + 0.5; }
-  return c + uAccent * contourLine() * uContour * 0.7 + uAccent * vScan * uContour * 0.5;
+  // The flow is the plate's depth cue, and it is one light: a band travelling
+  // from the camera out through the view depth, brightest where it leaves the
+  // camera and settled where it runs out. The rim rides it so a turned surface
+  // keeps an edge.
+  float near = 1.0 - clamp(vDepth, 0.0, 1.0);
+  float rim = pow(1.0 - abs(normalize(vViewNormal).z), 3.0);
+  return c + vec3(vScan * mix(0.20, 0.52, near) * vShade + rim * 0.12);
 }
 `;
 
@@ -998,7 +1090,7 @@ function flat(message) {
 }
 
 /* One frame loop for everything that moves: the reveal, the damped camera and
- * the contour sweep. It stops when the scene is still and while the stage is
+ * the flow. It stops when the scene is still and while the stage is
  * off-screen (or scrolled past on a phone), so an idle plate costs nothing. */
 function renderScene() {
   if (!renderer || !onScreen) { return; }
@@ -1006,7 +1098,7 @@ function renderScene() {
 }
 
 function animating() {
-  if (S.reading === 3 && motionAllowed()) { return true; }
+  if (S.view !== 0 && motionAllowed()) { return true; }
   return Math.abs(theta - aim.theta) > 1e-4 ||
     Math.abs(phi - aim.phi) > 1e-4 ||
     Math.abs(zoom - aim.zoom) > 1e-4;
@@ -1021,10 +1113,13 @@ function step(now) {
   if (Math.abs(aim.theta - theta) < 1e-4) { theta = aim.theta; }
   if (Math.abs(aim.phi - phi) < 1e-4) { phi = aim.phi; }
   if (Math.abs(aim.zoom - zoom) < 1e-4) { zoom = aim.zoom; }
-  if (S.reading === 3 && U && motionAllowed()) { U.uScan.value = (now % 11000) / 11000; }
+  if (S.view !== 0 && U && motionAllowed()) { U.uScan.value = (now % 11000) / 11000; }
   pivot.rotation.x = phi;
   pivot.rotation.y = theta;
   camera.position.z = zoom;
+  // The specular needs the eye in the surface's own space: the camera sits at
+  // +z in world, so one inverse turn of the pivot is the whole answer.
+  if (U) { U.uEye.value.set(0, 0, 1).applyQuaternion(eyeTurn.copy(pivot.quaternion).invert()); }
   renderer.render(scene, camera);
   if (animating() && onScreen) { frame = requestAnimationFrame(step); }
 }
@@ -1112,7 +1207,8 @@ function buildScene() {
     ['color', S.points.colors, 3],
     ['aSlope', S.points.slope, 2],
     ['aDepth', S.points.depth, 1],
-    ['aSeed', S.points.seeds, 1]
+    ['aSeed', S.points.seeds, 1],
+    ['aShadow', S.points.shadow, 1]
   ];
   const geometry = (index) => {
     const g = new THREE.BufferGeometry();
@@ -1146,6 +1242,7 @@ function buildScene() {
   photoTexture.needsUpdate = true;
 
   const color = (rgb) => new THREE.Color(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+  eyeTurn = new THREE.Quaternion();
   U = {
     uRise: { value: S.rise },
     uMind: { value: S.mind },
@@ -1156,14 +1253,13 @@ function buildScene() {
     uDPR: { value: renderer.getPixelRatio() },
     uFit: { value: 1 },
     uKey: { value: new THREE.Vector3(KEY[0], KEY[1], KEY[2]).normalize() },
+    uEye: { value: new THREE.Vector3(0, 0, 1) },
     uRelief: { value: 1.35 },
-    uSpacing: { value: 0.14 },
     uScan: { value: 0 },
     uSim: { value: simTexture },
     uMap: { value: photoTexture },
     uIso: { value: S.iso ? 1 : 0 },
     uNormals: { value: 0 },
-    uContour: { value: 0 },
     uAccent: { value: color(ACCENT) },
     uRule: { value: color(RULE) }
   };
@@ -1216,7 +1312,7 @@ function syncPlane() {
   // The photograph plane hands over to the mesh: a quarter of it stays behind
   // the raised surface to fill the holes the cut leaves, so the relief never
   // floats over an un-warped rectangle of the same picture.
-  const opacity = S.iso || S.reading === 4 ? 0 : (1 - S.mind) * (1 - 0.75 * S.rise);
+  const opacity = S.iso || S.reading === 3 ? 0 : (1 - S.mind) * (1 - 0.75 * S.rise);
   photoPlane.material.opacity = Math.min(1, Math.max(0, opacity));
   photoPlane.visible = photoPlane.material.opacity > 0.02;
 }
@@ -1256,7 +1352,6 @@ function fit() {
  * change a view. */
 function applyMode() {
   if (U) {
-    U.uContour.value = S.reading === 3 ? 1 : 0;
     U.uNormals.value = S.reading === 2 ? 1 : 0;
     U.uIso.value = S.iso ? 1 : 0;
   }
@@ -1275,7 +1370,7 @@ function syncFigure() {
     surfaceMesh.visible = S.reading !== 4 && S.rise > 0.004;
     surfaceMesh.material.depthWrite = S.rise > 0.985;
   }
-  if (points) { points.visible = S.reading === 4; }
+  if (points) { points.visible = S.reading === 3; }
   if (wireLines) { wireLines.visible = S.reading === 1; }
 }
 
@@ -1316,6 +1411,7 @@ function stopClock() {
 function reveal() {
   stopClock();
   S.view = 1;
+  applyMode();
   syncCue();
   for (const radio of viewRadios) { radio.checked = Number(radio.value) === 1; }
   // The caption describes what is being drawn: the lift starts now.
@@ -1353,9 +1449,9 @@ function setView(next) {
   const same = view === S.view;
   S.view = view;
   for (const radio of viewRadios) { radio.checked = Number(radio.value) === view; }
-  // The photograph is the still, so it has no reading: the wireframe, normals,
-  // contours and cloud are readings of the reconstruction and would otherwise
-  // draw over the untouched picture.
+  // The photograph is the still, so it has no reading: the wireframe, normals
+  // and cloud are readings of the reconstruction and would otherwise draw over
+  // the untouched picture.
   if (view === 0 && S.reading !== 0) {
     S.reading = 0;
     for (const radio of readRadios) { radio.checked = radio.value === '0'; }
@@ -1465,8 +1561,8 @@ function paintSim() {
 }
 
 /* One pin: the region grown around the patch, the region's mean as the query,
- * and the two figures that read them. `pinned` is a click (the strip ranks the
- * patch); a hover asks the same question and is not worth a ranking. */
+ * and the two figures that read them. The plate does not probe on hover — the
+ * grid is what builds the figure, and a click is what asks the strip. */
 function select(index, pinned) {
   if (!S.rows) { return; }
   S.probe = Math.max(0, Math.min(S.rows - 1, index));
@@ -1705,9 +1801,9 @@ function captions() {
       (S.topology.cut * 100).toFixed(1) + '% cells cut' +
       (S.iso ? ' · isolated · region ' + S.regionCount + (S.regionCount === 1 ? ' patch' : ' patches') : '');
   stage.setAttribute('aria-label', S.view === 0
-    ? 'The photograph as itself. Drag to orbit, wheel to zoom, hover or click to probe a part.'
+    ? 'The photograph as itself. Drag to orbit, wheel to zoom, click to pin a patch.'
     : 'The photograph reconstructed as a surface of ' + S.count.toLocaleString('en-GB') + ' vertices' +
-      (S.view === 2 ? ", coloured by the probe patch's cosine." : '. Drag to turn it, wheel to zoom, hover or click to probe a part.'));
+      (S.view === 2 ? ", coloured by the probe patch's cosine." : '. Drag to turn it, wheel to zoom, click to pin a patch.'));
 }
 
 /* ── interaction ───────────────────────────────────────────────────── */
@@ -1750,7 +1846,6 @@ function pickAt(event) {
   return row * S.grid + col;
 }
 
-let hoverTimer = 0;
 stage.addEventListener('pointerdown', (event) => {
   if (!renderer) { return; }
   dragging = { x: event.clientX, y: event.clientY, moved: 0 };
@@ -1759,25 +1854,15 @@ stage.addEventListener('pointerdown', (event) => {
   syncCue();
 });
 stage.addEventListener('pointermove', (event) => {
-  if (!renderer) { return; }
-  if (dragging) {
-    const dx = event.clientX - dragging.x;
-    const dy = event.clientY - dragging.y;
-    dragging.moved += Math.abs(dx) + Math.abs(dy);
-    dragging.x = event.clientX;
-    dragging.y = event.clientY;
-    aim.theta = Math.max(-YAW, Math.min(YAW, aim.theta + dx * 0.005));
-    aim.phi = Math.max(-PITCH, Math.min(PITCH, aim.phi + dy * 0.005));
-    renderScene();
-    return;
-  }
-  // Hover probes: the model's answer follows the pointer, which is the whole
-  // point of dense features. Debounced so a sweep is one question, not fifty.
-  clearTimeout(hoverTimer);
-  hoverTimer = setTimeout(() => {
-    const hit = pickAt(event);
-    if (hit >= 0 && hit !== S.probe) { select(hit, false); }
-  }, 160);
+  if (!renderer || !dragging) { return; }
+  const dx = event.clientX - dragging.x;
+  const dy = event.clientY - dragging.y;
+  dragging.moved += Math.abs(dx) + Math.abs(dy);
+  dragging.x = event.clientX;
+  dragging.y = event.clientY;
+  aim.theta = Math.max(-YAW, Math.min(YAW, aim.theta + dx * 0.005));
+  aim.phi = Math.max(-PITCH, Math.min(PITCH, aim.phi + dy * 0.005));
+  renderScene();
 });
 stage.addEventListener('pointerup', (event) => {
   if (!renderer) { return; }
@@ -1790,7 +1875,6 @@ stage.addEventListener('pointerup', (event) => {
   answer();
 });
 stage.addEventListener('pointercancel', () => { dragging = null; });
-stage.addEventListener('pointerleave', () => { clearTimeout(hoverTimer); });
 stage.addEventListener('dblclick', () => {
   stopClock();
   syncCue();
@@ -1888,7 +1972,7 @@ function bounded(bytes) {
     const img = new Image();
     img.onload = () => {
       // The bitmap is decoded into the element, so the object URL has done its
-      // job: revoking it here is what kept a hover's lookups from leaking one.
+      // job: revoking it here is what kept a sample's lookups from leaking one.
       URL.revokeObjectURL(url);
       const scale = MAX_EDGE / Math.max(img.width, img.height);
       let w = Math.max(1, Math.round(img.width * scale));
@@ -1971,7 +2055,9 @@ async function run(raw, key, src) {
     S.colors = boundedImage.pixels;
     S.photo = boundedImage.image;
     S.id = idFrom(key);
-    S.slopes = buildSlopes();
+    const heights = heightField();
+    S.slopes = buildSlopes(heights);
+    S.shadow = buildShadow(heights);
     buildPatchStats();
     elapsedFeatures = features.elapsed_us;
     elapsedDepth = depthReply.elapsed_us;
