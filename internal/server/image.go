@@ -419,6 +419,15 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 			continue
 		}
 
+		// A graph with a static batch axis accepts exactly that many images: pad an
+		// undersized run with a tensor of the same shape and drop the padded
+		// results, so a request shorter than the declared batch still runs.
+		padded := len(tensors)
+		if limit := res.BatchCap; limit > 0 && limit > padded {
+			for len(tensors) < limit {
+				tensors = append(tensors, tensors[0])
+			}
+		}
 		computed, err := res.Embed(tensors, need)
 		if err != nil {
 			for _, slot := range slots {
@@ -426,6 +435,7 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 			}
 			continue
 		}
+		computed = computed[:padded]
 		for k, slot := range slots {
 			for _, o := range need {
 				blob := computed[k][o.Name]

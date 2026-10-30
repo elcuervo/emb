@@ -741,6 +741,34 @@ func TestEMBIMGStaticBatchCap(t *testing.T) {
 	}
 }
 
+// TestEMBIMGStaticBatchPadding proves a request shorter than a graph's declared
+// batch is padded to it (the fixed-shape input accepts nothing else) and the
+// padded results never reach a slot.
+func TestEMBIMGStaticBatchPadding(t *testing.T) {
+	addr, _, sessions := serveImageBatchCap(t, 4)
+	a := solidImagePNG(t, color.NRGBA{R: 1, A: 255})
+	b := solidImagePNG(t, color.NRGBA{G: 2, A: 255})
+	d := solidImagePNG(t, color.NRGBA{B: 3, A: 255})
+
+	elems := arrayOf(t, redisCmd(t, addr, "EMB.IMG", "imgA", a, b, d))
+	if len(elems) != 3 {
+		t.Fatalf("reply slots = %d, want 3", len(elems))
+	}
+	for i, e := range elems {
+		m := arrayOf(t, e)
+		if len(m) != 2 || m[0].val != "embedding" || len(bulkOf(t, m[1])) != testImageDim*4 {
+			t.Fatalf("slot %d = %#v, want a one-key map with a %d-byte embedding", i, e, testImageDim*4)
+		}
+	}
+	fake := sessions["imgA"]
+	if fake.callCount() != 1 {
+		t.Fatalf("session runs = %d, want 1", fake.callCount())
+	}
+	if shape := fake.runShapes()[0]; shape[0] != 4 {
+		t.Fatalf("run batch = %d, want the graph's declared 4", shape[0])
+	}
+}
+
 // serveImageBatchCap starts a server whose imgA model declares a static batch
 // axis, so tests can observe the per-run batching the cap forces.
 func serveImageBatchCap(t *testing.T, batchCap int) (string, *Server, map[string]*fakeImageSession) {

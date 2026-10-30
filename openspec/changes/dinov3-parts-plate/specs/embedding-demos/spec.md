@@ -25,7 +25,7 @@ The gallery SHALL carry a plate built on one photograph and **one** model: the p
 #### Scenario: The photograph is the figure, and it keeps its own scale
 
 - **WHEN** the field is built
-- **THEN** the vertex count equals the pixel count of the bounded image, each vertex's colour is sampled from that image, and the photograph's aspect is preserved in the relief, the map and the plan
+- **THEN** the vertex count is `ceil(bounded width / step) × ceil(bounded height / step)` for the tier drawn (the step comes from the density control, and a narrow stage caps the tier at the middle one), each vertex's colour is sampled from that image, and the photograph's aspect is preserved in the relief, the map and the plan
 
 #### Scenario: The reconstruction returns to the photograph
 
@@ -144,7 +144,7 @@ The plate SHALL use the depth model's own ordering as light once the field leave
 - **THEN** the photograph is drawn from the bytes the browser sent, and every shading term multiplies by one
 ### Requirement: The plate leads with its figure
 
-The plate SHALL be named **The perception** wherever the site names it — the page's title and metadata, its head, the gallery's index entry and the gallery's own list of plates — and SHALL present the stage before any prose block. Its head MUST carry the title, at most two sentences naming the two models, the TL;DR line and the ruled figure caption, and the stage, the filmstrip and the readout MUST follow immediately. No prose MUST be painted above the stage.
+The plate SHALL be named **The perception** wherever the site names it — the page's title and metadata, its head, the gallery's index entry and the gallery's own list of plates — and SHALL present the stage before any prose block. Its head MUST carry the title, at most two sentences naming the one model the plate runs, the TL;DR line and the ruled figure caption, and the stage, the filmstrip and the readout MUST follow immediately. No prose MUST be painted above the stage.
 
 #### Scenario: The first screen is the photograph
 

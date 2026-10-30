@@ -621,6 +621,17 @@ func detectImageInputFromInfos(infos []onnx.InputInfo) (name string, size int, f
 	return "", 0, false
 }
 
+// staticInputSize returns the static square spatial size the graph declares for
+// the named 4D input, or 0 when the axis is symbolic.
+func staticInputSize(infos []onnx.InputInfo, input string) int {
+	for _, in := range infos {
+		if in.Name == input && in.Rank == 4 {
+			return staticSquareSize(in.Dimensions)
+		}
+	}
+	return 0
+}
+
 // staticBatchCap returns the batch dimension a graph declares statically for
 // input, or 0 when the axis is symbolic. It is what makes a batch-1 export (for
 // example a static DINOv3 ONNX) servable: every run carries exactly the batch
@@ -827,6 +838,17 @@ func resolveImagePlan(cfg config.ModelConfig, name string) (imageproc.Plan, imag
 		}
 	} else {
 		src.Input = "explicit"
+		// A named input still has a graph to read the size from: without this, a
+		// config that names the tensor but omits image.size rejects a model whose
+		// static spatial size is right there.
+		if plan.Size == 0 {
+			if infos, err := onnx.GetInputInfo(cfg.ONNX); err == nil {
+				if sz := staticInputSize(infos, plan.Input); sz > 0 {
+					plan.Size = sz
+					src.Size = "graph"
+				}
+			}
+		}
 	}
 	if plan.Input == "" {
 		plan.Input = "pixel_values"

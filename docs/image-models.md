@@ -402,14 +402,14 @@ floats):
 [Layer one](#layer-one-a-call-end-to-end) carries the arithmetic of the served
 call: what those bytes cost in RESP, in base64 and in JSON.
 
-The site serves the 224 dialect for exactly this reason. Its plate asks for both
-products in one call — `EMB.IMG dinov3 BLOB OUTPUTS embedding,patches` — and one
-image's reply is 301 056 bytes of `float32` (196 × 384) beside the 1 536-byte
-pooled vector, carried base64 by the sandbox bridge and decoded in the browser.
-The 336 dialect would triple that for a grid the page draws at 320 px, and its
-fp32-only export costs three times the resident weights. The bridge admits that
-one command shape and nothing else in the image family: `VALUES`, `EMB.IMGMULTI`,
-another model, and a second image are refused.
+The server serves the 224 dialect for exactly this reason. One request —
+`EMB.IMG dinov3 BLOB OUTPUTS embedding,patches` — returns both products in one
+call, and one image's reply is 301 056 bytes of `float32` (196 × 384) beside the
+1 536-byte pooled vector. The 336 dialect would triple that for a grid drawn at
+320 px, and its fp32-only export costs three times the resident weights. The
+site's own plate does not carry that request: the sandbox bridge admits only its
+shipped `depth` model, so the page's call is the 266 square map, and `VALUES`,
+`EMB.IMGMULTI`, another model, and a second image are refused there.
 
 ### Parity and its limits
 

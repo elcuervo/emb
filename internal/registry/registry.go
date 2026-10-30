@@ -325,6 +325,19 @@ func (e *ModelEntry) Fingerprint() (string, error) {
 		_, _ = fmt.Fprintf(h, "\x00output=%s\x00dim=%d\x00max_length=%d\x00pooling=%s\x00normalize=%t\x00pad_output=%t\x00quantization=%s",
 			e.cfg.OutputTensor, e.Dim, e.cfg.MaxLength, e.cfg.Pooling,
 			e.cfg.Normalize, e.cfg.PadOutput, e.Quantization)
+		// Image entries ride the same snapshot, so the resolved preprocessing and
+		// output layout belong here too: they decide the bytes an image entry
+		// holds, and a same-graph edit of image.* would otherwise restore
+		// embeddings this configuration never produced.
+		if res := e.ImageRes; res != nil {
+			p := res.Plan
+			_, _ = fmt.Fprintf(h, "\x00image_input=%s\x00image_size=%d\x00image_crop=%d\x00image_resample=%d\x00image_rescale=%g\x00image_mean=%v\x00image_std=%v\x00image_normalize=%t",
+				p.Input, p.Size, p.Crop, p.Resample, p.Rescale, p.Mean, p.Std, res.Normalize)
+			for _, o := range res.Outputs {
+				_, _ = fmt.Fprintf(h, "\x00image_output=%s\x00image_tensor=%s\x00image_select=%s\x00image_start=%d\x00image_rows=%d\x00image_dim=%d\x00image_grid=%d",
+					o.Name, o.Tensor, o.Select, o.Start, o.Rows, o.Dim, o.Grid)
+			}
+		}
 		e.fingerprint = hex.EncodeToString(h.Sum(nil))
 	})
 	return e.fingerprint, e.fingerprintErr

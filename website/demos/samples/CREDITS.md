@@ -1,8 +1,9 @@
 # Image-plate samples
 
 All six are public domain, fetched from Wikimedia Commons, downscaled to a 512px
-long edge and re-encoded as JPEG for the gallery. They ship with the page; a
-visitor uploads nothing.
+long edge and re-encoded as JPEG for the gallery. They ship with the page; this
+list covers only the committed files (the plate's upload path is described on
+the page itself).
 
 | File | Work | Source |
 |---|---|---|

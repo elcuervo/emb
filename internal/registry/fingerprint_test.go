@@ -6,9 +6,15 @@ import (
 	"testing"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/imageproc"
 )
 
 func fingerprintEntry(t *testing.T, cfg config.ModelConfig, model, tokenizer []byte) string {
+	t.Helper()
+	return fingerprintEntryWithImage(t, cfg, model, tokenizer, nil)
+}
+
+func fingerprintEntryWithImage(t *testing.T, cfg config.ModelConfig, model, tokenizer []byte, image *ImageResources) string {
 	t.Helper()
 	dir := t.TempDir()
 	cfg.ONNX = filepath.Join(dir, "model.onnx")
@@ -19,7 +25,7 @@ func fingerprintEntry(t *testing.T, cfg config.ModelConfig, model, tokenizer []b
 	if err := os.WriteFile(cfg.Tokenizer, tokenizer, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e := &ModelEntry{cfg: cfg, Dim: cfg.Dim, Quantization: "fp32"}
+	e := &ModelEntry{cfg: cfg, Dim: cfg.Dim, Quantization: "fp32", ImageRes: image}
 	got, err := e.Fingerprint()
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +81,44 @@ func TestFingerprintIncludesOutputInputsAndExcludesScheduling(t *testing.T) {
 				t.Fatalf("scheduling-only change altered fingerprint: %s != %s", got, want)
 			}
 		})
+	}
+}
+
+func TestFingerprintIncludesImageConfig(t *testing.T) {
+	cfg := config.ModelConfig{OutputTensor: "out", Dim: 4, MaxLength: 128, Pooling: "mean", Normalize: true}
+	images := func() *ImageResources {
+		return &ImageResources{
+			Plan:    imageproc.Plan{Input: "pixel_values", Size: 336, Crop: imageproc.CropCenter, Resample: imageproc.ResampleBicubic, Rescale: 1.0 / 255, Mean: [3]float64{0.5, 0.5, 0.5}, Std: [3]float64{0.5, 0.5, 0.5}},
+			Outputs: []ImageOutput{{Name: "embedding", Tensor: "descriptor", Select: "none", Rows: 1, Dim: 4}},
+		}
+	}
+	want := fingerprintEntryWithImage(t, cfg, []byte("model"), []byte("tokenizer"), images())
+
+	changed := []struct {
+		name   string
+		mutate func(*ImageResources)
+	}{
+		{"size", func(r *ImageResources) { r.Plan.Size = 224 }},
+		{"crop", func(r *ImageResources) { r.Plan.Crop = imageproc.CropNone }},
+		{"mean", func(r *ImageResources) { r.Plan.Mean[0] = 0.4 }},
+		{"normalize", func(r *ImageResources) { r.Normalize = true }},
+		{"output tensor", func(r *ImageResources) { r.Outputs[0].Tensor = "other" }},
+		{"output select", func(r *ImageResources) { r.Outputs[0].Select = "cls" }},
+		{"output grid", func(r *ImageResources) { r.Outputs[0].Grid = 21 }},
+	}
+	for _, tc := range changed {
+		t.Run(tc.name, func(t *testing.T) {
+			res := images()
+			tc.mutate(res)
+			if got := fingerprintEntryWithImage(t, cfg, []byte("model"), []byte("tokenizer"), res); got == want {
+				t.Fatal("image config change did not alter fingerprint")
+			}
+		})
+	}
+
+	// A text-only model keeps its fingerprint: the image block is absent.
+	if got := fingerprintEntryWithImage(t, cfg, []byte("model"), []byte("tokenizer"), nil); got != fingerprintEntry(t, cfg, []byte("model"), []byte("tokenizer")) {
+		t.Fatal("nil image resources changed the fingerprint")
 	}
 }
 

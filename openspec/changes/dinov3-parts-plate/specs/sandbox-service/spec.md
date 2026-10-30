@@ -77,7 +77,7 @@ metadata for the client to present it without re-decoding a model.
 #### Scenario: A binary map survives the bridge
 
 - **WHEN** the image command asks for a two-dimensional map and the returned bytes are also valid text
-- **THEN** the client still receives them as binary values with their element count and type, and the map's declared rows and dimension travel with the reply
+- **THEN** the client still receives them as binary values with their element count and type, because the command asked for `BLOB`, and reads the map's rows and dimension from `EMB.INFO`
 
 #### Scenario: Aggregate shapes survive the bridge
 

@@ -416,6 +416,25 @@ func TestStaticBatchCap(t *testing.T) {
 	}
 }
 
+// TestStaticInputSize covers the explicit-input fallback: a named 4D input with
+// a static spatial axis supplies image.size when the config omits it.
+func TestStaticInputSize(t *testing.T) {
+	infos := []onnx.InputInfo{
+		{Name: "input_ids", Rank: 2, Dimensions: []int64{1, 128}},
+		{Name: "pixel_values", Rank: 4, Dimensions: []int64{-1, 3, 336, 336}},
+		{Name: "other", Rank: 4, Dimensions: []int64{-1, 3, -1, -1}},
+	}
+	if got := staticInputSize(infos, "pixel_values"); got != 336 {
+		t.Errorf("static size = %d, want 336", got)
+	}
+	if got := staticInputSize(infos, "other"); got != 0 {
+		t.Errorf("symbolic size = %d, want 0", got)
+	}
+	if got := staticInputSize(infos, "input_ids"); got != 0 {
+		t.Errorf("rank-2 input size = %d, want 0", got)
+	}
+}
+
 // imageOutputFixture builds a config with one declared output, so output
 // resolution tests state only the fields they exercise.
 func imageOutputFixture(outputs ...config.ImageOutputConfig) config.ModelConfig {
