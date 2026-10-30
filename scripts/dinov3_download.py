@@ -49,16 +49,34 @@ def recorded_repo(dest_dir):
         return ""
 
 
+def claim(dest_dir, repo):
+    """Records the repository in dest_dir, and refuses a directory that belongs
+    to another one or to nothing.
+
+    The record is written before the first byte lands, so an interruption after
+    one file completed cannot leave a directory that a later request for another
+    repository reuses as its own. A directory with files but no record predates
+    this script or was written by hand: its bytes are of unknown origin, and
+    guessing would serve another model's weights under this name.
+    """
+    recorded = recorded_repo(dest_dir)
+    if recorded:
+        if recorded != repo:
+            sys.exit(f"{dest_dir} already holds {recorded}; use another directory "
+                     f"to fetch {repo}, or delete this one")
+        return
+    if os.listdir(dest_dir):
+        sys.exit(f"{dest_dir} holds files of unknown origin; use another directory "
+                 f"to fetch {repo}, or delete this one")
+    with open(os.path.join(dest_dir, SOURCE), "w", encoding="utf-8") as handle:
+        handle.write(repo + "\n")
+
+
 def main():
     if len(sys.argv) != 3:
         sys.exit("usage: dinov3_download.py <repo> <dir>")
     repo, dest_dir = sys.argv[1], sys.argv[2]
     os.makedirs(dest_dir, exist_ok=True)
-
-    recorded = recorded_repo(dest_dir)
-    if recorded and recorded != repo:
-        sys.exit(f"{dest_dir} already holds {recorded}; use another directory "
-                 f"to fetch {repo}, or delete this one")
 
     with urllib.request.urlopen(f"{BASE}/api/models/{repo}") as resp:
         listing = json.load(resp)
@@ -82,6 +100,7 @@ def main():
                 wanted.append((candidate, meta))
                 break
 
+    claim(dest_dir, repo)
     for remote, local in wanted:
         target = os.path.join(dest_dir, local)
         if os.path.exists(target) and os.path.getsize(target) > 0:
@@ -90,8 +109,6 @@ def main():
         print(f"  {remote} -> {target}")
         fetch(f"{BASE}/{repo}/resolve/main/{remote}", target)
 
-    with open(os.path.join(dest_dir, SOURCE), "w", encoding="utf-8") as handle:
-        handle.write(repo + "\n")
     print(f"model: {os.path.join(dest_dir, graph_name)}")
 
 
