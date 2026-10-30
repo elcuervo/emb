@@ -229,6 +229,18 @@ download-vision-model repo="onnx-community/siglip2-base-patch16-224-ONNX" dir=".
         else curl -fsSL "https://huggingface.co/{{repo}}/resolve/main/$f" -o "$out" && echo "✓ $f" || { rm -f "$out"; echo "failed to download $f" >&2; exit 1; }; fi; \
     done
 
+# Download a DINOv3 ONNX export for EMB.IMG: the fp32 graph, its external
+# `<graph>_data` sidecar (weights live outside the graph), and config.json /
+# preprocessor_config.json when the repo publishes them. The sidecar name comes
+# from the repo listing, never from a convention.
+# Usage: just download-dinov3-model [huggingface_repo] [output_dir]
+#   onnx-community (dynamic batch, pooler_output + last_hidden_state):
+#     just download-dinov3-model
+#   kornia (static batch 1, descriptor + tokens, 336px):
+#     just download-dinov3-model kornia/dinov3 ./models/dinov3-336
+download-dinov3-model repo="onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX" dir="./models/dinov3-vits16":
+    python3 scripts/dinov3_download.py "{{repo}}" "{{dir}}"
+
 # Download the GLiNER2 scripted-model testbed (cuerbot/gliner2-multi-v1 int8)
 # Used by the gated script-eval/GLiNER tests; ~380MB. Skips files that are
 # already present and fails on HTTP errors (curl -f), mirroring download-model.
@@ -1000,6 +1012,15 @@ website-examples-check:
 # `sitemap.xml`. The site has no build step, so what it emits is committed and
 # `--check` -- the drift guard CI runs -- is what keeps a hand-edited page from
 # disagreeing with the sitemap, the theme colour or the favicon.
+# Measure image files through the sandbox's depth model and apply PLATE VII's
+# depth gate: p5–p95 spread, near and far decile occupancy, gradient energy.
+# Needs `just website-dev` in another shell (emb + bridge). Exits 1 on a frame
+# that does not carry depth.
+#   just website-depth-gate                                  # the shipped six
+#   just website-depth-gate /tmp/candidates                  # a candidate pool
+website-depth-gate dir="website/demos/samples/parts":
+    python3 website/tools/depth-gate.py {{dir}}
+
 website-pages:
     python3 website/tools/stamp-pages.py
 

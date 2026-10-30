@@ -173,7 +173,7 @@ func TestPartialScriptPoolConstructionClosesOpened(t *testing.T) {
 
 	var created, closed atomic.Int64
 	injected := errors.New("injected session failure")
-	newNamedSession = func([]byte, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
+	newNamedSession = func([]byte, string, []string, []string, int, int, int, bool) (onnx.NamedSession, error) {
 		if created.Add(1) == 3 {
 			return nil, injected
 		}
@@ -257,10 +257,10 @@ func TestSharedTokenizerCreatedOnceClosedOnce(t *testing.T) {
 func TestImagePlanResolvedWithoutSessions(t *testing.T) {
 	_, entry := loadModelFixture(t, config.ModelConfig{
 		Image: &config.ImageConfig{
-			Input:  "pixel_values",
-			Size:   4,
-			Output: "last_hidden_state",
-			Std:    []float64{1, 1, 1},
+			Input:   "pixel_values",
+			Size:    4,
+			Outputs: []config.ImageOutputConfig{{Name: "embedding", Tensor: "last_hidden_state"}},
+			Std:     []float64{1, 1, 1},
 		},
 	})
 	if !entry.HasImageSurface() {

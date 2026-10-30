@@ -178,7 +178,7 @@ func TestSnapshotLegacyScriptIdentity(t *testing.T) {
 	const legacyMetadata = "916b0b7d3e5eba509cc49f1c31e93025ec144ac6963e10909b98d6486f36efad"
 	legacyKey := "test:" + sha + ":" + legacyMetadata + ":hello"
 	textKey := textCacheKey("test", "hello")
-	imageKey := imageCacheKey("imgA", []byte("image"))
+	imageKey := imageCacheKey("imgA", []byte("image"), "embedding")
 	textValue, imageValue := bytes.Repeat([]byte{7}, 16), bytes.Repeat([]byte{8}, testImageDim*4)
 	cache := NewCache(1 << 20)
 	cache.Set(legacyKey, []byte("$5\r\nwrong\r\n"))
@@ -227,7 +227,7 @@ func TestSnapshotLegacyScriptIdentity(t *testing.T) {
 	if got := bulkOf(t, redisCmd(t, addr, "EMB", "test", "hello")); got != string(textValue) {
 		t.Fatal("restored text missed")
 	}
-	if got := bulkOf(t, redisCmd(t, imageAddr, "EMB.IMG", "imgA", "image")); got != string(imageValue) {
+	if got := imageValueOf(t, redisCmd(t, imageAddr, "EMB.IMG", "imgA", "image"), "embedding"); got != string(imageValue) {
 		t.Fatal("restored image missed")
 	}
 	if srv.cache.Stats().Hits != after.Hits+1 || imageSrv.cache.Stats().Hits != 1 {

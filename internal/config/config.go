@@ -117,10 +117,34 @@ type ImageConfig struct {
 	Mean []float64 `yaml:"mean"`
 	// Std is the per-channel (RGB) normalization standard deviation.
 	Std []float64 `yaml:"std"`
-	// Output is the ONNX output tensor the image embedding is read from. Empty
-	// uses the model's output_tensor (correct for a fused export whose text and
-	// image branches share one output tensor).
-	Output string `yaml:"output"`
+	// Preset names a family profile (clip, siglip, imagenet, dinov3) that fills
+	// preprocessing and token-layout fields the config, the export's
+	// preprocessor_config.json, and the model's config.json leave unset.
+	Preset string `yaml:"preset"`
+	// Outputs is the complete set of products the model's image branch serves,
+	// each under a reply name. There is no default output: a bare image request
+	// serves all of them.
+	Outputs []ImageOutputConfig `yaml:"outputs"`
+}
+
+// ImageOutputConfig declares one named product of a model's image branch.
+type ImageOutputConfig struct {
+	// Name is the reply key clients read (for example "embedding").
+	Name string `yaml:"name"`
+	// Tensor is the graph output tensor this product is read from.
+	Tensor string `yaml:"tensor"`
+	// Select is how the tensor's rows are reduced: "none" (already pooled),
+	// "cls", "mean", "tokens" (every row from Start onward, normalized per
+	// row), or "map" (a 2-D [1,H,W] / [1,1,H,W] tensor, emitted flat and
+	// never normalized). Empty uses the model's pooling mode.
+	Select string `yaml:"select"`
+	// Start is the first token row of a "tokens" output. nil means 0, or the
+	// model's own layout metadata when its config.json declares register
+	// tokens.
+	Start *int `yaml:"start"`
+	// Grid is the patch edge of a "tokens" output: the emitted row count is
+	// grid*grid. 0 resolves it from the preset or the model's config.json.
+	Grid int `yaml:"grid"`
 }
 
 // validateImageConfig rejects structurally invalid image blocks at config
@@ -154,6 +178,58 @@ func validateImageConfig(name string, img ImageConfig) error {
 	}
 	if hasStd && len(img.Std) != 3 {
 		return fmt.Errorf("model %q: image.std must have 3 channels, got %d", name, len(img.Std))
+	}
+	return validateImageOutputsConfig(name, img)
+}
+
+// validateImageOutputsConfig rejects structurally invalid output declarations:
+// an unnamed output, one without a tensor, an unknown selector, a negative
+// start, a grid that cannot divide the configured size, or a duplicate name.
+// Checks that need the graph (a tensor's rank) or the model's metadata run at
+// resolution, where those facts exist.
+func validateImageOutputsConfig(name string, img ImageConfig) error {
+	seen := make(map[string]struct{}, len(img.Outputs))
+	for i, o := range img.Outputs {
+		if o.Name == "" {
+			return fmt.Errorf("model %q: image.outputs[%d] needs a name", name, i)
+		}
+		if o.Tensor == "" {
+			return fmt.Errorf("model %q: image output %q needs a tensor", name, o.Name)
+		}
+		// EMB.IMGMULTI VALUES answers a map per model/image pair and writes the
+		// pair's own `model` key into it; an output of that name would collide
+		// with it and a map-decoding client would keep only one of the two.
+		if o.Name == "model" {
+			return fmt.Errorf("model %q: image output name %q is reserved by EMB.IMGMULTI's pair identity", name, o.Name)
+		}
+		if _, dup := seen[o.Name]; dup {
+			return fmt.Errorf("model %q: duplicate image output name %q", name, o.Name)
+		}
+		seen[o.Name] = struct{}{}
+		switch o.Select {
+		case "", "none", "cls", "mean", "tokens", "map":
+		default:
+			return fmt.Errorf("model %q: image output %q has unknown select %q (want none|cls|mean|tokens|map or unset)", name, o.Name, o.Select)
+		}
+		// A map is a shape, not a sequence: start/grid describe token rows and
+		// would contradict it.
+		if o.Select == "map" {
+			if o.Start != nil {
+				return fmt.Errorf("model %q: image output %q selects map, which takes no start", name, o.Name)
+			}
+			if o.Grid != 0 {
+				return fmt.Errorf("model %q: image output %q selects map, which takes no grid", name, o.Name)
+			}
+		}
+		if o.Start != nil && *o.Start < 0 {
+			return fmt.Errorf("model %q: image output %q start must be non-negative, got %d", name, o.Name, *o.Start)
+		}
+		if o.Grid < 0 {
+			return fmt.Errorf("model %q: image output %q grid must be non-negative, got %d", name, o.Name, o.Grid)
+		}
+		if o.Grid > 0 && img.Size > 0 && img.Size%o.Grid != 0 {
+			return fmt.Errorf("model %q: image output %q grid %d does not divide image.size %d", name, o.Name, o.Grid, img.Size)
+		}
 	}
 	return nil
 }
@@ -416,8 +492,13 @@ func loadFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
+	// Strict decoding: a renamed or misspelled key fails the boot instead of
+	// silently falling back to a default (image.output -> image.outputs is the
+	// rename this guards).
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
@@ -428,6 +509,9 @@ func loadFile(path string) (*Config, error) {
 	for name, m := range cfg.Models {
 		if strings.EqualFold(name, "blob") || strings.EqualFold(name, "values") {
 			return nil, fmt.Errorf("model %q: %q is a reserved word (reserved for the EMB reply-format keyword)", name, name)
+		}
+		if strings.EqualFold(name, "outputs") {
+			return nil, fmt.Errorf("model %q: %q is a reserved word (reserved for the EMB.IMG output-projection keyword)", name, name)
 		}
 		if m.ExecutionMode != "" && m.ExecutionMode != "sequential" && m.ExecutionMode != "parallel" {
 			return nil, fmt.Errorf("model %q: execution_mode must be \"sequential\", \"parallel\", or unset, got %q", name, m.ExecutionMode)
@@ -1034,6 +1118,12 @@ func (m ModelConfig) Validate() error {
 		return fmt.Errorf("onnx file %q: %w", m.ONNX, err)
 	}
 	if _, err := os.Stat(m.Tokenizer); err != nil {
+		if m.Image != nil {
+			// A model that serves images needs no tokenizer to load: a DINOv3
+			// export ships none, and a text command on such a model fails when it
+			// loads the tokenizer, naming the file it wanted.
+			return nil
+		}
 		return fmt.Errorf("tokenizer file %q: %w", m.Tokenizer, err)
 	}
 	return nil

@@ -106,7 +106,9 @@ func redisCmd(t *testing.T, addr string, args ...string) respToken {
 	c := dial(t, addr)
 	defer c.Close()
 	c.Write(respCommand(args...))
-	return parseRESP(t, readRESP(t, c))
+	// One complete top-level value: EMB.INFO now nests a per-output map, so its
+	// reply can exceed a single socket read.
+	return parseRESP(t, readRESPComplete(t, c))
 }
 
 // ---- cacheHitRate ----

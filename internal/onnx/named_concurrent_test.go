@@ -85,7 +85,7 @@ func TestNamedSessionConcurrentRunsMatchSerial(t *testing.T) {
 
 	data := namedTestModel(t)
 	inputNames, outNames := namedTestInputs(t)
-	sess, err := NewNamedRuntimeSessionFromBytes(data, inputNames, outNames, 1, 2, ExecModeSequential, true)
+	sess, err := NewNamedRuntimeSessionFromBytes(data, "", inputNames, outNames, 1, 2, ExecModeSequential, true)
 	if err != nil {
 		t.Fatalf("creating named session: %v", err)
 	}

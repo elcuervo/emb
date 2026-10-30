@@ -116,6 +116,14 @@ func modelOf(key string) string {
 		if i := len(rest) - (sha256HexLen + 1); i >= 0 && rest[i] == ':' && isHexDigest(rest[i+1:]) {
 			return rest[:i]
 		}
+		// An image key carries an output name after its digest
+		// (img:<model>:<sha>:<output>), so the model is everything before the
+		// digest rather than before the last segment.
+		for i := 1; i+sha256HexLen < len(rest); i++ {
+			if rest[i-1] == ':' && rest[i+sha256HexLen] == ':' && isHexDigest(rest[i:i+sha256HexLen]) {
+				return rest[:i-1]
+			}
+		}
 		return rest
 	}
 	for i := 0; i+sha1HexLen+2 <= len(key); i++ {
@@ -130,11 +138,29 @@ func modelOf(key string) string {
 }
 
 // embeddingCacheKey reports whether a cache key addresses a float32 embedding
-// vector, whose value is the model's dimension times four bytes. Script replies
-// (any other key shape) share the same cache map with arbitrary-length JSON
-// values, so they cannot be length-checked against a dimension.
+// vector. Script replies (any other key shape) share the same cache map with
+// arbitrary-length JSON values, so they cannot be length-checked against a
+// dimension.
+//
+// A text entry holds exactly one dim-wide row; an image entry holds one row per
+// emitted vector, so it can hold a whole patch grid (rows*dim*4 bytes). Its
+// length is checked for that shape rather than for a single row.
 func embeddingCacheKey(key string) bool {
 	return strings.HasPrefix(key, "txt:") || strings.HasPrefix(key, "img:")
+}
+
+// validCacheValueLength reports whether a snapshot value has the byte length its
+// key shape promises for a model of dimension dim: one row for a text entry, a
+// whole number of rows for an image output, anything for a script reply.
+func validCacheValueLength(key string, value []byte, dim int) bool {
+	rowBytes := dim * 4
+	if rowBytes <= 0 || !embeddingCacheKey(key) {
+		return true
+	}
+	if strings.HasPrefix(key, "img:") {
+		return len(value) > 0 && len(value)%rowBytes == 0
+	}
+	return len(value) == rowBytes
 }
 
 const (

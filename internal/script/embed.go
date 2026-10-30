@@ -25,10 +25,15 @@ func looksLikeImageURL(b []byte) bool {
 	return false
 }
 
-// imageEmbedHost implements emb.image.embed(bytes) / emb.image.embed({bytes...})
-// returning pooled normalized image embeddings from the model's image branch,
-// in the same space as emb.embed. Each argument is raw encoded image bytes;
-// URLs are rejected.
+// imageEmbedHost implements emb.image.embed:
+//
+//	emb.image.embed(bytes)                    -> {output_name = {v1, v2, ...}, ...}
+//	emb.image.embed(bytes, {output = name})   -> {v1, v2, ...}
+//	emb.image.embed({b1, b2}, opts)           -> {{...}, {...}}
+//
+// Every configured output is returned unless opts names one, and an unknown
+// name raises an error listing the configured outputs. Each argument is raw
+// encoded image bytes; URLs are rejected.
 func imageEmbedHost(ls *lua.LState, ih *ImageHost) int {
 	if ih.Embed == nil {
 		ls.RaiseError("emb.image.embed is unavailable for this model")
@@ -68,41 +73,82 @@ func imageEmbedHost(ls *lua.LState, ih *ImageHost) int {
 	}
 
 	packed := false
+	var outputs []string
 	if opts, ok := ls.Get(2).(*lua.LTable); ok {
 		if b, ok := opts.RawGetString("bytes").(lua.LBool); ok {
 			packed = bool(b)
 		}
+		if name, ok := opts.RawGetString("output").(lua.LString); ok && name != "" {
+			outputs = []string{string(name)}
+		}
 	}
 
-	embs, err := ih.Embed(images)
+	products, err := ih.Embed(images, outputs)
 	if err != nil {
 		ls.RaiseError("emb.image.embed: %v", err)
 		return 0
 	}
-	if len(embs) != len(images) {
-		ls.RaiseError("emb.image.embed: got %d embeddings for %d images", len(embs), len(images))
+	if len(products) != len(images) {
+		ls.RaiseError("emb.image.embed: got %d results for %d images", len(products), len(images))
 		return 0
 	}
 
 	var total int64
-	for _, e := range embs {
-		total += int64(len(e) / 4)
+	for _, p := range products {
+		for _, blob := range p {
+			total += int64(len(blob) / 4)
+		}
 	}
 	if err := requestBudget(ls).charge(total); err != nil {
 		ls.RaiseError("emb.image.embed: %v", err)
 		return 0
 	}
 
+	// A narrowed request yields that one value; the keyed form yields a table
+	// keyed by output name.
+	if len(outputs) == 1 {
+		name := outputs[0]
+		values := make([]lua.LValue, len(products))
+		for i, p := range products {
+			blob, ok := p[name]
+			if !ok {
+				ls.RaiseError("emb.image.embed: output %q missing from the result", name)
+				return 0
+			}
+			values[i] = embedValue(ls, blob, packed)
+		}
+		if single {
+			ls.Push(values[0])
+			return 1
+		}
+		out := ls.NewTable()
+		for i, v := range values {
+			out.RawSetInt(i+1, v)
+		}
+		ls.Push(out)
+		return 1
+	}
+
 	if single {
-		ls.Push(embedValue(ls, embs[0], packed))
+		ls.Push(imageProductsTable(ls, products[0], packed))
 		return 1
 	}
 	out := ls.NewTable()
-	for i, e := range embs {
-		out.RawSetInt(i+1, embedValue(ls, e, packed))
+	for i, p := range products {
+		out.RawSetInt(i+1, imageProductsTable(ls, p, packed))
 	}
 	ls.Push(out)
 	return 1
+}
+
+// imageProductsTable renders one image's products as a table keyed by output
+// name. Key order is not significant in Lua; iteration order matches the map.
+func imageProductsTable(ls *lua.LState, products map[string][]byte, packed bool) *lua.LTable {
+	out := ls.NewTable()
+	for name, blob := range products {
+		out.RawSetString(name, embedValue(ls, blob, packed))
+	}
+	return out
 }
 
 // embedHost implements emb.embed:

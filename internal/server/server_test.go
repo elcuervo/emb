@@ -899,7 +899,7 @@ var infoModelFields = []string{
 	"model_bytes", "cpu_budget_enabled", "cpu_budget", "cpu_thread_share",
 	"cpu_share_reclaimed", "intra_op_threads", "allow_spinning",
 	"calibration_source", "calibration_reason", "script_requests",
-	"script_errors", "script_sessions", "script_tokenizer", "image_sessions",
+	"script_errors", "script_sessions", "script_tokenizer", "image_sessions", "image_outputs",
 	"script_dispatch_wait_us", "script_run_us", "script_runs",
 	"script_sessions_busy", "script_traffic_class", "script_inflight",
 	"script_concurrency_current", "script_concurrency_target",
@@ -962,12 +962,72 @@ func parseRESPFlatArray(t *testing.T, resp string) (declared int, elements []str
 			}
 			elements = append(elements, resp[i+1:j])
 			i = j + 2
+		case '*':
+			// A nested collection (image_outputs is name -> fields): consumed as
+			// one element, so the outer key/value alternation still holds.
+			elements = append(elements, "<nested>")
+			i = skipRESPValue(resp, i)
 		default:
 			t.Fatalf("unexpected RESP type %q at %d in %q", resp[i], i, resp)
 		}
 	}
 
 	return declared, elements
+}
+
+// skipRESPValue returns the offset just past the RESP value starting at i. It
+// understands the bulk, integer, null, and array forms the introspection replies
+// use, recursing into arrays so a nested value is skipped whole.
+func skipRESPValue(resp string, i int) int {
+	if i >= len(resp) {
+		return i
+	}
+	switch resp[i] {
+	case '$', ':':
+		j := i + 1
+		for j < len(resp) && resp[j] != '\r' {
+			j++
+		}
+		if resp[i] == '$' {
+			n, err := strconv.Atoi(resp[i+1 : j])
+			if err != nil || n < 0 {
+				return j + 2
+			}
+			return j + 2 + n + 2
+		}
+		return j + 2
+	case '_':
+		return i + 4
+	case '*':
+		j := i + 1
+		for j < len(resp) && resp[j] != '\r' {
+			j++
+		}
+		n, err := strconv.Atoi(resp[i+1 : j])
+		k := j + 2
+		if err != nil || n < 0 {
+			return k
+		}
+		for range n {
+			k = skipRESPValue(resp, k)
+		}
+		return k
+	default:
+		// Maps (%n) and other aggregate forms: skip the header and its n values.
+		j := i + 1
+		for j < len(resp) && resp[j] != '\r' {
+			j++
+		}
+		n, err := strconv.Atoi(resp[i+1 : j])
+		k := j + 2
+		if err != nil || n < 0 {
+			return k
+		}
+		for range n * 2 {
+			k = skipRESPValue(resp, k)
+		}
+		return k
+	}
 }
 
 // infoElementKeys turns a flat key/value array into the set of keys it carried.
@@ -1817,7 +1877,8 @@ func respValueLen(s []byte) (int, bool) {
 		return 0, false
 	}
 	switch s[0] {
-	case '*':
+	case '*', '%':
+		// An array carries n values; a RESP3 map carries n key/value pairs.
 		i := bytes.IndexByte(s, '\r')
 		if i < 0 {
 			return 0, false
@@ -1825,6 +1886,9 @@ func respValueLen(s []byte) (int, bool) {
 		n, err := strconv.Atoi(string(s[1:i]))
 		if err != nil {
 			return 0, false
+		}
+		if s[0] == '%' {
+			n *= 2
 		}
 		p := i + 2
 		for k := 0; k < n; k++ {

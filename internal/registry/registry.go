@@ -325,6 +325,19 @@ func (e *ModelEntry) Fingerprint() (string, error) {
 		_, _ = fmt.Fprintf(h, "\x00output=%s\x00dim=%d\x00max_length=%d\x00pooling=%s\x00normalize=%t\x00pad_output=%t\x00quantization=%s",
 			e.cfg.OutputTensor, e.Dim, e.cfg.MaxLength, e.cfg.Pooling,
 			e.cfg.Normalize, e.cfg.PadOutput, e.Quantization)
+		// Image entries ride the same snapshot, so the resolved preprocessing and
+		// output layout belong here too: they decide the bytes an image entry
+		// holds, and a same-graph edit of image.* would otherwise restore
+		// embeddings this configuration never produced.
+		if res := e.ImageRes; res != nil {
+			p := res.Plan
+			_, _ = fmt.Fprintf(h, "\x00image_input=%s\x00image_size=%d\x00image_crop=%d\x00image_resample=%d\x00image_rescale=%g\x00image_mean=%v\x00image_std=%v\x00image_normalize=%t",
+				p.Input, p.Size, p.Crop, p.Resample, p.Rescale, p.Mean, p.Std, res.Normalize)
+			for _, o := range res.Outputs {
+				_, _ = fmt.Fprintf(h, "\x00image_output=%s\x00image_tensor=%s\x00image_select=%s\x00image_start=%d\x00image_rows=%d\x00image_dim=%d\x00image_grid=%d",
+					o.Name, o.Tensor, o.Select, o.Start, o.Rows, o.Dim, o.Grid)
+			}
+		}
 		e.fingerprint = hex.EncodeToString(h.Sum(nil))
 	})
 	return e.fingerprint, e.fingerprintErr
@@ -565,7 +578,15 @@ var newTokenizer = func(path string, padOutput bool) (tokenizer.Tokenizer, error
 // callers must not close it (Registry.Close does).
 func (e *ModelEntry) sharedTokenizer() (tokenizer.Tokenizer, error) {
 	e.sharedTokOnce.Do(func() {
-		e.sharedTok, e.sharedTokErr = newTokenizer(e.cfg.Tokenizer, e.cfg.PadOutput)
+		// Publish only a successfully built tokenizer: a constructor that
+		// returns (nil, err) would otherwise leave a non-nil interface holding
+		// a nil pointer, which Close would dereference.
+		tok, err := newTokenizer(e.cfg.Tokenizer, e.cfg.PadOutput)
+		if err != nil {
+			e.sharedTokErr = err
+			return
+		}
+		e.sharedTok = tok
 	})
 	return e.sharedTok, e.sharedTokErr
 }
@@ -593,8 +614,8 @@ func effectiveEmbeddingSessions(cfg *config.ModelConfig) int {
 // newRuntimeSession creates one inference session from weights bytes. It is a
 // package var so tests can inject counting/batch-sensitive fakes and prove
 // the probe runs exactly once per model lifetime.
-var newRuntimeSession = func(data []byte, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
-	return onnx.NewRuntimeSessionFromBytes(data, inputNames, outputNames, dim, rank, intraOpThreads, interOpThreads, execMode, allowSpinning)
+var newRuntimeSession = func(data []byte, modelPath string, inputNames, outputNames []string, dim int, rank, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.Session, error) {
+	return onnx.NewRuntimeSessionFromBytes(data, modelPath, inputNames, outputNames, dim, rank, intraOpThreads, interOpThreads, execMode, allowSpinning)
 }
 
 // layoutOutcome is the immutable record of how a model's embedding layout was
@@ -711,6 +732,7 @@ func (e *ModelEntry) ensurePool() error {
 	sessionFactoryFor := func(threads int) (onnx.Session, error) {
 		return newRuntimeSession(
 			modelData,
+			cfg.ONNX,
 			inputNames,
 			[]string{cfg.OutputTensor},
 			cfg.Dim,
@@ -853,8 +875,8 @@ func (e *ModelEntry) ensurePool() error {
 // newNamedSession creates one named-tensor session for the scripted/image
 // paths. It is a package var so tests can inject a partial-construction failure
 // and count that already-opened sessions are closed.
-var newNamedSession = func(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.NamedSession, error) {
-	return onnx.NewNamedRuntimeSessionFromBytes(data, inputNames, outputNames, intraOpThreads, interOpThreads, execMode, allowSpinning)
+var newNamedSession = func(data []byte, modelPath string, inputNames, outputNames []string, intraOpThreads, interOpThreads, execMode int, allowSpinning bool) (onnx.NamedSession, error) {
+	return onnx.NewNamedRuntimeSessionFromBytes(data, modelPath, inputNames, outputNames, intraOpThreads, interOpThreads, execMode, allowSpinning)
 }
 
 // ScriptResources lazily opens the generic named-tensor session and the
@@ -985,7 +1007,7 @@ func (e *ModelEntry) openScriptResources() (*ScriptResources, error) {
 	sessions := make([]onnx.NamedSession, 0, numSessions)
 	for i := 0; i < numSessions; i++ {
 		sess, err := newNamedSession(
-			modelData, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, spinning,
+			modelData, cfg.ONNX, inputNames, outputNames, intraThreads, cfg.InterOpThreads, execMode, spinning,
 		)
 		if err != nil {
 			for _, opened := range sessions {
@@ -1066,6 +1088,10 @@ func downloadModel(cfg *config.ModelConfig, name string) error {
 		if tokenizerRepo == "" {
 			tokenizerRepo = cfg.ModelRepo
 		}
+		// Fetch only what the config asks for: an image-only model that needs no
+		// tokenizer simply declares none (its repo may ship none), while a
+		// dual-encoder model that names a tokenizer must get it or every text
+		// command fails after a load that looked successful.
 		if cfg.Tokenizer != "" {
 			if _, err := os.Stat(cfg.Tokenizer); err != nil {
 				if _, err := client.Download(tokenizerRepo, "tokenizer.json", dir); err != nil {
@@ -1273,6 +1299,17 @@ func loadModel(cfg config.ModelConfig, name string, preload bool) (*ModelEntry, 
 		cfg:  cfg,
 	}
 
+	if cfg.Image != nil {
+		// Image declarations are resolved and validated at load, not on the first
+		// EMB.IMG: a missing tensor, a rank that contradicts its selector, or an
+		// undeterminable grid is a boot error. Resolution opens no session.
+		if resolved := entry.resolveImage(); resolved.err != nil {
+			return nil, fmt.Errorf("model %q: %w", name, resolved.err)
+		} else {
+			logImagePlan(name, resolved.plan, resolved.outputs, resolved.sources)
+		}
+	}
+
 	if preload {
 		if err := entry.Preload(); err != nil {
 			_ = entry.closeResources()
@@ -1300,11 +1337,9 @@ func (e *ModelEntry) Preload() error {
 		log.Printf("  preloaded scripted sessions for %q (workers=%d)", name, len(res.Sessions()))
 	}
 	if cfg.ImagePreload && cfg.Image != nil {
-		res, err := e.ImageResources()
-		if err != nil {
+		if _, err := e.ImageResources(); err != nil {
 			return err
 		}
-		logImagePlan(name, res)
 	}
 	return nil
 }

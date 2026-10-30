@@ -73,7 +73,7 @@ RSpec.describe Emb::Telemetry do
     it 'spans an image call' do
       client = TelemetryHelpers::FakeClient.new
 
-      expect(Emb::Proxy.new(client, :clip).image('image-bytes')).to eq([1.0, 2.0])
+      expect(Emb::Proxy.new(client, :clip).image('image-bytes')).to eq('embedding' => [1.0, 2.0])
 
       span = span_named('emb.embed')
       expect(span.attributes).to include(

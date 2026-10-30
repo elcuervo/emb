@@ -41,7 +41,7 @@ module TelemetryHelpers
 
     def default_reply(args)
       case args.first
-      when 'EMB.IMG' then [1.0, 2.0].pack('e*')
+      when 'EMB.IMG' then ['embedding', [1.0, 2.0].pack('e*')]
       when 'EMB' then Array.new(args.size - 2) { [1.0, 2.0].pack('e*') }
       when 'EMB.MULTI' then Array.new((args.size - 1) / 2) { [1.0, 2.0].pack('e*') }
       else 'OK'

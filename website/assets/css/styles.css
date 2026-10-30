@@ -2697,6 +2697,291 @@ html.js.is-ready .hero__prose{
 }
 .drop.is-over{ border-color: var(--accent); }
 .drop__img{ display: block; max-width: 100%; max-height: 320px; margin: 0 auto; }
+/* The photograph's own aspect, declared once: the stage, the plan and the floor
+   under them all read it, and a run writes the real one. */
+.rig[data-rig="perception"]{ --aspect: 1.333; }
+
+/* The plate that leads with its figure: a short head, one wide line of
+   prose, and the stage on the first screen. */
+.plate--stage{ margin-top: clamp(14px, 1.8vw, 26px); }
+.plate--stage .plate__head{ grid-template-columns: minmax(0, 1fr) minmax(0, 34ch); }
+/* The row of numbers is the plate's own ledger, so it owns a row: squeezed
+   into the head's narrow second column its chips wrapped to a second line at
+   desktop width. One line at 1440, and a break at the middots on a phone. */
+.plate--stage .plate__ledger{ grid-column: 1 / -1; }
+.plate--stage .plate__teaches{ max-width: 62ch; font-size: 13px; }
+.plate--stage .plate__next{ margin-bottom: 6px; }
+@media (max-width: 860px){
+  .plate--stage .plate__head{ grid-template-columns: minmax(0, 1fr); }
+}
+
+/* THE STAGE. The figure is the page: the canvas takes the shell's width and
+   most of the viewport's height, and the chrome under it is one row of mono
+   labels. Height is capped so a phone still scrolls to the filmstrip. */
+.stage-block{ padding-block: clamp(18px, 2.2vw, 30px) clamp(22px, 2.6vw, 38px); }
+.stage__view{ position: relative; }
+/* Side by side: the still on the left, the reconstruction on the right, one
+   frame. Both reserve the photograph's own aspect, so the pair has one height
+   and neither column moves when the first reply lands. */
+.stage__pair{
+  display: grid; gap: clamp(10px, 1.2vw, 18px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+.stage__slot{ position: relative; min-width: 0; }
+.stage__pair .perception__stage{ width: 100%; margin: 0; }
+.perception__stage{
+  /* The frame is the photograph's own: the stage takes its aspect and its
+     height cap, so the front view is a photograph, not a picture in a window.
+     The aspect is on the rig, because the plan beside it reserves the same one
+     and neither may jump when the first reply lands. */
+  position: relative;
+  aspect-ratio: var(--aspect);
+  width: min(100%, calc(78vh * var(--aspect)));
+  height: auto; margin-inline: auto;
+  background: var(--dark); border: 1px solid var(--rule-dark);
+  /* The drag is horizontal (yaw and a small pitch), so a vertical swipe still
+     scrolls the page instead of being eaten by the canvas. */
+  touch-action: pan-y; cursor: grab; overflow: hidden;
+}
+.perception__stage:active{ cursor: grabbing; }
+.perception__stage:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
+.perception__stage canvas{ display: block; width: 100%; height: 100%; }
+.perception__stage.is-flat{
+  display: grid; place-items: center; padding: 12px; cursor: default;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--rule);
+}
+/* The measured line over the canvas's foot: vertices, triangles, reading. It is
+   read, not decoration, so it sits on the dark ground the samples' answers use:
+   over a bright photograph a bare grey line disappeared. */
+.stage__hud{
+  position: absolute; left: 8px; bottom: 8px; margin: 0; max-width: calc(100% - 16px);
+  padding: 3px 6px;
+  background: var(--dark);
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--rule); pointer-events: none;
+}
+/* The profile's line over the photograph: the same percentages the chart
+   samples, so the measurement and the picture cannot disagree about where it
+   came from. A drag places it, so the frame shows a crosshair. */
+.perception__frame{ cursor: crosshair; }
+.perception__prof{
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  color: var(--accent); pointer-events: none;
+}
+/* The model's own answer chips and the crop box belonged to the removed
+   second model; the plate is one map now, and its figures are below. */
+.stage__film{
+  display: grid; gap: 8px; margin-top: clamp(14px, 1.6vw, 22px);
+}
+/* The state control is the plate's one live control: three stops on one row,
+   five readings under it, both native radios drawn as the site's tab row. */
+.stage__ctrls{ display: grid; gap: 8px; margin-top: clamp(12px, 1.4vw, 18px); }
+.perception__states{
+  display: flex; flex-wrap: wrap; width: fit-content; max-width: 100%;
+}
+.perception__states label{
+  position: relative; display: inline-flex; align-items: center; min-height: 44px;
+  padding-inline: clamp(10px, 1.1vw, 16px);
+  border: 1px solid var(--rule-dark); cursor: pointer;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--rule);
+}
+.perception__states label + label{ border-left: 0; }
+.perception__states label:hover{ color: var(--accent); }
+.perception__states label:has(input:checked){ background: var(--accent); color: var(--fg); }
+.perception__states label:has(input:checked):hover{ color: var(--fg); }
+.perception__states label:focus-within{ outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Kept in the tab order and out of the way: the label is the hit area. */
+.perception__states input{
+  position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0;
+  pointer-events: none;
+}
+.stage__read{ display: grid; gap: 10px; min-width: 0; margin-top: clamp(14px, 1.6vw, 22px); }
+/* The plan reserves the photograph's own frame, so the stage and the still
+   do not jump when the first reply lands. The frame is the aspect box and the
+   caption sits under it, so the plan's canvas covers the image and nothing else. */
+.perception__shot{ position: relative; width: 100%; margin: 0; }
+.perception__frame{ position: relative; width: 100%; aspect-ratio: var(--aspect); }
+.perception__frame img{ display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; }
+/* One disclosure per quiet control group: native, so it opens without this
+   sheet and a reader without a pointer can still reach every input. */
+.perception__fold{
+  border-top: 1px solid var(--rule-dark);
+  padding-top: 8px;
+}
+.perception__fold-h{
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; min-height: 44px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--rule);
+}
+.perception__fold-h::-webkit-details-marker{ display: none; }
+.perception__fold-h::before{ content: "\25B8\00a0"; }
+.perception__fold[open] > .perception__fold-h::before{ content: "\25BE\00a0"; }
+.perception__fold-h:hover{ color: var(--bg); }
+.perception__fold-h:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.perception__fold-body{
+  display: flex; flex-wrap: wrap; gap: 10px clamp(12px, 2vw, 22px);
+  align-items: center; padding-top: 10px;
+}
+/* The long form: the same paper pages, opened by choice. */
+.perception__fold--prose{
+  margin-top: clamp(18px, 2vw, 26px); border-top-color: var(--rule);
+}
+.perception__fold--prose > .perception__fold-h{
+  color: var(--accent-ink); text-transform: none; letter-spacing: .02em;
+}
+.perception__fold--prose > .perception__fold-h:hover{ color: var(--fg); }
+.perception__fold--prose .perception__fold-body{
+  display: block; max-width: 78ch; padding-top: 12px;
+}
+.perception__fold--prose .block__deck + .block__deck{ margin-top: 1em; }
+@media (max-width: 860px){
+  .perception__stage{ width: 100%; }
+  /* A phone stacks the pair: the reconstruction keeps the width, the still
+     drops under it small enough that both read at once. */
+  .stage__pair{ grid-template-columns: minmax(0, 1fr); }
+  .stage__pair .perception__shot{ order: 2; max-width: 200px; margin-inline: auto; }
+}
+.perception__count{
+  display: flex; gap: 8px; align-items: center; justify-content: flex-start; margin: 0;
+  min-height: 44px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--rule);
+}
+.perception__count input[type="range"]{ width: 96px; accent-color: var(--accent); }
+.perception__count input[type="checkbox"]{ width: 20px; height: 20px; accent-color: var(--accent); }
+.perception__count input[type="file"]{
+  width: 100%; max-width: 22ch;
+  font-family: var(--mono); font-size: 12px; color: var(--rule);
+}
+.perception__count input:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.perception__cap{
+  margin: 8px 0 0;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--rule);
+}
+/* THE TRACE. The run's own numbers: request bytes, the head's measured time,
+   and one bar for the reply, scaled by its own byte count. DOM text, so it reads
+   at 350 px where an SVG's labels do not. */
+.trace{
+  display: grid; gap: 6px; margin: clamp(18px, 2.2vw, 26px) 0 0;
+  border-top: 1px solid var(--rule); padding-top: 12px;
+}
+.trace[hidden]{ display: none; }
+.trace__top{
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: 4px 16px;
+}
+.trace__req{
+  margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.trace__lane{ display: grid; gap: 2px; margin-top: 6px; }
+.trace__model{
+  margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.trace__reply{
+  display: grid; gap: 4px; min-height: 44px; padding: 4px 0;
+  border: 0; background: none; text-align: left; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.trace__reply:hover .trace__lab{ color: var(--accent-ink); }
+.trace__reply:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.trace__track{ display: block; width: 100%; height: 8px; background: var(--rule-soft); }
+.trace__bar{ display: block; height: 100%; width: 0; background: var(--accent-ink); }
+.trace__lab{ display: block; }
+
+/* THE THREE FIGURES. One row of figures over one reply: a raster, a matrix and
+   a field. They sit below the stage, so the first screen stays the photograph,
+   and every control is the site's own mono button at 44px. */
+.pfigs{
+  display: grid; gap: clamp(18px, 2.4vw, 32px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  margin-top: clamp(22px, 2.6vw, 34px);
+}
+.pfigs[hidden]{ display: none; }
+.pfig{
+  display: grid; gap: 10px; align-content: start; margin: 0;
+  border-top: 1px solid var(--rule); padding-top: 12px;
+}
+/* The field needs width to read: two grids and the arrows between them. On a
+   wide screen it takes the full row under the raster and the matrix. */
+@media (min-width: 1100px){
+  .pfigs{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pfig--wide{ grid-column: 1 / -1; }
+}
+.pfig__head{ display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pfig__t{
+  margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
+  color: var(--accent-ink);
+}
+.pfig__play{
+  min-height: 44px; min-width: 44px; padding-inline: 12px;
+  border: 1px solid var(--rule); background: transparent; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em; color: var(--muted);
+}
+.pfig__play:hover{ color: var(--accent-ink); border-color: var(--accent-ink); }
+.pfig__play:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.pfig__play[aria-pressed="false"]{ color: var(--accent-ink); border-color: var(--accent-ink); }
+.pfig__c{
+  display: block; width: 100%; height: auto; background: var(--bg);
+  border: 1px solid var(--rule-soft);
+  image-rendering: pixelated;
+}
+.pfig__spark{ display: block; width: 100%; height: auto; }
+/* The focus canvas holds a blurred photograph, not a raster: scaling it down to
+   a phone should smooth it, while the map's cells stay square. */
+.pfig__c--smooth{ image-rendering: auto; }
+.pfig__c:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+.pfig__read{
+  margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--muted); font-variant-numeric: tabular-nums;
+  min-height: 3em;
+}
+.pfig__cap{
+  margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  letter-spacing: .02em; color: var(--muted);
+}
+.pfig__pick{
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .02em; color: var(--muted);
+}
+.pfig__pick select{
+  min-height: 44px; max-width: 100%; padding-inline: 8px;
+  border: 1px solid var(--rule); background: var(--bg); color: var(--fg);
+  font-family: var(--mono); font-size: 12px;
+}
+.pfig__rev{ display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.pfig__rev input{ width: 20px; height: 20px; accent-color: var(--accent); }
+.pfig__pick select:focus-visible,
+.pfig__rev input:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The tuning labels were written for the dark stage; inside the paper figures
+   they take the paper's own caption colour, or they read as disabled. */
+.pfig__pick .perception__count{ color: var(--muted); }
+
+/* The photograph picker keeps each sample's own shape: the frame is letterboxed
+   on the dark ground instead of cropped, so a portrait stays a portrait. */
+.rig[data-rig="perception"] .samples img{ object-fit: contain; }
+/* The filmstrip: as many tiles as there are photographs, in one row, instead
+   of a grid's empty cells painting a grey band under the stage. */
+.rig[data-rig="perception"] .samples{
+  display: flex; flex-wrap: wrap; gap: 2px;
+  border: 0; background: transparent; margin-bottom: 0;
+}
+/* The strip is a gallery of photographs, not a set of swatches: the tiles are
+   wide enough to tell the six apart without opening one. */
+.rig[data-rig="perception"] .samples button{
+  width: clamp(112px, 12vw, 168px); flex: 0 0 auto;
+}
+/* The plate's hints are sentences in the mono voice, not tracked caps: they
+   carry a measurement each, and 12px caps are a label's voice. */
+.rig[data-rig="perception"] .drop__hint{
+  letter-spacing: .02em; text-transform: none; color: var(--rule);
+}
 .drop__hint{
   font-family: var(--mono); font-size: 12px; letter-spacing: .05em;
   text-transform: uppercase; color: var(--rule); margin: 0;
@@ -3966,4 +4251,8 @@ video.media__player,.media__player video,.media__player img{ width:100%; height:
   .doc-toc a{ min-height: 44px; align-items: center; }
   .plate-nav__link{ min-height: 44px; justify-content: center; }
   .plate__next a{ min-height: 44px; align-items: center; }
+  /* This plate's mono labels are declared at a flat 12px and its rows at a
+     flat 44px, so they arrive at the floor from their own rules and need no
+     entry here: the block exists for the `clamp()` floors that settle below
+     it, and this plate has none left. */
 }

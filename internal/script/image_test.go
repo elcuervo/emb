@@ -2,6 +2,7 @@ package script
 
 import (
 	"encoding/binary"
+	"errors"
 	"strings"
 	"testing"
 
@@ -173,5 +174,112 @@ func TestRunPackedBytesMutuallyExclusive(t *testing.T) {
 	}
 	if _, err := EvalWithHosts(`return emb.run({x = {shape = {1}, bytes = "AAAA"}})`, nil, nil, hosts, EvalOptions{}); err == nil || !strings.Contains(err.Error(), "dtype") {
 		t.Fatalf("bytes without dtype should error, got %v", err)
+	}
+}
+
+// scriptImageHost serves two outputs for emb.image.embed tests: a pooled vector
+// and a 2x2 token grid, both on a dim-2 model.
+func scriptImageHost(t *testing.T) *ImageHost {
+	t.Helper()
+	return &ImageHost{
+		Plan:       func() (imageproc.Plan, error) { return testImagePlan(2), nil },
+		Preprocess: func([]byte) ([]float32, error) { return nil, nil },
+		Outputs: func() ([]ImageOutputInfo, error) {
+			return []ImageOutputInfo{
+				{Name: "embedding", Tensor: "pooler_output", Select: "none", Rows: 1, Dim: 2},
+				{Name: "patches", Tensor: "last_hidden_state", Select: "tokens", Rows: 4, Grid: 2, Dim: 2},
+			}, nil
+		},
+		Embed: func(images [][]byte, outputs []string) ([]map[string][]byte, error) {
+			want := outputs
+			if len(want) == 0 {
+				want = []string{"embedding", "patches"}
+			}
+			out := make([]map[string][]byte, len(images))
+			for i := range images {
+				values := make(map[string][]byte, len(want))
+				for _, name := range want {
+					switch name {
+					case "embedding":
+						values[name] = make([]byte, 2*4)
+					case "patches":
+						values[name] = make([]byte, 4*2*4)
+					default:
+						return nil, errors.New(`unknown image output "` + name + `"; configured outputs: embedding, patches`)
+					}
+				}
+				out[i] = values
+			}
+			return out, nil
+		},
+	}
+}
+
+// TestImageEmbedKeyedTable covers emb.image.embed's keyed result: every
+// configured output under its own key, one value when narrowed, and an error
+// listing the configured outputs for an unknown name.
+func TestImageEmbedKeyedTable(t *testing.T) {
+	hosts := Hosts{Image: scriptImageHost(t)}
+
+	v, err := EvalWithHosts(`
+local e = emb.image.embed("img")
+local n = 0
+for name, vec in pairs(e) do n = n + #vec end
+return tostring(n) .. ":" .. tostring(#e.embedding) .. ":" .. tostring(#e.patches)`,
+		nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2 pooled values + 4*2 patch values, keyed so both are addressable.
+	if v.String() != "10:2:8" {
+		t.Fatalf("keyed table = %q, want 10 values across a 2-vector and an 8-value grid", v.String())
+	}
+
+	// The narrowed form returns that one value, not a table.
+	v, err = EvalWithHosts(`local e = emb.image.embed("img", {output = "patches"}); return tostring(type(e)) .. ":" .. tostring(#e)`,
+		nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "table:8" {
+		t.Fatalf("narrowed form = %q, want a table of 8 grid values", v.String())
+	}
+
+	// An array of images yields one keyed table per image.
+	v, err = EvalWithHosts(`local e = emb.image.embed({"img", "img2"}); return tostring(#e) .. ":" .. tostring(#e[1].patches) .. ":" .. tostring(#e[2].embedding)`,
+		nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "2:8:2" {
+		t.Fatalf("array form = %q, want two keyed tables", v.String())
+	}
+
+	// An unknown output name raises an error listing the configured ones.
+	_, err = EvalWithHosts(`return emb.image.embed("img", {output = "nope"})`, nil, nil, hosts, EvalOptions{})
+	if err == nil {
+		t.Fatal("unknown output name accepted")
+	}
+	for _, want := range []string{"nope", "embedding", "patches"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q should mention %q", err, want)
+		}
+	}
+}
+
+// TestImageInfoReportsOutputs covers emb.image.info's output list: name, tensor,
+// select, rows, dim, and grid for a token output.
+func TestImageInfoReportsOutputs(t *testing.T) {
+	hosts := Hosts{Image: scriptImageHost(t)}
+	v, err := EvalWithHosts(`
+local i = emb.image.info()
+return tostring(#i.outputs) .. ":" .. i.outputs[1].name .. ":" .. i.outputs[1].tensor
+    .. ":" .. i.outputs[2].select .. ":" .. tostring(i.outputs[2].rows) .. ":" .. tostring(i.outputs[2].grid)`,
+		nil, nil, hosts, EvalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "2:embedding:pooler_output:tokens:4:2" {
+		t.Fatalf("emb.image.info outputs = %q", v.String())
 	}
 }

@@ -42,8 +42,9 @@ redis-cli -3 EMB minilm VALUES "hello world"
 - **Multi-model queries** — `EMB.MULTI` calls different models in one command,
   with MGET-style partial failures.
 - **Image embeddings** — `EMB.IMG` / `EMB.IMGMULTI` take raw JPEG/PNG/GIF/WebP
-  bytes (no base64, no URLs), decode and preprocess server-side, and return
-  embeddings in the same `BLOB` / `VALUES` grammar.
+  bytes (no base64, no URLs), decode and preprocess server-side, and reply with
+  a map keyed by output name — so one model can serve a pooled vector and a
+  dense patch grid (DINOv3 does) from a single inference per image.
 - **Lua scripting** — pre/post-process around the model call: custom
   tokenization, pooling, argmax/softmax, similarity, and more.
 - **Ops-ready** — Redis-style `INFO` and `CONFIG`, `EMB.READY` health checks,
@@ -62,6 +63,7 @@ redis-cli -3 EMB minilm VALUES "hello world"
 |---|---|
 | [Commands](docs/commands.md) | Every command, reply formats (`BLOB` / `VALUES`), RESP3 negotiation |
 | [Configuration](docs/configuration.md) | Config file, model options, images, batching, cache, snapshots |
+| [Image models](docs/image-models.md) | The DINOv3 catalog and both published ONNX dialects, named outputs, presets, per-dialect config recipes |
 | [Scripting](docs/scripting.md) | Lua `EMB.EVAL` / `EMB.EVSHA` surface and examples |
 | [Operations](docs/operations.md) | Health checks, limits, observability, `emb-top`, and `emb-stress` against a fleet |
 | [Clients](docs/clients.md) | Ruby, Python, and Go recipes |
@@ -125,8 +127,8 @@ redis-cli EMB minilm "hello world"
 |---------|-------------|
 | `EMB <model> [BLOB\|VALUES] <text> [text...]` | Embed one or more texts |
 | `EMB.MULTI [BLOB\|VALUES] <model> <text> [<model> <text>...]` | Embed across different models in one call; per-pair nulls on failure |
-| `EMB.IMG <model> [BLOB\|VALUES] <bytes> [<bytes>...]` | Embed raw JPEG/PNG/GIF/WebP bytes (URLs rejected) |
-| `EMB.IMGMULTI [BLOB\|VALUES] <model> <bytes> [<model> <bytes>...]` | Embed images across different models |
+| `EMB.IMG <model> [BLOB\|VALUES] [OUTPUTS <name>,...] <bytes> [<bytes>...]` | Embed raw JPEG/PNG/GIF/WebP bytes (URLs rejected); replies a map keyed by output name |
+| `EMB.IMGMULTI [BLOB\|VALUES] [OUTPUTS <name>,...] <model> <bytes> [<model> <bytes>...]` | Embed images across different models, one keyed map per pair |
 | `EMB.MODELS` | List loaded models with dimensions and status |
 | `EMB.INFO <model>` | Model details, requests served, latency, live cache stats |
 | `EMB.STATS` | Uptime, requests, connections, per-model breakdown, RSS, CPU, goroutines |

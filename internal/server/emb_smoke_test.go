@@ -115,6 +115,19 @@ const (
 	// embFairAttempts is how many times the arm re-tries to park the wide head
 	// behind a holder before recording the assertion as unexercised.
 	embFairAttempts = 3
+	// embFairWindow bounds how long the arm waits for one observed gate state —
+	// the holder admitted, then the head queued — before it retries.
+	embFairWindow = 2 * time.Second
+	// embFairHoldTexts is how many copies of the longest text the holder sends in
+	// one command. The model batches, so the copies coalesce into one run that
+	// keeps one admission unit for several times a single run's cost: on a busy
+	// host the launch jitter can outlast one run, and a holder that has released
+	// before the wide head arrives parks nothing. One run, not several, so there
+	// is no gap between permits for the head to slip into.
+	embFairHoldTexts = 48
+	// embFairMaxBatch is the model's batch ceiling: the holder's copies have to
+	// coalesce into one run, so it must be at least embFairHoldTexts.
+	embFairMaxBatch = 64
 	// embAdmissionCommands is how many commands each admission burst offers:
 	// more than the pool can admit plus queue, so refusals are counted rather
 	// than raced.
@@ -686,7 +699,14 @@ func embModelConfig(preload bool, batching *int, maxBatch, workers, threads int)
 // requested text.
 func embEmbed(t *testing.T, addr string, texts ...string) [][]byte {
 	t.Helper()
-	args := append([]string{"EMB", embModelName}, texts...)
+	return embEmbedOn(t, addr, embModelName, texts...)
+}
+
+// embEmbedOn is embEmbed against a named model, for an arm that runs more than
+// one model over the same budget.
+func embEmbedOn(t *testing.T, addr, model string, texts ...string) [][]byte {
+	t.Helper()
+	args := append([]string{"EMB", model}, texts...)
 	reply, err := embAsk(addr, time.Now().Add(60*time.Second), args...)
 	if err != nil {
 		t.Fatalf("EMB %d text(s): %v", len(texts), err)
@@ -888,6 +908,25 @@ func embWatch(addr string, command []string, field string, interval time.Duratio
 	return func() int {
 		once.Do(func() { close(done) })
 		return int(max.Load())
+	}
+}
+
+// embAwait polls EMB.STATS until pred holds, returning the snapshot that did.
+// It reports the last snapshot it read with ok=false when d elapses, so a caller
+// that orders requests by observed server state can tell an observation from a
+// timeout instead of assuming a launch has already reached the gate.
+func embAwait(t *testing.T, addr string, d time.Duration, pred func(embSnapshot) bool) (embSnapshot, bool) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for {
+		snapshot := embTake(t, addr)
+		if pred(snapshot) {
+			return snapshot, true
+		}
+		if !time.Now().Before(deadline) {
+			return snapshot, false
+		}
+		time.Sleep(250 * time.Microsecond)
 	}
 }
 
@@ -1394,16 +1433,30 @@ func embLayoutConcurrency(t *testing.T, gate *embAssertions, fixture *embFixture
 // offers a narrow probe. Borrowing idle capacity serves the probe immediately;
 // a gate that only ever admits the head makes it wait out the holder and the
 // wide run, which is orders of magnitude more than its own measured serial cost.
+//
+// The three requests are ordered by what the server reports, not by sleeping
+// between launches: a launch only starts a dial, so on a busy host the wide head
+// can reach the gate after the holder has already finished. The head then never
+// parks, the arm records a skip, and a gate that skips this assertion cannot
+// catch the regression it exists for.
 func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 	t.Helper()
 	off := 0
 	calibrate := false
 	const wideModel = "wide"
+	const probeModel = "probe"
+	window := 2
 	arm := embStart(t, embArmOptions{
-		// Two sessions of one thread, so the holder cannot block the probe in the
-		// pool: the probe's wait is the gate's or nothing.
-		model:     embModelConfig(true, &off, 0, 2, 1),
-		extra:     map[string]config.ModelConfig{wideModel: embWideModelConfig(&off)},
+		// Three models, one budget. The holder batches, so its copies are one run
+		// long enough to outlast the launch jitter that used to release it before
+		// the head arrived. The probe is its own single-thread model, unbatched:
+		// neither the holder's pool nor its batching window can sit between the
+		// probe and the gate, so its latency is the gate's answer and nothing else.
+		model: embModelConfig(true, &window, embFairMaxBatch, 2, 1),
+		extra: map[string]config.ModelConfig{
+			wideModel:  embWideModelConfig(&off),
+			probeModel: embModelConfig(true, &off, 0, 1, 1),
+		},
 		budget:    embFairBudget,
 		calibrate: &calibrate,
 	})
@@ -1413,7 +1466,7 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 	samples := make([]time.Duration, 0, embSerialSamples)
 	for range embSerialSamples {
 		begin := time.Now()
-		_ = embEmbed(t, arm.addr, short)
+		_ = embEmbedOn(t, arm.addr, probeModel, short)
 		samples = append(samples, time.Since(begin))
 	}
 	serial := embPercentile(samples, 0.5)
@@ -1421,18 +1474,39 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 
 	detail := "the wide head never blocked (the holder had already finished before the wide run parked)"
 	for attempt := range embFairAttempts {
-		// Each attempt widens the window between the launches: on a slow host the
-		// holder is longer, but on a fast one the sleeps are what keep the head
-		// parked while the probe arrives.
-		gap := time.Duration(attempt+1) * 500 * time.Microsecond
 		before := embTake(t, arm.addr)
-		holder := embLaunch(arm.addr, 30*time.Second, "EMB", embModelName, long)
-		time.Sleep(gap)
+		hold := make([]string, embFairHoldTexts)
+		for i := range hold {
+			hold[i] = long
+		}
+		holder := embLaunch(arm.addr, 30*time.Second, append([]string{"EMB", embModelName}, hold...)...)
+		// The holder has to be admitted before the wide head is offered, and the
+		// head has to be queued before the probe is: the window is read from the
+		// gate's own counters. A retry drains what it launched first, so the next
+		// attempt starts from a quiet gate.
+		if _, ok := embAwait(t, arm.addr, embFairWindow, func(s embSnapshot) bool {
+			return s.activeToken > before.activeToken
+		}); !ok {
+			_, _, _ = holder()
+			detail = fmt.Sprintf("attempt %d: the holder never reached the gate", attempt)
+			continue
+		}
 		wide := embLaunch(arm.addr, 30*time.Second, "EMB", wideModel, short)
-		time.Sleep(gap)
+		if _, ok := embAwait(t, arm.addr, embFairWindow, func(s embSnapshot) bool {
+			return s.waiters > 0
+		}); !ok {
+			_, _, _ = holder()
+			_, _, _ = wide()
+			detail = fmt.Sprintf("attempt %d: the wide head never queued behind the holder", attempt)
+			continue
+		}
 		begin := time.Now()
-		probe, err := embAsk(arm.addr, time.Now().Add(30*time.Second), "EMB", embModelName, short)
+		probe, err := embAsk(arm.addr, time.Now().Add(30*time.Second), "EMB", probeModel, short)
 		probeLatency := time.Since(begin)
+		// Sample the queue before draining it: once holder() and wide() return,
+		// every waiter has been admitted and the depth reads zero whatever the
+		// probe actually met.
+		afterProbe := embTake(t, arm.addr)
 		_, holderLatency, holderErr := holder()
 		wideReply, wideLatency, wideErr := wide()
 		after := embTake(t, arm.addr)
@@ -1444,6 +1518,14 @@ func embFairness(t *testing.T, gate *embAssertions, fixture *embFixture) {
 		detail = fmt.Sprintf("attempt %d: the wide head never blocked; holder %s, wide %s, probe %s",
 			attempt, holderLatency, wideLatency, probeLatency)
 		if wideWait <= 0 {
+			continue
+		}
+		// An unproven window is not a failure: when the holder released before the
+		// probe reached the gate, the probe is measuring the wide run instead. A
+		// head still queued when the probe returned was parked for the whole probe,
+		// which is the state the property is about.
+		if afterProbe.waiters == 0 && probeLatency <= bound {
+			detail = fmt.Sprintf("attempt %d: the holder released before the probe reached the gate (probe %s)", attempt, probeLatency)
 			continue
 		}
 		// The head is parked: the probe's latency is the property under test.

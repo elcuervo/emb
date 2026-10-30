@@ -239,15 +239,20 @@ func (b *Bridge) handleExec(w http.ResponseWriter, r *http.Request) {
 
 // decodeBinary turns the request's base64 binary arguments into the raw bytes
 // emb expects. Binary is not a second command surface: it is admitted only for
-// a preloaded preset named on the allowlist, called by digest, and it is bounded
-// by the image caps. Everything else is refused before a byte reaches the
-// server, and the decoded indices are returned so the text-byte cap can skip
-// them.
+// a preloaded preset named on the allowlist, called by digest, and for the one
+// EMB.IMG shape that names the sandbox's own image model, and it is bounded by
+// the image caps. Everything else is refused before a byte reaches the server,
+// and the decoded indices are returned so the text-byte cap can skip them.
 func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
 	if len(req.Bin) == 0 {
 		return req.Args, nil, nil
 	}
 	if !b.isBinaryCall(req.Args) {
+		// The image family has its own sentence: a visitor who sent VALUES or
+		// another model needs to read the shape that works, not the preset rule.
+		if len(req.Args) > 0 && strings.EqualFold(req.Args[0], "emb.img") {
+			return nil, nil, fmt.Errorf("EMB.IMG accepts only <model> BLOB [OUTPUTS <name>[,<name>...]] with one image, for the sandbox's %s models", imageModelNames())
+		}
 		return nil, nil, fmt.Errorf("binary arguments are accepted only by the sandbox's image or audio preset")
 	}
 	if b.limits.MaxImages > 0 && len(req.Bin) > b.limits.MaxImages {
@@ -272,11 +277,16 @@ func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
 	return args, bin, nil
 }
 
-// isBinaryCall reports whether argv calls a preloaded preset named on the binary
-// allowlist by digest. The digest must be one the server preloaded and the preset
-// must be on the allowlist, so the binary transport cannot be pointed at a text
-// preset.
+// isBinaryCall reports whether argv is one of the two calls that may carry
+// image bytes: the sandbox's image preset, called by a digest the server
+// preloaded, or the framed image command naming the sandbox's own image model.
+// Both are on the allowlist, so the binary transport cannot be pointed at a text
+// command.
 func (b *Bridge) isBinaryCall(args []string) bool {
+	if len(args) >= 3 && strings.EqualFold(args[0], "emb.img") {
+		_, served := imageModels[strings.ToLower(args[1])]
+		return served && strings.EqualFold(args[2], "blob")
+	}
 	if len(args) < 4 || !strings.EqualFold(args[0], "emb.evsha") {
 		return false
 	}
@@ -296,7 +306,7 @@ func (b *Bridge) execute(args []string, proto int, client string, bin map[int]bo
 	if err != nil {
 		return capacityEnvelope(err), statusFor(codeCapacity)
 	}
-	if err := validateArgv(args, b.presets); err != nil {
+	if err := validateArgv(args, b.presets, bin); err != nil {
 		return errorEnvelope(codeRefused, err.Error()), http.StatusOK
 	}
 	if proto != 3 {
@@ -324,7 +334,7 @@ func (b *Bridge) execute(args []string, proto int, client string, bin map[int]bo
 		}
 		return errorEnvelope(codeUnavailable, err.Error()), statusFor(codeUnavailable)
 	}
-	env := toEnvelope(rep, isBlobEmbedding(args))
+	env := toEnvelope(rep, wantsBlob(args), isPairReply(args))
 	env.ElapsedUs = elapsed.Microseconds()
 	return env, http.StatusOK
 }
@@ -520,10 +530,19 @@ func (b *Bridge) clientKey(r *http.Request) string {
 	return host
 }
 
-// isBlobEmbedding reports whether a command asks for a binary embedding
-// (EMB/EMB.MULTI without the VALUES keyword), whose bulk payloads are bytes
-// rather than text.
-func isBlobEmbedding(args []string) bool {
+// isPairReply reports whether a command's reply is a name/value pair list. The
+// image command is the only one: its reply is a map under RESP3 and the same
+// pairs flat under RESP2, and either way the names are text.
+func isPairReply(args []string) bool {
+	return len(args) > 0 && strings.EqualFold(args[0], "emb.img")
+}
+
+// wantsBlob reports whether a command asked for bytes rather than text: EMB and
+// EMB.MULTI without VALUES, and the image command, whose only admitted format is
+// BLOB. The answer follows from the representation the command asked for, never
+// from the bytes it returned — a float32 grid can be valid UTF-8 by accident, and
+// a text round trip would then corrupt it.
+func wantsBlob(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
@@ -532,6 +551,8 @@ func isBlobEmbedding(args []string) bool {
 		return len(args) < 3 || !isFormat(args[2])
 	case "emb.multi":
 		return len(args) < 2 || !isFormat(args[1])
+	case "emb.img":
+		return true // validated above; BLOB is the only admitted format
 	default:
 		return false
 	}

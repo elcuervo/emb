@@ -59,11 +59,14 @@ const (
 )
 
 // toEnvelope converts an upstream reply. blob reports that the request asked
-// for a binary embedding (an EMB/EMB.MULTI BLOB reply): its bulk payloads are
-// bytes, never text, so they are always carried base64 with a vector
-// descriptor rather than round-tripped through a text encoding that could
-// replace an invalid sequence.
-func toEnvelope(r resp.Reply, blob bool) Envelope {
+// for bytes (an EMB/EMB.MULTI BLOB reply or the image command, which admits
+// only BLOB): its bulk payloads are bytes, never text, so they are always
+// carried base64 with a vector descriptor rather than round-tripped through a
+// text encoding that could replace an invalid sequence. pairs reports that the
+// reply is a name/value pair list — RESP3's map or RESP2's flat array — whose
+// even elements are names, not payloads, so a name stays text even when the
+// values beside it are bytes.
+func toEnvelope(r resp.Reply, blob, pairs bool) Envelope {
 	switch r.Type {
 	case '+':
 		return Envelope{Kind: kindStatus, Text: r.Str}
@@ -90,21 +93,18 @@ func toEnvelope(r resp.Reply, blob bool) Envelope {
 		return Envelope{Kind: kindDouble, Float: &f}
 	case '_':
 		return Envelope{Kind: kindNil}
-	case '*':
-		if r.Nil {
+	case '*', '%':
+		if r.Type == '*' && r.Nil {
 			return Envelope{Kind: kindNil}
 		}
 		elems := make([]Envelope, len(r.Elems))
 		for i, el := range r.Elems {
-			elems[i] = toEnvelope(el, blob)
+			elems[i] = toEnvelope(el, blob && (!pairs || i%2 == 1), false)
+		}
+		if r.Type == '%' {
+			return Envelope{Kind: kindMap, Elems: elems}
 		}
 		return Envelope{Kind: kindArray, Elems: elems}
-	case '%':
-		elems := make([]Envelope, len(r.Elems))
-		for i, el := range r.Elems {
-			elems[i] = toEnvelope(el, blob)
-		}
-		return Envelope{Kind: kindMap, Elems: elems}
 	default:
 		return Envelope{Kind: kindError, Text: "unknown reply kind", Code: codeUnavailable}
 	}

@@ -40,6 +40,10 @@ website/
 │   ├── js/tldr.js          the read-mode switch on /demos, /docs and /gem:
 │   │                       one remembered preference that reveals each
 │   │                       surface's `.tldr` gist and hides its long form
+│   ├── vendor/three-0.170.0/ three.js r170's ESM build, vendored from the npm
+│   │                       release beside its MIT licence; the plate renders its
+│   │                       layer stack with it, and the directory carries the
+│   │                       release, so a new one is a new file
 │   ├── vendor/sqlite-wasm-vec-0.1.9/
 │   │                       sqlite-vec in the browser, vendored from the npm
 │   │                       release pinned in `flake.nix` and re-vendored by
@@ -362,15 +366,19 @@ than enforced by a job. On the tree this change ships:
 
 ```bash
 ~/.pi/agent/skills/impeccable/scripts/impeccable detect website
-# 2 anti-patterns found.
+# 199 anti-patterns found.
 # 12 advisory notes (not counted).
 ```
 
-Every rule is at zero except the two `cream-palette` warnings, and they are the
-world's own ground rather than a defect: `#F3F0E8` is the beige the site is built
-on, and the rule fires on the two files that declare a *page* background
-(`tools/ink-probe.html`, `tools/og-card.html`) — the served pages take their
-ground from `styles.css`, which the rule does not read as a page background. The
+The 199 are the shell's own set, repeated per page: `cramped-padding` 110 (the
+`.block` insets), `clipped-overflow-container` 43 (the skip link against the
+`html`/`body` clip), `wide-tracking` 25 (the shell's tracked label rule),
+`all-caps-body` 19 (the plates' short uppercase heads read as body by the rule)
+and 2 `cream-palette` warnings, which are the world's own ground rather than a
+defect: `#F3F0E8` is the beige the site is built on, and the rule fires on the two
+files that declare a *page* background (`tools/ink-probe.html`,
+`tools/og-card.html`) — the served pages take their ground from `styles.css`,
+which the rule does not read as a page background. The
 ground is a decision, so it is left standing and not silenced with an
 `impeccable ignores` entry: an ignore rule would also hide the next real finding
 on those two files. The twelve advisories are `em-dash-overuse`, advisory by the
@@ -1274,6 +1282,22 @@ left out. Every rendered control is at least 44px tall at 320–834px.
   modifications, Latin-only). A font subset is versioned by its file, which is
   why `_headers` may pin `/assets/fonts/*` immutable: re-vendoring a face means
   a new file beside it, never new bytes under the same name.
+- `assets/vendor/three-0.170.0/three.module.min.mjs` is **three.js r170**
+  (`three@0.170.0/build/three.module.min.js`, MIT, `LICENSE` beside it). It is
+  the only third-party script the plates import, and it is committed rather than
+  loaded from a CDN:
+
+  ```bash
+  curl -fsSL -o website/assets/vendor/three-0.170.0/three.module.min.mjs \
+    https://unpkg.com/three@0.170.0/build/three.module.min.js
+  # sha256 08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7
+  ```
+
+  One plate uses it, so it is imported by that page's module alone and never by
+  the shared gallery client. It is `.mjs` on purpose: `/assets/vendor/*` is
+  pinned immutable because its directory name carries the release, and the
+  published-tree check refuses an immutable `.js` under a stable name — the
+  release directory plus a non-`.js` suffix is what keeps both true.
 - `terrain-v2.png` was made with the built-in image generation tool using the
   supplied poster as a visual reference. Prompts and provenance are recorded
   in [`assets/img/terrain-v2.md`](assets/img/terrain-v2.md). It is kept as the

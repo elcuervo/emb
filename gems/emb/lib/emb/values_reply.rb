@@ -17,7 +17,11 @@ module Emb
       pairs = reply.is_a?(Hash) ? reply : reply.each_slice(2).to_h
       shape = pairs.fetch('shape')
       values = Array(pairs.fetch('values')).map { |v| float_value(v) }
-      { dtype: pairs.fetch('dtype'), shape: shape, values: values }
+      envelope = { dtype: pairs.fetch('dtype'), shape: shape, values: values }
+      # A token output's envelope also carries its patch grid; text and pooled
+      # image envelopes do not, so the key appears only when the server sent it.
+      envelope[:grid] = pairs['grid'] if pairs.key?('grid')
+      envelope
     end
 
     # rows reshapes flat values into per-text rows using shape [m, dim].
@@ -26,10 +30,10 @@ module Emb
       values.each_slice(dim).to_a
     end
 
-    def float_value(v)
-      Float(v)
+    def float_value(value)
+      Float(value)
     rescue ArgumentError, TypeError
-      raise ArgumentError, "EMB VALUES: unparsable decimal value #{v.inspect} (expected a numeric bulk string)"
+      raise ArgumentError, "EMB VALUES: unparsable decimal value #{value.inspect} (expected a numeric bulk string)"
     end
   end
 end

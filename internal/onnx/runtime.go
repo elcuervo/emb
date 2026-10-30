@@ -35,19 +35,57 @@ type RuntimeSession struct {
 	outFlat   int
 }
 
-func NewRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*RuntimeSession, error) {
+// NewRuntimeSessionFromBytes opens an embedding session from ONNX bytes.
+// modelPath is the file the bytes came from (or "" for inline test bytes); its
+// directory is where ORT resolves external initializers, so a graph whose
+// weights live in a sidecar loads independently of the working directory.
+func NewRuntimeSessionFromBytes(data []byte, modelPath string, inputNames, outputNames []string, dim int, outputRank int, intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*RuntimeSession, error) {
 	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode, allowSpinning)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = opts.Destroy() }()
+	if err := applyExternalInitializersFolder(opts, modelPath); err != nil {
+		return nil, err
+	}
 
 	session, err := ort.NewDynamicAdvancedSessionWithONNXData(data, inputNames, outputNames, opts)
 	if err != nil {
-		return nil, fmt.Errorf("creating session: %w", err)
+		return nil, sessionCreateError(modelPath, err)
 	}
 
 	return newRuntimeSession(session, inputNames, dim, outputRank), nil
+}
+
+// externalInitializersFolderKey is the session option that tells ORT where a
+// graph's external initializers (for example a `<graph>.onnx.data` sidecar
+// written beside it) live. Without it ORT resolves the sidecar against the
+// process working directory, so a from-bytes session fails whenever that is not
+// the model's directory. The sidecar's own name comes from the graph; only the
+// directory is supplied here.
+const externalInitializersFolderKey = "session.model_external_initializers_file_folder_path"
+
+// applyExternalInitializersFolder points opts at modelPath's directory when a
+// model path is known. An empty path (inline test bytes) leaves opts untouched.
+func applyExternalInitializersFolder(opts *ort.SessionOptions, modelPath string) error {
+	if modelPath == "" {
+		return nil
+	}
+	dir := filepath.Dir(modelPath)
+	if err := opts.AddSessionConfigEntry(externalInitializersFolderKey, dir); err != nil {
+		return fmt.Errorf("setting external initializers folder %q for %q: %w", dir, modelPath, err)
+	}
+	return nil
+}
+
+// sessionCreateError names the model and its external-initializer directory so
+// a missing sidecar reads as the file problem it is, not a generic load failure.
+func sessionCreateError(modelPath string, err error) error {
+	if modelPath == "" {
+		return fmt.Errorf("creating session: %w", err)
+	}
+	return fmt.Errorf("creating session for %q (external initializers folder %q): %w",
+		modelPath, filepath.Dir(modelPath), err)
 }
 
 func newSessionOptions(intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*ort.SessionOptions, error) {

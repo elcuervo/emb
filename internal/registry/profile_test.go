@@ -15,7 +15,7 @@ func TestCapacityProfiles(t *testing.T) {
 	t.Cleanup(func() { newNamedSession = orig })
 
 	run := func(cfg config.ModelConfig) (spinning []bool, res *ScriptResources) {
-		newNamedSession = func(_ []byte, _, _ []string, _, _, _ int, allowSpinning bool) (onnx.NamedSession, error) {
+		newNamedSession = func(_ []byte, _ string, _, _ []string, _, _, _ int, allowSpinning bool) (onnx.NamedSession, error) {
 			spinning = append(spinning, allowSpinning)
 			return &fakeNamedSession{}, nil
 		}

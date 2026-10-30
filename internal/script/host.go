@@ -109,6 +109,18 @@ type Hosts struct {
 	Config map[string]any
 }
 
+// ImageOutputInfo describes one of a model's image products for scripts: the
+// reply name, the graph tensor behind it, the selector, and the shape one image
+// yields.
+type ImageOutputInfo struct {
+	Name   string
+	Tensor string
+	Select string
+	Rows   int
+	Grid   int
+	Dim    int
+}
+
 // ImageHost exposes a model's image preprocessing to scripts. Plan resolves
 // the model's immutable preprocessing plan lazily, without opening inference
 // sessions, so emb.image.info can report configuration while image sessions
@@ -118,10 +130,13 @@ type Hosts struct {
 type ImageHost struct {
 	Plan       func() (imageproc.Plan, error)
 	Preprocess func(data []byte) ([]float32, error)
-	// Embed returns pooled, normalized image embeddings for raw encoded image
-	// bytes, in the model's shared text/image embedding space. Nil makes
-	// emb.image.embed unavailable.
-	Embed func(images [][]byte) ([][]byte, error)
+	// Outputs reports the model's configured image products without opening a
+	// session, so emb.image.info can list them.
+	Outputs func() ([]ImageOutputInfo, error)
+	// Embed returns each image's products keyed by output name, in the model's
+	// shared text/image embedding space, restricted to outputs (empty = every
+	// configured output). Nil makes emb.image.embed unavailable.
+	Embed func(images [][]byte, outputs []string) ([]map[string][]byte, error)
 }
 
 // registerHosts installs the whitelisted emb.* and json host functions into
@@ -457,6 +472,27 @@ func imageInfoHost(ls *lua.LState, ih *ImageHost) int {
 	}
 	result.RawSetString("mean", mean)
 	result.RawSetString("std", std)
+	if ih.Outputs != nil {
+		outputs, err := ih.Outputs()
+		if err != nil {
+			ls.RaiseError("emb.image.info: %v", err)
+			return 0
+		}
+		list := ls.NewTable()
+		for i, o := range outputs {
+			entry := ls.NewTable()
+			entry.RawSetString("name", lua.LString(o.Name))
+			entry.RawSetString("tensor", lua.LString(o.Tensor))
+			entry.RawSetString("select", lua.LString(o.Select))
+			entry.RawSetString("rows", lua.LNumber(o.Rows))
+			entry.RawSetString("dim", lua.LNumber(o.Dim))
+			if o.Select == "tokens" {
+				entry.RawSetString("grid", lua.LNumber(o.Grid))
+			}
+			list.RawSetInt(i+1, entry)
+		}
+		result.RawSetString("outputs", list)
+	}
 	ls.Push(result)
 	return 1
 }

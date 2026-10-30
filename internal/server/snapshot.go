@@ -424,15 +424,14 @@ func readSnapshot(path string, maxBytes int64, current map[string]registry.Model
 		// snapshot's stored fingerprint exactly. Embedding values are additionally
 		// checked against the model's dimension; an opaque script reply has no
 		// dimension to check and is gated by the fingerprint alone.
-		embedding := embeddingCacheKey(key)
 		if cur.Loaded {
-			if _, ok := compatible[model]; !ok || (embedding && len(value) != cur.Dim*4) {
+			if _, ok := compatible[model]; !ok || !validCacheValueLength(key, value, cur.Dim) {
 				result.SkippedFingerprint++
 				continue
 			}
 		} else {
 			hfp, ok := headerFP[model]
-			if !ok || hfp.Dim != cur.Dim || (embedding && len(value) != cur.Dim*4) {
+			if !ok || hfp.Dim != cur.Dim || !validCacheValueLength(key, value, cur.Dim) {
 				result.SkippedFingerprint++
 				continue
 			}

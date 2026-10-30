@@ -68,17 +68,23 @@ type NamedRuntimeSession struct {
 // NewNamedRuntimeSessionFromBytes opens a scripted-model session from ONNX
 // bytes. The intra/inter-op thread and execution-mode options mirror
 // NewRuntimeSessionFromBytes. allowSpinning maps to ORT
-// session.intra_op.allow_spinning.
-func NewNamedRuntimeSessionFromBytes(data []byte, inputNames, outputNames []string, intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*NamedRuntimeSession, error) {
+// session.intra_op.allow_spinning. modelPath is the file the bytes came from
+// (or "" for inline test bytes); its directory is where ORT resolves external
+// initializers, so a graph whose weights live in a sidecar loads independently
+// of the working directory.
+func NewNamedRuntimeSessionFromBytes(data []byte, modelPath string, inputNames, outputNames []string, intraOpThreads, interOpThreads int, execMode int, allowSpinning bool) (*NamedRuntimeSession, error) {
 	opts, err := newSessionOptions(intraOpThreads, interOpThreads, execMode, allowSpinning)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = opts.Destroy() }()
+	if err := applyExternalInitializersFolder(opts, modelPath); err != nil {
+		return nil, err
+	}
 
 	session, err := ort.NewDynamicAdvancedSessionWithONNXData(data, inputNames, outputNames, opts)
 	if err != nil {
-		return nil, fmt.Errorf("creating session: %w", err)
+		return nil, sessionCreateError(modelPath, err)
 	}
 	return &NamedRuntimeSession{
 		session:    session,

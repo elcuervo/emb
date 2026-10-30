@@ -174,11 +174,9 @@ func serveTelemetryRecordTest(t *testing.T, opts ...Option) (string, *Server) {
 		Dim:  4,
 		Pool: pool,
 		ImageRes: &registry.ImageResources{
-			Sessions:     []onnx.NamedSession{&fakeImageSession{dim: testImageDim}},
-			Plan:         testImagePlan(4),
-			OutputTensor: "image_embeds",
-			Pooling:      "none",
-			Dim:          testImageDim,
+			Sessions: []onnx.NamedSession{&fakeImageSession{dim: testImageDim}},
+			Plan:     testImagePlan(4),
+			Outputs:  []registry.ImageOutput{{Name: "embedding", Tensor: "image_embeds", Select: "none", Rows: 1, Dim: testImageDim}},
 		},
 	})
 
@@ -208,8 +206,8 @@ func TestRecordRequestObservesEveryInferenceCommand(t *testing.T) {
 	if got := doCmd(t, c, "EMB", "test", "hello"); !strings.HasPrefix(got, "$") {
 		t.Fatalf("EMB reply = %q", got)
 	}
-	if got := doCmd(t, c, "EMB.IMG", "test", solidImagePNG(t, color.White)); !strings.HasPrefix(got, "$") {
-		t.Fatalf("EMB.IMG reply = %q", got)
+	if got := doCmd(t, c, "EMB.IMG", "test", solidImagePNG(t, color.White)); !strings.HasPrefix(got, "*2\r\n") {
+		t.Fatalf("EMB.IMG reply = %q, want a one-key map", got)
 	}
 	if got := doCmd(t, c, "EMB.EVAL", "test", "return 1", "1", "x"); got != ":1\r\n" {
 		t.Fatalf("EMB.EVAL reply = %q", got)

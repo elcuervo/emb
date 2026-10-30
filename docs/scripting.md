@@ -38,7 +38,7 @@ value per text. The whitelisted host blocks:
 | `emb.run(spec [, opts])` | Named-tensor inference → `{name = {shape, data, dtype}}` per output; `opts = {bytes = true, outputs = {"name", ...}}` |
 | `emb.run_batch({item, ...} [, opts])` | One model call for N items (padded into a single session run; one run per item for graphs with `DynamicQuantizeLinear`, whose output depends on batch composition), same `opts` |
 | `emb.embed(text \| {texts...} [, {bytes = true}])` | **Pooled, normalized embedding(s)** through the server's embedding path: shares the batcher, the `model:text` cache, and the ORT sessions with `EMB` |
-| `emb.image.embed(bytes \| {bytes...} [, {bytes = true}])` | Pooled image embedding(s) from the model's image branch, in the same space as `emb.embed` (URLs rejected) |
+| `emb.image.embed(bytes \| {bytes...} [, {output = name, bytes = true}])` | The model's image products, keyed by output name (`{embedding = {...}, patches = {...}}`), in the same space as `emb.embed` (URLs rejected). `output = <name>` returns that one value; an unknown name raises an error listing the configured outputs |
 | `emb.similarity(a, b [, metric])` | **Higher = more similar**: `cosine` (default), `dot` |
 | `emb.distance(a, b [, metric])` | **Lower = closer**: `l2` (default), `l2sq`, `cosine` (= `1 − cosine`) |
 | `emb.tokenize.encode(text, max_len)` | The model tokenizer's own pipeline → `{ids, mask, offsets}` |
@@ -51,7 +51,7 @@ value per text. The whitelisted host blocks:
 | `emb.math.{topk, gather, slice, scale, add}` | Selection/arithmetic without interpreted loops (scalar arguments must be integers) |
 | `emb.math.float32_bytes(vals)` | Pack numbers into ONE little-endian float32 bulk (`unpack('e*')`) |
 | `emb.image.preprocess(bytes)` | Decode and preprocess raw image bytes with the model's `image:` plan → `{shape, bytes, dtype, input}` ready for `emb.run` |
-| `emb.image.info()` | The model's configured image preprocessing parameters (`input`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`) |
+| `emb.image.info()` | The model's configured image preprocessing parameters (`input`, `size`, `crop`, `resample`, `rescale`, `mean`, `std`) plus its `outputs` list (`name`, `tensor`, `select`, `rows`, `dim`, and `grid` for a token output) |
 | `emb.API_VERSION` | The server's version — the release's `VERSION`, the same value `INFO` reports as `emb_version` — for scripts that must detect an older server |
 | `json.{encode, decode, null}` | Structured replies / parsing; `json.null` is the unique null sentinel (arrays round-trip) |
 

@@ -7,10 +7,10 @@ Full reference for the `emb` command surface. See the
 |---------|-------------|
 | `EMB <model> [BLOB\|VALUES] <text> [text...]` | Embed one or more texts. Default `BLOB`: single text → bulk string, multiple → array of bulk strings (float32 bytes). `VALUES`: `dtype`/`shape`/`values` envelope with decimal values |
 | `EMB.MULTI [BLOB\|VALUES] <model> <text> [<model> <text>...]` | Embed texts across different models in one call; per-pair `VALUES` envelopes (with `model`) or null on failure |
-| `EMB.IMG <model> [BLOB\|VALUES] <bytes> [<bytes>...]` | Embed one or more images from raw JPEG/PNG/GIF/WebP bytes (each a binary-safe bulk). `BLOB`: single image → bulk, multiple → array with nulls for failed/truncated slots; `VALUES`: one `[m, dim]` envelope over processed images. URLs are rejected |
-| `EMB.IMGMULTI [BLOB\|VALUES] <model> <bytes> [<model> <bytes>...]` | Embed images across different models in one call; MGET-style per-pair nulls, per-pair `VALUES` envelopes (with `model`) |
+| `EMB.IMG <model> [BLOB\|VALUES] [OUTPUTS <name>[,<name>...]] <bytes> [<bytes>...]` | Embed one or more images from raw JPEG/PNG/GIF/WebP bytes (each a binary-safe bulk). The reply is keyed by output name: one image → a map, several → an array of maps, null for failed/truncated slots. `OUTPUTS` narrows the projection (absent = every configured output). URLs are rejected |
+| `EMB.IMGMULTI [BLOB\|VALUES] [OUTPUTS <name>[,<name>...]] <model> <bytes> [<model> <bytes>...]` | Embed images across different models in one call; one keyed map per pair, MGET-style per-pair nulls, and under `VALUES` each pair carries its `model` beside its outputs |
 | `EMB.MODELS` | List loaded models with dimensions and status |
-| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, the embedding path's dispatch/admission/run timings and runs, and that model's own cache stats (hits, misses, rate, evictions, entries, bytes) |
+| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, the embedding path's dispatch/admission/run timings and runs, `image_outputs` (each configured image product's tensor, selector, rows, dim and grid — read without running inference), and that model's own cache stats (hits, misses, rate, evictions, entries, bytes) |
 | `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown, CPU allowance/budget/active peak, cache/connection limits, mem (RSS MB), CPU user/sys usec, goroutines |
 | `MONITOR [seq] [limit]` | Recent completed-request events from a bounded ring: `seq`, `at_us` (µs), `model`, `texts`, `latency_us`, `err`, then the request's own attribution — `cached_texts` (how many of its texts the reply cache answered), `attributed` (whether the server measured its phases), `dispatch_us`, `admit_us`, `run_us`. Eleven fields in that closed order, a flat array under RESP2 and a map with the same names under RESP3; the five attribution fields are appended after `err`, so a client reading the original six positionally is unaffected. Incremental (`seq`) fetch; no text payloads |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
@@ -120,8 +120,12 @@ client just sends the file:
 # redis-cli -x reads the last argument from stdin:
 cat cat.jpg | redis-cli -x EMB.IMG siglip2
 
-# multiple images → one embedding slot each (null on a failed/truncated slot):
+# multiple images → one keyed map each (null on a failed/truncated slot):
 redis-cli EMB.IMG siglip2 <cat.jpg bytes> <dog.png bytes>
+
+# a model with two products: a pooled vector and a 14x14 patch grid
+redis-cli EMB.IMG dinov3 <cat.jpg bytes>
+redis-cli EMB.IMG dinov3 OUTPUTS patches <cat.jpg bytes>
 
 # cross-model, MGET-style per-pair nulls:
 redis-cli EMB.IMGMULTI clip <cat.jpg bytes> siglip2 <dog.png bytes>
@@ -129,15 +133,80 @@ redis-cli EMB.IMGMULTI clip <cat.jpg bytes> siglip2 <dog.png bytes>
 
 The server decodes the image (PNG/JPEG/GIF/WebP), resizes/crops, rescales, and
 normalizes it to the model's `pixel_values` tensor (`[1, 3, H, W]` float32 RGB),
-then runs **one batched inference** for all images in the command. The reply is
-the same `BLOB`/`VALUES` grammar as text (`EMB.IMG` takes the keyword at
-position 2, `EMB.IMGMULTI` at position 1).
+then runs **one batched inference** for all images in the command, reading every
+requested output from that same run. The chunk is bounded by the session batch
+axis the graph declares, so a static batch-1 export (a kornia DINOv3 ONNX) runs
+one image per session and still serves every slot.
+
+### Grammar
+
+`EMB.IMG <model> [BLOB|VALUES] [OUTPUTS <name>[,<name>...]] <bytes>...`
+
+Both keywords sit in fixed positions: the reply format first, then `OUTPUTS`,
+both before the first image argument. A keyword is only recognized when an image
+argument follows it, so a trailing `VALUES` is an image, not a keyword.
+`EMB.IMGMULTI` takes the same two keywords at position 1, before its first
+model. Names are deduped and served in configured order; a name the model does
+not configure fails the command (naming the configured outputs) before any image
+is decoded. `EMB.IMGMULTI` narrows per pair, so a name one pair's model lacks
+nulls only that pair.
+
+`outputs` is a reserved model name, alongside `blob` and `values`.
+
+### The reply is keyed by output name
+
+```
+one image       -> a map: {output_name: value, ...}
+several images  -> an array of those maps, in request order, null per failed slot
+value, BLOB     -> raw little-endian float32 bytes (rows * dim * 4)
+value, VALUES   -> {dtype, shape, values [, grid]}
+grid            -> [h, w] only on a token output
+```
+
+```text
+# RESP2: one image, one output — a flat name/value array
+EMB.IMG siglip2 <bytes>
+*2
+$9 embedding
+$3072            # 768 float32 values
+...
+
+# RESP2: one image, two outputs — still one flat map
+EMB.IMG dinov3 OUTPUTS embedding,patches <bytes>
+*4
+$9  embedding
+$1536           # 384 floats
+$7  patches
+$677376         # 441 rows * 384 floats
+...
+
+# RESP2: two images — an array of two such maps
+EMB.IMG dinov3 <a bytes> <b bytes>
+*2
+*4 ... (map a)
+*4 ... (map b)
+
+# RESP3 (HELLO 3): real maps, nested all the way
+%1
+$7 patches
+...
+```
+
+A client therefore reads `reply["embedding"]` whether the model configures one
+output or five; there is no positional form and no single-output compact form.
+The same name/value shape is what `MONITOR` and `EMB.INFO` already return.
+
+`VALUES` on a grid is large (~4.5× the `BLOB` equivalent, because decimal
+floats): `BLOB` stays the documented default for token outputs. See
+[docs/image-models.md](image-models.md#reply-sizes) for per-model sizes.
 
 **Bytes only — the server never fetches URLs.** An `http(s):` or `data:` URI
 argument is rejected with an error telling the client to fetch the image and
 send its bytes. This keeps the request path network-free (no SSRF surface) and
-makes image caching optimal: entries are keyed `img:<model>:sha256(bytes)`, so a
-changed image is always a different key and a hit costs no decode or network.
+makes image caching optimal: entries are keyed
+`img:<model>:sha256(bytes):<output>`, so a changed image is always a different
+key, each output is cached on its own, and a hit costs no decode or network.
+Per-model stats and `EMB.CACHE.FLUSH <model>` cover every output of that model.
 
 Image limits are configurable and enforced before decode/inference:
 `max_images` (default 4096, `0` = unlimited), `max_image_bytes` (default 32 MiB),
@@ -145,9 +214,11 @@ Image limits are configurable and enforced before decode/inference:
 command-wide `max_command_bytes` (default 64 MiB). A single bad or oversized
 image fails only its own slot; overflow images past `max_images` are truncated
 to null slots without being decoded. The command's one batched run must return
-one output row per image; an output whose batch dimension disagrees is refused
-(the server never pools or reads past the tensor) with
-`image output "<tensor>" has batch dimension <received>, want <expected>`.
+one slot per image; an output whose batch dimension disagrees is refused (the
+server never pools or reads past the tensor) with
+`image output "<name>" has batch dimension <received>, want <expected>`, and a
+token output whose row count disagrees with `start`/`grid` is refused with both
+counts named.
 See [Configuration](configuration.md).
 
 ## Reply formats: BLOB and VALUES

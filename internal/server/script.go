@@ -449,7 +449,20 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 				plan.MaxPixels = s.maxImagePixels.Load()
 				return plan.Tensor(data)
 			},
-			Embed: func(images [][]byte) ([][]byte, error) {
+			Outputs: func() ([]script.ImageOutputInfo, error) {
+				outs, err := entry.ImageOutputs()
+				if err != nil {
+					return nil, err
+				}
+				infos := make([]script.ImageOutputInfo, len(outs))
+				for i, o := range outs {
+					infos[i] = script.ImageOutputInfo{
+						Name: o.Name, Tensor: o.Tensor, Select: o.Select, Rows: o.Rows, Grid: o.Grid, Dim: o.Dim,
+					}
+				}
+				return infos, nil
+			},
+			Embed: func(images [][]byte, names []string) ([]map[string][]byte, error) {
 				r, err := resolveImage()
 				if err != nil {
 					return nil, err
@@ -460,7 +473,11 @@ func (s *Server) evalScripted(model, src, sha string, config map[string]any, dig
 				if limit := s.maxImages.Load(); limit > 0 && int64(len(images)) > limit {
 					return nil, fmt.Errorf("too many images: %d (max %d)", len(images), limit)
 				}
-				results, _, errs := s.embedImages(model, r, images)
+				outputs, err := selectImageOutputs(r.Outputs, names)
+				if err != nil {
+					return nil, err
+				}
+				results, _, errs := s.embedImages(model, r, outputs, images)
 				for i, e := range errs {
 					if e != nil {
 						return nil, fmt.Errorf("image %d: %w", i, e)

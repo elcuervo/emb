@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 // surface is the permitted command set, quoted in every refusal so a refusal
 // points at what is available rather than being silent.
-const surface = "PING, HELLO 2|3, EMB, EMB.MULTI, EMB.MODELS, EMB.INFO, EMB.STATS, EMB.READY, EMB.HELP, EMB.EVSHA (preloaded presets only), INFO"
+const surface = "PING, HELLO 2|3, EMB, EMB.MULTI, EMB.MODELS, EMB.INFO, EMB.STATS, EMB.READY, EMB.HELP, EMB.EVSHA (preloaded presets only), EMB.IMG (one image, the sandbox's depth model, BLOB only), INFO"
 
 // presets maps a model to the digests the server preloaded for it, each to the
 // preset's name. A preset is callable only when its model and digest both
@@ -27,25 +28,44 @@ var refusedFamilies = map[string]string{
 	"emb.cache.flush": "shared state is not visitor-mutable",
 	"emb.script":      "script loading and flushing are not exposed",
 	"emb.eval":        "raw Lua is not accepted; call a preloaded preset by digest",
-	"emb.img":         "image decoding is not exposed",
-	"emb.imgmulti":    "image decoding is not exposed",
+	"emb.imgmulti":    "one image per call is the whole image surface",
+}
+
+// imageModels is the single image branch the site exposes, with the outputs its
+// sandbox config declares: the depth entry (one 2-D map). The plate names it; a
+// model the sandbox serves for text is not an image surface, and a second name
+// is a config-and-allowlist change, not a widening at runtime.
+var imageModels = map[string]map[string]bool{
+	"depth": {"depth": true},
+}
+
+// imageModelNames lists the permitted models for a refusal.
+func imageModelNames() string {
+	return "depth"
+}
+
+// imageOutputList lists a model's outputs for a refusal, sorted.
+func imageOutputList(outputs map[string]bool) string {
+	names := make([]string, 0, len(outputs))
+	for name := range outputs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // validateArgv checks the whole argument vector against the fixed showcase
 // surface. It refuses an unknown command, a refused family, a permitted
 // command whose shape was widened, and a preset call that names anything but a
-// preloaded digest.
-func validateArgv(args []string, p presets) error {
+// preloaded digest. bin names the arguments the bridge decoded from base64, so
+// the image command can require its image to arrive as bytes rather than text.
+func validateArgv(args []string, p presets, bin map[int]bool) error {
 	if len(args) == 0 {
 		return fmt.Errorf("empty command: the sandbox permits only %s", surface)
 	}
 	name := strings.ToLower(args[0])
 	if why, ok := refusedFamilies[name]; ok {
 		return refuse("%s is not permitted: %s", strings.ToUpper(args[0]), why)
-	}
-	// EMB.IMG and its variants are one refused family, however they are spelled.
-	if strings.HasPrefix(name, "emb.img") {
-		return refuse("%s is not permitted: image decoding is not exposed", strings.ToUpper(args[0]))
 	}
 	switch name {
 	case "ping":
@@ -96,6 +116,8 @@ func validateArgv(args []string, p presets) error {
 		if len(args[start:]) < 2 || len(args[start:])%2 != 0 {
 			return refuse("EMB.MULTI takes <model> <text> pairs")
 		}
+	case "emb.img":
+		return validateImageCommand(args, bin)
 	case "emb.evsha":
 		// EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>
 		if len(args) < 4 {
@@ -114,6 +136,47 @@ func validateArgv(args []string, p presets) error {
 		}
 	default:
 		return refuse("unknown command %q", strings.ToUpper(args[0]))
+	}
+	return nil
+}
+
+// validateImageCommand admits exactly one EMB.IMG shape:
+//
+//	EMB.IMG <imageModel> BLOB [OUTPUTS <name>[,<name>...]] <one image>
+//
+// The image must be the command's binary argument, so a URL or a sentence is
+// refused before the server could decode or fetch it, and everything else in the
+// family (VALUES, EMB.IMGMULTI, another model, other outputs, a second image)
+// stays out of the surface.
+func validateImageCommand(args []string, bin map[int]bool) error {
+	if len(args) < 4 {
+		return refuse("EMB.IMG needs <model> BLOB [OUTPUTS <name>[,<name>]] <image>")
+	}
+	if !strings.EqualFold(args[2], "blob") {
+		return refuse("EMB.IMG accepts only BLOB; a VALUES image reply is not available")
+	}
+	model := strings.ToLower(args[1])
+	outputs, ok := imageModels[model]
+	if !ok {
+		return refuse("EMB.IMG serves only the sandbox's own image models (%s), not %q", imageModelNames(), args[1])
+	}
+	image := 3
+	if strings.EqualFold(args[3], "outputs") {
+		if len(args) < 6 {
+			return refuse("EMB.IMG OUTPUTS needs a name list and one image")
+		}
+		for _, name := range strings.Split(args[4], ",") {
+			if !outputs[name] {
+				return refuse("EMB.IMG serves only %s's configured outputs (%s); %q is not one", model, imageOutputList(outputs), name)
+			}
+		}
+		image = 5
+	}
+	if len(args) != image+1 {
+		return refuse("EMB.IMG takes exactly one image per call")
+	}
+	if !bin[image] {
+		return refuse("EMB.IMG takes the image as its binary argument (bin), not as text or a URL")
 	}
 	return nil
 }
