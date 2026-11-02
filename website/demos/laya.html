@@ -6,12 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — the decision engine: typed questions, one forward pass</title>
 <link rel="canonical" href="https://emb.is/demos/laya.html">
-<meta name="description" content="Laya is a decision model. A state goes in; a tree of typed questions — choice, score, noul — is answered by one forward pass. See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.">
+<meta name="description" content="Laya is a decision model. A state goes in; one forward pass answers a tree of typed questions (choice, score, noul). See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — the decision engine: typed questions, one forward pass">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="One state, a tree of typed questions, one forward pass, typed answers. Snake, Pac-Man, an inbox, and the smallest round — with the model's own probabilities.">
+<meta property="og:description" content="One state, a tree of typed questions, one forward pass, typed answers. Snake, Pac-Man, an inbox, and the smallest round, with the model's own probabilities.">
 <meta property="og:url" content="https://emb.is/demos/laya.html">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
@@ -67,7 +67,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything that explains it — the three types, the tree, the exact commands — is static and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything that explains it (the three types, the tree, the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -81,12 +81,12 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The decision engine</h1>
           <p class="plate__teaches">
-            Not an embedding model, and it writes nothing: a <b>state</b> goes in, a
+            Laya is a decision model, not an embedding model. A <b>state</b> goes in; a
             <b>tree of typed questions</b> is answered by <b>one forward pass</b>, every
-            option scored at once. The three types, then three examples — a game loop,
-            an inbox, the smallest round.
+            option scored at once, and no text is generated. The three types, then three
+            examples: a game loop, an inbox, the smallest round.
           </p>
-          <p class="tldr">Laya answers typed questions about a state — choice, score, noul — in one forward pass, with calibrated probabilities and zero generated tokens.</p>
+          <p class="tldr">Laya answers typed questions about a state (choice, score, noul) in one forward pass, with calibrated probabilities and zero generated tokens.</p>
         </div>
         <div>
           <p class="fig fig--as-written"><b>THE DECISION ENGINE</b>
@@ -145,7 +145,7 @@
         <article class="type">
           <header class="type__head">
             <span class="type__name">noul</span>
-            <span class="type__job">is this true? — with an "I don't know"</span>
+            <span class="type__job">is this true? with an "I don't know"</span>
           </header>
           <figure class="code"><pre class="code__body"><code>{ "type": "noul",
   "instructions": "Does the customer ask for money back?" }</code></pre></figure>
@@ -156,7 +156,7 @@
         </article>
       </div>
 
-      <p class="block__deck">Every answer also carries <span class="t-cmd">action.act_probability</span> — a second head reading the same row as <em>act on it</em> or <em>escalate it</em>. It is not part of the question.</p>
+      <p class="block__deck">Every answer also carries <span class="t-cmd">action.act_probability</span>, a second head reading the same row as <em>act on it</em> or <em>escalate it</em>. It is not part of the question.</p>
     </div></div>
   </section>
 
@@ -164,14 +164,14 @@
   <section class="block block--paper sec" aria-labelledby="tree-h">
     <div class="shell block__inner"><div class="block__body">
       <h2 class="sec__h" id="tree-h">THE TREE</h2>
-      <p class="block__deck">A question is a branch. The state is the root, each option is a leaf, and <b>one forward pass scores every leaf</b> — there is no depth-first walk, only one wide read.</p>
+      <p class="block__deck">A question is a branch. The state is the root, each option is a leaf, and <b>one forward pass scores every leaf</b>: there is no depth-first walk, only one wide read.</p>
 
       <figure class="tree">
         <div class="qtree qtree--static">
           <div class="qtree__inner">
             <div class="qtree__state">
               <span class="qtree__k">state</span>
-              <p class="qtree__text">an email · a board · a ticket — whatever the questions are about</p>
+              <p class="qtree__text">an email · a board · a ticket, whatever the questions are about</p>
             </div>
             <div class="qtree__branches">
               <div class="qtree__branch qtree__branch--choice">
@@ -203,7 +203,7 @@
             </div>
           </div>
         </div>
-        <figcaption class="tree__cap"><b>Breadth, not depth</b>: every branch and leaf is in the same batch, so the answers come back in one reply — a decision model is a single call, not a pipeline. The leaves are empty here; below they carry the model's probabilities.</figcaption>
+        <figcaption class="tree__cap"><b>Breadth, not depth</b>: every branch and leaf is in the same batch, so the answers come back in one reply. The leaves are empty here; below they carry the model's probabilities.</figcaption>
       </figure>
     </div></div>
   </section>
@@ -227,7 +227,7 @@
           <summary class="cmds__h">the commands this run sent</summary>
           <div class="cmds__body" data-cmds-body></div>
         </details>
-        <p class="lab__honest" data-honest>Snake and Pac-Man run the sandbox's <b>32-hidden miniature</b> — real mechanism, random weights, so their bars are shapes, not judgments. Inbox and Quickstart are answered by the real published <b>typed-decisions</b> checkpoint (<span class="t-cmd">codenamev/laya-onnx</span>, mounted as its published int8 export), so their decisions are judgments. Inbox and Quickstart make one call per round; Snake and Pac-Man make one call per episode and animate locally. A typed-question call is a real ~400M-parameter forward pass — roughly five seconds of CPU per call on the shared sandbox — so the plate's own examples are warmed at boot and a first click is served from the reply cache; the inference time shown is the cached run's. Repeated requests hit the reply cache.</p>
+        <p class="lab__honest" data-honest>Snake and Pac-Man run the sandbox's <b>32-hidden miniature</b>: real mechanism, random weights, so their bars are shapes, not judgments. Inbox and Quickstart are answered by the real published <b>typed-decisions</b> checkpoint (<span class="t-cmd">codenamev/laya-onnx</span>, mounted as its published int8 export), so their decisions are judgments. Inbox and Quickstart make one call per round; Snake and Pac-Man make one call per episode and animate locally. A typed-question call is a real ~400M-parameter forward pass, roughly five seconds of CPU per call on the shared sandbox, so the plate's own examples are warmed at boot and a first click is served from the reply cache; the inference time shown is the cached run's. Repeated requests hit the reply cache.</p>
       </div>
     </div></div>
   </section>
@@ -241,8 +241,8 @@
   <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
     <div class="shell block__inner"><div class="block__body">
       <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
-      <p class="block__deck">One command carried the round: the state as <span class="t-cmd">KEYS[1]</span>, the questions as <span class="t-cmd">ARGV[1]</span>. The preset built each question into its own sequence — instructions first, every option a <span class="t-cmd">[MASK]</span> marker, the state at the tail — and sent them as one batch. One pass scored every marker, so the branches came back together.</p>
-      <p class="block__deck">The bars are the model's probabilities, <em>tempered</em>: the checkpoint's fitted temperature is applied per bucket before the softmax, so <span class="t-cmd">confidence</span> — <span class="t-cmd">1 − H(p)/log k</span> — is calibrated, not raw. <b>0</b> (<b>0.5</b> for a yes/no) is a coin flip; <b>1</b> is decided. The untrained miniature's bars sit at the floor — which is why Snake's shield exists — while the real checkpoint's bars are judgments.</p>
+      <p class="block__deck">One command carried the round: the state as <span class="t-cmd">KEYS[1]</span>, the questions as <span class="t-cmd">ARGV[1]</span>. The preset built each question into its own sequence (instructions first, every option a <span class="t-cmd">[MASK]</span> marker, the state at the tail) and sent them as one batch. One pass scored every marker, so the branches came back together.</p>
+      <p class="block__deck">The bars are the model's probabilities, <em>tempered</em>: the checkpoint's fitted temperature is applied per bucket before the softmax, so <span class="t-cmd">confidence</span> (<span class="t-cmd">1 − H(p)/log k</span>) is calibrated, not raw. <b>0</b> (<b>0.5</b> for a yes/no) is a coin flip; <b>1</b> is decided. The untrained miniature's bars sit at the floor, which is why Snake's shield exists, while the real checkpoint's bars are judgments.</p>
     </div></div>
   </section>
 
@@ -250,8 +250,8 @@
   <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
     <div class="shell block__inner"><div class="block__body">
       <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
-      <p class="block__deck">A classifier zoo is a pipeline of glued-together models; a decision model is one checkpoint and one call. The questions are <em>data</em> — they live in the request, so they diff in review and change without a retrain.</p>
-      <p class="block__deck">Because every option is scored and the confidence is calibrated, a caller can gate: route at <span class="t-cmd">confidence ≥ 0.85</span>, escalate the rest. And the answers are probabilities, not a sentence — nothing to parse, nothing to hallucinate.</p>
+      <p class="block__deck">A classifier zoo is a pipeline of glued-together models; a decision model is one checkpoint and one call. The questions are <em>data</em>: they live in the request, so they diff in review and change without a retrain.</p>
+      <p class="block__deck">Every option is scored and the confidence is calibrated, so a caller can gate: route at <span class="t-cmd">confidence ≥ 0.85</span> and escalate the rest. The answers are probabilities, so there is nothing to parse and nothing to hallucinate.</p>
     </div></div>
   </section>
 
@@ -265,7 +265,7 @@
 
 # -> {"answers": {"&lt;id&gt;": {"type": "choice|score|noul", "confidence": …, "action": {"act_probability": …}, …}},
 #     "usage": {"input_tokens": …, "output_tokens": 0}}</code></pre>
-        <figcaption class="code__cap">Every example below is exactly this call. The checkpoint's envelope is <b>not</b> in it — the model entry carries it once. "The commands this run sent" under the rig unfolds the real bytes of the last call.</figcaption>
+        <figcaption class="code__cap">Every example below is exactly this call. The checkpoint's envelope is <b>not</b> in it: the model entry carries it once. "The commands this run sent" under the rig unfolds the real bytes of the last call.</figcaption>
       </figure>
 
       <figure class="code"><pre class="code__body"><code>models:
@@ -280,25 +280,25 @@
           head_max_len: 32
           temperature: [1.6, 1.25, 1.98]
           temperature_by_options: { "choice:2": 1.9, "noul:2": 1.98 }</code></pre>
-        <figcaption class="code__cap">The envelope travels with the checkpoint, not with every request: the preset reads it as <span class="t-cmd">emb.script.config</span>. A caller can still override per call, but no client has to know it — the same mechanism carries any scripted model's own constants.</figcaption>
+        <figcaption class="code__cap">The envelope travels with the checkpoint, not with every request: the preset reads it as <span class="t-cmd">emb.script.config</span>. A caller can still override per call, but no client has to know it: the same mechanism carries any scripted model's own constants.</figcaption>
       </figure>
 
       <dl class="api">
         <dt>model</dt>
-        <dd>the mounted checkpoint entry — one per checkpoint you serve.</dd>
+        <dd>the mounted checkpoint entry, one per checkpoint you serve.</dd>
         <dt>laya.lua sha1</dt>
         <dd>the preset's digest, preloaded at boot with <span class="t-cmd">script_preload</span>.</dd>
         <dt>1</dt>
         <dd>one text: the state.</dd>
         <dt>state · KEYS[1]</dt>
-        <dd>a string, or Python-style JSON for a structured state — spaces after every comma and colon, because the checkpoints were trained on exactly those strings.</dd>
+        <dd>a string, or Python-style JSON for a structured state: spaces after every comma and colon, because the checkpoints were trained on exactly those strings.</dd>
         <dt>questions · ARGV[1]</dt>
-        <dd>an object of <span class="t-cmd">id → {type, instructions, criteria}</span>. Criteria label order is significant — marker order maps to label order — so <span class="t-cmd">choice</span> criteria are read in document order.</dd>
+        <dd>an object of <span class="t-cmd">id → {type, instructions, criteria}</span>. Criteria label order is significant (marker order maps to label order), so <span class="t-cmd">choice</span> criteria are read in document order.</dd>
         <dt>config · model entry</dt>
         <dd>the checkpoint's envelope, declared on the model's <span class="t-cmd">scripts</span> entry and read by the preset as <span class="t-cmd">emb.script.config</span>: <span class="t-cmd">max_len</span>, <span class="t-cmd">head_max_len</span>, <span class="t-cmd">min_seq</span>, <span class="t-cmd">min_markers</span>, <span class="t-cmd">temperature</span>, <span class="t-cmd">temperature_by_options</span>. Temperatures outside <span class="t-cmd">[0.5, 5.0]</span> clamp; non-numeric values answer with <span class="t-cmd">1.0</span>. An optional <span class="t-cmd">ARGV[2]</span> still overrides it per call.</dd>
       </dl>
 
-      <p class="block__deck"><b>The loop.</b> The Snake preset is a task, not a second command: it declares its own questions and game loop, and one call returns an episode. The host learns nothing about Snake.</p>
+      <p class="block__deck"><b>The loop.</b> The Snake preset is a task: it declares its own questions and game loop, and one call returns an episode. The host learns nothing about Snake.</p>
       <figure class="code"><pre class="code__body"><code>EMB.EVSHA laya &lt;snake.lua sha1&gt; 1 '{"ticks": 96, "board": null, "width": 20, "height": 14, "seed": 7}'
 
 # -> {"frames": [ {board, probs, proposed, executed, intervened, risk, food, …} × 96 ],
@@ -311,7 +311,7 @@
 r = redis.Redis()
 r.execute_command("EMB.EVSHA", "laya", LAYA_SHA, 1,
                   json.dumps(state), json.dumps(questions))</code></pre>
-        <figcaption class="code__cap">The reply is the answers object in the command above — same state, same questions, same shape, no SDK.</figcaption>
+        <figcaption class="code__cap">The reply is the answers object in the command above: same state, same questions, same shape, with no SDK needed.</figcaption>
       </figure>
 
       <p class="block__deck"><b>The checkpoints.</b> The sandbox serves a vendored 32-hidden miniature for the two loops (Snake, Pac-Man), so the page works offline, and the real published <span class="t-cmd">typed-decisions</span> export (ModernBERT-large, <span class="t-cmd">max_len 1024</span>, fine-tuned for invoice, security and customer-service workflows, mounted as its published int8 export) for the typed-question examples (Inbox, Quickstart). Production is the same command against any published export: <span class="t-cmd">english</span> (ModernBERT-large, <span class="t-cmd">max_len 512</span>), <span class="t-cmd">multilingual</span> (mmBERT-base, 100+ languages), or <span class="t-cmd">typed-decisions</span>. One model entry per checkpoint; the questions and the call do not change.</p>

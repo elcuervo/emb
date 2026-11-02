@@ -67,7 +67,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -83,13 +83,13 @@
           <p class="plate__teaches">
             Three ways to find a medium, each answering a different question. A
             fingerprint names the exact recording from a four-second excerpt,
-            even a noisy one, by matching the constellation of its spectrogram —
-            computed in your browser. CLAP, a real text-audio model, cannot name
-            it but finds music by meaning from a phrase. X-CLIP, a real video
-            model, does the same for footage, mixing eight frames inside its
-            graph rather than reading one picture.
+            even a noisy one, by matching the constellation of its spectrogram,
+            computed in your browser. CLAP, a real text-audio model, finds music
+            by meaning from a phrase; it cannot name the recording. X-CLIP, a
+            real video model, does the same for footage, mixing eight frames
+            inside its graph instead of reading one picture.
           </p>
-        <p class="tldr">A fingerprint names the exact recording; CLAP finds music by meaning and X-CLIP finds footage by meaning — real audio and video models, queried live.</p>
+        <p class="tldr">A fingerprint names the exact recording; CLAP finds music by meaning and X-CLIP finds footage by meaning, with real audio and video models queried live.</p>
         </div>
         <div>
           <p class="fig"><b>THE MEDIUM</b>
@@ -108,8 +108,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">A fingerprint is not an embedding. It is a sparse map of the loudest points in a spectrogram, paired into hundreds of short hashes and stored with the time they occurred. Match a query by looking those hashes up: the recording that shares many of them <em>at one consistent offset</em> is the answer, and the size of that agreement is the evidence. It survives noise, because noise does not move the loud points; it does not survive a different performance, because a different performance has different points.</p>
-            <p class="block__deck">An embedding is the opposite trade. The sandbox's model turns the same excerpt into a picture and a vector, which puts it near other things that <em>look</em> alike — the same instrument, the same texture — but cannot tell one performance from another. Both readings are below, on the same four seconds. Then the video half does with a phrase what the fingerprint does with a hash.</p>
+            <p class="block__deck">A fingerprint is not an embedding: it is a sparse map of the loudest points in a spectrogram, paired into hundreds of short hashes and stored with the time they occurred. Match a query by looking those hashes up: the recording that shares many of them <em>at one consistent offset</em> is the answer, and the size of that agreement is the evidence. It survives noise, because noise does not move the loud points; it does not survive a different performance, because a different performance has different points.</p>
+            <p class="block__deck">An embedding makes the opposite trade. The sandbox's model turns the same excerpt into a picture and a vector, which puts it near other things that <em>look</em> alike (the same instrument, the same texture) but cannot tell one performance from another. Both readings are below, on the same four seconds. Then the video half does with a phrase what the fingerprint does with a hash.</p>
 </div></div>
     </section>
 
@@ -125,13 +125,13 @@
                  data-emb-preset-xclip-text="70bea6840641e80f6b310c5aed45960f4d0d2324">
 
               <h3 class="media__h">Name that tune</h3>
-              <p class="media__lede">Pick an excerpt. Your browser decodes it, finds the spectral peaks, hashes them, and looks them up in the shipped database — nothing is uploaded and no answer is stored in the page.</p>
+              <p class="media__lede">Pick an excerpt. Your browser decodes it, finds the spectral peaks, hashes them, and looks them up in the shipped database: nothing is uploaded and no answer is stored in the page.</p>
               <div class="media__queries" role="group" aria-label="The excerpts to identify" data-queries></div>
 
               <div class="media__grid">
                 <div>
                   <canvas class="media__canvas" data-spectro width="640" height="280" role="img" aria-label="The query's spectrogram with its fingerprint peaks marked"></canvas>
-                  <p class="media__cap" data-spectro-cap>the query — its fingerprint peaks are the bright points</p>
+                  <p class="media__cap" data-spectro-cap>the query: its fingerprint peaks are the bright points</p>
                 </div>
                 <div>
                   <div class="media__votes" data-votes aria-live="polite"></div>
@@ -142,7 +142,7 @@
               </div>
 
               <h3 class="media__h">Describe what you hear — CLAP</h3>
-              <p class="media__lede">A real text-audio model. The five excerpts below were embedded by CLAP's audio tower before deployment; your phrase is embedded live by its text tower and the tracks are ranked across the shared space. This is what the picture never could do: a phrase finds the music by meaning.</p>
+              <p class="media__lede">A real text-audio model. The five excerpts below were embedded by CLAP's audio tower before deployment; your phrase is embedded live by its text tower and the tracks are ranked across the shared space. The phrase finds music by meaning, which the picture reading above cannot do.</p>
               <form class="rig__form" data-audio-form>
                 <label class="sr-only" for="a-q">A phrase to find music by</label>
                 <input class="rig__input" id="a-q" autocomplete="off" spellcheck="false" value="a solo piano">
@@ -157,7 +157,7 @@
               </div>
 
               <h3 class="media__h">Describe what you see — X-CLIP</h3>
-              <p class="media__lede">A real video model, not a picture of one. Each clip was sampled into eight frames — the export's fixed contract — and embedded by X-CLIP's video tower, which mixes the frames inside the graph; your phrase is embedded live by its text tower. The margins here are small, and the plate prints them: eight frames of satellite footage is a hard question.</p>
+              <p class="media__lede">A real video model. Each clip was sampled into eight frames, the export's fixed contract, and embedded by X-CLIP's video tower, which mixes the frames inside the graph; your phrase is embedded live by its text tower. The margins here are small, and the plate prints them: eight frames of satellite footage is a hard question.</p>
               <form class="rig__form" data-video-form>
                 <label class="sr-only" for="v-q">A phrase to find footage by</label>
                 <input class="rig__input" id="v-q" autocomplete="off" spellcheck="false" value="a rocket launching into the sky">
@@ -190,12 +190,12 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">The fingerprint ran entirely in your browser: an 11 kHz decode, a windowed FFT, the loudest local maxima as a constellation, neighbouring peaks paired into <span class="t-cmd">(f1, f2, Δt)</span> hashes, each looked up in a database built from the shipped audio, and the offset of every hit counted. The track with hundreds of hits at one offset won. That histogram is the figure.</p>
+            <p class="block__deck">The fingerprint ran entirely in your browser: an 11 kHz decode, a windowed FFT, the loudest local maxima as a constellation, neighbouring peaks paired into <span class="t-cmd">(f1, f2, Δt)</span> hashes, each looked up in a database built from the shipped audio, and the offset of every hit counted. The track with hundreds of hits at one offset won; that histogram is the figure.</p>
             <p class="block__deck">Then two real models answered the semantic question. <b>CLAP</b> is a text-audio model: the five excerpts were decoded to 48 kHz, turned into the log-mel the model's own feature extractor defines, and embedded by CLAP's <b>audio tower</b> offline; your phrase went to its <b>text tower</b> live and the two were compared in one 512-d space. <b>X-CLIP</b> is a text-video model: each clip was sampled into eight frames and embedded by its <b>video tower</b>, which mixes the frames inside the graph, and your phrase by its <b>text tower</b>. Both phrase embeds are one scripted call each.</p>
 <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Reach for the cheap, exact tool when the question is exact. A fingerprint costs a few kilobytes per track and answers "which recording is this" better than any model — but it can only ever answer that, and only for a recording it was given. Reach for the embedding when the question is about meaning — "find the moment someone is in the water", "more like this" — and accept that it describes rather than identifies.</p>
-            <p class="block__deck"><b>What this does not prove.</b> The fingerprint matched these exact recordings and nothing else — a different performance of the same piece would not match, which is the point of it. CLAP is trained on general audio, so its reading of a genre is a similarity, not a fact: it puts every "guitar" phrase on the lap-steel track and finds the folk guitar only by character. X-CLIP's export is a third party's, and eight evenly-spaced frames is its fixed contract — it mixes motion inside the graph, but the sampling is not a tuning knob, and its margins on this satellite footage are small (0.254 for the launch, 0.216 for the turtle). A close cosine is a retrieval score, not an understanding of the medium.
+            <p class="block__deck">Reach for the cheap, exact tool when the question is exact. A fingerprint costs a few kilobytes per track and answers "which recording is this" better than any model, but it answers only that, and only for a recording it was given. Use the embedding when the question is about meaning ("find the moment someone is in the water", "more like this") and accept that it describes rather than identifies.</p>
+            <p class="block__deck"><b>What this does not prove.</b> The fingerprint matched these exact recordings and nothing else: a different performance of the same piece would not match. CLAP is trained on general audio, so its reading of a genre is a similarity, not a fact: it puts every "guitar" phrase on the lap-steel track and finds the folk guitar only by character. X-CLIP's export is a third party's, and eight evenly-spaced frames is its fixed contract: it mixes motion inside the graph, but the sampling is not a tuning knob, and its margins on this satellite footage are small (0.254 for the launch, 0.216 for the turtle). A close cosine is a retrieval score, not evidence that the model understands the medium.</p>
 </div></div>
     </section>
 
@@ -218,7 +218,7 @@ EMB.EVSHA xclip-text &lt;xclip_text.lua sha1&gt; 1 "a rocket launching into the 
 # the indexed media were embedded offline by the other towers:
 EMB.EVSHA clap-audio &lt;clap_audio.lua sha1&gt; 1 &lt;packed log-mel f32&gt;
 EMB.EVSHA xclip-video &lt;xclip_video.lua sha1&gt; 1 &lt;8 frames f32&gt;</code></pre>
-        <figcaption class="code__cap">The fingerprint is the browser's own DSP and sends nothing. CLAP and X-CLIP each embed the phrase live in one scripted call, against an index their own other tower built offline. No upload; the only binary the sandbox ever receives is an allowlisted preset's tensor.</figcaption>
+        <figcaption class="code__cap">The fingerprint is the browser's own DSP and sends nothing. CLAP and X-CLIP each embed the phrase live in one scripted call, against an index their own other tower built offline. Nothing is uploaded, and the only binary the sandbox ever receives is an allowlisted preset's tensor.</figcaption>
       </figure>
       </div></div>
     </section>

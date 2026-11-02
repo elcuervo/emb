@@ -69,7 +69,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -83,7 +83,7 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The model is a function</h1>
           <p class="plate__teaches">
-            One primitive — text in, tensors out — and as many answers as you
+            One primitive (text in, tensors out), and as many answers as you
             have scripts. The server runs the scripts it preloaded; it does not
             run yours.
           </p>
@@ -105,8 +105,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck"><span class="t-cmd">emb</span> is not a product with an embeddings endpoint bolted on. It is a server whose primitive is <em>run a model over inputs</em>: one command for the common case, a scripting surface for the rest. This plate runs one passage through four answers, from two models.</p>
-            <p class="block__deck">The first is the raw command — a bulk string of packed float32s and the metadata the bridge attaches. The next two call the preloaded <span class="t-cmd">embed.lua</span>: a typed <span class="t-cmd">{dim, norm}</span>, then <span class="t-cmd">{dim, norm, similarity}</span> against a reference text. The fourth is <span class="t-cmd">classify.lua</span>, whose answer is a label and a confidence.</p>
+            <p class="block__deck"><span class="t-cmd">emb</span> is a server whose primitive is <em>run a model over inputs</em>, with one command for the common case and a scripting surface for the rest. This plate runs one passage through four answers, from two models.</p>
+            <p class="block__deck">The first is the raw command: a bulk string of packed float32s and the metadata the bridge attaches. The next two call the preloaded <span class="t-cmd">embed.lua</span>: a typed <span class="t-cmd">{dim, norm}</span>, then <span class="t-cmd">{dim, norm, similarity}</span> against a reference text. The fourth is <span class="t-cmd">classify.lua</span>, whose answer is a label and a confidence.</p>
 </div></div>
     </section>
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
@@ -162,17 +162,17 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">Each scripted reply is the server's own bytes. The digest beside it is the SHA1 of the script the server preloaded, and <span class="t-cmd">EMB.EVSHA</span> accepts only the digests the sandbox was configured with — so the page cannot describe a script the server does not have.</p>
-            <p class="block__deck">Nothing here sends Lua. <span class="t-cmd">EMB.EVAL</span> is refused by the sandbox's allowlist, with the refusal naming the alternative. That boundary is part of the lesson: a public sandbox cannot run a stranger's code, and extensibility does not need it to.</p>
+            <p class="block__deck">Each scripted reply is the server's own bytes. The digest beside it is the SHA1 of the script the server preloaded, and <span class="t-cmd">EMB.EVSHA</span> accepts only the digests the sandbox was configured with, so the page cannot describe a script the server does not have.</p>
+            <p class="block__deck">Nothing here sends Lua. <span class="t-cmd">EMB.EVAL</span> is refused by the sandbox's allowlist, and the refusal names the alternative. A public sandbox cannot run a stranger's code, and extensibility does not need it to.</p>
 </div></div>
     </section>
     <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">The four answers are four products. A vector store wants the first, a reranker the third, a moderation filter or sentiment badge the fourth. If your server can only return vectors, each is a separate service and a separate deployment — and the models are the expensive part, not the HTTP.</p>
+            <p class="block__deck">The four answers are four products. A vector store wants the first, a reranker the third, a moderation filter or sentiment badge the fourth. If your server can only return vectors, each is a separate service and a separate deployment, and the models are the expensive part, not the HTTP.</p>
             <p class="block__deck">Scripting inside the server is also what keeps it fast: the script runs beside the model, over the same buffers, sharing the same batcher and cache, so <span class="t-cmd">classify.lua</span> costs one model call and one round trip.</p>
-            <p class="block__deck">One step further, the scripted model can <em>answer</em>: five typed questions, every option a marker on one tree, a single forward pass scoring them all — <a href="laya.html">the decision</a>.</p>
+            <p class="block__deck">One step further, the scripted model can <em>answer</em>: five typed questions, every option a marker on one tree, a single forward pass scoring them all. That is <a href="laya.html">the decision</a>.</p>
 </div></div>
     </section>
     <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
@@ -194,7 +194,7 @@ EMB.EVSHA sst2 &lt;classify.lua sha1&gt; 1 &quot;This film is a masterpiece…&q
 
 EMB.EVAL minilm &quot;return 1&quot; 1 &quot;x&quot;
 # -> refused: raw Lua is not accepted; call a preloaded preset by digest</code></pre>
-        <figcaption class="code__cap">Four shapes of one idea — bytes, a described vector, a comparison, a classification — and then the one form emb refuses: raw Lua.</figcaption>
+        <figcaption class="code__cap">Four shapes of one idea (bytes, a described vector, a comparison, a classification), then the one form emb refuses: raw Lua.</figcaption>
       </figure>
       </div></div>
     </section>

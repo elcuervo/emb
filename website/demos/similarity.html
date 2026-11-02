@@ -70,7 +70,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -83,7 +83,7 @@
         <nav class="plate__next" aria-label="The next demo"><a href="search.html"><span>Next</span> <b>The search</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">I.</span>The similarity</h1>
-          <p class="plate__teaches">Everything retrieval does is this number, sorted. One cosine over two vectors, not 384 additions you have to read.</p>
+          <p class="plate__teaches">Everything retrieval does is this number, sorted. It is one cosine over two vectors, instead of 384 numbers to compare.</p>
         <p class="tldr">Two of those lists compare to one score. Sort the scores and you have search.</p>
         </div>
         <div><p class="fig"><b>THE SIMILARITY</b>
@@ -100,7 +100,7 @@
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
             <p class="block__deck">Two vectors and one cosine. Because the model normalizes its output, cosine similarity is the dot product: 1 is the same direction, 0 unrelated, negative opposed. A paraphrase scores above 0.6; an unrelated passage sits near 0.1.</p>
-            <p class="block__deck">The sandbox computes the number, not the page: the plate calls a preloaded Lua script by its SHA1 and renders the reply. The source and its digest are printed with it — the sandbox refuses a script it was not told to load.</p>
+            <p class="block__deck">The sandbox computes the number. The plate calls a preloaded Lua script by its SHA1 and renders the reply. The source and its digest are printed with it, and the sandbox refuses a script it was not told to load.</p>
 </div></div>
     </section>
 
@@ -144,8 +144,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">The script calls <span class="t-cmd">emb.embed</span> twice — the same path, batcher and cache as <span class="t-cmd">EMB</span> — then <span class="t-cmd">emb.similarity</span>. It returns one number rather than 768 floats, because the number is the answer.</p>
-            <p class="block__deck">Doing it in Lua is the product's argument: the arithmetic runs beside the model, over the same packed float32 buffers, so a rerank costs one round trip and no bytes on the wire.</p>
+            <p class="block__deck">The script calls <span class="t-cmd">emb.embed</span> twice (the same path, batcher and cache as <span class="t-cmd">EMB</span>), then <span class="t-cmd">emb.similarity</span>. It returns one number instead of 768 floats: the number is the answer.</p>
+            <p class="block__deck">Running the arithmetic in Lua keeps it beside the model, over the same packed float32 buffers, so a rerank costs one round trip and no bytes on the wire.</p>
 </div></div>
     </section>
 

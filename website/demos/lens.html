@@ -69,7 +69,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -84,8 +84,7 @@
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The model lens</h1>
           <p class="plate__teaches">
             Two models, one corpus, one query. The neighbours change and the map
-            changes shape, which is why &ldquo;which embedding?&rdquo; is a
-            decision and not a detail.
+            changes shape, so the choice of embedding changes the answer.
           </p>
         <p class="tldr">Two models make two different number-worlds. A vector from one is meaningless in the other, so you cannot mix them.</p>
         </div>
@@ -104,8 +103,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">A model defines a space. Two models define two spaces, and a vector from one means nothing in the other — same numbers, same dimensions, no relationship. This is the fact every newcomer gets wrong, and why a server that serves several models beats one that serves a favourite.</p>
-            <p class="block__deck">Both models here return 384 dimensions. That is the trap: matching shapes make the mistake easy and silent. Embed the corpus with one, query with the other, and you get plausible, meaningless neighbours. The plate shows the two spaces side by side rather than asserting the difference.</p>
+            <p class="block__deck">A model defines a space. Two models define two spaces, and a vector from one means nothing in the other, even when the numbers and the dimensions match. This trips up most people moving between models, and it is why a server that serves several models beats one that serves a favourite.</p>
+            <p class="block__deck">Both models here return 384 dimensions. That is the trap: matching shapes make the mistake easy and silent. Embed the corpus with one, query with the other, and you get plausible, meaningless neighbours. The plate shows the two spaces side by side.</p>
 </div></div>
     </section>
     <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
@@ -164,15 +163,15 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Retrieval-tuned, multilingual, small, long-context: each model is a different answer to the same question, and the right one depends on your corpus, language, latency and memory. Keeping the choice inside one server makes the model a config value, not a migration.</p>
-            <p class="block__deck">The rule is on the plate's own caption: a corpus and its queries must use the same model and normalization. Mixing them does not error, which is what makes it dangerous — it returns a ranking, and the ranking is noise.</p>
+            <p class="block__deck">Retrieval-tuned, multilingual, small, long-context: each model is a different answer to the same question, and the right one depends on your corpus, language, latency and memory. Keeping the choice inside one server makes the model a config value; nothing else in the stack has to move.</p>
+            <p class="block__deck">The same rule is in the plate's caption: a corpus and its queries must use the same model and normalization. Mixing them does not error, so it is easy to miss; it returns a ranking, and the ranking is noise.</p>
 </div></div>
     </section>
     <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-            <p class="block__deck">One command per model for the query, one query per table. The index is a single file with a table per model, so switching the lens is choosing a table.</p>
+            <p class="block__deck">One command per model for the query, one query per table. The index is a single file with a table per model, so switching the lens means choosing a table.</p>
 <figure class="code"><pre class="code__body"><code>EMB minilm    BLOB &quot;a guilty conscience that will not stay buried&quot;
 EMB bge-small BLOB &quot;a guilty conscience that will not stay buried&quot;
 
@@ -182,7 +181,7 @@ SELECT rowid FROM vec_bge_small WHERE embedding MATCH vec_int8(:q) AND k = 5;
 
 # and the mistake this plate exists to prevent:
 #   EMB bge-small …  queried against  vec_minilm  runs fine, and is noise</code></pre>
-        <figcaption class="code__cap">The same question asked in two spaces, and the mistake this plate exists to prevent: a vector from one model queried against the other's table runs fine, and answers nothing.</figcaption>
+        <figcaption class="code__cap">The same question asked in two spaces, then the mistake this plate exists to prevent: a vector from one model queried against the other's table runs fine, and answers nothing.</figcaption>
       </figure>
       </div></div>
     </section>

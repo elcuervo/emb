@@ -67,7 +67,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -81,9 +81,9 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The image</h1>
           <p class="plate__teaches">
-            A picture into the same space as a sentence. One model, two
-            modalities, so an image can be matched against words it never saw as
-            a caption.
+            A picture into the same space as a sentence. One model covers both
+            modalities, so an image can be matched against words that were never
+            its caption.
           </p>
         <p class="tldr">A photo and a set of words can share one number-world, so a photo matches labels nobody trained it on.</p>
         </div>
@@ -102,8 +102,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">CLIP was trained so that an image and its caption land near each other, which makes one space hold two kinds of thing: a photograph and a phrase are both points, and the distance between them sorts.</p>
-            <p class="block__deck">So the labels below are not trained — they are text, embedded beside the image and ranked. Pick another sample and the ranking moves. That is zero-shot classification, the same cosine the first plates used. The samples are public-domain works, committed with the gallery.</p>
+            <p class="block__deck">CLIP was trained so that an image and its caption land near each other, which lets one space hold two kinds of thing: a photograph and a phrase are both points, and the distance between them is the score.</p>
+            <p class="block__deck">The labels below are text, embedded beside the image and ranked; the model was never trained on them. Pick another sample and the ranking moves. That is zero-shot classification, using the same cosine as the first plates. The samples are public-domain works, committed with the gallery.</p>
 </div></div>
     </section>
 
@@ -150,7 +150,7 @@
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
             <p class="block__deck">The browser downscaled the sample and base64-encoded it, because JSON cannot carry bytes; the bridge decoded it and passed it to the sandbox. The server built the model's <span class="t-cmd">pixel_values</span> tensor, ran the fused CLIP graph for the image and each label, and returned the softmax of the cosines.</p>
-            <p class="block__deck">There is no upload. The samples ship with the page and are used for this request only, and the bridge accepts binary for one preloaded script, one model, and within its image bounds.</p>
+            <p class="block__deck">Nothing is uploaded. The samples ship with the page and serve this request only. The bridge accepts binary for one preloaded script, one model, and within its image bounds.</p>
 </div></div>
     </section>
 
@@ -158,8 +158,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">One model for two modalities is how image search, tagging and content moderation work without a classifier per label: embed everything once, then compare. A new label is new text, not a new training run.</p>
-            <p class="block__deck">It is also the strongest argument for the scripting layer. The fused graph needs both branches' inputs for either run; the script builds the unused branch as a constant host-side, asks the graph for one output per run, and reduces packed float32 with <span class="t-cmd">emb.math</span> — one round trip, no 150,000-element table.</p>
+            <p class="block__deck">One model for two modalities is how image search, tagging and content moderation work without a classifier per label: embed everything once, then compare. A new label is new text, so there is nothing to retrain.</p>
+            <p class="block__deck">It is also the strongest argument for the scripting layer. The fused graph needs both branches' inputs for either run; the script builds the unused branch as a constant host-side, asks the graph for one output per run, and reduces packed float32 with <span class="t-cmd">emb.math</span> in one round trip, with no 150,000-element table.</p>
 </div></div>
     </section>
 
@@ -167,7 +167,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-            <p class="block__deck">One scripted command. The count is the number of keys — the image is the only one; the labels are arguments. The bridge carries the image as base64 in its own argument.</p>
+            <p class="block__deck">One scripted command. The count is the number of keys: the image is the only key, and the labels are arguments. The bridge carries the image as base64 in its own argument.</p>
 <figure class="code"><pre class="code__body"><code>EMB.EVSHA clip &lt;zeroshot.lua sha1&gt; 1 &lt;image bytes&gt; raven storm …
 # -> { label = "raven", score = 0.31, probs = {...}, scores = {...} }
 

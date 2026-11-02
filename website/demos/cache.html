@@ -70,7 +70,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -85,8 +85,8 @@
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The cache</h1>
           <p class="plate__teaches">
             Ask once, ask again. emb keys a vector by the model, the text and the
-            settings, so the second ask is a lookup — not a second pass over the
-            model.
+            settings, so the second ask is a lookup instead of a second pass over
+            the model.
           </p>
         <p class="tldr">The same text always gives the same vector, so the server keeps it. Asking twice is a lookup, not a second model run.</p>
         </div>
@@ -105,8 +105,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">Embedding the same text twice is work a server does not have to do twice. The vector is a pure function of model and text: the same bytes in always produce the same 384 floats out. That makes it safe to remember, and emb remembers it in an LRU bounded by a memory budget.</p>
-            <p class="block__deck">The plate asks for one passage twice and reads the model's own cache counters around the pair. Type your own passage and the first ask is a miss, the second a hit; if someone already asked for this exact passage, the first is a hit too — and the plate says so, because the counters are the server's.</p>
+            <p class="block__deck">A server does not have to embed the same text twice. The vector is a pure function of model and text: the same bytes in always produce the same 384 floats out. That makes it safe to remember, and emb remembers it in an LRU bounded by a memory budget.</p>
+            <p class="block__deck">The plate asks for one passage twice and reads the model's own cache counters around the pair. Type your own passage and the first ask is a miss, the second a hit; if someone already asked for this exact passage, the first is a hit too, and the plate says so, because the counters are the server's.</p>
 </div></div>
     </section>
 
@@ -149,7 +149,7 @@
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
             <p class="block__deck">Two identical <span class="t-cmd">EMB</span> commands went to the sandbox with an <span class="t-cmd">EMB.INFO</span> before and after each. The first call either missed and filled the cache or was already a hit; the second was a hit either way. <span class="t-cmd">cache_hits</span> moved by at least one.</p>
-            <p class="block__deck">Nothing on the page arranged this. There is no warm-up step and no <span class="t-cmd">CACHE GET</span> to call: every path — <span class="t-cmd">EMB</span>, <span class="t-cmd">EMB.MULTI</span>, a preset's <span class="t-cmd">emb.embed</span> — reads and writes the same cache.</p>
+            <p class="block__deck">Nothing on the page arranged this. There is no warm-up step and no <span class="t-cmd">CACHE GET</span> to call: every path (<span class="t-cmd">EMB</span>, <span class="t-cmd">EMB.MULTI</span>, a preset's <span class="t-cmd">emb.embed</span>) reads and writes the same cache.</p>
 </div></div>
     </section>
 
@@ -157,7 +157,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Real traffic repeats itself: a search box re-asks as someone types, a queue retries, a corpus is re-indexed and half the documents have not changed. A cache turns every repeat from inference into a memory read — no new hardware, no smaller model, no loss of quality, because it returns the same vector, not an approximation.</p>
+            <p class="block__deck">Real traffic repeats itself: a search box re-asks as someone types, a queue retries, a corpus is re-indexed and half the documents have not changed. A cache turns every repeat from inference into a memory read, with no new hardware, no smaller model, and no loss of quality: it returns the same vector, not an approximation.</p>
             <p class="block__deck">It is also why the gallery can afford to be live. Every plate runs against one shared 2&nbsp;GB machine, and the canned queries are cached after their first reader, so a room full of visitors mostly reads memory.</p>
 </div></div>
     </section>

@@ -70,7 +70,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -88,7 +88,7 @@
             the first word; emb spends it once for a whole batch instead of once
             per text.
           </p>
-        <p class="tldr">Many texts in one call is far faster than one call each. The server does the same thing for readers who arrive together.</p>
+        <p class="tldr">Many texts in one call is far faster than one call each, and the server batches requests that arrive together the same way.</p>
         </div>
         <div>
           <p class="fig"><b>THE BATCH</b>
@@ -105,8 +105,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">Embedding one text is cheap; starting the work is not. The tokenizer, the matrix multiplies and the pooling each pay a fixed cost per <em>pass</em>, and a pass can carry many texts at once. Six texts in six passes pay it six times; six texts in one pass pay it once.</p>
-            <p class="block__deck">The plate measures both ways against the sandbox and draws them to scale. Both numbers are the server's own <span class="t-cmd">elapsed_us</span>, bracketed on the bridge's loopback connection — execution time, with the network between you and the sandbox excluded.</p>
+            <p class="block__deck">Most of the cost of embedding one text is starting the pass, not the text. The tokenizer, the matrix multiplies and the pooling each pay a fixed cost per <em>pass</em>, and a pass can carry many texts at once. Six texts in six passes pay it six times; six texts in one pass pay it once.</p>
+            <p class="block__deck">The plate measures both ways against the sandbox and draws them to scale. Both numbers are the server's own <span class="t-cmd">elapsed_us</span>, bracketed on the bridge's loopback connection: execution time, with the network between you and the sandbox excluded.</p>
 </div></div>
     </section>
 
@@ -145,7 +145,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">Six passages went to the sandbox twice. First as six separate <span class="t-cmd">EMB</span> commands, each its own pass over the model; then as one <span class="t-cmd">EMB</span> carrying all six, which the server's batcher ran in one pass. The same six vectors come back both ways.</p>
+            <p class="block__deck">Six passages went to the sandbox twice. First as six separate <span class="t-cmd">EMB</span> commands, each its own pass over the model; then as one <span class="t-cmd">EMB</span> carrying all six, which the server's batcher ran in one pass. The same six vectors come back either way.</p>
             <p class="block__deck">It is the same batcher that handles concurrent visitors: two people who ask at the same moment are coalesced into one pass whether either asked for a batch. Each run salts both sides with a fresh marker, so the measurement is never made cheaper by the cache the next plate is about.</p>
 </div></div>
     </section>
@@ -154,7 +154,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Embedding a corpus is an N-request job, and N is not small. Chunk 10,000 documents, quote every review, deduplicate every ticket: one text at a time or all of them together decides whether the job takes minutes or hours.</p>
+            <p class="block__deck">Embedding a corpus is an N-request job, and N is usually large. Chunk 10,000 documents, quote every review, deduplicate every ticket: one text at a time or all of them together decides whether the job takes minutes or hours.</p>
             <p class="block__deck">Batching is also why the sandbox can be small. Concurrent requests become one pass over a shared CPU, so the 2&nbsp;GB machine behind this gallery serves a room full of readers without a queue.</p>
 </div></div>
     </section>
@@ -163,7 +163,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
 
-            <p class="block__deck">Both are the same command. The only difference is how many texts ride on it — and the bridge caps one call at eight.</p>
+            <p class="block__deck">The six calls and the single call use the same command. The only difference is how many texts ride on it, and the bridge caps one call at eight.</p>
 <figure class="code"><pre class="code__body"><code>EMB minilm "text 1"...     # one call: the model sees the whole batch at once
 EMB minilm "text 2"
 …                          # six calls: the model sees them one at a time
@@ -172,7 +172,7 @@ EMB minilm "text 6"
 EMB minilm "text 1" "text 2" "text 3" "text 4" "text 5" "text 6"
 
 # every reply is the same six vectors; only the number of passes differs.</code></pre>
-        <figcaption class="code__cap">The same command, once per text and once for all six. Only the number of passes over the model differs — the six vectors that come back are identical.</figcaption>
+        <figcaption class="code__cap">The same command, once per text and once for all six. Only the number of passes over the model differs; the six vectors that come back are identical.</figcaption>
       </figure>
       </div></div>
     </section>

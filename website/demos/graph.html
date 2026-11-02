@@ -67,7 +67,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -80,9 +80,9 @@
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">IV.</span>The graph</h1>
           <p class="plate__teaches">
-            Each passage points at its nearest neighbours. The regions of the
-            atlas are the cloud; here they are the edges, computed by a script
-            beside the model.
+            Each passage points at its nearest neighbours. In the atlas the
+            regions are the cloud; here they are the edges, computed by a
+            script beside the model.
           </p>
         <p class="tldr">A script builds the nearest-neighbour graph of the whole corpus beside the model and returns just the edges.</p>
         </div>
@@ -101,7 +101,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
-            <p class="block__deck">A directed graph: an arrow from one passage to another means the first is closer to the second than to most things. No layout pretends to be geography — the ring is just a place to stand, and the arrows are the only claim. Dense clusters show up as mutual arrows; lonely passages point out and are not pointed at.</p>
+            <p class="block__deck">A directed graph: an arrow from one passage to another means the first is closer to the second than to most things. No layout pretends to be geography. The ring is just a place to stand, and the arrows are the only claim. Dense clusters show up as mutual arrows; lonely passages point out and are not pointed at.</p>
 </div></div>
     </section>
 
@@ -144,7 +144,7 @@
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
             <p class="block__deck">The page embedded the seed, took the corpus's eight nearest passages, and sent those eight texts to <span class="t-cmd">graph.lua</span>. The script called <span class="t-cmd">emb.embed</span> once for all eight, built the eight-by-eight cosine matrix, and returned each node's two nearest neighbours.</p>
-            <p class="block__deck">The matrix never crossed the wire. Sixty-four cosines became sixteen edges inside the server's process, over packed float32 buffers, with <span class="t-cmd">emb.math.topk</span> doing the ordering host-side. That is the scripting layer's whole argument: move the arithmetic to the data.</p>
+            <p class="block__deck">The matrix never crossed the wire: sixty-four cosines became sixteen edges inside the server's process, over packed float32 buffers, with <span class="t-cmd">emb.math.topk</span> doing the ordering host-side.</p>
 </div></div>
     </section>
 
@@ -152,7 +152,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Nearest-neighbour graphs are how search finds more than the top-k: recommend what is near what you liked, cluster by connected components, spot the outlier nothing points at. All of it is the same cosine, and all of it is cheap when the graph is built where the vectors already are.</p>
+            <p class="block__deck">Nearest-neighbour graphs are how search finds more than the top-k: recommend what is near what you liked, cluster by connected components, spot the outlier nothing points at. Every one of those uses the same cosine, and costs little when the graph is built where the vectors already are.</p>
 </div></div>
     </section>
 
@@ -172,7 +172,7 @@ EMB.EVSHA minilm &lt;graph.lua sha1&gt; 8 "p1" … "p8" "the sea"
 local vecs = emb.embed(KEYS, { bytes = true })
 scores[j] = emb.similarity(vecs[i], vecs[j], "cosine")
 local top = emb.math.topk(scores, 2)   -- edges, not the matrix</code></pre>
-        <figcaption class="code__cap">Seed by SQL, then one scripted call: the preset embeds the seeds, scores every pair, and returns only the top edges. The graph is computed beside the model, not for it.</figcaption>
+        <figcaption class="code__cap">Seed by SQL, then one scripted call: the preset embeds the seeds, scores every pair, and returns only the top edges.</figcaption>
       </figure>
       </div></div>
     </section>

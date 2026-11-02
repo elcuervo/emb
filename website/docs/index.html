@@ -6,12 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — documentation: install, commands, replies, Lua</title>
 <link rel="canonical" href="https://emb.is/docs/">
-<meta name="description" content="Reference for emb, a simple yet powerful self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta name="description" content="Reference for emb, a self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — documentation: install, commands, replies, Lua">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="Reference for emb, a simple yet powerful self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
+<meta property="og:description" content="Reference for emb, a self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.">
 <meta property="og:url" content="https://emb.is/docs/">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
@@ -83,8 +83,8 @@
     <div class="doc-head">
       <h1>Documentation</h1>
       <p class="doc-lede">
-        <strong>emb</strong> is a simple yet powerful self-hosted inference
-        server that speaks the Redis protocol. It implements the protocol rather than shipping a
+        <strong>emb</strong> is a self-hosted inference server that speaks the
+        Redis protocol. It implements the protocol rather than shipping a
         client, so the Redis client you already have is the SDK. This page is
         the reference: everything below is the behaviour of the shipped server,
         and <a href="https://github.com/elcuervo/emb/blob/main/README.md" rel="noopener">the repository README</a>
@@ -95,7 +95,7 @@
         and interfaces may still move. Commands, configuration keys and reply
         shapes on this page describe that version.
       </p>
-        <p class="tldr">Everything the server does, as commands and replies. Each section shows the exact command and what comes back.</p>
+        <p class="tldr">Every command the server takes and the exact reply it returns.</p>
     </div>
 
     <nav class="doc-toc" aria-labelledby="toc-h">
@@ -125,9 +125,10 @@
       <div class="mech" data-mech="install"></div>
 
       <p class="doc-prose">
-        Three ways to get the server. All of them install the same single binary
-        with ONNX Runtime embedded — inference, batching, caching, scripting and
-        operations are server-side, so there is nothing to run alongside it.
+        Three ways to get the server. All of them install the same single
+        binary with ONNX Runtime embedded: inference, batching, caching,
+        scripting and operations run server-side, so nothing else needs to run
+        alongside it.
       </p>
 
       <figure class="code">
@@ -160,7 +161,7 @@
 <span class="t-cmd">redis-cli</span> <span class="t-cmd">EMB</span> minilm <span class="t-str">"hello world"</span>
 <span class="t-dim"># → \x7c\x8e\x80\xbd…            384 float32s × 4 bytes = 1.5 KB</span></pre>
         <figcaption class="code__cap">
-          The default reply is raw little-endian float32 bytes — the fastest,
+          The default reply is raw little-endian float32 bytes, the fastest and
           most faithful form of the number.
         </figcaption>
       </figure>
@@ -169,7 +170,7 @@
         <dt>platforms</dt>
         <dd>macOS on Apple Silicon; Linux on amd64 and arm64.</dd>
         <dt>default port</dt>
-        <dd><code>:6379</code> — the Redis port, so existing tooling needs no new mental model.</dd>
+        <dd><code>:6379</code>, the Redis port, so existing tooling needs no new mental model.</dd>
         <dt>config</dt>
         <dd>a YAML file via <code>-config</code>, or the same settings as inline flags. See <a href="#configuration">Configuration</a>.</dd>
         <dt>model source</dt>
@@ -188,7 +189,7 @@
     <div class="doc-body">
 
       <p class="doc-prose">
-        The command surface. Argument shapes are shown in full: where a command
+        Argument shapes are shown in full. Where a command
         takes a reply-format keyword, its position is fixed and is described
         under <a href="#replies">Replies and protocol</a>.
       </p>
@@ -204,13 +205,13 @@
         <dd>List the loaded models with their dimensions and status.</dd>
 
         <dt>EMB.INFO &lt;model&gt;</dt>
-        <dd>Model details: dimension, workers, requests served, average latency, batch determinism, the CPU share, thread width and spinning the process granted this model, the embedding path's dispatch, admission and run timings and runs (<code>embed_dispatch_wait_us</code>, <code>embed_admission_wait_us</code>, <code>embed_run_us</code>, <code>embed_runs</code>), and that model's own cache counters — <code>cache_hits</code>, <code>cache_misses</code>, <code>cache_hit_rate</code>, <code>cache_evictions</code>, <code>cache_entries</code>, <code>cache_max_bytes</code>.</dd>
+        <dd>Model details: dimension, workers, requests served, average latency, batch determinism, the CPU share, thread width and spinning the process granted this model, the embedding path's dispatch, admission and run timings and runs (<code>embed_dispatch_wait_us</code>, <code>embed_admission_wait_us</code>, <code>embed_run_us</code>, <code>embed_runs</code>), and that model's own cache counters: <code>cache_hits</code>, <code>cache_misses</code>, <code>cache_hit_rate</code>, <code>cache_evictions</code>, <code>cache_entries</code>, <code>cache_max_bytes</code>.</dd>
 
         <dt>EMB.STATS</dt>
-        <dd>Server statistics: uptime, total requests, live connections, active requests, a per-model breakdown, and process resources — RSS in MB, CPU user/system microseconds, goroutines.</dd>
+        <dd>Server statistics: uptime, total requests, live connections, active requests, a per-model breakdown, and process resources (RSS in MB, CPU user/system microseconds, goroutines).</dd>
 
         <dt>MONITOR [seq] [limit]</dt>
-        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, text count, latency in µs, error, then the request's own attribution — <code>cached_texts</code> (how many of its texts the reply cache answered), <code>attributed</code> (whether the server measured its phases at all), and <code>dispatch_us</code>, <code>admit_us</code>, <code>run_us</code>: the time its uncached texts spent waiting for a session or batch window, at the process CPU gate, and running. They follow <code>err</code>, so a client reading the original six positionally is unaffected. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
+        <dd>Recent completed-request events from a bounded ring of up to 8192: sequence, timestamp in µs, model, text count, latency in µs, error, then the request's own attribution: <code>cached_texts</code> (how many of its texts the reply cache answered), <code>attributed</code> (whether the server measured its phases at all), and <code>dispatch_us</code>, <code>admit_us</code>, <code>run_us</code>: the time its uncached texts spent waiting for a session or batch window, at the process CPU gate, and running. They follow <code>err</code>, so a client reading the original six positionally is unaffected. Pass the last <code>seq</code> you saw to fetch only newer events. Request texts are never included.</dd>
 
         <dt>EMB.READY</dt>
         <dd>Health check. <code>+OK</code> when ready, otherwise <code>-ERR</code> with a reason: <code>loading</code>, <code>draining</code>, <code>no models</code>.</dd>
@@ -255,7 +256,7 @@
           failure never blocks exit; <code>ABORT</code> cancels a pending
           shutdown and cannot be combined with any other flag.
           <code>-ERR syntax error</code> starts nothing. The caller receives
-          <strong>no reply</strong> — it blocks for the grace and drain, and its
+          <strong>no reply</strong>: it blocks for the grace and drain, and its
           connection closes as the process exits; a second caller during the
           same shutdown blocks too, and its flags are ignored.
           <code>ABORT</code> replies <code>+OK</code> (or <code>-ERR No shutdown
@@ -333,13 +334,13 @@
 
       <h3 class="doc-h3">Where the keyword is read</h3>
       <p class="doc-prose">
-        The keyword is detected only at its fixed position — right after the
-        model name, or before the pairs in <code>EMB.MULTI</code> — and is never
+        The keyword is detected only at its fixed position (right after the
+        model name, or before the pairs in <code>EMB.MULTI</code>) and is never
         scanned from the tail of the text. A trailing word that happens to read
         <code>BLOB</code> or <code>VALUES</code> embeds normally. The one
         collision is a <em>first</em> text in a multi-text call:
         <code>EMB m VALUES hello</code> treats <code>VALUES</code> as the
-        keyword, so write it twice — <code>EMB m VALUES VALUES hello</code> —
+        keyword, so write it twice (<code>EMB m VALUES VALUES hello</code>)
         or reorder the texts. As a safety measure both words are reserved and
         cannot be used as model names.
       </p>
@@ -435,9 +436,9 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <dt>workers</dt>
         <dd>Auto-tuned. Number of worker goroutines.</dd>
         <dt>intra_op_threads</dt>
-        <dd>Defaults to <code>cores−2</code> under <code>cpu_budget: off</code>; with the default <code>cpu_budget: auto</code> the process budget and calibration choose it. Set it explicitly to override — an explicit value is never replaced.</dd>
+        <dd>Defaults to <code>cores−2</code> under <code>cpu_budget: off</code>; with the default <code>cpu_budget: auto</code> the process budget and calibration choose it. Set it explicitly to override; an explicit value is never replaced.</dd>
         <dt>scripts</dt>
-        <dd>Default <code>[]</code>. Lua scripts to preload at boot; relative paths resolve against the config file's directory. An invalid script — bad syntax, missing file, oversized — fails startup.</dd>
+        <dd>Default <code>[]</code>. Lua scripts to preload at boot; relative paths resolve against the config file's directory. An invalid script (bad syntax, missing file, oversized) fails startup.</dd>
         <dt>batching</dt>
         <dd>Default <code>{timeout: 1, max_batch: 32, max_batch_tokens: 16384}</code>.</dd>
         <dt>script_callers_per_session</dt>
@@ -454,8 +455,8 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         one named-tensor session, up to
         <code>script_callers_per_session</code>. Out of the box the server
         observes each model's traffic shape and moves the effective allowance
-        inside that cap — shrinking under sustained serial traffic and
-        re-expanding to the cap on the first burst — so neither an unusually
+        inside that cap (shrinking under sustained serial traffic and
+        re-expanding to the cap on the first burst), so neither an unusually
         serial nor an unusually bursty workload needs a hand-picked layout.
       </p>
       <dl class="doc-cmds">
@@ -471,7 +472,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <code>allow_spinning</code> is kept, and <code>autotune: off</code> pins
         the allowance at the configured value even under
         <code>capacity: throughput</code>. A model whose class stays
-        <code>saturated</code> is CPU-bound — more concurrency cannot help — so
+        <code>saturated</code> is CPU-bound (more concurrency cannot help), so
         the controller holds the allowance and logs one recommendation to raise
         <code>script_workers</code> or <code>intra_op_threads</code> instead.
       </p>
@@ -481,7 +482,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         Embedding and image models are budgeted as one process. Out of the box
         the server detects the CPU allowance it may use, holds back
         <code>cpu_reserve</code>, and calibrates each model's session count and
-        intra-op width inside what is left — so a default deployment sizes
+        intra-op width inside what is left, so a default deployment sizes
         itself to the machine instead of to a hard-coded thread count.
       </p>
       <dl class="doc-cmds">
@@ -496,7 +497,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       </dl>
       <p class="doc-prose">
         Precedence: an explicit <code>workers</code> or
-        <code>intra_op_threads</code> is never replaced — the plan reports the
+        <code>intra_op_threads</code> is never replaced, and the plan reports the
         width you asked for. <code>cpu_budget: off</code> is the kill switch and
         restores the legacy width rule exactly. The budget bounds <em>admitted
         intra-op work</em>, not physical CPU: tokenization and Go work sit
@@ -534,7 +535,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <p class="doc-note">
         <strong>A snapshot contains the original input text and the embedding
         bytes.</strong> Treat the file as sensitive, and treat it as a warm-start
-        optimization rather than a durable database — it is disposable, and a
+        optimization rather than a durable database: it is disposable, and a
         restore that does not fit the configured budget is simply skipped.
       </p>
     </div>
@@ -552,17 +553,16 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <div class="mech" data-mech="scripts"></div>
 
       <p class="doc-prose">
-        This section is the introduction. <a href="../scripting/index.html">The
-        scripting reference</a> carries the complete host surface — every
-        <code>emb.*</code> function, the tensor and reply forms, the budgets, and
-        the reply-cache identity.
+        <a href="../scripting/index.html">The scripting reference</a> carries the
+        complete host surface: every <code>emb.*</code> function, the tensor and
+        reply forms, the budgets, and the reply-cache identity.
       </p>
 
       <p class="doc-prose">
         The plain embed command is a fixed pipeline:
         <code>model(input) → output</code>. A script replaces the edges around
-        that same call with your own code — preprocessing, postprocessing, and
-        the reply itself — so a raw-logits text model can answer as a labelled
+        that same call with your own code (preprocessing, postprocessing, and
+        the reply itself), so a raw-logits text model can answer as a labelled
         classifier, or a cross-encoder can answer with a score.
       </p>
 
@@ -579,7 +579,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
 <span class="t-cmd">local</span> idx, score <span class="t-dim">=</span> emb.math.<span class="t-cmd">argmax</span>(probs)
 <span class="t-cmd">return</span> { label <span class="t-dim">=</span> labels[idx], confidence <span class="t-dim">=</span> score, scores <span class="t-dim">=</span> probs }</pre>
         <figcaption class="code__cap">
-          <code>examples/scripts/snippets/sst2.lua</code> — a raw-logits text model
+          <code>examples/scripts/snippets/sst2.lua</code>, a raw-logits text model
           answering as a classifier.
         </figcaption>
       </figure>
@@ -620,7 +620,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <dt>emb.math.{sigmoid, softmax, argmax}</dt>
         <dd>Post-processing primitives, vectorized per array.</dd>
         <dt>emb.math.float32_bytes(vals)</dt>
-        <dd>Pack numbers into one little-endian float32 bulk — <code>unpack('e*')</code> on the client.</dd>
+        <dd>Pack numbers into one little-endian float32 bulk: <code>unpack('e*')</code> on the client.</dd>
         <dt>json.{encode, decode}</dt>
         <dd>Structured replies and parsing.</dd>
       </dl>
@@ -653,7 +653,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       </p>
       <dl class="doc-cmds">
         <dt>reference/gliner2.lua</dt>
-        <dd>Span extraction against supplied labels — the maintained reference. Reads its logits in packed form and decodes with <code>emb.math.gather</code> + <code>emb.math.sigmoid</code>.</dd>
+        <dd>Span extraction against supplied labels: the maintained reference. Reads its logits in packed form and decodes with <code>emb.math.gather</code> + <code>emb.math.sigmoid</code>.</dd>
         <dt>snippets/sst2.lua</dt>
         <dd>Text classification with a softmax over logits, returning a label and a confidence.</dd>
         <dt>snippets/qa.lua</dt>
@@ -669,7 +669,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <p>
         For embeddings and scoring, prefer <code>emb.embed</code> (pooled,
         normalized, cached, and sharing the server's batcher and sessions with
-        <code>EMB</code>) and the similarity methods —
+        <code>EMB</code>) and the similarity methods:
         <code>emb.similarity(a, b [, metric])</code> for <em>higher is more
         similar</em> (<code>cosine</code>, <code>dot</code>) and
         <code>emb.distance(a, b [, metric])</code> for <em>lower is
@@ -706,7 +706,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <h3 class="doc-h3">Health checks</h3>
       <p class="doc-prose">
         <code>EMB.READY</code> answers <code>+OK</code> when the server can serve
-        traffic, or <code>-ERR</code> with a reason — <code>loading</code>,
+        traffic, or <code>-ERR</code> with a reason: <code>loading</code>,
         <code>draining</code>, <code>no models</code>. Point a load balancer's
         TCP health check at it; the Ruby client exposes the same probe as
         <code>ready?</code> and <code>ready</code>.
@@ -731,7 +731,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         closing the socket immediately without counting it.
         <code>max_concurrent_requests</code> answers <code>EMB</code> and
         <code>EMB.MULTI</code> with <code>ERR busy …</code> at the cap, giving
-        consumers backpressure instead of unbounded queueing — while
+        consumers backpressure instead of unbounded queueing, while
         <code>PING</code>, <code>AUTH</code>, <code>EMB.READY</code>,
         <code>EMB.STATS</code>, <code>EMB.MODELS</code>, <code>EMB.INFO</code>
         and <code>EMB.HELP</code> still answer, so ops can probe a saturated
@@ -753,8 +753,8 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         instance.
       </p>
       <p class="doc-prose">
-        Then the listening socket closes — new connections are refused
-        (<code>ECONNREFUSED</code>, which Redis clients retry) — idle
+        Then the listening socket closes: new connections are refused
+        (<code>ECONNREFUSED</code>, which Redis clients retry), idle
         connections close, a running command finishes and its connection closes
         right after the reply, and a command not yet executing gets no reply at
         all: its connection closes, so a caller sees a connection error and
@@ -800,7 +800,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
         <code>active_requests</code> count, a per-model breakdown, process
         resources (<code>mem</code> as RSS in MB, CPU user and system
         microseconds, <code>goroutines</code>), the cache counters, and the
-        effective limits — enough to classify an incident as volume,
+        effective limits, enough to classify an incident as volume,
         saturation, or churn, and to confirm RSS and goroutines are flat between
         polls.
       </p>
@@ -826,8 +826,8 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <p class="doc-prose">
         <code>CONFIG GET [glob]</code> reads the live registry
         (<code>CONFIG GET cache*</code>) and <code>CONFIG SET</code> tunes it at
-        runtime, including live cache resizing — <code>CONFIG SET cache 1GB</code>
-        evicts immediately — and swapping the password, which affects new
+        runtime, including live cache resizing (<code>CONFIG SET cache 1GB</code>
+        evicts immediately) and swapping the password, which affects new
         connections only. Read-only parameters such as the listen address, TLS
         and models are reported by <code>GET</code> and rejected by
         <code>SET</code>. Both require authentication, matching Redis.
@@ -841,7 +841,7 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       </p>
       <dl class="doc-cmds">
         <dt>script_traffic_class</dt>
-        <dd><code>idle</code>, <code>latency</code>, <code>throughput</code>, or <code>saturated</code> — the class of the most recent sampling window.</dd>
+        <dd><code>idle</code>, <code>latency</code>, <code>throughput</code>, or <code>saturated</code>, the class of the most recent sampling window.</dd>
         <dt>script_inflight</dt>
         <dd>Evaluations running right now, counted at the inference boundary; cache hits never reach it.</dd>
         <dt>script_concurrency_current</dt>
@@ -863,13 +863,13 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       <h3 class="doc-h3">Process CPU plan</h3>
       <p class="doc-prose">
         The startup log and <code>EMB.STATS</code> report the plan the server
-        settled on, so the layout is observable rather than implied:
+        settled on:
       </p>
       <dl class="doc-cmds">
         <dt>cpu_allowance</dt>
         <dd>The CPU allowance the process detected, in CPUs.</dd>
         <dt>cpu_allowance_source</dt>
-        <dd>Where it came from — <code>scheduler/affinity</code>, a cgroup quota, or a fallback.</dd>
+        <dd>Where it came from: <code>scheduler/affinity</code>, a cgroup quota, or a fallback.</dd>
         <dt>cpu_budget</dt>
         <dd>The admitted budget after <code>cpu_reserve</code>, in intra-op tokens.</dd>
         <dt>cpu_active_tokens</dt>
@@ -881,8 +881,8 @@ env = redis.call(<span class="t-str">"EMB"</span>, <span class="t-str">"minilm"<
       </dl>
       <p class="doc-prose">
         Calibration runs trials at startup, which costs a short burst of CPU
-        before the server accepts requests. A calibrated layout falls back —
-        keeping the explicit width and logging the reason — when the model's
+        before the server accepts requests. A calibrated layout falls back
+        (keeping the explicit width and logging the reason) when the model's
         demand exceeds the admitted budget, when an explicit
         <code>intra_op_threads</code> is set, or when the trial cannot validate
         a candidate.
@@ -994,15 +994,15 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
       <h3 class="doc-h3">emb-stress</h3>
       <p class="doc-prose">
         <code>emb-top</code> observes a fleet; <code>emb-stress</code> drives one.
-        It takes the same server configuration the fleet was started with — so
+        It takes the same server configuration the fleet was started with (so
         the models it exercises, their dimensions and their maximum lengths come
-        from the fleet's own contract — and a <em>target</em> that is one
+        from the fleet's own contract) and a <em>target</em> that is one
         <code>host:port</code> or a DNS name, which it expands into one endpoint
         per address record. It reconciles the configured models against what
         each node reports, then offers closed-loop load to every node at each
         level in turn, and reports per endpoint and for the fleet the offered
         load, the completed requests per second, the p50/p95/p99 latency and the
-        error count. It is a pure RESP client — no model, no ONNX Runtime — so
+        error count. It is a pure RESP client (no model, no ONNX Runtime), so
         it runs anywhere <code>emb-top</code> does.
       </p>
       <p class="doc-prose">
@@ -1184,17 +1184,17 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
         <dd>6 CPUs for the server, 4 for the tooling. The server is bounded by <code>GOMAXPROCS</code> and <code>intra_op_threads</code>, hard-pinned with <code>taskset -c</code> on Linux. The partition is measurement methodology, not a throughput knob.</dd>
       </dl>
 
-      <h3 class="doc-h3">Adaptive capacity — a scripted model</h3>
+      <h3 class="doc-h3">Adaptive capacity: a scripted model</h3>
       <p class="doc-prose">
         The figures above use <code>EMB</code> on an embedding model. These use a
-        <em>scripted</em> model — GLiNER2 int8, 36 texts, reply cache off, on
+        <em>scripted</em> model: GLiNER2 int8, 36 texts, reply cache off, on
         the same Apple M4. Out of the box, with no
         <code>script_workers</code> and no profile, the burst case runs
         <strong>2.0×</strong> the throughput at <strong>2.0×</strong> the p50
         latency of the pre-change binary, with serial latency unchanged. The
         gain belongs to the adaptive-capacity work as a whole: the fixed
         shared-session default it shipped with was already the measured best,
-        so the controller's own effect against that default is parity — and the
+        so the controller's own effect against that default is parity, and the
         first plate says so.
       </p>
 
@@ -1277,7 +1277,7 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
         </svg>
         </div>
         <div class="plate__legend">
-          <span><i class="plate__swatch--signal" aria-hidden="true"></i><b>allowance</b> — the orange step</span>
+          <span><i class="plate__swatch--signal" aria-hidden="true"></i><b>allowance</b>: the orange step</span>
           <span><i class="plate__swatch--area" aria-hidden="true"></i>in-flight runs</span>
           <span><i class="plate__swatch--cap" aria-hidden="true"></i>cap 4</span>
         </div>
@@ -1333,10 +1333,10 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
         </svg>
         </div>
         <figcaption class="plate__cap">
-          <strong>Pick your corner.</strong> Serial p50 (ms) against burst
+          <strong>The profiles.</strong> Serial p50 (ms) against burst
           req/s (c=8). <code>auto</code> <strong>21.03 ms / 151.8</strong>,
           <code>throughput</code> <strong>21.20 / 149.5</strong>,
-          <code>off</code> (fixed cap) <strong>21.14 / 150.2</strong> — within
+          <code>off</code> (fixed cap) <strong>21.14 / 150.2</strong>, within
           noise of each other. <code>latency</code> is the deliberate trade:
           <strong>20.16 ms / 121.6</strong>, about 5% off serial p50 for about
           20% of burst throughput. Reproduce a row with
@@ -1347,7 +1347,7 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
 
       <p class="doc-note">
         <strong>Guardrails, same runs.</strong> Replies are byte-identical
-        between the two binaries — the harness interleaves them and exits
+        between the two binaries: the harness interleaves them and exits
         non-zero on any difference. The Ruby client suite passes against the
         adaptive server (203 examples, 0 failures) with
         <code>EMB.READY</code> answering <code>+OK</code>. Entering
@@ -1356,7 +1356,7 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
         recorded in <code>BENCHMARK.md</code> with its reproduction command.
       </p>
 
-      <h3 class="doc-h3">Multi-threaded — one session at 8 intra-op threads</h3>
+      <h3 class="doc-h3">Multi-threaded: one session at 8 intra-op threads</h3>
       <p class="doc-prose">
         The default <code>config.yaml</code> carries no tuning keys, so
         <code>cpu_budget: auto</code> decides the layout: on this 10-core
@@ -1374,7 +1374,7 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
         <dd><strong>2,721 req/s</strong> (1,955–2,729), p50 23.295 ms.</dd>
       </dl>
 
-      <h3 class="doc-h3">Process CPU budget — out of the box vs tuned</h3>
+      <h3 class="doc-h3">Process CPU budget: out of the box vs tuned</h3>
       <p class="doc-prose">
         Two arms compare the automatic budget against its kill switch and
         against an explicit width. Each arm is started, warmed and measured
@@ -1383,11 +1383,11 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
       </p>
       <dl class="doc-cmds">
         <dt>cpu_budget: auto <span class="t-dim">(default)</span></dt>
-        <dd>1 session × 8 threads — <strong>1,288 req/s</strong> (1,280–2,049).</dd>
+        <dd>1 session × 8 threads: <strong>1,288 req/s</strong> (1,280–2,049).</dd>
         <dt>cpu_budget: off</dt>
-        <dd>legacy session sizing — <strong>1,426 req/s</strong> (1,413–2,232), <strong>1.10× auto</strong> (1.08–1.24) interleaved.</dd>
+        <dd>legacy session sizing: <strong>1,426 req/s</strong> (1,413–2,232), <strong>1.10× auto</strong> (1.08–1.24) interleaved.</dd>
         <dt>intra_op_threads: 4 <span class="t-dim">(explicit)</span></dt>
-        <dd>1 session × 4 threads — <strong>2,026 req/s</strong> (2,020–2,030), 0.98× auto.</dd>
+        <dd>1 session × 4 threads: <strong>2,026 req/s</strong> (2,020–2,030), 0.98× auto.</dd>
       </dl>
       <p class="doc-prose">
         Absolute medians follow the host's regime, so the interleaved ratio is
@@ -1399,7 +1399,7 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
         a flat win. The budget bounds admitted intra-op work, not physical CPU.
       </p>
 
-      <h3 class="doc-h3">Cache hit — identical texts</h3>
+      <h3 class="doc-h3">Cache hit: identical texts</h3>
       <p class="doc-prose">
         The first request populates the cache; the rest return without ONNX.
       </p>
@@ -1441,9 +1441,8 @@ q quit · p pause · r reset · j/k select · enter detail · esc back · ? help
     <div class="doc-body">
 
       <p class="doc-prose">
-        Because the reply is ordinary RESP, any Redis client works unchanged —
-        that is the point of implementing the protocol instead of shipping an
-        SDK. The only decision is whether to decode the bytes yourself or ask for
+        Because the reply is ordinary RESP, any Redis client works unchanged.
+        The only decision is whether to decode the bytes yourself or ask for
         the decimal <code>VALUES</code> envelope.
       </p>
 
@@ -1467,8 +1466,8 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         The <code>emb</code> Ruby gem wraps the same protocol with connection
         pooling, a proxy API, multi-model support and automatic float32
         decoding, and the <code>emb-server</code> gem ships the precompiled
-        binary. Neither is required — they are conveniences over the wire —
-        but the client's three execution modes and the one rule that decides
+        binary. Neither is required; they are conveniences over the wire. The
+        client's three execution modes and the one rule that decides
         how many commands a scope costs are <a href="../gem/index.html">explained
         on their own surface</a>.
       </p>
@@ -1523,9 +1522,9 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         against the vendored corpus (see <a href="../demos/laya.html">the decision engine</a>
         plate and the <a href="https://github.com/elcuervo/emb/blob/main/README.md" rel="noopener">README's Laya section</a>). The plate
         runs four rounds over the same call: a <b>Snake loop</b> that runs a whole
-        bounded episode in one call — the preset owns the board, the planner and the
+        bounded episode in one call (the preset owns the board, the planner and the
         three typed questions, and the plate animates the frames beside the
-        reference's own probability readout (ported from
+        reference's own probability readout, ported from
         <a href="https://github.com/mizorewww/laya-coreml" rel="noopener">laya-coreml</a>),
         a <b>Pac-Man loop</b> on the same contract with its own maze, pellets and
         ghosts, the <b>email-triage</b> set, and the <b>smallest</b> three-question round.
@@ -1542,11 +1541,11 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         supporting files under that folder.
       </p>
       <dl class="doc-cmds">
-        <dt><code>english</code> — ModernBERT-large · 421M · context 512</dt>
+        <dt><code>english</code>: ModernBERT-large · 421M · context 512</dt>
         <dd>English, general purpose. The default checkpoint.</dd>
-        <dt><code>multilingual</code> — mmBERT-base · 322M · context 1024</dt>
-        <dd>100+ languages, roughly twice as fast as english. The router sends a ticket whose script or language the English checkpoint cannot read — Devanagari, Han, Spanish, Arabic — here <em>before</em> the forward pass, because a wrong checkpoint collapses while staying confident.</dd>
-        <dt><code>typed-decisions</code> — ModernBERT-large · 421M · context 1024</dt>
+        <dt><code>multilingual</code>: mmBERT-base · 322M · context 1024</dt>
+        <dd>100+ languages, roughly twice as fast as english. The router sends a ticket whose script or language the English checkpoint cannot read (Devanagari, Han, Spanish, Arabic) here <em>before</em> the forward pass, because a wrong checkpoint collapses while staying confident.</dd>
+        <dt><code>typed-decisions</code>: ModernBERT-large · 421M · context 1024</dt>
         <dd>Fine-tuned on the typed-decisions workflows: invoice processing, security incidents, customer service, agent-trace observability. Same command surface, its own calibrations.</dd>
       </dl>
 
@@ -1554,8 +1553,8 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
       <p class="doc-prose">
         The model reads a question as one sequence, and the sequence is a little tree:
         the question is the trunk, every option is a branch marked with the model's
-        mask token, and the state — the email, ticket, prompt or JSON — rides at the
-        tail. The template, exactly:
+        mask token, and the state (the email, ticket, prompt or JSON) rides at the
+        tail. The template:
       </p>
       <figure class="code">
 <pre class="code__body"><code>[CLS] choice question: which team should handle the email in `body`? [SEP]
@@ -1571,13 +1570,13 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         That is <b>one row</b>. A round sends <b>one row per question</b> as a single
         batch: the email set above is five rows and fifteen markers
         (6 + 2 + 2 + 3 + 2), and the one forward pass scores every marker at its own
-        position — so the answers all come back together. In a classical decision tree
+        position, so the answers all come back together. In a classical decision tree
         you ask, branch on the answer, and ask again, depth first; Laya's tree is
-        <b>breadth, not depth</b>. No question waits on another's answer, which is why
-        the whole round is one call, one pass, and one reply.
+        <b>breadth, not depth</b>. No question waits on another's answer, so the
+        whole round is one call and one reply.
       </p>
       <p class="doc-prose">
-        <b>Loops.</b> A decision <em>loop</em> — each step depending on the last — should
+        <b>Loops.</b> A decision <em>loop</em> (each step depending on the last) should
         run where the model runs, not behind a round trip per step. The shipped
         <code>scripts/snake.lua</code> is the example: it owns the board, a Hamiltonian
         safety planner and three typed questions, and one
@@ -1585,8 +1584,8 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         (each with the move probabilities and the shielded result) plus the board to
         resume from. The page animates the frames locally and prefetches the next
         episode. The host learns nothing about Snake: it is a task preset, and
-        <code>scripts/pacman.lua</code> is a second one — its own maze, pellets and
-        ghosts, the same one-call contract — so a third task would keep its own rules
+        <code>scripts/pacman.lua</code> is a second one (its own maze, pellets and
+        ghosts, the same one-call contract), so a third task would keep its own rules
         the same way. Every frame carries the model call's own duration
         (<code>inference_ms</code>): the host measures <code>emb.run</code> around the
         session run and returns it as a second value, so the page shows model time,
@@ -1599,8 +1598,8 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
       <p class="doc-prose">
         A Laya export (from <code>codenamev/laya-onnx</code>: <code>english</code>,
         <code>multilingual</code>, <code>typed-decisions</code>) mounts like any
-        scripted model — <code>onnx:</code> + <code>tokenizer:</code>, the preset
-        preloaded — and answers over <code>EMB.EVSHA</code>. The export publishes each
+        scripted model (<code>onnx:</code> + <code>tokenizer:</code>, the preset
+        preloaded) and answers over <code>EMB.EVSHA</code>. The export publishes each
         checkpoint under a folder, so the entry names it with
         <code>model_subfolder:</code>; the downloader fetches
         <code>&lt;subfolder&gt;/model.onnx</code> and the supporting files into the
@@ -1641,16 +1640,18 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
       <h3 class="doc-h3">The wire contract</h3>
       <p class="doc-prose">
         One <code>EMB.EVSHA &lt;model&gt; &lt;laya.lua sha1&gt; 1 &lt;state&gt; &lt;questions&gt; [&lt;config&gt;]</code>
-        answers every question. The state is <code>KEYS[1]</code>: a plain string passes
-        through, and a structured state must be Python-style JSON — spaces after
-        every comma and colon (<code>{"from": "a@b", "body": "x"}</code>), because the
-        checkpoints were trained on exactly those strings. <code>ARGV[1]</code> is the
-        questions object; criteria label order is significant (marker order maps
-        to label order), so criteria objects arrive as JSON objects in document
-        order. The checkpoint's envelope — <code>max_len</code>, <code>head_max_len</code>,
-        <code>min_seq</code>, <code>min_markers</code>, <code>temperature</code> (choice/score/noul)
-        and <code>temperature_by_options</code> (buckets <code>2</code>, <code>3-5</code>, <code>6-10</code>,
-        <code>11+</code>) — belongs to the checkpoint, not the request: it is declared on
+        answers every question. The state is <code>KEYS[1]</code>: a plain string
+        passes through, and a structured state must be Python-style JSON, with
+        spaces after every comma and colon
+        (<code>{"from": "a@b", "body": "x"}</code>), because the checkpoints were
+        trained on exactly those strings. <code>ARGV[1]</code> is the questions
+        object; criteria label order is significant (marker order maps to label
+        order), so criteria objects arrive as JSON objects in document order. The
+        checkpoint's envelope belongs to the checkpoint, not the request:
+        <code>max_len</code>, <code>head_max_len</code>, <code>min_seq</code>,
+        <code>min_markers</code>, <code>temperature</code> (choice/score/noul) and
+        <code>temperature_by_options</code> (buckets <code>2</code>,
+        <code>3-5</code>, <code>6-10</code>, <code>11+</code>). It is declared on
         the model entry's <code>scripts</code> config and read by the preset as
         <code>emb.script.config</code>, so a client sends only the state and the
         questions. <code>ARGV[2]</code> remains an optional per-call override.
@@ -1669,29 +1670,32 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
       </dl>
 
       <p class="doc-prose">
-        The reference implementations ship ready-made question sets as their canonical
-        examples — <code>Laya::Presets.*</code> in the gem and <code>laya.presets.*</code>
-        upstream, byte-identical: <code>triage_questions</code> (intent, urgency,
-        frustration, refund, churn), <code>email_questions</code> (category, spam,
-        phishing, urgency, needs-reply — the set <a href="../demos/laya.html">the decision
-        engine</a> plate runs verbatim), <code>guard_questions</code> (jailbreak, injection,
+        The reference implementations ship ready-made question sets as their
+        canonical examples (<code>Laya::Presets.*</code> in the gem and
+        <code>laya.presets.*</code> upstream, byte-identical):
+        <code>triage_questions</code> (intent, urgency, frustration, refund,
+        churn), <code>email_questions</code> (category, spam, phishing, urgency,
+        needs-reply; the set <a href="../demos/laya.html">the decision engine</a>
+        plate runs verbatim), <code>guard_questions</code> (jailbreak, injection,
         sensitive data, harm, topic), <code>moderation_questions</code>, and
-        <code>router_questions</code>. They are JSON the same way any question set is —
-        copy one, or write your own with the schema above.
+        <code>router_questions</code>. They are plain JSON, so you can copy one
+        or write your own with the schema above.
       </p>
 
       <h3 class="doc-h3">Reading the answers: confidence, the act/escalate head, the gate</h3>
       <p class="doc-prose">
         Every answer carries <code>confidence</code> and
         <code>action.act_probability</code>. Confidence is normalized entropy
-        (<code>1 − H(p) / log k</code>), so it has a true floor: a <code>choice</code> or
-        <code>score</code> sits on the 0–1 scale — <b>0.0000</b> is the undecided floor
-        (a uniform distribution, the genuinely ambiguous input), <b>1.0000</b> is fully
-        decided; a <code>noul</code>'s scale bottoms out at <b>0.5000</b> (a coin flip
-        between yes and no), and a single-option question is always <b>1.0000</b>.
-        <code>act_probability</code> is the act/escalate head's read on the same answer —
-        how strongly the model says “act on this” versus “escalate this” — served as the
-        answer's <code>action</code> field.
+        (<code>1 − H(p) / log k</code>), so it has a true floor: a
+        <code>choice</code> or <code>score</code> sits on the 0–1 scale, where
+        <b>0.0000</b> is the undecided floor (a uniform distribution, the
+        genuinely ambiguous input) and <b>1.0000</b> is fully decided; a
+        <code>noul</code>'s scale bottoms out at <b>0.5000</b> (a coin flip
+        between yes and no), and a single-option question is always
+        <b>1.0000</b>. <code>act_probability</code> is the act/escalate head's
+        read on the same answer (how strongly the model says “act on this”
+        versus “escalate this”), served as the answer's <code>action</code>
+        field.
       </p>
       <p class="doc-prose">
         The gating pattern the reference implementations themselves demo gates on
@@ -1710,13 +1714,13 @@ env = r.execute_command(<span class="t-str">"EMB"</span>, <span class="t-str">"m
         The same round works in any of the 100+ languages: mount <code>english</code> and
         <code>multilingual</code>, detect the ticket's script before the call (the gem's
         <code>Laya::Router</code>, or your own detector), and point each ticket at the
-        checkpoint that can read it — the state, the questions and the config envelope
+        checkpoint that can read it: the state, the questions and the config envelope
         do not change, only the model entry.
       </p>
 
       <p class="doc-prose">
         The website sandbox mounts two Laya entries: a 32-hidden miniature of the
-        architecture — random weights, real mechanism — behind the two game loops
+        architecture with random weights behind the two game loops
         (Snake, Pac-Man), and the published <code>typed-decisions</code> checkpoint
         behind the typed-question examples (Inbox, Quickstart), mounted as that
         checkpoint's published int8 export (<code>model_int8.onnx</code>, resolved by

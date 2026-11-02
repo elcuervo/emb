@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — a fast embedding server that speaks the Redis protocol</title>
 <link rel="canonical" href="https://emb.is/">
-<meta name="description" content="emb is a simple yet powerful inference server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache, multi-model queries.">
+<meta name="description" content="emb is a self-hosted embedding server that speaks the Redis protocol. ONNX Runtime inference, batching, an LRU cache, and multi-model queries.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — a fast embedding server that speaks the Redis protocol">
@@ -128,7 +128,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
 
         <p class="hero__sub">
           Any Redis client works unchanged. Pre-1.0, MIT licensed.
-          Turn text — or any tensor a script builds —
+          Turn text, or any tensor a script builds,
           into vectors.
         </p>
 
@@ -153,7 +153,7 @@ window.addEventListener('error',function(){if(!document.documentElement.classLis
                 <span class="opt__key">DOCKER</span>
                 <span class="opt__body">
                   <code class="opt__cmd">docker run -p 6379:6379 elcuervo/emb</code>
-                  <span class="opt__note">Nothing else to install — ONNX Runtime is inside the image.</span>
+                  <span class="opt__note">Nothing else to install: ONNX Runtime is inside the image.</span>
                 </span>
               </a>
               <a class="opt" href="docs/index.html#install">
@@ -648,7 +648,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
             <article class="cap" data-reveal>
               <h3 class="cap__label">ANY REDIS CLIENT</h3>
               <p class="cap__claim">
-                redis-cli, redis-py, redis-rb — the client you already have is
+                redis-cli, redis-py, redis-rb: the client you already have is
                 the SDK. Nothing to install but the server.
               </p>
             </article>
@@ -707,7 +707,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
             <p class="block__deck">
               The plain embed command is a fixed pipeline:
               <span class="t-cmd">model(input) → output</span>. A script
-              replaces the edges around that same call with your own code —
+              replaces the edges around that same call with your own code:
               preprocessing, postprocessing, and the reply itself.
             </p>
 
@@ -737,7 +737,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
 <span class="t-dim">-- labels arrive in the model's training order</span>
 <span class="t-cmd">return</span> { label <span class="t-dim">=</span> labels[idx], confidence <span class="t-dim">=</span> score }</pre>
               <figcaption class="code__cap">
-                <span class="t-cmd">examples/scripts/snippets/sst2.lua</span> — a raw-logits
+                <span class="t-cmd">examples/scripts/snippets/sst2.lua</span>: a raw-logits
                 text model becomes a labelled classifier
               </figcaption>
             </figure>
@@ -785,7 +785,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               <p class="cap__claim">
                 Redis-shaped <span class="t-cmd">INFO</span> and
                 <span class="t-cmd">CONFIG</span>, including live cache
-                resizing — no restart, no new config format.
+                resizing, with no restart and no new config format.
               </p>
             </article>
 
@@ -793,7 +793,7 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               <h3 class="cap__label">A REAL READINESS PROBE</h3>
               <p class="cap__claim">
                 <span class="t-cmd">EMB.READY</span> answers <span
-                class="t-num">+OK</span> or says why not — loading, draining,
+                class="t-num">+OK</span> or says why not: loading, draining,
                 no models.
               </p>
             </article>
@@ -820,12 +820,12 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
               <p class="cap__claim">
                 Detects the CPU allowance it may use (here from the scheduler's
                 CPU affinity), holds back a reserve, and calibrates each model's
-                sessions × intra-op width inside what is left — on a 10-core M4
-                that is allowance <span class="t-num">10</span>, budget
-                <span class="t-num">8</span>, one embedding session at
-                <span class="t-num">8</span> threads. An explicit
-                <span class="t-cmd">intra_op_threads</span> is never replaced, and
-                when no calibrated candidate validates the server keeps that
+                sessions × intra-op width within what remains. On a 10-core M4
+                that means an allowance of <span class="t-num">10</span>, a
+                budget of <span class="t-num">8</span>, and one embedding
+                session at <span class="t-num">8</span> threads. An explicit
+                <span class="t-cmd">intra_op_threads</span> is never replaced;
+                when no calibrated candidate validates, the server keeps that
                 width and logs why. <span class="t-cmd">cpu_budget: off</span>
                 restores the legacy width rule.
               </p>
@@ -846,8 +846,8 @@ Run these on a local server; this panel is a specimen without JavaScript.</pre>
         <section class="topviz" aria-labelledby="topviz-h" data-reveal>
           <h3 class="cap__label" id="topviz-h">emb-top</h3>
           <p class="topviz__claim">
-            Req/s, p50/p95/p99, cache hit ratio and RSS — polled in one round
-            trip, over the same protocol you already speak.
+            Req/s, p50/p95/p99, cache hit ratio and RSS, polled in one round
+            trip over the same protocol you already speak.
           </p>
           <!-- A capture, not a drawing — and it plays. `.topviz__live` is the
                player's mount point and it is deliberately empty: the player
