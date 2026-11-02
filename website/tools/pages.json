@@ -105,7 +105,7 @@
       "path": "/demos/dns.html",
       "indexable": true,
       "title": "emb \u2014 demos: the zone \u2014 a DNS name is a sentence, a TXT record is the answer",
-      "description": "dns.emb.is, a DNS zone where every name is a sentence: the query, the ranked emoji, and the same answer printed twice \u2014 the escaped TXT data a resolver hands back and the glyph it stands for.",
+      "description": "dns.emb.is, a DNS zone where every name is a sentence: the query, the ranked emoji, and the same answer printed twice (the escaped TXT data a resolver hands back, and the glyph it stands for).",
       "social_description": "Semantic retrieval over DNS: every name under dns.emb.is is a query, and the reply is one TXT record per ranked emoji."
     },
     {
@@ -137,7 +137,7 @@
       "path": "/demos/",
       "indexable": true,
       "title": "emb \u2014 the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium",
-      "description": "Fifteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute \u2014 and decide \u2014 beside the model, how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.",
+      "description": "Fifteen small demonstrations run against a real embeddings server and a real vector index. They show what a vector is, why retrieval by meaning works, why two models produce two incomparable spaces, what a call costs, and what a script can compute and decide beside the model. They also show how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.",
       "social_description": "A gallery of fifteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus."
     },
     {
@@ -145,8 +145,8 @@
       "path": "/demos/laya.html",
       "indexable": true,
       "title": "emb \u2014 the decision engine: typed questions, one forward pass",
-      "description": "Laya is a decision model. A state goes in; a tree of typed questions \u2014 choice, score, noul \u2014 is answered by one forward pass. See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.",
-      "social_description": "One state, a tree of typed questions, one forward pass, typed answers. Snake, Pac-Man, an inbox, and the smallest round \u2014 with the model's own probabilities.",
+      "description": "Laya is a decision model. A state goes in; one forward pass answers a tree of typed questions (choice, score, noul). See it triage an inbox, play a game one decision at a time, and run the smallest round. No generated tokens.",
+      "social_description": "One state, a tree of typed questions, one forward pass, typed answers. Snake, Pac-Man, an inbox, and the smallest round, with the model's own probabilities.",
       "twitter_description": "One state, a tree of typed questions, one forward pass, typed answers."
     },
     {
@@ -204,8 +204,8 @@
       "path": "/docs/",
       "indexable": true,
       "title": "emb \u2014 documentation: install, commands, replies, Lua",
-      "description": "Reference for emb, a simple yet powerful self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.",
-      "social_description": "Reference for emb, a simple yet powerful self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.",
+      "description": "Reference for emb, a self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.",
+      "social_description": "Reference for emb, a self-hosted inference server that speaks the Redis protocol: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks.",
       "twitter_description": "The hosted reference for emb: install, commands, reply formats, configuration, Lua scripting, operations and benchmarks."
     },
     {
@@ -221,7 +221,7 @@
       "path": "/",
       "indexable": true,
       "title": "emb \u2014 a fast embedding server that speaks the Redis protocol",
-      "description": "emb is a simple yet powerful inference server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache, multi-model queries.",
+      "description": "emb is a self-hosted embedding server that speaks the Redis protocol. ONNX Runtime inference, batching, an LRU cache, and multi-model queries.",
       "social_description": "A fast embedding server that speaks the Redis protocol. ONNX Runtime inference, smart batching, LRU cache.",
       "twitter_description": "A fast embedding server that speaks the Redis protocol."
     },

@@ -67,7 +67,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it is static and complete: the explanation, the mechanism, the scripts and the exact commands.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -82,8 +82,8 @@
           <h1 class="plate__title" id="plate-h"><span class="plate__num">VII.</span>The perception</h1>
           <p class="plate__teaches">
             One photograph, one call: a monocular depth model answers a
-            266 × 266 map of relative distance, and the page reads that same map
-            three ways — as a lit surface you can turn, as a picture of itself,
+            266 × 266 map of relative distance, and the page reads that map
+            three ways: as a lit surface you can turn, as a picture of itself,
             and as a depth of field you can focus.
           </p>
           <p class="tldr">A depth model turns one photograph into 70 756 relative distances, and one reply becomes a relief, a profile and a focus.</p>
@@ -165,7 +165,7 @@
               </div>
             </details>
             <p class="drop__hint">drag to orbit · wheel to zoom · double-click resets · arrow keys and + − 0 turn and zoom</p>
-            <p class="perception__cap">relative, monocular depth — no metres, one face · the profile is in frame-heights</p>
+            <p class="perception__cap">relative, monocular depth · frame-heights, not metres · one face</p>
           </div>
 
           <details class="cmds" data-cmds hidden>
@@ -182,7 +182,7 @@
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
         <p class="block__deck">The still sits on the left, its reconstruction on the right, so the depth reads against the picture it came from. Each grid cell becomes two triangles, its corners carried into camera space by the predicted depth; the photograph supplies the colour.</p>
-        <p class="block__deck">Two readings of that one buffer: surface, the photograph lit by the map's own gradient, and normals, the orientation of that gradient in camera space. One band of light travels the view depth every 11 seconds, bright as it leaves and settled as it runs out, so the direction is watched rather than drawn.</p>
+        <p class="block__deck">Two readings of that one buffer: surface, the photograph lit by the map's own gradient, and normals, the orientation of that gradient in camera space. One band of light travels the view depth every 11 seconds, bright as it leaves and settled as it runs out, so the motion itself shows the direction.</p>
         <p class="block__deck">The six photographs are six kinds of depth: a pier walkway, a curving forest path and a spiral staircase, where one-point perspective converges; layered canyon walls, where geology stacks three planes; a sea cave, where a rock arch occludes a bright bay; and rails leaving a dark tunnel.</p>
       </div></div>
     </section>
@@ -234,7 +234,7 @@
             </div>
             <canvas class="pfig__c pfig__c--smooth" data-focus-canvas width="640" height="428" role="img" aria-label="The photograph blurred by its distance from the focused depth band"></canvas>
             <p class="pfig__read" data-focus-read aria-live="polite">refocusing…</p>
-            <figcaption class="pfig__cap">The map used as a lens: the band at the chosen depth stays sharp and everything else is blurred in six quantised steps. Where the map is wrong — a window, a thin branch, a tunnel's mouth — the blur follows the mistake, and it is left on screen.</figcaption>
+            <figcaption class="pfig__cap">The map used as a lens: the band at the chosen depth stays sharp and everything else is blurred in six quantised steps. Where the map is wrong (a window, a thin branch, a tunnel's mouth) the blur follows the mistake, and it is left on screen.</figcaption>
           </figure>
         </div>
 
@@ -253,7 +253,7 @@
               <span class="trace__lab">depth · <b data-trace-shape="depth">—</b> · <b data-trace-bytes="depth">—</b> B</span>
             </button>
           </div>
-          <figcaption class="pfig__cap">One lane, one reply, one bar at 100% by construction. Press the reply to jump to the figure that reads it; nothing here asks the sandbox anything.</figcaption>
+          <figcaption class="pfig__cap">One lane, one reply, and one bar at 100% by construction. Press the reply to jump to the figure that reads it; nothing here asks the sandbox anything.</figcaption>
         </figure>
 
         <details class="perception__fold perception__fold--prose">
@@ -273,13 +273,13 @@
         <details class="perception__fold perception__fold--prose">
           <summary class="perception__fold-h">the index, the tolerances and the limits</summary>
           <div class="perception__fold-body">
-            <p class="block__deck">A depth model is not a feature model. It is trained to predict one number per pixel, so its map has no vector to compare and no label to print: the plate never claims an object, a name or a class. What it has is an ordering — which pixel is nearer than which — and that ordering is what every figure here draws.</p>
-            <p class="block__deck">The mesh is one regular grid at the density the reader picks, and the readout under the stage carries the vertex count of the tier drawn. A cell survives when its four edges and its diagonal each change the display depth by less than the cut tolerance, and the tolerance scales with the step, so the same surface survives at every tier: a smooth ramp changes more across a coarse step than a fine one, while a real occlusion boundary changes by the same amount either way. Refused cells leave a hole, which is the honest shape of an unknown surface.</p>
-            <p class="block__deck">The relief is lit, not painted: one key light from the upper left, a fill from the opposite side and a specular that follows the camera, with the normals taken from the depth map's own gradient. The shadows come from that same map — a cast term that walks each cell along the light and stops at taller terrain, and a contact term that darkens wherever the surface sits below its own neighbourhood. Both are baked once per sample, 70 756 cells each.</p>
+            <p class="block__deck">A depth model is trained to predict one number per pixel, so its map has no vector to compare and no label to print: the plate never claims an object, a name or a class. It has an ordering, which pixel is nearer than which, and every figure here draws that ordering.</p>
+            <p class="block__deck">The mesh is one regular grid at the density the reader picks, and the readout under the stage carries the vertex count of the tier drawn. A cell survives when its four edges and its diagonal each change the display depth by less than the cut tolerance, and the tolerance scales with the step, so the same surface survives at every tier: a smooth ramp changes more across a coarse step than a fine one, while a real occlusion boundary changes by the same amount either way. Refused cells leave a hole, which marks where the surface is unknown.</p>
+            <p class="block__deck">The relief is lit by one key light from the upper left, a fill from the opposite side and a specular that follows the camera, with the normals taken from the depth map's own gradient. The shadows come from that same map: a cast term that walks each cell along the light and stops at taller terrain, and a contact term that darkens wherever the surface sits below its own neighbourhood. Both are baked once per sample, 70 756 cells each.</p>
             <p class="block__deck">Elevation is the rank-equalised depth times a single gain, so the exaggeration slider scales the geometry without touching the buffer. The reading is a uniform over that buffer, which is why it composes with the camera: turn the surface and the normals turn with it. The camera is clamped to 25° of yaw and 15° of pitch, because a single-view reconstruction has one face.</p>
             <p class="block__deck">The chosen sample is sent to the sandbox for one call; the model's weights are downloaded by the sandbox on boot, and this page ships none of them. A photograph you upload goes the same way: bounded to 768 pixels in the browser, sent as bytes, answered by the same graph. The picture itself is never stored; the sandbox keeps the reply in a cache keyed by a hash of those bytes, so a repeat is a lookup rather than another run.</p>
-            <p class="block__deck">The profile is not a second interpretation of the map. It samples the same bilinear reader the vertex shader displaces by, in the same units, so a point on the chart and a point on the relief are the same number: the reader can check one against the other and find no drift. What it cannot give is a distance in metres — a monocular model predicts an ordering, not a scale.</p>
-            <p class="block__deck">The focus is the map used as a photographic tool rather than as a measurement. The photograph is blurred by its distance from a band of the rank map, in six quantised steps drawn with <span class="t-cmd">ctx.filter</span> and masked by the map's own band, and a Laplacian variance on a 192-pixel copy reports how much sharper the band is than everything outside it. Where the map is wrong the blur follows the mistake: a window, a thin branch and the mouth of the tunnel stay wrong on screen, because correcting them by hand would make the figure a claim instead of a demonstration.</p>
+            <p class="block__deck">The profile samples the same bilinear reader the vertex shader displaces by, in the same units, so a point on the chart and a point on the relief are the same number: the reader can check one against the other and find no drift. It cannot give a distance in metres: a monocular model predicts an ordering, not a scale.</p>
+            <p class="block__deck">The focus uses the map as a photographic control. The photograph is blurred by its distance from a band of the rank map, in six quantised steps drawn with <span class="t-cmd">ctx.filter</span> and masked by the map's own band, and a Laplacian variance on a 192-pixel copy reports how much sharper the band is than everything outside it. Where the map is wrong the blur follows the mistake: a window, a thin branch and the mouth of the tunnel stay wrong on screen, because correcting them by hand would make the figure a claim instead of a demonstration.</p>
             <p class="block__deck">The six photographs are Unsplash, reached through their CC0 mirrors on Wikimedia Commons, and 352 candidates from that import were measured before six were kept. Each went through the plate's own call as <span class="t-cmd">EMB.IMG depth BLOB OUTPUTS depth</span>: the 283 024-byte map was min-max normalised and reduced to the p5 and p95 spread, the share below 0.10 and above 0.90, and the gradient energy. The six kept span 0.69–0.95 of the range with 1.1–36.2% of the frame near and 2.0–12.7% far, so every one of them has a foreground, a middle ground and a background for the relief to separate.</p>
           </div>
         </details>
@@ -296,12 +296,12 @@
         <details class="perception__fold perception__fold--prose">
           <summary class="perception__fold-h">what one call buys</summary>
           <div class="perception__fold-body">
-            <p class="block__deck">One pass, one map, three readings. The reply is 70 756 numbers and nothing else: no vector, no label, no second service. The relief is those numbers as a height field, the map figure is the same numbers drawn directly, the profile is one line through them, and the focus is the same line turned into a photographic control. One reply is enough for all four because none of them is a different measurement.</p>
+            <p class="block__deck">The reply is 70 756 numbers and nothing else: no vector, no label, no second service. The relief is those numbers as a height field; the map figure draws the same numbers directly; the profile is one line through them; the focus turns that line into a photographic control. One reply is enough for all four because none of them is a different measurement.</p>
             <p class="block__deck">The declared shape is the contract. <span class="t-cmd">select: map</span> reports <span class="t-cmd">rows</span> and <span class="t-cmd">dim</span> in <span class="t-cmd">EMB.INFO</span>, and the page refuses to draw when the reply's element count disagrees with it, so a mis-shaped or truncated reply becomes a stated error instead of a picture that looks plausible.</p>
-            <p class="block__deck">A map is not a vector, and the plate never pretends otherwise. There is no similarity score here and no ranking: a dot product between two depth maps would mean nothing. What the map supports is comparison along its own axes — near against far along a line, this band against that one — and that is exactly what the profile and the focus do.</p>
+            <p class="block__deck">There is no similarity score here and no ranking: a dot product between two depth maps would mean nothing. The map supports comparison along its own axes, near against far along a line, this band against that one, and that is what the profile and the focus do.</p>
             <p class="block__deck">The model is not free. It has its own session, which <span class="t-cmd">EMB.INFO depth</span> reports as <span class="t-cmd">image_sessions: 1</span>, 27 MB of int8 weights on disk and about 100 MB resident once the CPU provider dequantises them. It stays warm, which is why a picture already seen is a lookup instead of a second wait.</p>
             <p class="block__deck">No stored asset is involved. The page does not ship a precomputed map or a screenshot of one, because a figure drawn from a file cannot be checked against a reply. Every number on this page is written when the reply lands or measured in the browser, and the six photographs are the only committed assets.</p>
-            <p class="block__deck">The limits are the honest part. The depth is monocular: one camera, one face, no invented backside. It is relative: the profile's axis is frame-heights, not metres, and a different photograph has a different scale. It is approximate: the cut leaves holes at real occlusion boundaries, and the focus inherits every place the map is wrong.</p>
+            <p class="block__deck">The limits follow from the model. The depth is monocular: one camera, one face, no invented backside. It is relative: the profile's axis is frame-heights, not metres, and a different photograph has a different scale. It is approximate: the cut leaves holes at real occlusion boundaries, and the focus inherits every place the map is wrong.</p>
           </div>
         </details>
       </div></div>
@@ -348,12 +348,12 @@ image:
         </dl>
 
 <dl class="api">
-  <dt>the map is data, not a vector</dt><dd>266 × 266 numbers in row-major order, never normalised, never pooled. The server reports the shape; the client owns the transform.</dd>
-  <dt>the cut is topology, not a filter</dt><dd>A cell is refused before any triangle exists, so no triangle spans two objects. The tolerance is a control: lower it and the mesh spends its triangles on the material, raise it and only real object edges open.</dd>
+  <dt>the map is a grid of numbers</dt><dd>266 × 266 numbers in row-major order, never normalised, never pooled. The server reports the shape; the client owns the transform.</dd>
+  <dt>the cut removes cells</dt><dd>A cell is refused before any triangle exists, so no triangle spans two objects. The tolerance is a control: lower it and the mesh spends its triangles on the material, raise it and only real object edges open.</dd>
   <dt>two readings, one geometry</dt><dd>Surface and normals share one vertex buffer and one index; the colour changes, the geometry does not.</dd>
   <dt>the normals are the map's</dt><dd>Each normal is the gradient of the depth model's own ordering, clamped so a cliff reads as a steep ramp instead of a black band. It is a convincing orientation, not a recovered surface normal.</dd>
   <dt>the profile is the shader's own function</dt><dd>It samples the same bilinear reader and rank equalisation the vertices are displaced by, in display units, so the chart and the relief cannot disagree.</dd>
-  <dt>the focus is not a lens</dt><dd>It is the map used as a depth of field: six bands, blur by distance from the chosen one, and a measured sharpness ratio. The places the map is wrong stay wrong on screen.</dd>
+  <dt>the focus is a depth of field</dt><dd>It uses the map as a depth of field: six bands, blur by distance from the chosen one, and a measured sharpness ratio. The places the map is wrong stay wrong on screen.</dd>
   <dt>what it is not</dt><dd>No labels, no segmentation head, no metric scale and no invented geometry: the reconstruction has one face, the depth is monocular and relative, and the profile's axis is in frame-heights.</dd>
 </dl>
 

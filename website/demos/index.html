@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium</title>
 <link rel="canonical" href="https://emb.is/demos/">
-<meta name="description" content="Fifteen small demonstrations run against a real embeddings server and a real vector index: what a vector is, why it retrieves by meaning, why two models produce two incomparable spaces, what a call costs, what a script can compute — and decide — beside the model, how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.">
+<meta name="description" content="Fifteen small demonstrations run against a real embeddings server and a real vector index. They show what a vector is, why retrieval by meaning works, why two models produce two incomparable spaces, what a call costs, and what a script can compute and decide beside the model. They also show how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium">
@@ -72,7 +72,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it, the explanation, the mechanism, the scripts and the exact commands, is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -88,15 +88,16 @@
           <p class="plate__teaches">
             Fifteen demonstrations of one idea, run against a real server and a
             real index. The first four answer <em>what is a vector</em> and <em>why
-            does it help</em>; the next six answer <em>why emb</em> — several
+            does it help</em>. The next six answer <em>why emb</em>: several
             models, six languages in one space, an image beside them, and a
-            batcher and a cache that make it cheap; the last two are the
-            scripting layer computing structure beside the model, then answering
-            typed questions; and the last is the same model reached over DNS,
-            from a deployment of its own. The last identifies a recording by its
-            fingerprint and searches a clip by a phrase, and the newest, The perception, turns one
-            photograph into a lit surface and measures the depth it read. Read them in order, or jump to the one
-            you came for — each stands on its own.
+            batcher and a cache that make it cheap. Then come the two scripting
+            plates, computing structure beside the model and answering typed
+            questions. The last three are the zone, the same model reached over
+            DNS from a deployment of its own; the medium, which identifies a
+            recording by its fingerprint and searches a clip by a phrase; and the
+            newest plate, The perception, which turns one photograph into a lit
+            surface and measures the depth it read. Read them in order, or jump
+            to the one you came for; each stands on its own.
           </p>
         <p class="tldr">Fifteen short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
         </div>
@@ -119,12 +120,12 @@
         <li class="ord__i">
           <span class="ord__n">01</span>
           <span class="ord__t"><a href="vector.html">The vector</a></span>
-          <span class="ord__w"><b>PLATE I</b> · Text becomes 384 numbers, and the vector is the model's answer — not a hash of the text.<br>Teaches: the unit everything else is built from. <span class="ord__start" aria-hidden="true">← start here</span></span>
+          <span class="ord__w"><b>PLATE I</b> · Text becomes 384 numbers, and the vector is the model's answer, not a hash of the text.<br>Teaches: the unit everything else is built from. <span class="ord__start" aria-hidden="true">← start here</span></span>
         </li>
         <li class="ord__i">
           <span class="ord__n">02</span>
           <span class="ord__t"><a href="similarity.html">The similarity</a></span>
-          <span class="ord__w"><b>PLATE I</b> · One number between two texts. The whole retrieval story is this number, sorted.<br>Teaches: the primitive retrieval is made of.</span>
+          <span class="ord__w"><b>PLATE I</b> · One number between two texts. Retrieval is that number, sorted.<br>Teaches: the primitive retrieval is made of.</span>
         </li>
         <li class="ord__i">
           <span class="ord__n">03</span>
@@ -134,7 +135,7 @@
         <li class="ord__i">
           <span class="ord__n">04</span>
           <span class="ord__t"><a href="atlas.html">The atlas</a></span>
-          <span class="ord__w"><b>PLATE II</b> · The corpus laid out by meaning. Themes are not a metaphor here — they are regions of a space.<br>Teaches: what a vector store actually looks like.</span>
+          <span class="ord__w"><b>PLATE II</b> · The corpus laid out by meaning. Themes here are regions of a space, not a metaphor.<br>Teaches: what a vector store actually looks like.</span>
         </li>
         <li class="ord__i">
           <span class="ord__n">05</span>
@@ -164,7 +165,7 @@
         <li class="ord__i">
           <span class="ord__n">10</span>
           <span class="ord__t"><a href="cache.html">The cache</a></span>
-          <span class="ord__w"><b>PLATE III</b> · Ask once, ask again. The same vector is memoized, so the repeat is a lookup.<br>Teaches: the cheapest speed-up is the one that returns the same answer.</span>
+          <span class="ord__w"><b>PLATE III</b> · Ask once, ask again: the same vector is memoized, so the repeat is a lookup.<br>Teaches: the cheapest speed-up is the one that returns the same answer.</span>
         </li>
         <li class="ord__i">
           <span class="ord__n">11</span>
@@ -174,12 +175,12 @@
         <li class="ord__i">
           <span class="ord__n">12</span>
           <span class="ord__t"><a href="laya.html">The decision engine</a> <span class="chip-new">new</span></span>
-          <span class="ord__w"><b>PLATE IV</b> · Four rounds over one call: a Snake loop the model plays as a whole episode in one call, and a Pac-Man loop on the same contract with a different board — each animated beside its own live probability readout — a support inbox triaged by five typed questions, and the smallest three-question round. The typed questions answer with a real published checkpoint; the two loops run the shipped miniature.<br>Teaches: the scripting layer answering typed questions, not embedding.</span>
+          <span class="ord__w"><b>PLATE IV</b> · Four rounds over one call: a Snake loop the model plays as a whole episode in one call, and a Pac-Man loop on the same contract with a different board (each animated beside its own live probability readout), a support inbox triaged by five typed questions, and the smallest three-question round. The typed questions answer with a real published checkpoint; the two loops run the shipped miniature.<br>Teaches: the scripting layer answering typed questions, not embedding.</span>
         </li>
         <li class="ord__i">
           <span class="ord__n">13</span>
           <span class="ord__t"><a href="dns.html">The zone</a> <span class="chip-new">new</span></span>
-          <span class="ord__w"><b>PLATE V</b> · Every name under dns.emb.is is a sentence and every TXT record is the emoji it matches — semantic retrieval reached over the most boring protocol there is, on a deployment of its own. The algebra is playable: compose with what the ranking just showed you.<br>Teaches: the model behind a protocol you already speak, why the record carries the answer while the working rides beside it, and what a conjunction asks that a sum cannot.</span>
+          <span class="ord__w"><b>PLATE V</b> · Every name under dns.emb.is is a sentence and every TXT record is the emoji it matches. Semantic retrieval, reached over the most boring protocol there is, on a deployment of its own. The algebra is playable: compose with what the ranking just showed you.<br>Teaches: the model behind a protocol you already speak, why the record carries the answer while the working rides beside it, and what a conjunction asks that a sum cannot.</span>
         </li>
         <li class="ord__i">
           <span class="ord__n">14</span>
@@ -189,7 +190,7 @@
         <li class="ord__i">
           <span class="ord__n">15</span>
           <span class="ord__t"><a href="perception.html">The perception</a> <span class="chip-new">new</span></span>
-          <span class="ord__w"><b>PLATE VII</b> · One photograph, one call: a monocular depth model answers 70 756 relative distances, and the plate reads that same reply three ways — a lit surface you can turn and cut, the map drawn as itself, the depth along a line you drag, and a depth of field that refocuses the picture by depth, with the sharpness it achieves measured.<br>Teaches: what one map is worth once it is geometry, and how far a relative, monocular ordering can be trusted before it stops being a measurement.</span>
+          <span class="ord__w"><b>PLATE VII</b> · One photograph, one call. A monocular depth model answers 70 756 relative distances, and the plate reads that same reply four ways: a lit surface you can turn and cut, the map drawn as itself, the depth along a line you drag, and a depth of field that refocuses the picture by depth, with the sharpness it achieves measured.<br>Teaches: what one map is worth once it is geometry, and how far a relative, monocular ordering can be trusted before it stops being a measurement.</span>
         </li>
           </ol>
         </div></div>
@@ -204,8 +205,8 @@
         <div class="shell block__inner"><div class="block__body">
           <h2 class="sec__h" id="what-h">WHAT THESE ARE</h2>
 
-          <p class="block__deck">Every plate embeds real text with the sandbox's own model, searches a corpus embedded before deployment, and shows the exact command and reply. Nothing is a screenshot and nothing is replayed: where a plate shows a number, it came from the server or the shipped index — and where the sandbox cannot be reached, the plate says so and shows nothing.</p>
-          <p class="block__deck">The corpus is Poe's collected tales and poems — 86 public-domain works from Project Gutenberg. One author's work has real thematic continents (the sea, the grave, detection, grief), which is what makes a map of the space legible. Your own text answers your request and is not stored or shown to anyone else.</p>
+          <p class="block__deck">Every plate embeds real text with the sandbox's own model, searches a corpus embedded before deployment, and shows the exact command and reply. Nothing is a screenshot and nothing is replayed: where a plate shows a number, it came from the server or the shipped index, and where the sandbox cannot be reached, the plate says so and shows nothing.</p>
+          <p class="block__deck">The corpus is Poe's collected tales and poems, 86 public-domain works from Project Gutenberg. One author's work has real thematic continents (the sea, the grave, detection, grief), which is what makes a map of the space legible. Your own text answers your request and is not stored or shown to anyone else.</p>
           <p class="block__deck">The search runs in your browser over an index built offline and shipped like any other asset, so the sandbox pays one embedding per query. Nothing here writes to the sandbox, and it runs only the scripts it preloaded: <span class="t-cmd">EMB.EVAL</span> is refused, on purpose. The cost plates measure the server's own timings, so "cheap" is a reading from the machine, not a claim about it.</p>
           <p class="block__deck">Every plate here drives the server. The <a href="../gem/index.html">Ruby client's own surface</a> is its companion on the other side of the wire: the same six texts, four ways of sending them, and the one rule that decides which of the four your call site is already choosing.</p>
 </div></div>

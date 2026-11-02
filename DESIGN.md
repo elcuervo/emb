@@ -466,7 +466,7 @@ Below it, smaller text:
 
 ```text
 Any Redis client works unchanged. Pre-1.0, MIT licensed.
-Turn text — or any tensor a script builds —
+Turn text, or any tensor a script builds,
 into vectors.
 ```
 

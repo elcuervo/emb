@@ -70,7 +70,7 @@
 <main id="main">
   <noscript>
     <style>[data-live]{ display: none; }</style>
-    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it — the explanation, the mechanism, the scripts and the exact commands — is static, and complete.</p></div>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. Everything around it (the explanation, the mechanism, the scripts and the exact commands) is static and complete.</p></div>
   </noscript>
   <div class="shell">
     <div class="tldr-bar">
@@ -83,8 +83,8 @@
         <nav class="plate__next" aria-label="The next demo"><a href="function.html"><span>Next</span> <b>The model is a function</b> <span aria-hidden="true">&#8594;</span></a></nav>
         <div>
           <h1 class="plate__title" id="plate-h"><span class="plate__num">III.</span>The languages</h1>
-          <p class="plate__teaches">One model holds six languages in one space, so a sentence written in English lands where its Portuguese translation lands. No translator runs between them.</p>
-        <p class="tldr">One model, many languages: the same meaning lands in the same place whichever language carries it.</p>
+          <p class="plate__teaches">One model holds six languages in one space, so an English sentence lands where its Portuguese translation lands, with no translator in between.</p>
+        <p class="tldr">The same meaning lands in the same place whichever language carries it, because one model holds all six.</p>
         </div>
         <div><p class="fig"><b>THE LANGUAGES</b>
             · <b>1</b> model
@@ -100,7 +100,7 @@
         <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
 
             <p class="block__deck">An English-only model puts a French sentence and its English translation in opposite corners of the space, so a search in one language cannot see the other. A multilingual model is trained so meaning lands together no matter which language carries it.</p>
-            <p class="block__deck">Below, five translations of one sentence and two unrelated sentences are each compared with the English original. The translations should score near each other and well above the unrelated pair. No translator runs: the model reads all six languages itself.</p>
+            <p class="block__deck">Below, five translations of one sentence and two unrelated sentences are each compared with the English original. The translations should score near each other and well above the unrelated pair. The model reads all six languages itself.</p>
 
       </div></div>
     </section>
@@ -140,8 +140,8 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
 
-            <p class="block__deck">Each candidate went to the sandbox as its own <span class="t-cmd">EMB.EVSHA multilingual &lt;embed.lua sha1&gt; 1 "&lt;candidate&gt;" "&lt;english&gt;"</span> call: the server embedded both texts through the multilingual model and returned the cosine. One model, one script, one space.</p>
-            <p class="block__deck">Nothing was translated or transliterated. The tokenizer splits each language into its own subwords, and training pushed translations of a sentence to the same point — which is why the five translations cluster and the other two fall away.</p>
+            <p class="block__deck">Each candidate went to the sandbox as its own <span class="t-cmd">EMB.EVSHA multilingual &lt;embed.lua sha1&gt; 1 "&lt;candidate&gt;" "&lt;english&gt;"</span> call: the server embedded both texts through the multilingual model and returned the cosine.</p>
+            <p class="block__deck">Nothing was translated or transliterated: the tokenizer splits each language into its own subwords, and training pushed translations of a sentence to the same point, so the five translations cluster and the other two fall away.</p>
 
       </div></div>
     </section>
@@ -150,7 +150,7 @@
       <div class="shell block__inner"><div class="block__body">
         <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
 
-            <p class="block__deck">Retrieval over a multilingual corpus is otherwise a pipeline: detect the language, translate the query, search, translate the result. One shared space makes it the search you already have — a Portuguese document answers an English question.</p>
+            <p class="block__deck">Retrieval over a multilingual corpus is otherwise a pipeline: detect the language, translate the query, search, translate the result. One shared space makes it the search you already have: a Portuguese document answers an English question.</p>
             <p class="block__deck">It also decides which model to keep. A multilingual model is larger and slower than an English-only one, and emb serves several at once, so you pay for the languages you actually answer.</p>
 
       </div></div>
@@ -166,7 +166,7 @@
 
 EMB.EVSHA multilingual &lt;embed.lua sha1&gt; 1 "Necesito comprar leche y pan en el mercado." "The sea was calm and the ship sailed on through the night."
 # -&gt; { dim = 384, norm = 1, similarity = 0.06 }</code></pre>
-        <figcaption class="code__cap">The same model, the same script, two languages. The translation scores high, the unrelated sentence low, and neither was translated to get there.</figcaption>
+        <figcaption class="code__cap">The same model and script on two languages: the translation scores high, the unrelated sentence low, and neither was translated.</figcaption>
       </figure>
       </div></div>
     </section>

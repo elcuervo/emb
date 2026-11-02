@@ -83,9 +83,9 @@
         <div>
           <h1 class="plate__title" id="plate-h">The Ruby client</h1>
           <p class="plate__teaches">
-            One call, one command. The gem is a skin over the Redis protocol
-            with three execution modes on top, and the shape of your call site
-            decides how many commands a scope puts on the wire.
+            One call, one command. The gem wraps the Redis protocol and adds
+            three execution modes; the shape of your call site decides how many
+            commands a scope puts on the wire.
           </p>
         <p class="tldr">A thin Ruby wrapper over the same Redis commands. It pools, batches and unpacks for you; the wire stays <span class="t-cmd">EMB</span>.</p>
         </div>
@@ -105,8 +105,8 @@
         <h2 class="sec__h" id="what-h">WHAT YOU ARE LOOKING AT</h2>
         <div class="mech" data-mech="call"></div>
 
-            <p class="block__deck">The server answers RESP, and the gem does not change that. What it removes is what you would otherwise write yourself: the <span class="t-cmd">unpack('e*')</span> that turns four bytes per number into an array, the registry that remembers one proxy per model, the pool, and the coalescing.</p>
-            <p class="block__deck"><span class="t-cmd">Emb[:minilm]["hello world"]</span> is 384 floats, eager and unremarkable — it sends <span class="t-cmd">EMB minilm "hello world"</span> and unpacks the reply. The interesting part is what the same line does under a <span class="t-cmd">lazy</span> mode.</p>
+            <p class="block__deck">The server answers RESP, and the gem does not change that. It saves you from writing the <span class="t-cmd">unpack('e*')</span> that turns four bytes per number into an array, the registry that remembers one proxy per model, the pool, and the coalescing.</p>
+            <p class="block__deck"><span class="t-cmd">Emb[:minilm]["hello world"]</span> is 384 floats: it sends <span class="t-cmd">EMB minilm "hello world"</span> and unpacks the reply. Under a <span class="t-cmd">lazy</span> mode the same line sends nothing until something reads the value.</p>
 <div class="block__main block__main--ledger">
           <div class="cap">
             <p class="cap__label">01 · YOUR CALL</p>
@@ -144,9 +144,8 @@
 
         <p class="block__deck">
           Every way the gem can be told to embed six texts, and the command each
-          one puts on the wire. Read the instrument column downwards: the same
-          six texts in every row, four different counts, and the shape the
-          client sends for each.
+          one puts on the wire. The same six texts appear in every row; only the
+          count and the wire shape change.
         </p>
 
         <ol class="wire">
@@ -175,7 +174,7 @@
           <li class="wire__i">
             <div class="wire__m">
               <p class="wire__t">lazy: :batch</p>
-              <p class="wire__cmd">The same deferral, and the same commands — sent concurrently instead of one after another. Here <span class="t-cmd">batch_size: 2</span> over six texts is three shares of two, in flight at once.</p>
+              <p class="wire__cmd">The same deferral and the same commands, sent concurrently instead of one after another. Here <span class="t-cmd">batch_size: 2</span> over six texts is three shares of two, in flight at once.</p>
             </div>
             <p class="wire__n">3 commands, at once</p>
             <div class="wire__track">
@@ -219,7 +218,7 @@
         <p class="fig fig--as-written"><b>THE SHAPE THE CLIENT SENDS</b>
           · <b>A COUNT OF COMMANDS, NOT A STOPWATCH</b>
           · the sandbox runs the server and not Ruby, so no run of the gem is
-          observable from a page — every number here is the shipped slicing
+          observable from a page. Every number here is the shipped slicing
           code's own arithmetic, and every bar is that count drawn to scale.</p>
       </div></div>
     </section>
@@ -238,10 +237,9 @@
         <p class="block__deck">
           In a lazy mode, <span class="t-cmd">Emb[:minilm]["text"]</span> sends
           nothing. It returns a value that asks the server the first time it is
-          <em>used</em> — and that first use pays for every other deferred value
-          in the scope. So the deferral only helps if the values exist before
-          the first one is consumed. That is the whole feature and the whole
-          trap.
+          <em>used</em>, and that first use pays for every other deferred value
+          in the scope. The deferral only helps if the values exist before the
+          first one is consumed.
         </p>
 
         <div class="code">
@@ -281,10 +279,10 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
 
         <p class="block__deck">
           Two consequences follow from the same rule. A value created and never
-          used never embeds at all — it is dropped when the thread's scope ends,
-          which is a leak of nothing. And the scope caches what it resolved, so
-          asking for the same text twice inside one scope costs nothing the
-          second time. Change one call site or turn it on for the whole app with
+          used never embeds at all: it is dropped when the thread's scope ends,
+          so nothing leaks. The scope also caches what it resolved, so asking
+          for the same text twice inside one scope costs nothing the second
+          time. Turn it on for one call site or for the whole app with
           <span class="t-cmd">Emb.configure { |c| c.lazy = :batch }</span>; the
           shape of the call site is the only thing that has to change.
         </p>
@@ -303,7 +301,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
           A batch that fails fails closed. It raises
           <span class="t-cmd">Emb::ServerError</span> to the code that used the
           first value, and every deferred item in that batch is removed from the
-          scope — so retrying, or using a sibling from the same failed batch,
+          scope, so retrying, or using a sibling from the same failed batch,
           does not re-send it. The underlying redis error is preserved as
           <span class="t-cmd">cause</span>, and the message names the models,
           the text count and the attempt count.
@@ -329,8 +327,8 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
         </div>
 
         <p class="block__deck">
-          Per-pair failure is a different thing and is not an error at all. A
-          pair the server could not embed comes back as a <span class="t-cmd">null</span>
+          Per-pair failure is different: it is not an error. A pair the server
+          could not embed comes back as a <span class="t-cmd">null</span>
           slot, MGET-style, and that value materializes as <span class="t-cmd">nil</span>
           while its siblings resolve normally. Only a failure of the command
           itself closes the batch.
@@ -345,8 +343,8 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
 
         <p class="block__deck">
           The scope holding deferred values is a thread-local, and it is cleared
-          at the boundary of the work that filled it — so a request cannot inherit
-          another request's cache, and a job cannot leak its scope into the next
+          at the boundary of the work that filled it, so a request cannot inherit
+          another request's cache and a job cannot leak its scope into the next
           one. In Rails the railtie wires every boundary it finds, and each can be
           switched off.
         </p>
@@ -358,7 +356,7 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
           </div>
           <div class="cap">
             <p class="cap__label">ACTIVEJOB</p>
-            <p class="cap__claim">An <span class="t-cmd">around_perform</span> callback on the base class, so every adapter is covered — SolidQueue, Sidekiq, Shoryuken, the test adapters. Opt out with <span class="t-cmd">config.emb.job_middleware = false</span>.</p>
+            <p class="cap__claim">An <span class="t-cmd">around_perform</span> callback on the base class, so every adapter is covered: SolidQueue, Sidekiq, Shoryuken, the test adapters. Opt out with <span class="t-cmd">config.emb.job_middleware = false</span>.</p>
           </div>
           <div class="cap">
             <p class="cap__label">SIDEKIQ</p>
@@ -403,13 +401,12 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
         </div>
 
         <p class="block__deck">
-          The wrapper is thinner than it sounds, and the dependency is the
-          interesting part: the gem does not ship ONNX Runtime. It asks the
+          The wrapper is thin: the gem does not ship ONNX Runtime. It asks the
           <span class="t-cmd">onnxruntime</span> gem where its shared library
           is, then runs the server with <span class="t-cmd">-ort-lib</span> and
-          that path — so the runtime you install is the runtime the server
-          loads. Platforms are macOS arm64, Linux x86_64 and Linux aarch64, and
-          both gems take their version from the same file as the server, so the
+          that path, so the runtime you install is the runtime the server
+          loads. Platforms are macOS arm64, Linux x86_64 and Linux aarch64. Both
+          gems take their version from the same file as the server, so the
           client, the binary and the release are one number.
         </p>
 
@@ -454,10 +451,10 @@ loaders.each { |l| <span class="t-cmd">process</span>(l) }
 <span class="t-dim"># every reply is float32 little-endian, four bytes a number,
 # which is why the gem unpacks with 'e*' and you never see them</span></pre>
           <figcaption class="code__cap">
-            One model, many texts, and several models in one call — with the
+            One model, many texts, and several models in one call, plus the
             decimal <span class="t-cmd">VALUES</span> envelope when a client
-            cannot unpack binaries. Nothing here is gem-specific: it is what any
-            RESP client would send.
+            cannot unpack binaries. Nothing here is gem-specific: any RESP
+            client sends the same.
           </figcaption>
         </div>
 
