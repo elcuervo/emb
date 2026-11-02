@@ -17,8 +17,8 @@ worth once it is geometry*: one photograph goes to Depth Anything V2 Small
 (Apache-2.0) and comes back as a 266 × 266 relative map of 70 756 values, and
 every figure on the page is that reply plus the pixels the browser sent. The
 still sits beside its reconstruction, and the reply is read four ways: the lit
-surface you can turn and cut, **the map drawn as itself**, **the profile along a
-line you drag**, and **the map used as a depth of field**. The plate is an
+surface you can turn and cut, **the map drawn as itself**, **the profile along one
+fixed slice**, and **the map used as a depth of field**. The plate is an
 extension of the gallery's committed world, not a new one: the palette, type
 ladder, dark-plate apparatus and caption discipline come from `DESIGN.md`, and
 the sample's own aspect sets the stage's frame.
@@ -31,8 +31,8 @@ lifts out of the depth map over three seconds, and the light catches it as the
 camera turns 12.6° inside a clamp that never shows a backside. Turn it, wheel
 into it, choose `surface` or `normals`, set the cut or the exaggeration. Then
 read the map below: every cell is a value the server sent, one toggle away from
-the rank transform the geometry uses; drag a line and the profile prints the
-depth along it in the shader's own units; slide the focus and the photograph
+the rank transform the geometry uses; the profile prints the depth along one
+fixed slice in the shader's own units; slide the focus and the photograph
 refocuses by depth, with the detail each region keeps printed beside it. Leave
 knowing that the depth is monocular and relative, that the profile is in
 frame-heights and not metres, that the focus is the map used as a lens rather
@@ -44,7 +44,7 @@ than a lens, and that the places the map is wrong stay wrong on screen.
   body, `Archivo` display. The plate adds no colour, font or dependency of its
   own: the stage is the gallery's dark block, its labels are the committed mono
   caption, and the one accent marks the pressed state, the reveal cue, the
-  profile line and the map's near end. Its own material is six photographs in
+  profile chart and the map's near end. Its own material is six photographs in
   `website/demos/samples/parts/` — Unsplash originals shipped as their Wikimedia
   Commons CC0 mirrors, chosen on the depth their maps carry — and the vendored
   three.js module, loaded only when the stage first draws.
@@ -58,10 +58,10 @@ than a lens, and that the places the map is wrong stay wrong on screen.
   plus exaggeration, cut, density and upload inside one `adjust` disclosure. No
   probe, no cluster reading, no crop, no cross-picture ranking: the plate asks
   one model one question.
-- **Every figure is operable where it is.** The map's toggle, the profile's two
-  ends and row, and the focus's two sliders live inside their own figures, so a
-  reader who scrolled past the stage never has to go back up to use them. The
-  drag on the still writes the same profile state, never a second one.
+- **A figure is operable where it is.** The map's toggle and the focus's two
+  sliders live inside their own figures, so a reader who scrolled past the stage
+  never has to go back up to use them. The profile is one fixed slice and
+  carries no control.
 - **A figure cannot lie about the reply.** All three read the same map; the map
   figure's pointer value is `depth[row × dim + col]` exactly, the profile samples
   the shader's own bilinear reader and rank transform, and the focus's sharpness
@@ -78,17 +78,17 @@ stage. Below it, in the gallery's own order: `WHAT YOU ARE LOOKING AT`,
 MATTERS`, and `THE EXACT COMMANDS`.
 
 The figures: the map as one 266² raster with `raw` / `rank-equalised`; the
-profile as a line chart in display units with its two ends marked on the still
-and drawn on the relief; the focus as the photograph banded by depth with the
-detail it keeps printed. Canvas 2D only — no WebGL below the stage.
+profile as a line chart in display units, fixed at row 50 from 8 to 92 percent;
+the focus as the photograph banded by depth with the detail it keeps printed.
+Canvas 2D only — no WebGL below the stage.
 
 ## Accessibility and restraint
 
 - The map canvas is the `role="img"` figure: with no WebGL or no module the plate
   says so and the map, the profile and the focus still draw from the same reply.
 - Every control is native — radios, ranges, a checkbox, a file input — at the
-  site's 44 px target, and the profile and the focus are fully operable by
-  keyboard from inside their own figures.
+  site's 44 px target, and the focus is fully operable by keyboard from inside
+  its own figure.
 - Reduced motion lands on the settled relief in one frame; no figure depends on
   an animation having played.
 - The copy keeps its limits: monocular, relative, one face, no metres, the
@@ -99,8 +99,9 @@ detail it keeps printed. Canvas 2D only — no WebGL below the stage.
 1. **Map:** the pointer's value equals `depth[row × dim + col]`; the count equals
    `rows × dim`; the toggle redraws from the rank map the relief uses; no
    request on either.
-2. **Profile:** 100 sampled points equal the shader's height function; the ends'
-   readout matches the map; dragging or moving an input issues no request.
+2. **Profile:** 100 sampled points equal the shader's height function; the
+   readout matches the map; the slice is fixed at row 50 from 8 to 92 percent,
+   and drawing it issues no request.
 3. **Focus:** a change renders in ≤ 40 ms and issues no request; the sharp band's
    kept detail over the defocused bands' is ≥ 3 on every shipped picture.
 4. **Removal:** no `dinov3`, `patches`, `cosine`, `cluster`, `crop` or

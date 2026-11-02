@@ -97,8 +97,8 @@
       "path": "/demos/perception.html",
       "indexable": true,
       "title": "emb \u2014 demos: The perception \u2014 one photograph, one depth map",
-      "description": "One photograph, one call: a monocular depth model answers a 266 \u00d7 266 map of relative distance. The same reply becomes a lit surface you can turn, the map drawn as itself, a profile along a line you drag, and a depth of field that refocuses the photograph.",
-      "social_description": "One photograph, one depth map: 70 756 relative distances become a lit relief, a dragged profile and a depth of field."
+      "description": "One photograph, one call: a monocular depth model answers a 266 \u00d7 266 map of relative distance. The same reply becomes a lit surface you can turn, the map drawn as itself, a profile of one fixed slice through the middle, and a depth of field that refocuses the photograph.",
+      "social_description": "One photograph, one depth map: 70 756 relative distances become a lit relief, a fixed depth profile and a depth of field."
     },
     {
       "file": "demos/dns.html",
