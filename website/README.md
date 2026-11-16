@@ -166,12 +166,15 @@ stays the source of truth for all three.
 
 ### The demos gallery
 
-Six plates, three tiers: what a vector is (the vector, the similarity), why
-vectors help (the search, the atlas), and why emb — and why more than one model
-(the model lens, the model is a function). Each plate carries the same five
-sections in the same order — what you are looking at, try it, what just
-happened, why it matters, the exact commands — so the gallery reads as one
-curriculum rather than six toys.
+Seventeen plates, three tiers: what a vector is (the vector, the similarity),
+why vectors help (the search, the atlas), and why emb — and why more than one
+model (the model lens, the model is a function). The last two read a real
+retail catalog rather than Poe, under the same plate contract. The gallery
+index and both retail plates share one animated pipeline component
+(`assets/js/flowgraph.js`), so every stage diagram reads the same way. Each plate
+carries the same five sections in the same order — what you are looking at,
+try it, what just happened, why it matters, the exact commands — so the gallery
+reads as one curriculum rather than a cabinet of curiosities.
 
 The corpus is Edgar Allan Poe's collected tales and poems: 86 works, public
 domain, fetched from Project Gutenberg. It is embedded **offline** against a
@@ -185,6 +188,41 @@ just website-poe-check       # …or assert the committed corpus is current
 just website-demos           # embed it and write assets/demo/ (needs ./models)
 just website-demos-vendor    # re-vendor the pinned sqlite-vec build for the browser
 ```
+
+### The retail plates and their pinned sources
+
+`/demos/catalog.html` and `/demos/queue.html` read a bounded selection from two
+consecutive archived [USDA FoodData Central](https://fdc.nal.usda.gov/download-datasets/)
+branded-food releases. The source archives are **opt-in and never served**: the
+download, digest check and extraction are one target, and everything they write
+lands in the ignored `website/tools/retail/.cache/`.
+
+```bash
+just website-retail-sources      # download + verify + extract (about 900 MB)
+just website-retail-analysis     # embed + train Faiss e-means/Lloyd (needs a local emb)
+just website-retail              # text stage + retail stage + one finalize
+just website-retail-check        # pins, report schema, leakage, samples, manifest
+```
+
+`website/tools/retail/sources.lock.json` names both releases, their sizes and
+SHA-256 values, the `branded_food.csv` + `food.csv` extraction and join, the
+population fields, the fixed analysis grid, and the redistribution decision and
+attribution. The fetch target verifies the digests before parsing and stops when
+the record is missing; the analysis refuses to read an archive that disagrees
+with the lock. Re-read the download page and the GBFPD documentation before
+changing a pin.
+
+The analysis runs only in `nix develop .#retail` (Python, NumPy, and the pinned
+`faiss-cpu` wheel from `tools/retail/requirements.txt`, installed into the
+ignored `.deps/`). It writes `assets/demo/retail/report.json`, the two CSV
+tables, `tools/retail/catalog.jsonl`, `tools/retail/centroids.jsonl`, the PCA
+basis in `projection.json`, and the held-out projection in
+`projected_heldout.jsonl`; the index stage appends `retail_*` tables to the
+gallery's one working index. The two plates draw that projection in three axes,
+so the live query lands in the same field as the committed rows without any
+projection fitted in the browser. A
+text-only `just website-demos` after a retail index has shipped fails at
+finalize rather than silently dropping those tables.
 
 Four Lua presets back the plates, all preloaded by `repl/sandbox.yaml` and
 called by digest: `embed.lua` (dimension, norm, optional similarity),

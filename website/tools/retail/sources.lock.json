@@ -1,0 +1,126 @@
+{
+  "catalog": "USDA FoodData Central — USDA Global Branded Food Products Database (GBFPD)",
+  "publisher": "U.S. Department of Agriculture, Agricultural Research Service, Beltsville Human Nutrition Research Center",
+  "catalog_page": "https://fdc.nal.usda.gov/download-datasets/",
+  "documentation": "https://fdc.nal.usda.gov/GBFPD_Documentation.html",
+  "releases": [
+    {
+      "role": "training",
+      "version": "2026-04-30",
+      "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_branded_food_csv_2026-04-30.zip",
+      "bytes": 448767220,
+      "sha256": "26050a5d03197469813754743a21ee0fad4ccf22b6aac2a995846a987719fc49",
+      "published": "2026-04-30",
+      "last_modified": "Wed, 29 Apr 2026 23:01:26 GMT"
+    },
+    {
+      "role": "evaluation",
+      "version": "2026-10-29",
+      "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_branded_food_csv_2026-10-29.zip",
+      "bytes": 451954262,
+      "sha256": "17f1e52ea91854d8c6c266487597bf1dd6ce63441bfe27c9e61f64e2768440c7",
+      "published": "2026-10-29",
+      "last_modified": "Wed, 28 Oct 2026 18:48:18 GMT"
+    }
+  ],
+  "extraction": {
+    "archive_members": {
+      "branded_food": "FoodData_Central_branded_food_csv_{version}/branded_food.csv",
+      "description": "FoodData_Central_branded_food_csv_{version}/food.csv"
+    },
+    "join": "fdc_id",
+    "delimiter": ",",
+    "encoding": "utf-8"
+  },
+  "population_fields": {
+    "identity": "fdc_id",
+    "description": "food.csv description (falls back to branded_food.short_description)",
+    "brand": [
+      "brand_owner",
+      "brand_name",
+      "subbrand_name"
+    ],
+    "identifier": "gtin_upc",
+    "category": "branded_food_category",
+    "pack": [
+      "package_weight",
+      "serving_size",
+      "serving_size_unit",
+      "household_serving_fulltext"
+    ],
+    "dates": [
+      "modified_date",
+      "available_date",
+      "discontinued_date"
+    ],
+    "embedding_text": "short_description + ' — ' + brand_owner (category deliberately excluded)"
+  },
+  "redistribution": {
+    "decision": "permitted",
+    "checked": "2026-11-13",
+    "basis": [
+      "The download page offers these archives for download without registration or a licence click-through: https://fdc.nal.usda.gov/download-datasets/",
+      "FoodData Central is a U.S. Government work published by a federal agency. Under 17 U.S.C. §105, copyright protection does not extend to works of the U.S. Government; no copyright notice or restricted-use licence is attached to the downloadable files.",
+      "The GBFPD documentation states that product information is received from food-industry data providers and that the data are downloadable and searchable at fdc.nal.usda.gov: https://fdc.nal.usda.gov/GBFPD_Documentation.html",
+      "The published base is bounded to the selected product rows and aggregate measurements; no provider-private fields, customer data, receipts, or card data exist in the source files.",
+      "Attribution and the suggested citation are carried by every plate and by the generated report."
+    ],
+    "attribution": "U.S. Department of Agriculture (USDA), Agricultural Research Service. FoodData Central: USDA Global Branded Food Products Database. Internet: fdc.nal.usda.gov.",
+    "recheck": "Re-read the download page, the GBFPD documentation and this record before changing either pinned archive; stop the build if the terms cannot be re-verified."
+  },
+  "model": {
+    "name": "minilm",
+    "dimension": 384,
+    "normalization": "l2",
+    "text": "food.csv description + ' — ' + brand_owner",
+    "note": "Category labels are retained as metadata and never passed to clustering."
+  },
+  "analysis": {
+    "scales": [
+      2000,
+      8000
+    ],
+    "centroids": [
+      16,
+      64
+    ],
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "canonical": {
+      "scale": 8000,
+      "centroids": 64,
+      "seed": 1
+    },
+    "emeans": {
+      "implementation": "faiss.contrib.e_means.NumpyEmeans",
+      "initialization": "k-means++",
+      "epochs": 16,
+      "subsampling": "none: every training vector is used each epoch"
+    },
+    "lloyd": {
+      "implementation": "faiss.Kmeans",
+      "initialization": "k-means++",
+      "niter": 25,
+      "subsampling": "none"
+    },
+    "objective": "held-out squared L2 on unit-normalized embeddings, loss from final-centroid reassignment",
+    "evaluation_split": "sha256(fdc_id) first byte < 204 → held out; the rest trains",
+    "populations": {
+      "train_cap": 8000,
+      "eval_cap": 1500,
+      "arrival_cap": 600,
+      "sample_catalog": 8,
+      "sample_arrivals": 8,
+      "ship_cap": 600
+    },
+    "review_rule": {
+      "statistic": "nearest",
+      "source_percentile": "p95",
+      "comparison": "greater_than",
+      "verdict": "review"
+    }
+  }
+}

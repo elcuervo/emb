@@ -4,21 +4,21 @@
 <!-- meta:start -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium</title>
+<title>emb — the demos gallery: vectors, similarity, search, the atlas, images, media, and a real retail catalog</title>
 <link rel="canonical" href="https://emb.is/demos/">
-<meta name="description" content="Fifteen small demonstrations run against a real embeddings server and a real vector index. They show what a vector is, why retrieval by meaning works, why two models produce two incomparable spaces, what a call costs, and what a script can compute and decide beside the model. They also show how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.">
+<meta name="description" content="Seventeen small demonstrations run against a real embeddings server and a real vector index. They show what a vector is, why retrieval by meaning works, why two models produce two incomparable spaces, what a call costs, what a script can compute and decide beside the model, how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how a real branded-food catalog behaves when it is searched, clustered offline, and asked to review a later release.">
 <meta name="theme-color" content="#F3F0E8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium">
+<meta property="og:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, images, media, and a real retail catalog">
 <meta property="og:site_name" content="emb">
-<meta property="og:description" content="A gallery of fifteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus.">
+<meta property="og:description" content="A gallery of seventeen demos that embed real text, images and media and search a real index, over one author’s public-domain corpus and a real USDA branded-food catalog.">
 <meta property="og:url" content="https://emb.is/demos/">
 <meta property="og:image" content="https://emb.is/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium">
-<meta name="twitter:description" content="A gallery of fifteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus.">
+<meta name="twitter:title" content="emb — the demos gallery: vectors, similarity, search, the atlas, images, media, and a real retail catalog">
+<meta name="twitter:description" content="A gallery of seventeen demos that embed real text, images and media and search a real index, over one author’s public-domain corpus and a real USDA branded-food catalog.">
 <meta name="twitter:image" content="https://emb.is/assets/img/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
 <!-- meta:end -->
@@ -86,7 +86,7 @@
         <div>
           <h1 class="plate__title" id="plate-h">The demos gallery</h1>
           <p class="plate__teaches">
-            Fifteen demonstrations of one idea, run against a real server and a
+            Seventeen demonstrations of one idea, run against a real server and a
             real index. The first four answer <em>what is a vector</em> and <em>why
             does it help</em>. The next six answer <em>why emb</em>: several
             models, six languages in one space, an image beside them, and a
@@ -99,11 +99,11 @@
             surface and measures the depth it read. Read them in order, or jump
             to the one you came for; each stands on its own.
           </p>
-        <p class="tldr">Fifteen short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
+        <p class="tldr">Seventeen short demos, one idea: text becomes numbers, and numbers let you search by meaning. Every one runs against a real server.</p>
         </div>
         <div>
           <p class="fig"><b>THE ATLAS</b>
-            · <b>fifteen plates</b>
+            · <b>seventeen plates</b>
             · <b data-fig-count>2 782</b> passages
             · <b data-fig-works>86</b> works
             · <b data-fig-model>all-MiniLM-L6-v2</b>
@@ -112,6 +112,50 @@
           <p class="fig"><b>CORPUS</b> · <span data-fig-attrib>Texts: Edgar Allan Poe (1809–1849), public domain, via Project Gutenberg.</span></p>
         </div>
       </div>
+
+      <section class="block block--paper sec" aria-labelledby="how-h">
+        <div class="shell block__inner"><div class="block__body">
+          <h2 class="sec__h" id="how-h">HOW A RUN WORKS</h2>
+          <p class="block__deck">The pipeline is the same on every plate. Committed text or media goes in, the model turns it into a vector in a space that model defines, the vector is compared with the rows shipped in the index, and the nearest rows become evidence for whatever the page decides next. No plate skips a stage it shows. What changes from plate to plate is the table being searched and what that evidence is allowed to prove.</p>
+          <div data-flow data-reveal aria-label="How a run works, in six stages: input, model, vector, index, candidates, decision"></div>
+
+          <figure data-reveal>
+            <svg data-space viewBox="0 0 360 200" role="img" aria-label="Schematic of one embedding space: a quiet field of committed marks, one query mark, and three lines joining it to its nearest marks. Conceptual, not measured." style="display:block;width:min(100%,440px);height:auto">
+              <g stroke="var(--accent)" stroke-width="1" stroke-opacity=".35">
+                <line data-space-link x1="166" y1="96" x2="222" y2="72"></line>
+                <line data-space-link x1="166" y1="96" x2="238" y2="126"></line>
+                <line data-space-link x1="166" y1="96" x2="128" y2="128"></line>
+              </g>
+              <g fill="currentColor" opacity=".28">
+                <circle cx="40" cy="34" r="1.8"></circle>
+                <circle cx="96" cy="64" r="1.6"></circle>
+                <circle cx="140" cy="34" r="1.9"></circle>
+                <circle cx="196" cy="44" r="1.5"></circle>
+                <circle cx="246" cy="24" r="1.7"></circle>
+                <circle cx="300" cy="54" r="1.8"></circle>
+                <circle cx="330" cy="104" r="1.5"></circle>
+                <circle cx="306" cy="148" r="1.9"></circle>
+                <circle cx="272" cy="180" r="1.6"></circle>
+                <circle cx="208" cy="178" r="1.8"></circle>
+                <circle cx="150" cy="162" r="1.5"></circle>
+                <circle cx="104" cy="176" r="1.7"></circle>
+                <circle cx="58" cy="168" r="1.6"></circle>
+                <circle cx="32" cy="112" r="1.9"></circle>
+                <circle cx="46" cy="62" r="1.5"></circle>
+                <circle cx="292" cy="80" r="1.6"></circle>
+              </g>
+              <g fill="currentColor" opacity=".75" stroke="var(--rule)" stroke-width="1">
+                <circle cx="222" cy="72" r="3"></circle>
+                <circle cx="238" cy="126" r="3"></circle>
+                <circle cx="128" cy="128" r="3"></circle>
+              </g>
+              <circle data-space-pulse cx="166" cy="96" r="7" fill="none" stroke="var(--accent)" stroke-opacity=".22"></circle>
+              <circle cx="166" cy="96" r="4.6" fill="var(--accent)"></circle>
+            </svg>
+            <figcaption class="fig fig--as-written"><b>SCHEMATIC</b> · no measurement in the drawing. The quiet marks are committed rows in one space, the accented mark is the query, and the three lines join it to the nearest marks. It shows an order of proximity; no number in it comes from the index, and every figure on this page is read from the manifest or the run.</figcaption>
+          </figure>
+        </div></div>
+      </section>
 
       <section class="block block--paper sec tldr-keep" aria-labelledby="plan-h">
         <div class="shell block__inner"><div class="block__body">
@@ -192,6 +236,16 @@
           <span class="ord__t"><a href="perception.html">The perception</a> <span class="chip-new">new</span></span>
           <span class="ord__w"><b>PLATE VII</b> · One photograph, one call. A monocular depth model answers 70 756 relative distances, and the plate reads that same reply four ways: a lit surface you can turn and cut, the map drawn as itself, the depth along a fixed slice through the middle, and a depth of field that refocuses the picture by depth, with the sharpness it achieves measured.<br>Teaches: what one map is worth once it is geometry, and how far a relative, monocular ordering can be trusted before it stops being a measurement.</span>
         </li>
+        <li class="ord__i">
+          <span class="ord__n">16</span>
+          <span class="ord__t"><a href="catalog.html">The catalog match</a> <span class="chip-new">new</span></span>
+          <span class="ord__w"><b>PLATE VIII</b> · A real branded-food catalog drawn from two USDA releases, embedded offline and searched live. The nearest products land on a two-axis map; selecting one compares its GTIN, brand and pack with the query, and a page-local tray records the merge or review you would propose. The measured e-means-versus-Lloyd comparison runs beside it.<br>Teaches: retrieval returns candidates, identity needs record evidence, and what a centroid comparison does and does not support.</span>
+        </li>
+        <li class="ord__i">
+          <span class="ord__n">17</span>
+          <span class="ord__t"><a href="queue.html">The arrival queue</a> <span class="chip-new">new</span></span>
+          <span class="ord__w"><b>PLATE IX</b> · A later-release product assigned to the centroids frozen in the earlier release. A cutoff explorer moves the review threshold across the held-out reference; the scatter, histogram and ECDF follow it, and the verdict labels an explored cutoff separately from the shipped p95.<br>Teaches: out-of-sample assignment, reference distributions, and why review can be the honest output.</span>
+        </li>
           </ol>
         </div></div>
       </section>
@@ -223,21 +277,96 @@
   </div>
 </footer>
 <script type="module" data-sandbox="https://cli.emb.is">
-import { gallery, figure } from '../assets/js/demos.js';
+import { gallery, figure, motionAllowed } from '../assets/js/demos.js';
+import { flowGraph } from '../assets/js/flowgraph.js';
+import { revealOnScroll } from '../assets/js/polish.js';
 const g = gallery();
 const put = (sel, text) => { const n = document.querySelector(sel); if (n) n.textContent = text; };
+// The gallery's own pipeline, in the order every plate runs it. Static stages
+// state the shape; the four with data behind them are filled from the manifest.
+// Each note says what the stage does, without a number of its own.
+const flowHost = document.querySelector('[data-flow]');
+const flow = flowGraph(flowHost, [
+  { label: 'input', value: 'fixed sample · committed bytes', note: 'What the plate sends: text or media fixed before the run.', usage: 'committed sample' },
+  { label: 'EMB', value: '—', note: 'The model reads that input and returns one embedding.', usage: 'EMB minilm "<sample>"' },
+  { label: 'vector', value: '—', note: 'The embedding as a list of values, normalised so comparison is about direction.', usage: 'BLOB / VALUES' },
+  { label: 'index', value: '—', note: 'The table of rows built before deployment and shipped with the site.', usage: 'SELECT … FROM vec0' },
+  { label: 'candidates', value: 'k nearest rows', note: 'The rows closest to the query vector, ranked by distance.', usage: 'MATCH vec_int8(:q) AND k = ?' },
+  { label: 'decision', value: 'evidence, not a score', note: 'The page states a reading and shows the rows it rests on.', usage: 'GTIN · p95 · report' }
+]);
+// Hover or keyboard focus lights one stage through flowGraph's own focus().
+if (flow) {
+  const cards = [...flowHost.querySelectorAll('.flow-graph__stage')];
+  cards.forEach((card) => { card.tabIndex = 0; });
+  let lit = -1;
+  const light = (i) => {
+    if (i === lit) { return; }
+    lit = i;
+    if (i < 0) { flow.reset(); } else { flow.focus(i); }
+  };
+  const stageAt = (target) => {
+    const card = target && target.closest ? target.closest('.flow-graph__stage') : null;
+    return card ? cards.indexOf(card) : -1;
+  };
+  flowHost.addEventListener('pointerover', (event) => { light(stageAt(event.target)); });
+  flowHost.addEventListener('pointerleave', () => { light(-1); });
+  flowHost.addEventListener('focusin', (event) => { light(stageAt(event.target)); });
+  flowHost.addEventListener('focusout', (event) => {
+    if (!flowHost.contains(event.relatedTarget)) { light(-1); }
+  });
+}
 // The index reads the manifest and nothing else: no wasm, no database. Every
 // figure below is the index's own, so a rebuild cannot leave this page
 // describing the previous one.
 g.manifest().then((m) => {
   const first = m.models[0];
-  put('[data-fig-count]', m.count.toLocaleString('en-US').replace(/,/g, ' '));
+  const count = m.count.toLocaleString('en-US').replace(/,/g, ' ');
+  const name = first.name === 'minilm' ? 'all-MiniLM-L6-v2' : first.name;
+  put('[data-fig-count]', count);
   put('[data-fig-works]', m.corpus.works);
-  put('[data-fig-model]', first.name === 'minilm' ? 'all-MiniLM-L6-v2' : first.name);
+  put('[data-fig-model]', name);
   put('[data-fig-dim]', first.dimension);
   put('[data-fig-size]', (m.asset.bytes / 1048576).toFixed(1) + ' MB');
   put('[data-fig-attrib]', m.attribution);
-}).catch(() => { /* the static figures stand; nothing is fabricated. */ });
+  if (flow) {
+    flow.setValues([
+      'fixed sample · committed bytes',
+      name + ' · ' + first.dimension + ' values',
+      'unit length · ' + (first.quantization || m.precision),
+      first.table + ' (vec0) · ' + count + ' rows',
+      'k nearest rows · ranked by distance',
+      'evidence, not a score'
+    ]);
+  }
+}).catch(() => { /* the static figures stand; nothing is fabricated. */ })
+  .finally(() => { revealOnScroll(document, '[data-reveal]'); });
+
+// The space is a schematic, so its motion is the only thing it claims: a slow
+// pulse on the query and staggered connectors, and nothing at all when the
+// reader asked for reduced motion.
+const space = document.querySelector('[data-space]');
+if (space && motionAllowed()) {
+  const pulse = space.querySelector('[data-space-pulse]');
+  const links = [...space.querySelectorAll('[data-space-link]')];
+  let frame = 0;
+  let visible = false;
+  const tick = (now) => {
+    frame = 0;
+    if (!visible) { return; }
+    const t = now / 1000;
+    pulse.setAttribute('r', (7 + 2 * Math.sin(t * 0.9)).toFixed(2));
+    pulse.setAttribute('stroke-opacity', (0.22 + 0.12 * Math.sin(t * 0.9)).toFixed(3));
+    links.forEach((link, i) => {
+      link.setAttribute('stroke-opacity', (0.2 + 0.55 * (0.5 + 0.5 * Math.sin(t * 1.2 - i * 0.8))).toFixed(3));
+    });
+    frame = requestAnimationFrame(tick);
+  };
+  new IntersectionObserver((entries) => {
+    visible = entries[0].isIntersecting;
+    if (visible && !frame) { frame = requestAnimationFrame(tick); }
+    if (!visible && frame) { cancelAnimationFrame(frame); frame = 0; }
+  }).observe(space);
+}
 </script>
 <script src="../assets/js/nav.js" defer></script>
 <script src="../assets/js/tldr.js" defer></script>

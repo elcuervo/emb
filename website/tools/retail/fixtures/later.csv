@@ -1,0 +1,7 @@
+fdc_id,brand_owner,brand_name,subbrand_name,gtin_upc,ingredients,not_a_significant_source_of,serving_size,serving_size_unit,household_serving_fulltext,branded_food_category,data_source,package_weight,modified_date,available_date,market_country,discontinued_date,preparation_state_code,trade_channel,short_description
+1001,Acme,Acme Cola,,00012345678905,"Carbonated water, sugar",,355,ml,1 can,Soda,LI,12 fl oz,2026-01-02,2025-12-01,United States,,,,Acme Cola
+1002,Acme,Acme Diet Cola,,00012345678905,"Carbonated water, aspartame",,355,ml,1 can,Soda,LI,12 fl oz,2026-08-01,2026-06-01,United States,,,,Acme Diet Cola Zero
+1003,Contoso,Contoso Chips,,00055555555550,,,,,,Snacks,LI,,,,United States,,,,
+3001,Fresh,Fresh Salsa,,00022222222223,"Tomato, onion",,30,g,2 tbsp,Salsa,LI,16 oz,2026-08-01,2026-06-01,United States,,,,Fresh Tomato Salsa
+3002,Nomad,Nomad Jerky,,00033333333330,"Beef, salt",,28,g,1 oz,,LI,2 oz,2026-08-01,2026-06-01,United States,,,,Nomad Beef Jerky
+3003,Old,Old Tea,,00044444444447,Tea,,240,ml,1 cup,Tea,LI,16 oz,2026-08-01,2026-06-01,United States,2026-09-01,,,Old Black Tea

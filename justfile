@@ -1053,7 +1053,8 @@ website-poe-check:
 #
 #   just website-demos                       # minilm + bge-small
 #   just website-demos models=minilm
-website-demos models="minilm,bge-small": build
+#   just website-demos retail=1              # text, retail, one finalize
+website-demos models="minilm,bge-small" retail="": build
     @set -eu; \
     cfg=website/repl/.sandbox-index.yaml; \
     port=16389; \
@@ -1072,7 +1073,43 @@ website-demos models="minilm,bge-small": build
     for i in $(seq 1 300); do redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK && break; sleep 1; done; \
     redis-cli -p $port EMB.READY 2>/dev/null | grep -q OK || { echo "website-demos: emb did not become ready"; tail -20 /tmp/emb-demos.log; exit 1; }; \
     python3 website/tools/build-demo-db.py --emb 127.0.0.1:$port --models "{{models}}"; \
+    if [ -n "{{retail}}" ]; then python3 website/tools/build-retail-index.py --emb 127.0.0.1:$port; fi; \
     python3 website/tools/demo_index.py finalize
+
+# `website-retail` is the documented full rebuild: the text stage, the opt-in
+# retail stage, then one finalize. It needs the downloaded releases
+# (`just website-retail-sources`) and the report
+# (`just website-retail-analysis`); the retail stage refuses to append to a
+# working file with no text stage. A text-only `just website-demos` after a
+# retail index has shipped fails at finalize instead of dropping the tables.
+website-retail:
+    just website-demos retail=1
+
+# Both pinned archives, verified against the lock and extracted into the
+# ignored `.cache/`. Run `--verify` to check what is on disk without a download.
+website-retail-sources:
+    python3 website/tools/retail/fetch_sources.py
+
+# The offline e-means-vs-Lloyd analysis in its pinned NumPy/Faiss shell. It
+# needs a local emb serving the retail model on `emb` (default: the gallery's
+# text-stage port) and never runs as part of the site build.
+website-retail-analysis emb="127.0.0.1:16389" threads="4":
+    @set -eu; \
+    deps=website/tools/retail/.deps; \
+    nix develop .#retail --command bash -c "set -eu; \
+      if [ ! -d '$deps/faiss' ]; then \
+        python3 -m pip install --quiet --no-cache-dir --target '$deps' \
+          -r website/tools/retail/requirements.txt; \
+      fi; \
+      PYTHONPATH='$deps' OMP_NUM_THREADS={{threads}} OPENBLAS_NUM_THREADS={{threads}} \
+        python3 website/tools/retail/analysis.py --emb {{emb}} --threads {{threads}}"
+
+# Parser fixtures, report schema/leakage checks, and the index/manifest
+# provenance check. No archive, no model, no server.
+website-retail-check:
+    python3 -m unittest website/tools/retail/test_parse_catalog.py
+    python3 website/tools/retail/check_retail.py --check
+    python3 website/tools/build-retail-index.py --check
 
 # `website-media` appends the music fingerprint database (pure DSP, no server) to
 # the gallery's shared index, then names the one artefact. The clip's frame

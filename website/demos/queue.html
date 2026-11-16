@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- meta:start -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the arrival queue — a later release meets frozen regions</title>
+<link rel="canonical" href="https://emb.is/demos/queue.html">
+<meta name="description" content="A product from a later USDA release, embedded live and assigned to the earlier release's frozen centroids. A cutoff explorer moves the review threshold across a held-out reference; the scatter, histogram and ECDF follow it, and the verdict labels exploration separately from the shipped rule.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the arrival queue — a later release meets frozen regions">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="A later-release product against frozen centroids, with a cutoff explorer that shows what review would flag and what it would let through.">
+<meta property="og:url" content="https://emb.is/demos/queue.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the arrival queue — a later release meets frozen regions">
+<meta name="twitter:description" content="A later-release product against frozen centroids, with a cutoff explorer that shows what review would flag and what it would let through.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
+
+<link rel="preload" href="../assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. The explanation, provenance, measured tables and exact commands are static and complete. The generated evidence is served as
+      <a href="../assets/demo/retail/report.json">report.json</a>,
+      <a href="../assets/demo/retail/comparison.csv">comparison.csv</a> and
+      <a href="../assets/demo/retail/distributions.csv">distributions.csv</a>.</p></div>
+  </noscript>
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="index.html"><span>Gallery</span> <b>All the plates</b> <span aria-hidden="true">&#8594;</span></a></nav>
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">IX.</span>The arrival queue</h1>
+          <p class="plate__teaches">A product from the later catalog release, embedded live and assigned to the earlier release's frozen centroids. The plate shows the distance, the margin, and where both sit against a held-out reference. It also shows why the honest output is often review, which carries no label.</p>
+          <p class="tldr">An arrival is a point in the same space. The queue asks which region is nearest, how much nearer it is than the runner-up, and whether the distance falls outside the held-out reference.</p>
+        </div>
+          <p class="fig"><b>THE QUEUE</b>
+            · <b data-fig-arrivals>—</b> fixed arrivals
+            · <b data-fig-model>—</b>
+            · <b data-fig-centroids>—</b> frozen centroids
+            · held-out p95 <b data-fig-p95>—</b>
+            · review, not classification</p>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        <p class="block__deck">The centroids were trained on the earlier release, then frozen. An arrival is a row from the later release, embedded by the same model, normalized the same way, and assigned to those frozen centroids.</p>
+        <p class="block__deck">The earlier release also yields a held-out population the centroids never trained on. Its nearest distances and margins are the reference. An arrival outside that reference can be sent to review. A review flag is not a category or a rejection, and nothing here writes a decision back to a catalog.</p>
+        <p class="block__deck">For regions inside one corpus, see <a href="atlas.html">the atlas</a>. Product identity and quantization are on <a href="catalog.html">the catalog plate</a>. This plate covers the later-release reference and abstention.</p>
+        <p class="fig fig--as-written"><b>PROVENANCE</b> · <span data-prov-source>—</span> · <span data-prov-versions>—</span> · model <span data-prov-model>—</span> · <span data-prov-populations>—</span></p>
+        <p class="fig fig--as-written"><b>FILES</b> · <a href="../assets/demo/retail/report.json">the generated report</a> · <a href="../assets/demo/retail/distributions.csv">the distributions</a></p>
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <p class="block__deck">Each selection runs the same five steps. The rule comes from measurement: the threshold is the held-out p95 of the same statistic.</p>
+
+        <div data-flow role="group" aria-label="How an arrival is reviewed"></div>
+
+        <div data-live class="rig" data-rig="queue">
+          <div class="pick" data-pick aria-label="Committed later-release samples"></div>
+          <p class="rig__state" data-state>ready when you are</p>
+          <div class="rig__out" data-out hidden>
+            <p class="retail-readout" data-readout></p>
+
+            <div class="live-grid">
+              <div>
+                <div class="field" data-field aria-label="The arrival against the held-out cloud and frozen centroids"></div>
+                <p class="retail-note">Faint marks are held-out products from the training release, larger marks are the frozen centroids, and the accent mark is the live arrival. The lit line joins the arrival to its nearest centroid. Drag to turn.</p>
+              </div>
+              <div data-reveal>
+                <div class="verdict" data-verdict><b>—</b></div>
+                <div class="retail-scroll">
+                  <table class="retail-table">
+                    <caption>the arrival against the frozen centroids</caption>
+                    <thead><tr><th scope="col">measure</th><th scope="col">arrival</th><th scope="col">held-out p50</th><th scope="col">held-out p95</th><th scope="col">arrival p50</th></tr></thead>
+                    <tbody data-measures></tbody>
+                  </table>
+                </div>
+                <p class="retail-note" data-context></p>
+              </div>
+            </div>
+
+            <div class="equations" data-reveal aria-label="The live equation, with this run's numbers">
+              <div class="equation">
+                <p class="equation__k">the assignment</p>
+                <p class="equation__body" data-eq-assign>—</p>
+              </div>
+              <div class="equation">
+                <p class="equation__k">the margin</p>
+                <p class="equation__body" data-eq-margin>—</p>
+              </div>
+              <div class="equation">
+                <p class="equation__k">the reference</p>
+                <p class="equation__body" data-eq-reference>—</p>
+              </div>
+              <div class="equation">
+                <p class="equation__k">the rule</p>
+                <p class="equation__body" data-eq-rule>—</p>
+              </div>
+            </div>
+
+            <div class="cut" data-cut>
+              <label class="cut__label" for="cut-range">exploratory cutoff
+                <input class="cut__input" id="cut-range" type="range" data-cut-range aria-describedby="cut-readout">
+              </label>
+              <output class="cut__v" id="cut-value" data-cut-value for="cut-range">—</output>
+              <button class="cut__reset" type="button" data-cut-reset>reset to shipped p95</button>
+              <p class="retail-note cut__note" id="cut-readout" data-cut-readout>—</p>
+              <p class="retail-note cut__note">The verdict follows the cutoff in play while you explore, and the plate labels it exploratory. Reset restores the shipped p95.</p>
+            </div>
+
+            <figure class="retail-plot" data-scatter>
+              <div data-scatter-svg></div>
+              <figcaption data-scatter-cap>—</figcaption>
+            </figure>
+
+            <figure class="retail-plot" data-hist>
+              <div data-hist-svg></div>
+              <figcaption data-hist-cap>—</figcaption>
+            </figure>
+            <p class="retail-note" data-percentile></p>
+
+            <figure class="retail-plot" data-ecdf>
+              <div data-ecdf-svg></div>
+              <figcaption data-ecdf-cap>—</figcaption>
+            </figure>
+
+            <figure class="retail-plot" data-margin-ref>
+              <div data-margin-svg></div>
+              <figcaption data-margin-cap>—</figcaption>
+            </figure>
+
+            <details class="cmds" data-cmds hidden>
+              <summary class="cmds__h">the commands this run sent</summary>
+              <div class="cmds__body" data-cmds-body></div>
+            </details>
+          </div>
+        </div>
+      </div></div>
+    </section>
+
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-saddle.png" width="1100" height="138" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        <p class="block__deck">The arrival's text went through the sandbox once. The returned vector was checked against the centroid provenance (model, dimension, L2 normalization), then measured against every frozen centroid in this page with squared L2. The nearest centroid, the runner-up, and the margin between them are computed here from the vectors; the page reads no stored ranking.</p>
+        <p class="block__deck">The reference numbers come from the generated report: 1 500 held-out products from the training release, assigned to the same frozen centroids. The threshold is the held-out p95 of the nearest distance, written into the report by the analysis. The histogram, the ECDF and the scatter place the live arrival against that population.</p>
+        <p class="block__deck">The field uses the build-time PCA shipped in the index, so the arrival lands in the held-out cloud's own axes and nothing is fitted in the browser.</p>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS</h2>
+        <p class="block__deck">The later release arrives after the centroids were frozen. This plate measures only rows with no earlier-release history, so every distance here is out of sample.</p>
+        <div class="scenarios" data-reveal>
+          <div class="scenario">
+            <p class="scenario__h">inside the reference</p>
+            <p class="scenario__body">The distance is within the held-out population. The plate states the comparison and assigns nothing. A nearby region is context only.</p>
+          </div>
+          <div class="scenario">
+            <p class="scenario__h">outside the reference</p>
+            <p class="scenario__body">The measured distance exceeds the held-out p95. The output is review, and a person looks at the row and its label.</p>
+          </div>
+          <div class="scenario">
+            <p class="scenario__h">small margin</p>
+            <p class="scenario__body">The runner-up is almost as close. Even inside the reference, a small margin is weak evidence for which region the product belongs to. The plate shows the number and leaves the choice open.</p>
+          </div>
+          <div class="scenario">
+            <p class="scenario__h">out of sample</p>
+            <p class="scenario__body">The row comes from the later release and has no earlier-release history. The centroids were frozen before it arrived, so its distance is measured on a product they never saw.</p>
+          </div>
+        </div>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="distribution-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="distribution-h">THE MEASURED DISTRIBUTION</h2>
+        <p class="block__deck">Held-out and later-release populations on the same frozen centroids. The quantiles are generated from the report, and the live histogram above places one arrival inside them. Every distance is measured from a pinned release, so no synthetic arrival or load value appears in the plots.</p>
+        <div class="retail-scroll" data-quantiles></div>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        <p class="block__deck">One sandbox call embeds the committed arrival. The centroid table is read and the distances are computed in this page. No command classifies the arrival, and none writes it anywhere.</p>
+<figure class="code"><pre class="code__body"><code>EMB minilm VALUES "&lt;committed later-release sample text&gt;"
+# -> dtype f32, shape 1 384, and the arrival's 384 values
+
+SELECT id, label, vector FROM retail_centroids WHERE model = 'minilm';
+-- -> the frozen centroids; nearest and runner-up are computed here
+--    in float32, with the margin between them
+
+SELECT nearest, runner_up, margin FROM report.distributions.held_out;
+-- -> the reference quantiles the review threshold was taken from</code></pre>
+        <figcaption class="code__cap">The arrival is embedded, projected, assigned, and compared. The plate stops there: a review flag is not a category, and its absence is not an automatic classification.</figcaption>
+      </figure>
+      </div></div>
+    </section>
+  <div class="shell">
+    <nav class="plate-nav" aria-label="The gallery">
+      <a class="plate-nav__link" href="catalog.html"><span class="plate-nav__k">Previous</span><span class="plate-nav__t">The catalog match</span></a>
+      <a class="plate-nav__link plate-nav__link--next" href="index.html"><span class="plate-nav__k">Next</span><span class="plate-nav__t">The demos gallery</span></a>
+    </nav>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, motionAllowed, unfold } from '../assets/js/demos.js';
+import { retailField } from '../assets/js/retail3d.js';
+import { flowGraph } from '../assets/js/flowgraph.js';
+import { revealOnScroll, countUp } from '../assets/js/polish.js';
+
+const g = gallery();
+const root = document.querySelector('[data-rig="queue"]');
+const pick = root.querySelector('[data-pick]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const verdict = root.querySelector('[data-verdict]');
+const measures = root.querySelector('[data-measures]');
+const context = root.querySelector('[data-context]');
+const fieldNode = root.querySelector('[data-field]');
+const scatterNode = root.querySelector('[data-scatter]');
+const scatterSvg = root.querySelector('[data-scatter-svg]');
+const scatterCap = root.querySelector('[data-scatter-cap]');
+const cutPanel = root.querySelector('[data-cut]');
+const cutRange = root.querySelector('[data-cut-range]');
+const cutValue = root.querySelector('[data-cut-value]');
+const cutReset = root.querySelector('[data-cut-reset]');
+const cutReadout = root.querySelector('[data-cut-readout]');
+const eqAssign = root.querySelector('[data-eq-assign]');
+const eqMargin = root.querySelector('[data-eq-margin]');
+const eqReference = root.querySelector('[data-eq-reference]');
+const eqRule = root.querySelector('[data-eq-rule]');
+const histSvg = root.querySelector('[data-hist-svg]');
+const histCap = root.querySelector('[data-hist-cap]');
+const percentile = root.querySelector('[data-percentile]');
+const ecdfSvg = root.querySelector('[data-ecdf-svg]');
+const ecdfCap = root.querySelector('[data-ecdf-cap]');
+const marginSvg = root.querySelector('[data-margin-svg]');
+const marginCap = root.querySelector('[data-margin-cap]');
+
+const flowText = ['committed sample', '—', '—', '—', '—'];
+const flow = flowGraph(document.querySelector('[data-flow]'), [
+  { label: 'later product', value: flowText[0],
+    note: 'a row from the later release with no history in the earlier one',
+    usage: 'no earlier-release history' },
+  { label: 'EMB', value: flowText[1],
+    note: 'the sandbox embeds its text into 384 values',
+    usage: 'EMB minilm VALUES "<sample text>"' },
+  { label: 'project · assign', value: flowText[2],
+    note: 'the vector is projected for the plot and measured against every frozen centroid',
+    usage: 'SELECT id, vector FROM retail_centroids' },
+  { label: 'nearest · margin', value: flowText[3],
+    note: 'squared L2 to every centroid, then the two smallest and the gap between them',
+    usage: 'argmin d²(q, c)' },
+  { label: 'reference rule', value: flowText[4],
+    note: 'review when the nearest distance is above the held-out p95',
+    usage: 'nearest > p95' }
+], {
+  onSelect: (index) => {
+    if (out.hidden) { return; }
+    const panels = [pick, fieldNode, scatterNode, ecdfSvg.closest('figure'), verdict];
+    const panel = panels[index];
+    if (panel) {
+      panel.scrollIntoView({ behavior: motionAllowed() ? 'smooth' : 'auto', block: 'start' });
+    }
+  }
+});
+
+function setFlow(index, text) {
+  flowText[index] = text;
+  if (flow) { flow.setValues(flowText); }
+}
+
+function flowThrough(index) {
+  if (flow) { flow.through(index); }
+}
+
+let section = null, report = null, catalog = null, centroids = [], heldOut = [], field = null;
+let samples = [], running = 0, started = false, fieldReady = false;
+let shippedP95 = null, cutoff = null, current = null;
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, motionAllowed() ? ms : 0));
+
+function settleVerdict() {
+  if (!motionAllowed()) { return; }
+  verdict.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' });
+  const rows = [...measures.children, ...root.querySelectorAll('.equation')];
+  rows.forEach((node, index) => node.animate([
+    { opacity: 0, transform: 'translateY(6px)' },
+    { opacity: 1, transform: 'none' }
+  ], { duration: 300, delay: 40 + index * 45, easing: 'ease-out', fill: 'backwards' }));
+}
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); if (samples[running]) run(samples[running]); });
+}
+
+function svg(tag, attrs) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.keys(attrs || {}).forEach((key) => node.setAttribute(key, attrs[key]));
+  return node;
+}
+
+function table(caption, head, rows) {
+  return el('table', { class: 'retail-table' }, [
+    el('caption', { text: caption }),
+    el('thead', {}, [el('tr', {}, head.map((name) => el('th', { scope: 'col', text: name })))]),
+    el('tbody', {}, rows)
+  ]);
+}
+
+function row(columns) {
+  return el('tr', {}, columns.map((value) => el('td', { text: String(value) })));
+}
+
+function centroidDistances(vector) {
+  return centroids.map((centroid) => {
+    const view = new DataView(centroid.vector.buffer, centroid.vector.byteOffset, centroid.vector.byteLength);
+    let sum = 0;
+    for (let i = 0; i < vector.length; i++) {
+      const delta = vector[i] - view.getFloat32(i * 4, true);
+      sum += delta * delta;
+    }
+    return { id: centroid.id, label: centroid.label, distance: sum, x: centroid.x, y: centroid.y, z: centroid.z };
+  }).sort((a, b) => a.distance - b.distance);
+}
+
+let markerX = null;
+
+function drawHistogram(distance, threshold) {
+  const bins = report.distributions.held_out_histogram;
+  const width = 720, height = 230, pad = { l: 42, r: 14, t: 14, b: 34 };
+  const max = Math.max(...bins.map((bin) => bin.count)) || 1;
+  const from = bins[0].from, to = bins[bins.length - 1].to;
+  const band = (width - pad.l - pad.r) / bins.length;
+  const x = (value) => pad.l + ((value - from) / (to - from || 1)) * (width - pad.l - pad.r);
+  const y = (value) => height - pad.b - (value / max) * (height - pad.t - pad.b);
+  const root = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Held-out nearest-centroid distance histogram with the live arrival, the exploratory cutoff and the shipped p95 marked.' });
+  root.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: y(0), y2: y(0),
+    stroke: 'currentColor', 'stroke-opacity': '0.4' }));
+  bins.forEach((bin, i) => {
+    const bx = pad.l + band * i + band * 0.12;
+    root.appendChild(svg('rect', { x: bx, y: y(bin.count), width: band * 0.76,
+      height: y(0) - y(bin.count), fill: 'none', stroke: 'currentColor',
+      'stroke-width': '1.1', 'stroke-opacity': '0.62' }));
+    if (i % 2 === 0) {
+      const label = svg('text', { x: bx, y: height - pad.b + 15, 'text-anchor': 'middle',
+        'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+      label.textContent = bin.from.toFixed(2);
+      root.appendChild(label);
+    }
+  });
+  const exploring = shippedP95 !== null && Math.abs(threshold - shippedP95) > 1e-9;
+  if (exploring) {
+    const shippedX = x(shippedP95);
+    root.appendChild(svg('line', { x1: shippedX, x2: shippedX, y1: pad.t, y2: y(0),
+      stroke: 'currentColor', 'stroke-dasharray': '5 4', 'stroke-width': '1.2', 'stroke-opacity': '0.55' }));
+    const shippedLabel = svg('text', { x: Math.min(shippedX + 5, width - 78), y: pad.t + 10, 'font-family': 'monospace',
+      'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.7' });
+    shippedLabel.textContent = 'shipped ' + shippedP95.toFixed(3);
+    root.appendChild(shippedLabel);
+  }
+  const thresholdX = x(threshold);
+  root.appendChild(svg('line', { x1: thresholdX, x2: thresholdX, y1: pad.t, y2: y(0),
+    stroke: 'var(--accent)', 'stroke-width': '1.6' }));
+  const thresholdLabel = svg('text', { x: Math.min(thresholdX + 5, width - 78), y: exploring ? pad.t + 24 : pad.t + 10,
+    'font-family': 'monospace', 'font-size': '10', fill: 'var(--accent)' });
+  thresholdLabel.textContent = (exploring ? 'cutoff ' : 'p95 ') + threshold.toFixed(3);
+  root.appendChild(thresholdLabel);
+  const targetX = Math.max(pad.l, Math.min(width - pad.r, x(distance)));
+  const line = svg('line', { x1: markerX === null ? targetX : markerX, x2: markerX === null ? targetX : markerX,
+    y1: pad.t, y2: y(0), stroke: 'var(--accent)', 'stroke-width': '2' });
+  const dot = svg('circle', { cx: markerX === null ? targetX : markerX, cy: pad.t + 2, r: 4,
+    fill: 'var(--accent)' });
+  root.appendChild(line);
+  root.appendChild(dot);
+  histSvg.replaceChildren(root);
+  histCap.textContent = 'Held-out nearest-centroid squared L2 in 12 bins. The accent line is the cutoff in play and the accent mark is the live arrival at ' +
+    distance.toFixed(4) + (exploring ? '; the dashed line is the shipped p95 at ' + shippedP95.toFixed(4) + '.' : '.');
+  const start = markerX === null ? targetX : markerX;
+  markerX = targetX;
+  if (!motionAllowed() || start === targetX) { return; }
+  const begun = performance.now();
+  const glide = (now) => {
+    const t = Math.min(1, (now - begun) / 520);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const at = start + (targetX - start) * eased;
+    line.setAttribute('x1', at); line.setAttribute('x2', at);
+    dot.setAttribute('cx', at);
+    if (t < 1) { requestAnimationFrame(glide); }
+  };
+  requestAnimationFrame(glide);
+}
+
+let ecdfMarker = null;
+
+function drawEcdf(distance, threshold) {
+  const bins = report.distributions.held_out_histogram;
+  const total = bins.reduce((sum, bin) => sum + bin.count, 0) || 1;
+  const width = 720, height = 200, pad = { l: 48, r: 14, t: 14, b: 34 };
+  const from = bins[0].from, to = bins[bins.length - 1].to;
+  const x = (value) => pad.l + ((value - from) / (to - from || 1)) * (width - pad.l - pad.r);
+  const y = (share) => height - pad.b - share * (height - pad.t - pad.b);
+  const root = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Held-out nearest-centroid distance ECDF, 0 to 100%. The solid line is the cutoff in play at ' +
+      threshold.toFixed(4) + '; the accent mark is the live arrival at ' + distance.toFixed(4) + '.' });
+  root.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: y(0), y2: y(0),
+    stroke: 'currentColor', 'stroke-opacity': '0.4' }));
+  root.appendChild(svg('line', { x1: pad.l, x2: pad.l, y1: pad.t, y2: y(0),
+    stroke: 'currentColor', 'stroke-opacity': '0.4' }));
+  [0, 0.5, 1].forEach((share) => {
+    const label = svg('text', { x: pad.l - 6, y: y(share) + 3, 'text-anchor': 'end',
+      'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+    label.textContent = Math.round(share * 100) + '%';
+    root.appendChild(label);
+  });
+  let cumulative = 0;
+  let path = 'M ' + x(from) + ' ' + y(0);
+  bins.forEach((bin) => {
+    path += ' L ' + x(bin.to) + ' ' + y(cumulative);
+    cumulative += bin.count / total;
+    path += ' L ' + x(bin.to) + ' ' + y(cumulative);
+  });
+  root.appendChild(svg('path', { d: path, fill: 'none', stroke: 'var(--accent)',
+    'stroke-width': '2', 'stroke-linejoin': 'miter' }));
+  bins.forEach((bin, i) => {
+    if (i % 2 !== 0) { return; }
+    const label = svg('text', { x: x(bin.from), y: height - pad.b + 15, 'text-anchor': 'middle',
+      'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+    label.textContent = bin.from.toFixed(2);
+    root.appendChild(label);
+  });
+  const exploring = shippedP95 !== null && Math.abs(threshold - shippedP95) > 1e-9;
+  if (exploring) {
+    const shippedX = x(shippedP95);
+    root.appendChild(svg('line', { x1: shippedX, x2: shippedX, y1: pad.t, y2: y(0),
+      stroke: 'currentColor', 'stroke-dasharray': '5 4', 'stroke-width': '1.2', 'stroke-opacity': '0.55' }));
+    const shippedLabel = svg('text', { x: Math.min(shippedX + 5, width - 78), y: pad.t + 10, 'font-family': 'monospace',
+      'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.7' });
+    shippedLabel.textContent = 'shipped ' + shippedP95.toFixed(3);
+    root.appendChild(shippedLabel);
+  }
+  const thresholdX = x(threshold);
+  root.appendChild(svg('line', { x1: thresholdX, x2: thresholdX, y1: pad.t, y2: y(0),
+    stroke: 'var(--accent)', 'stroke-width': '1.6' }));
+  const thresholdLabel = svg('text', { x: Math.min(thresholdX + 5, width - 78), y: exploring ? pad.t + 24 : pad.t + 10,
+    'font-family': 'monospace', 'font-size': '10', fill: 'var(--accent)' });
+  thresholdLabel.textContent = (exploring ? 'cutoff ' : 'p95 ') + threshold.toFixed(3);
+  root.appendChild(thresholdLabel);
+
+  let share = 0;
+  bins.forEach((bin) => { if (distance >= bin.to) { share += bin.count / total; } });
+  const targetX = Math.max(pad.l, Math.min(width - pad.r, x(distance)));
+  const targetY = y(share);
+  const start = ecdfMarker || { x: targetX, y: targetY };
+  const line = svg('line', { x1: start.x, x2: start.x, y1: y(0), y2: start.y,
+    stroke: 'var(--accent)', 'stroke-width': '1.6', 'stroke-opacity': '0.55' });
+  const dot = svg('circle', { cx: start.x, cy: start.y, r: 4, fill: 'var(--accent)' });
+  root.appendChild(line);
+  root.appendChild(dot);
+  ecdfSvg.replaceChildren(root);
+  ecdfCap.textContent = 'Held-out nearest-centroid squared L2 as a cumulative step over ' +
+    total.toLocaleString('en-US') + ' products: ' + Math.round(share * 100) +
+    '% of the reference lies at or below the live arrival (' + distance.toFixed(4) +
+    '). The accent line is the cutoff in play' +
+    (exploring ? ', and the dashed line is the shipped p95.' : '.');
+  ecdfMarker = { x: targetX, y: targetY };
+  if (!motionAllowed() || (start.x === targetX && start.y === targetY)) { return; }
+  const begun = performance.now();
+  const glide = (now) => {
+    const t = Math.min(1, (now - begun) / 520);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const atX = start.x + (targetX - start.x) * eased;
+    const atY = start.y + (targetY - start.y) * eased;
+    line.setAttribute('x1', atX); line.setAttribute('x2', atX);
+    line.setAttribute('y2', atY);
+    dot.setAttribute('cx', atX); dot.setAttribute('cy', atY);
+    if (t < 1) { requestAnimationFrame(glide); }
+  };
+  requestAnimationFrame(glide);
+}
+
+let scatterMarker = null;
+
+function drawScatter(selected, threshold) {
+  if (!report) { return; }
+  const held = report.distributions.held_out.rows;
+  const arrivals = report.distributions.arrivals.rows;
+  const width = 720, height = 300, pad = { l: 54, r: 16, t: 18, b: 42 };
+  let from = report.distributions.held_out.nearest.min;
+  let to = report.distributions.held_out.nearest.max;
+  let top = 1e-6;
+  const span = (entry) => {
+    if (entry.nearest < from) { from = entry.nearest; }
+    if (entry.nearest > to) { to = entry.nearest; }
+    if (entry.margin > top) { top = entry.margin; }
+  };
+  held.forEach(span);
+  arrivals.forEach(span);
+  const x = (value) => pad.l + ((Math.max(from, Math.min(to, value)) - from) / (to - from || 1)) * (width - pad.l - pad.r);
+  const y = (value) => height - pad.b - (Math.max(0, Math.min(top, value)) / top) * (height - pad.t - pad.b);
+  const dots = (rows) => rows.map((entry) =>
+    'M' + x(entry.nearest).toFixed(1) + ' ' + y(entry.margin).toFixed(1) + 'h0.01').join('');
+  const exploring = Math.abs(threshold - shippedP95) > 1e-9;
+  const root = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Reference scatter of ' + held.length.toLocaleString('en-US') +
+      ' held-out rows and ' + arrivals.length.toLocaleString('en-US') +
+      ' later-release arrivals by nearest distance and margin. The solid line is the cutoff in play at ' +
+      threshold.toFixed(4) + (exploring ? '; the dashed line is the shipped p95 at ' + shippedP95.toFixed(4) : ' (the shipped p95)') +
+      '.' + (selected ? ' The large accent mark is the selected arrival.' : '') });
+  root.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: y(0), y2: y(0),
+    stroke: 'currentColor', 'stroke-opacity': '0.4' }));
+  root.appendChild(svg('line', { x1: pad.l, x2: pad.l, y1: pad.t, y2: y(0),
+    stroke: 'currentColor', 'stroke-opacity': '0.4' }));
+  const fromLabel = svg('text', { x: pad.l, y: height - pad.b + 16, 'text-anchor': 'start',
+    'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+  fromLabel.textContent = from.toFixed(2);
+  const toLabel = svg('text', { x: width - pad.r, y: height - pad.b + 16, 'text-anchor': 'end',
+    'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+  toLabel.textContent = to.toFixed(2);
+  const xTitle = svg('text', { x: width - pad.r, y: height - 8, 'text-anchor': 'end',
+    'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+  xTitle.textContent = 'nearest distance';
+  const yTitle = svg('text', { x: pad.l, y: pad.t - 6, 'font-family': 'monospace',
+    'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+  yTitle.textContent = 'margin';
+  root.append(fromLabel, toLabel, xTitle, yTitle);
+  root.appendChild(svg('path', { d: dots(held), fill: 'none', stroke: 'currentColor',
+    'stroke-width': '2.4', 'stroke-linecap': 'round', 'stroke-opacity': '0.2' }));
+  root.appendChild(svg('path', { d: dots(arrivals), fill: 'none', stroke: 'var(--accent)',
+    'stroke-width': '2.6', 'stroke-linecap': 'round', 'stroke-opacity': '0.4' }));
+  if (exploring) {
+    const shippedX = x(shippedP95);
+    root.appendChild(svg('line', { x1: shippedX, x2: shippedX, y1: pad.t, y2: y(0),
+      stroke: 'currentColor', 'stroke-dasharray': '5 4', 'stroke-width': '1.2', 'stroke-opacity': '0.55' }));
+    const shippedLabel = svg('text', { x: Math.min(shippedX + 5, width - 78), y: pad.t + 10, 'font-family': 'monospace',
+      'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.7' });
+    shippedLabel.textContent = 'shipped ' + shippedP95.toFixed(3);
+    root.appendChild(shippedLabel);
+  }
+  const thresholdX = x(threshold);
+  root.appendChild(svg('line', { x1: thresholdX, x2: thresholdX, y1: pad.t, y2: y(0),
+    stroke: 'var(--accent)', 'stroke-width': '1.6' }));
+  const thresholdLabel = svg('text', { x: Math.min(thresholdX + 5, width - 78), y: exploring ? pad.t + 24 : pad.t + 10,
+    'font-family': 'monospace', 'font-size': '10', fill: 'var(--accent)' });
+  thresholdLabel.textContent = (exploring ? 'cutoff ' : 'p95 ') + threshold.toFixed(3);
+  root.appendChild(thresholdLabel);
+
+  const target = selected ? { x: x(selected.nearest), y: y(selected.margin) } : null;
+  if (!target) {
+    scatterSvg.replaceChildren(root);
+    scatterCap.textContent = 'Held-out rows in faint marks and later-release arrivals tinted accent, by nearest distance and margin. The solid line is the cutoff in play.';
+    return;
+  }
+  const start = scatterMarker || target;
+  const ring = svg('circle', { cx: start.x, cy: start.y, r: 10, fill: 'none',
+    stroke: 'var(--accent)', 'stroke-opacity': '0.4' });
+  const dot = svg('circle', { cx: start.x, cy: start.y, r: 5, fill: 'var(--accent)' });
+  root.append(ring, dot);
+  scatterSvg.replaceChildren(root);
+  scatterCap.textContent = 'Held-out rows in faint marks and later-release arrivals tinted accent, by nearest distance and margin. The solid line is the cutoff in play' +
+    (exploring ? ', the dashed line is the shipped p95' : '') +
+    ', and the large accent mark is the selected arrival.';
+  scatterMarker = target;
+  if (!motionAllowed() || (start.x === target.x && start.y === target.y)) { return; }
+  const begun = performance.now();
+  const glide = (now) => {
+    const t = Math.min(1, (now - begun) / 520);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const atX = start.x + (target.x - start.x) * eased;
+    const atY = start.y + (target.y - start.y) * eased;
+    dot.setAttribute('cx', atX); dot.setAttribute('cy', atY);
+    ring.setAttribute('cx', atX); ring.setAttribute('cy', atY);
+    if (t < 1) { requestAnimationFrame(glide); }
+  };
+  requestAnimationFrame(glide);
+}
+
+function countAbove(rows, threshold) {
+  let count = 0;
+  for (const entry of rows) { if (entry.nearest > threshold) { count += 1; } }
+  return count;
+}
+
+function renderVerdict() {
+  if (!report || !current || !section || !section.review_rule) { return; }
+  const shipped = section.review_rule.threshold;
+  const threshold = cutoff === null ? shipped : cutoff;
+  const exploring = cutoff !== null && Math.abs(cutoff - shipped) > 1e-9;
+  const flagged = current.nearest > threshold;
+  verdict.replaceChildren(
+    el('b', { text: (flagged ? 'REVIEW' : 'NO AUTOMATIC CLASSIFICATION') + (exploring ? ' · EXPLORATORY' : '') }),
+    document.createTextNode(exploring
+      ? 'Exploratory cutoff ' + threshold.toFixed(4) + ' (shipped p95 ' + shipped.toFixed(4) +
+        '). This what-if is not the published rule.'
+      : flagged
+        ? 'The nearest distance is above the held-out p95 (' + shipped.toFixed(4) +
+          '), so the arrival goes to review. A person decides, and the page assigns no category.'
+        : 'The distance is inside the held-out reference. The plate states the comparison and assigns no category.')
+  );
+  if (flagged) { verdict.setAttribute('data-review', ''); } else { verdict.removeAttribute('data-review'); }
+  eqRule.textContent = 'review iff nearest > ' + (exploring ? 'exploratory cutoff' : 'held-out p95') +
+    '\n' + current.nearest.toFixed(6) + (flagged ? ' > ' : ' \u2264 ') + threshold.toFixed(6) +
+    '\nverdict: ' + (flagged ? 'REVIEW' : 'no automatic classification') +
+    (exploring ? ' (exploratory)' : '');
+}
+
+function refreshCutoff() {
+  if (!report || !current || shippedP95 === null) { return; }
+  const threshold = cutoff === null ? shippedP95 : cutoff;
+  const held = report.distributions.held_out.rows;
+  const arrivals = report.distributions.arrivals.rows;
+  const heldFlagged = countAbove(held, threshold);
+  const arrivalFlagged = countAbove(arrivals, threshold);
+  const exploring = cutoff !== null;
+  const share = (count, rows) => (100 * count / rows.length).toFixed(1) + '%';
+  const delta = (count, base) => {
+    const diff = count - base;
+    return diff === 0 ? '0' : (diff > 0 ? '+' : '-') + Math.abs(diff);
+  };
+  cutValue.textContent = threshold.toFixed(4);
+  cutRange.setAttribute('aria-valuetext', threshold.toFixed(4) +
+    (exploring ? ' exploratory cutoff' : ' shipped p95') +
+    ', live arrival ' + (current.nearest > threshold ? 'above' : 'below'));
+  cutReset.disabled = !exploring;
+  if (exploring) { cutPanel.setAttribute('data-exploring', ''); } else { cutPanel.removeAttribute('data-exploring'); }
+  cutReadout.textContent = 'shipped p95 ' + shippedP95.toFixed(4) +
+    (exploring ? ' · exploring ' + threshold.toFixed(4) : '') +
+    ' · held-out ' + heldFlagged.toLocaleString('en-US') + ' of ' + held.length.toLocaleString('en-US') +
+    ' flagged (' + share(heldFlagged, held) + ')' +
+    ' · arrivals ' + arrivalFlagged.toLocaleString('en-US') + ' of ' + arrivals.length.toLocaleString('en-US') +
+    ' flagged (' + share(arrivalFlagged, arrivals) + ')' +
+    (exploring ? ' · vs shipped ' + delta(heldFlagged, countAbove(held, shippedP95)) + ' held-out, ' +
+      delta(arrivalFlagged, countAbove(arrivals, shippedP95)) + ' arrivals' : '') +
+    ' · live arrival ' + current.nearest.toFixed(4) + ' is ' +
+    (current.nearest > threshold ? 'above this cutoff (would flag for review)' : 'below this cutoff (would not flag)');
+  drawHistogram(current.nearest, threshold);
+  drawEcdf(current.nearest, threshold);
+  drawScatter(current, threshold);
+  renderVerdict();
+}
+
+cutRange.addEventListener('input', () => {
+  if (shippedP95 === null) { return; }
+  cutoff = Number(cutRange.value);
+  refreshCutoff();
+});
+
+cutReset.addEventListener('click', () => {
+  cutoff = null;
+  if (shippedP95 !== null) { cutRange.value = String(shippedP95); }
+  refreshCutoff();
+});
+
+let marginMarker = null;
+
+function drawMargin(margin, marginRef) {
+  const width = 720, height = 104, pad = { l: 16, r: 16, t: 42, b: 34 };
+  const span = Math.max(marginRef.p95, margin, 1e-6) * 1.12;
+  const x = (value) => pad.l + (Math.max(0, Math.min(span, value)) / span) * (width - pad.l - pad.r);
+  const trackY = pad.t + 8;
+  const root = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Held-out margin reference: p5 ' + marginRef.p5.toFixed(4) + ', p50 ' +
+      marginRef.p50.toFixed(4) + ', p95 ' + marginRef.p95.toFixed(4) +
+      '. The accent mark is the live arrival margin at ' + margin.toFixed(4) + '.' });
+  root.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: trackY, y2: trackY,
+    stroke: 'currentColor', 'stroke-opacity': '0.3', 'stroke-width': '2' }));
+  [['p5', marginRef.p5], ['p50', marginRef.p50], ['p95', marginRef.p95]].forEach(([label, value]) => {
+    const at = x(value);
+    root.appendChild(svg('line', { x1: at, x2: at, y1: trackY - 7, y2: trackY + 7,
+      stroke: 'currentColor', 'stroke-opacity': '0.55', 'stroke-width': '1.2' }));
+    const tickLabel = svg('text', { x: at, y: trackY + 22, 'text-anchor': 'middle',
+      'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.7' });
+    tickLabel.textContent = label + ' ' + value.toFixed(3);
+    root.appendChild(tickLabel);
+  });
+  const targetX = x(margin);
+  const startX = marginMarker === null ? targetX : marginMarker;
+  const line = svg('line', { x1: startX, x2: startX, y1: trackY - 14, y2: trackY + 14,
+    stroke: 'var(--accent)', 'stroke-width': '2' });
+  const dot = svg('circle', { cx: startX, cy: trackY, r: 4, fill: 'var(--accent)' });
+  const valueLabel = svg('text', { x: startX, y: trackY - 20, 'text-anchor': 'middle',
+    'font-family': 'monospace', 'font-size': '10', fill: 'var(--accent)' });
+  valueLabel.textContent = 'margin ' + margin.toFixed(3);
+  root.append(line, dot, valueLabel);
+  marginSvg.replaceChildren(root);
+  marginCap.textContent = 'Held-out margin quantiles from the generated report, with the live arrival margin at ' +
+    margin.toFixed(4) + '.';
+  marginMarker = targetX;
+  if (!motionAllowed() || startX === targetX) { return; }
+  const begun = performance.now();
+  const glide = (now) => {
+    const t = Math.min(1, (now - begun) / 520);
+    const at = startX + (targetX - startX) * (1 - Math.pow(1 - t, 3));
+    line.setAttribute('x1', at); line.setAttribute('x2', at);
+    dot.setAttribute('cx', at);
+    valueLabel.setAttribute('x', at);
+    if (t < 1) { requestAnimationFrame(glide); }
+  };
+  requestAnimationFrame(glide);
+}
+
+function percentileOf(value, quantiles) {
+  const ladder = [['p5', quantiles.p5], ['p25', quantiles.p25], ['p50', quantiles.p50],
+    ['p75', quantiles.p75], ['p95', quantiles.p95]];
+  let below = 0;
+  for (const [, q] of ladder) { if (value > q) { below++; } }
+  return below * 20;
+}
+
+async function run(sample) {
+  if (!section) { return; }
+  running = samples.indexOf(sample);
+  g.begin();
+  setState('running');
+  out.hidden = true;
+  if (flow) { flow.reset(); }
+  try {
+    setFlow(0, sample.description);
+    flowThrough(0);
+    await pause(180);
+
+    const vector = await g.embed(section.model, sample.text);
+    const norm = Math.sqrt([...vector].reduce((sum, value) => sum + value * value, 0));
+    setFlow(1, vector.length + ' values · norm ' + norm.toFixed(3));
+    flowThrough(1);
+    await pause(180);
+
+    const ordered = centroidDistances(vector);
+    const nearest = ordered[0], runner = ordered[1];
+    const margin = runner.distance - nearest.distance;
+    const query = await g.retailProject(vector);
+    setFlow(2, nearest.label.split(' · ')[0]);
+    flowThrough(2);
+    await pause(160);
+
+    const nearestRef = report.distributions.held_out.nearest;
+    const marginRef = report.distributions.held_out.margin;
+    const arrivalNearest = report.distributions.arrivals.nearest;
+    const rule = section.review_rule;
+    const flagged = !!(rule && rule.statistic === 'nearest' && rule.comparison === 'greater_than' &&
+      nearest.distance > rule.threshold);
+    const percentileValue = percentileOf(nearest.distance, nearestRef);
+    setFlow(3, 'd₁ ' + nearest.distance.toFixed(3) + ' · margin ' + margin.toFixed(3));
+    flowThrough(3);
+    await pause(160);
+    setFlow(4, rule
+      ? (flagged ? 'review · > p95' : 'inside reference · no label')
+      : 'no predeclared rule');
+    flowThrough(4);
+
+    measures.replaceChildren(
+      row(['nearest distance', nearest.distance.toFixed(4), nearestRef.p50.toFixed(4),
+        nearestRef.p95.toFixed(4), arrivalNearest.p50.toFixed(4)]),
+      row(['runner-up distance', runner.distance.toFixed(4), '—', '—', '—']),
+      row(['margin', margin.toFixed(4), marginRef.p50.toFixed(4), marginRef.p95.toFixed(4), '—']),
+      row(['nearest region', nearest.label, '—', '—', '—'])
+    );
+    readout.replaceChildren(
+      el('span', { text: 'arrival ' }), el('b', { class: 'retail-mark', text: sample.description }),
+      el('span', { text: ' · ' + sample.brand + ' · later release' })
+    );
+    context.textContent = 'Out of sample: this row has no earlier-release history, so the frozen centroids never saw it. Its distance is measured here from the embedded vector.';
+    eqAssign.textContent = 'c* = argmin_c d²(q,c)\nc* = ' + nearest.label +
+      '\nd₁ = ' + nearest.distance.toFixed(6) + ' · runner-up d₂ = ' + runner.distance.toFixed(6);
+    eqMargin.textContent = 'margin = d₂ − d₁\nmargin = ' + margin.toFixed(6) +
+      '\nheld-out p50 = ' + marginRef.p50.toFixed(6) + ' · p95 = ' + marginRef.p95.toFixed(6);
+    eqReference.textContent = 'nearest(q) = ' + nearest.distance.toFixed(6) +
+      '\nheld-out p50 = ' + nearestRef.p50.toFixed(6) + ' · p95 = ' + nearestRef.p95.toFixed(6) +
+      '\n≈ p' + percentileValue + ' of the held-out reference';
+
+    current = { nearest: nearest.distance, margin: margin };
+    refreshCutoff();
+    drawMargin(margin, marginRef);
+    percentile.textContent = 'The arrival sits at roughly the ' + percentileValue +
+      'th percentile of held-out nearest distances. ' + (flagged
+        ? 'It is outside the measured reference.'
+        : 'It is inside the measured reference, and the plate still assigns no category.');
+
+    if (field) {
+      field.update({ query: { x: query[0], y: query[1], z: query[2] }, nearest, runner });
+    }
+
+    out.hidden = false;
+    settleVerdict();
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    unfold(root, g.trace());
+  }
+}
+
+function start() {
+  if (started || !fieldReady || !section || !samples.length) { return; }
+  started = true;
+  run(samples[0]);
+}
+
+Promise.all([g.retailCatalog(), g.retail(), g.retailReport(), g.retailCentroids(), g.retailHeldOut()])
+  .then(async ([data, sectionValue, reportValue, centroidValue, heldOutValue]) => {
+    catalog = data;
+    samples = data.arrivals;
+    section = sectionValue;
+    report = reportValue;
+    centroids = centroidValue;
+    heldOut = heldOutValue;
+
+    pick.replaceChildren(...samples.map((sample, i) => el('button', {
+      type: 'button', 'aria-pressed': i === 0 ? 'true' : 'false',
+      text: sample.description,
+      onclick: (event) => {
+        pick.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+        event.currentTarget.setAttribute('aria-pressed', 'true');
+        run(sample);
+      }
+    })));
+
+    countUp(document.querySelector('[data-fig-arrivals]'), section.samples.arrivals.length);
+    document.querySelector('[data-fig-model]').textContent = section.model;
+    document.querySelector('[data-fig-centroids]').textContent = section.centroid_count;
+    const nearestRef = report.distributions.held_out.nearest;
+    document.querySelector('[data-fig-p95]').textContent = nearestRef.p95.toFixed(4);
+    shippedP95 = section.review_rule ? section.review_rule.threshold : nearestRef.p95;
+    cutRange.min = nearestRef.min.toFixed(6);
+    cutRange.max = nearestRef.max.toFixed(6);
+    cutRange.step = 'any';
+    cutRange.value = String(shippedP95);
+    document.querySelector('[data-prov-source]').textContent = section.source.catalog;
+    document.querySelector('[data-prov-versions]').textContent =
+      section.source.releases.map((release) => release.version).join(' → ');
+    document.querySelector('[data-prov-model]').textContent =
+      section.model + ' · ' + section.dimension + 'd · ' + section.normalization + ' normalized';
+    document.querySelector('[data-prov-populations]').textContent =
+      report.populations.training.toLocaleString('en-US') + ' training · ' +
+      report.populations.held_out.toLocaleString('en-US') + ' held out · ' +
+      section.source.terms.decision;
+
+    const quantiles = ['nearest', 'runner_up', 'margin'];
+    document.querySelector('[data-quantiles]').replaceChildren(
+      table('held-out earlier release', ['statistic', 'min', 'p5', 'p25', 'p50', 'p75', 'p95', 'max'],
+        quantiles.map((statistic) => row([statistic, ...['min', 'p5', 'p25', 'p50', 'p75', 'p95', 'max']
+          .map((key) => report.distributions.held_out[statistic][key].toFixed(4))]))),
+      table('later-release arrivals', ['statistic', 'min', 'p5', 'p25', 'p50', 'p75', 'p95', 'max'],
+        quantiles.map((statistic) => row(['arrivals · ' + statistic, ...['min', 'p5', 'p25', 'p50', 'p75', 'p95', 'max']
+          .map((key) => report.distributions.arrivals[statistic][key].toFixed(4))])))
+    );
+
+    revealOnScroll(document, '[data-reveal]');
+    field = await retailField(fieldNode, { products: null, heldOut, centroids, extent: catalog.arrivals, query: null });
+    fieldReady = true;
+    start();
+  }).catch((err) => setState(err.state || 'error', err.message));
+</script>
+<script src="../assets/js/nav.js" defer></script>
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- meta:start -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>emb — demos: the catalog match — a real product catalog, searched by meaning</title>
+<link rel="canonical" href="https://emb.is/demos/catalog.html">
+<meta name="description" content="A bounded selection from two USDA branded-food releases, embedded offline and searched live in the browser. Each sample returns its nearest committed products, a two-axis catalog map, and the record fields that decide identity, with a page-local decision tray and the measured e-means-versus-Lloyd comparison beside it.">
+<meta name="theme-color" content="#F3F0E8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="emb — demos: the catalog match — a real product catalog, searched by meaning">
+<meta property="og:site_name" content="emb">
+<meta property="og:description" content="A real branded-food catalog: nearest products on a live map, record evidence kept separate from similarity, and a page-local merge or review proposal.">
+<meta property="og:url" content="https://emb.is/demos/catalog.html">
+<meta property="og:image" content="https://emb.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="emb — demos: the catalog match — a real product catalog, searched by meaning">
+<meta name="twitter:description" content="A real branded-food catalog: nearest products on a live map, record evidence kept separate from similarity, and a page-local merge or review proposal.">
+<meta name="twitter:image" content="https://emb.is/assets/img/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F3F0E8'/%3E%3Crect x='0' y='0' width='32' height='32' fill='none' stroke='%230B0B0B' stroke-width='2'/%3E%3Crect x='14' y='4' width='4' height='24' fill='%23FF5A1F'/%3E%3C/svg%3E">
+<!-- meta:end -->
+
+<link rel="preload" href="../assets/fonts/public-sans-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/archivo-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/jetbrains-mono-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/styles.css">
+
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div class="masthead__brand">
+      <a class="brand" href="../index.html" aria-label="emb — home">emb</a>
+      <span class="vrule" aria-hidden="true"></span>
+      <p class="masthead__tagline" aria-hidden="true">BYTES&nbsp;IN.<br>VECTORS&nbsp;OUT.</p>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="../docs/index.html">Docs</a>
+      <a href="index.html">Demos</a>
+      <a href="../gem/index.html">Gem</a>
+      <a href="https://github.com/elcuervo/emb" rel="noopener">GitHub</a>
+    </nav>
+
+    <details class="mobile-nav">
+      <summary>Menu <span aria-hidden="true">+</span></summary>
+      <nav aria-label="Mobile">
+        <a href="../docs/index.html">Docs <span aria-hidden="true">&#8594;</span></a>
+        <a href="index.html">Demos <span aria-hidden="true">&#8594;</span></a>
+        <a href="../gem/index.html">Gem <span aria-hidden="true">&#8594;</span></a>
+        <a href="https://github.com/elcuervo/emb">GitHub <span aria-hidden="true">&#8599;</span></a>
+      </nav>
+    </details>
+
+    <div class="masthead__cta">
+      <a class="btn btn--dark btn--sm" href="../docs/index.html#install">Get Started <span aria-hidden="true">&#8594;</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <noscript>
+    <style>[data-live]{ display: none; }</style>
+    <div class="shell"><p class="rig__state">The interactive part of this page needs JavaScript. The explanation, provenance, measured tables and exact commands are static and complete. The generated evidence is served as
+      <a href="../assets/demo/retail/report.json">report.json</a>,
+      <a href="../assets/demo/retail/comparison.csv">comparison.csv</a> and
+      <a href="../assets/demo/retail/distributions.csv">distributions.csv</a>.</p></div>
+  </noscript>
+  <div class="shell">
+    <div class="tldr-bar">
+      <p class="tldr-bar__label">Read mode</p>
+      <button class="tldr-toggle" type="button" data-tldr-toggle aria-pressed="false" hidden>TL;DR</button>
+    </div>
+
+    <section class="plate" aria-labelledby="plate-h">
+      <div class="plate__head">
+        <nav class="plate__next" aria-label="The next demo"><a href="queue.html"><span>Next</span> <b>The arrival queue</b> <span aria-hidden="true">&#8594;</span></a></nav>
+        <div>
+          <h1 class="plate__title" id="plate-h"><span class="plate__num">VIII.</span>The catalog match</h1>
+          <p class="plate__teaches">A real branded-food catalog, embedded live in the browser: the text becomes a vector, the search returns its nearest products, and telling whether two of them are the same item takes an identifier. Every number below is computed on this page from committed data.</p>
+          <p class="tldr">Pick a product to see where it lands in the catalog, what sits near it, and why a close vector does not settle whether two rows are the same item.</p>
+        </div>
+        <div><p class="fig"><b>THE CATALOG</b>
+            · <b data-fig-shipped>—</b> products indexed
+            · <b data-fig-model>—</b>
+            · <b data-fig-dim>—</b> dimensions
+            · <b data-fig-regions>—</b> frozen regions
+            · retrieval <b data-fig-recall>—</b> at <b data-fig-k>—</b>
+            · search in this page</p></div>
+      </div>
+    </section>
+  </div>
+
+    <section class="block block--paper sec" aria-labelledby="what-you-are-looking-at-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-you-are-looking-at-h">WHAT YOU ARE LOOKING AT</h2>
+        <p class="block__deck">The page covers a bounded selection from two consecutive archived releases of the <span data-prov-source>USDA Global Branded Food Products Database</span>, embedded by the same model the sandbox serves. The embedding text is the product's own description and brand. Category is metadata and stays out of the clustering.</p>
+        <p class="block__deck">A product is a <em>name</em> and a <em>record</em>. EMB sees only the name, which is enough to find products that mean the same thing. The record (GTIN, brand, pack) decides whether two rows are the same item. The two kinds of evidence are kept apart here on purpose.</p>
+        <p class="block__deck">The map places the live query on the same two build-time axes as the shipped products, so the page shows where it sits; the axes do not preserve distance. This page generates candidates. The retrieval lesson is in <a href="search.html">search.html</a>, and the vector primitive is in <a href="vector.html">vector.html</a>.</p>
+        <p class="fig fig--as-written"><b>PROVENANCE</b> · <span data-prov-source>—</span> · <span data-prov-versions>—</span> · model <span data-prov-model>—</span> · <span data-prov-populations>—</span></p>
+        <p class="fig fig--as-written"><b>REDISTRIBUTION</b> · <span data-prov-terms>—</span> · <a href="../assets/demo/retail/report.json">the generated report</a> · <a href="../assets/demo/retail/comparison.csv">every grid cell</a></p>
+      </div></div>
+    </section>
+
+    <section class="block block--dark sec tldr-keep" aria-labelledby="try-it-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="try-it-h">TRY IT</h2>
+        <p class="block__deck">Every selection runs the same five steps, and the graph below advances as each one finishes. Click a stage to open the panel it feeds. The map and the numbers use that run's own vector.</p>
+
+        <div data-flow role="group" aria-label="How a catalog match is made"></div>
+
+        <div data-live class="rig" data-rig="catalog">
+          <div class="pick" data-pick aria-label="Committed catalog samples"></div>
+          <p class="rig__state" data-state>ready when you are</p>
+          <div class="rig__out" data-out hidden>
+            <p class="retail-readout" data-readout></p>
+
+            <div class="live-grid" data-reveal>
+              <div data-panel="map">
+                <p class="fig fig--as-written"><b>THE CATALOG MAP</b> · PCA axes 1 and 2, fitted at build time</p>
+                <div class="cat-map" data-map></div>
+                <p class="retail-note">Faint marks are the 600 committed products, the accent mark is the live query, and the numbered rings are the five candidates. The projection is build time, so read the map for orientation; the axes do not preserve distance.</p>
+              </div>
+              <div data-panel="candidates">
+                <div class="cat-filter" data-filter role="group" aria-label="Candidate filter">
+                  <button type="button" data-filter-all aria-pressed="true">all candidates</button>
+                  <button type="button" data-filter-gtin aria-pressed="false">same GTIN only</button>
+                </div>
+                <p class="fig fig--as-written"><b>THE FIVE CANDIDATES</b> · squared L2 by rank, nearest first</p>
+                <figure class="retail-plot" data-candidate-plot></figure>
+                <div class="retail-scroll">
+                  <table class="retail-table">
+                    <caption>nearest committed products · squared L2, from the shipped vectors</caption>
+                    <thead><tr><th scope="col">#</th><th scope="col">squared L2</th><th scope="col">product · evidence</th><th scope="col">identity</th></tr></thead>
+                    <tbody data-hits></tbody>
+                  </table>
+                </div>
+                <p class="retail-note">Select a row to open its record in the evidence panel.</p>
+              </div>
+            </div>
+
+            <div class="equations" data-reveal data-panel="equations" aria-label="The live equation, with this run's numbers">
+              <div class="equation">
+                <p class="equation__k">the vector</p>
+                <p class="equation__body" data-eq-vector>—</p>
+              </div>
+              <div class="equation">
+                <p class="equation__k">the distance</p>
+                <p class="equation__body" data-eq-distance>—</p>
+              </div>
+              <div class="equation">
+                <p class="equation__k">the index</p>
+                <p class="equation__body" data-eq-quant>—</p>
+              </div>
+              <div class="equation">
+                <p class="equation__k">the region</p>
+                <p class="equation__body" data-eq-region>—</p>
+              </div>
+            </div>
+
+            <p class="fig fig--as-written"><b>THE QUANTIZATION ERROR</b> · every 8th value · |vᵢ − q8ᵢ/127|</p>
+            <div class="strip" data-quant-plot aria-hidden="true"></div>
+            <p class="retail-note" data-quant-cap>—</p>
+
+            <div class="live-grid" data-reveal>
+              <div class="cat-panel" data-panel="evidence">
+                <p class="fig fig--as-written"><b>THE EVIDENCE</b> · the selected candidate beside the query</p>
+                <div data-inspector aria-live="polite"></div>
+              </div>
+              <div class="cat-panel" data-panel="tray">
+                <p class="fig fig--as-written"><b>THE DECISION TRAY</b> · page-local only</p>
+                <div class="cat-decisions" data-decisions role="group" aria-label="Decision for the selected candidate">
+                  <button type="button" data-decision="merge" aria-pressed="false">propose merge</button>
+                  <button type="button" data-decision="review" aria-pressed="false">send to review</button>
+                  <button type="button" data-decision="separate" aria-pressed="false">leave separate</button>
+                </div>
+                <ol class="cat-tray" data-tray-list></ol>
+                <button type="button" data-tray-clear hidden>clear</button>
+                <p class="retail-note">The tray records what you would propose for the selected candidate. It is page-local: nothing is written to the catalog or to shared state.</p>
+              </div>
+            </div>
+
+            <details class="cmds" data-cmds hidden>
+              <summary class="cmds__h">the commands this run sent</summary>
+              <div class="cmds__body" data-cmds-body></div>
+            </details>
+          </div>
+        </div>
+      </div></div>
+    </section>
+
+    <section class="ridge ridge--band" aria-hidden="true">
+      <img class="ridge__art" src="../assets/img/terrain-saddle.png" width="1100" height="138" alt="" decoding="async" fetchpriority="low">
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="what-just-happened-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="what-just-happened-h">WHAT JUST HAPPENED</h2>
+        <p class="block__deck">The sample text went to the sandbox once and came back as 384 float32 values. The page made a unit-length copy for the region and the map, quantized an int8 copy for the index, and asked the committed <span class="t-cmd">vec0</span> table for its nearest rows with that copy. The distances beside the rows are recomputed on this page from the stored float32 vectors, so they can be compared with the offline report.</p>
+        <p class="block__deck">The region is a separate calculation. The page asks the shipped centroids for the nearest one and the runner-up, with the margin between them. A region describes how the catalog is organised. It is not a product identity and it does not override the GTIN.</p>
+        <p class="block__deck">The projection is build-time as well. PCA was fitted on the shipped product embeddings, and its mean and basis are in the index, so the live query lands on the same two axes as the catalog. Nothing is fitted in the browser.</p>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="why-it-matters-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="why-it-matters-h">WHAT YOU CAN DO WITH IT</h2>
+        <p class="block__deck">The page is a candidate generator with an explicit evidence check. It does not merge, reject, or publish anything. The three scenarios below are the identity outcomes a downstream system has to handle, and the tray records the decision you would send for a selected candidate.</p>
+        <div class="scenarios" data-reveal>
+          <div class="scenario">
+            <p class="scenario__h">same GTIN</p>
+            <p class="scenario__body">The nearest row carries the same identifier. Similarity and evidence agree, so this is a merge candidate, still subject to pack and brand checks.</p>
+          </div>
+          <div class="scenario">
+            <p class="scenario__h">different GTIN, close</p>
+            <p class="scenario__body">The names are close and the identifiers differ, so the row goes to review: a different pack, a private label, or a product that really is different. The page shows the contradiction and does not resolve it.</p>
+          </div>
+          <div class="scenario">
+            <p class="scenario__h">revised row</p>
+            <p class="scenario__body">USDA lets a provider correct a description while the product stays the same. The report counts that as a revision and keeps the ID.</p>
+          </div>
+        </div>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec" aria-labelledby="comparison-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="comparison-h">THE MEASURED COMPARISON</h2>
+        <p class="block__deck">The two centroid methods run on the same matrix and are scored the same way: held-out squared L2 after every held-out product is assigned to the final centroids. The plot and the table are generated from the report, and no value on them is typed into this page.</p>
+        <figure class="retail-plot" data-plot>
+          <div data-plot-svg></div>
+          <figcaption data-plot-cap>—</figcaption>
+        </figure>
+        <div class="retail-scroll" data-plot-table></div>
+        <figure class="retail-plot" data-seed-plot>
+          <div data-seed-svg></div>
+          <figcaption data-seed-cap>—</figcaption>
+        </figure>
+        <div class="retail-scroll" data-seed-table></div>
+      </div></div>
+    </section>
+
+    <section class="block block--paper sec tldr-keep" aria-labelledby="the-exact-commands-h">
+      <div class="shell block__inner"><div class="block__body">
+        <h2 class="sec__h" id="the-exact-commands-h">THE EXACT COMMANDS</h2>
+        <p class="block__deck">The first command goes to the sandbox and embeds the sample by name. Both SELECTs run in this page: one searches the shipped table, the other reads the frozen centroids.</p>
+<figure class="code"><pre class="code__body"><code>EMB minilm VALUES "&lt;committed sample text&gt;"
+# -> dtype f32, shape 1 384, and the sample's 384 values
+
+SELECT rowid FROM vec_retail_minilm
+  WHERE embedding MATCH vec_int8(:query) AND k = 6
+  ORDER BY distance;
+-- -> 6 rowids, nearest first (sqlite-vec, in this page);
+--    the query's own row is dropped, the five neighbours are shown
+
+SELECT id, label, vector FROM retail_centroids WHERE model = 'minilm';
+-- -> the 64 frozen centroids; nearest and runner-up are computed
+--    in float32 in this page, with the margin between them</code></pre>
+        <figcaption class="code__cap">The query leaves as bytes and returns as a vector. The product table answers with rowids and the centroid table answers with regions. Both answers appear on the page, and their meanings stay separate.</figcaption>
+      </figure>
+      </div></div>
+    </section>
+  <div class="shell">
+    <nav class="plate-nav" aria-label="The gallery">
+      <a class="plate-nav__link" href="perception.html"><span class="plate-nav__k">Previous</span><span class="plate-nav__t">The perception</span></a>
+      <a class="plate-nav__link plate-nav__link--next" href="queue.html"><span class="plate-nav__k">Next</span><span class="plate-nav__t">The arrival queue</span></a>
+    </nav>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="shell footer__inner">
+    <p class="footer__copy mono">&#169; 2026 emb. made with ☠️ by <a href="https://github.com/elcuervo" rel="noopener">elcuervo</a></p>
+    <p class="footer__mark mono">BYTES IN. VECTORS OUT.&nbsp;&nbsp;/&nbsp;&nbsp;EMB</p>
+  </div>
+</footer>
+
+<script type="module" data-sandbox="https://cli.emb.is">
+
+import { gallery, el, showState, motionAllowed, tween, unfold } from '../assets/js/demos.js';
+import { flowGraph } from '../assets/js/flowgraph.js';
+import { revealOnScroll, countUp } from '../assets/js/polish.js';
+
+const g = gallery();
+const root = document.querySelector('[data-rig="catalog"]');
+const pick = root.querySelector('[data-pick]');
+const state = root.querySelector('[data-state]');
+const out = root.querySelector('[data-out]');
+const readout = root.querySelector('[data-readout]');
+const hits = root.querySelector('[data-hits]');
+const mapNode = root.querySelector('[data-map]');
+const inspector = root.querySelector('[data-inspector]');
+const filterAll = root.querySelector('[data-filter-all]');
+const filterGtin = root.querySelector('[data-filter-gtin]');
+const decisions = root.querySelector('[data-decisions]');
+const decisionButtons = [...decisions.querySelectorAll('button')];
+const trayList = root.querySelector('[data-tray-list]');
+const trayClear = root.querySelector('[data-tray-clear]');
+const eqVector = root.querySelector('[data-eq-vector]');
+const eqDistance = root.querySelector('[data-eq-distance]');
+const eqQuant = root.querySelector('[data-eq-quant]');
+const eqRegion = root.querySelector('[data-eq-region]');
+const candidatePlot = root.querySelector('[data-candidate-plot]');
+const quantPlot = root.querySelector('[data-quant-plot]');
+const quantCap = root.querySelector('[data-quant-cap]');
+const panel = (name) => root.querySelector('[data-panel="' + name + '"]');
+const flow = flowGraph(document.querySelector('[data-flow]'), [
+  { label: 'text', value: 'committed sample', note: 'the description and brand the catalog ships',
+    usage: 'sample.description + brand' },
+  { label: 'EMB', value: '—', note: 'the sandbox embeds that text into 384 float32 values',
+    usage: 'EMB minilm VALUES "<sample text>"' },
+  { label: 'normalize · int8', value: '—', note: 'the vector is rescaled to unit length and rounded to int8',
+    usage: 'q8 = round(127 · v)' },
+  { label: 'vec0 search', value: '—', note: 'sqlite-vec returns the nearest rowids for the int8 query',
+    usage: 'SELECT … FROM vec_retail_minilm' },
+  { label: 'evidence', value: '—', note: 'GTIN equality and the record fields decide; the vector supplied candidates',
+    usage: 'GTIN equality' }
+], { onSelect: focusStage });
+const flowText = ['committed sample', '—', '—', '—', '—'];
+let section = null, report = null, catalog = null;
+let samples = [], running = null, started = false;
+let current = null, selectedId = null, filter = 'all';
+let proposals = new Map();
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, motionAllowed() ? ms : 0));
+
+function setState(next, message) {
+  showState(state, next, message, () => { g.retry(); if (running !== null) run(samples[running]); });
+}
+
+function svg(tag, attrs) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.keys(attrs || {}).forEach((key) => node.setAttribute(key, attrs[key]));
+  return node;
+}
+
+function table(caption, head, rows) {
+  return el('table', { class: 'retail-table' }, [
+    el('caption', { text: caption }),
+    el('thead', {}, [el('tr', {}, head.map((name) => el('th', { scope: 'col', text: name })))]),
+    el('tbody', {}, rows)
+  ]);
+}
+
+function cellRow(columns, tag) {
+  return el('tr', {}, columns.map((column) => el(tag || 'td', { text: String(column) })));
+}
+
+function flowSet(stage, value) {
+  flowText[stage] = value;
+  flow.setValues(flowText);
+  flow.through(stage);
+}
+
+/* The five live squared L2 distances, rank on x, distance on y. Each mark grows
+ * from the baseline on the run; reduced motion draws the final position once. */
+function drawCandidates(ranked, sample) {
+  const width = 720, height = 170, pad = { l: 58, r: 14, t: 16, b: 30 };
+  const distances = ranked.map((entry) => entry.distance);
+  const known = distances.filter((value) => value !== null && Number.isFinite(value));
+  const yMin = known.length ? Math.min(...known) * 0.92 : 0;
+  const yMax = known.length ? Math.max(...known) * 1.02 : 1;
+  const x = (i) => pad.l + ((i + 0.5) / ranked.length) * (width - pad.l - pad.r);
+  const y = (value) => height - pad.b - ((value - yMin) / (yMax - yMin || 1)) * (height - pad.t - pad.b);
+  const chart = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Squared L2 distance by rank for ' + sample.description + ', nearest first. ' +
+      known.length + ' committed candidates.' });
+  chart.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: y(yMin), y2: y(yMin),
+    stroke: 'currentColor', 'stroke-opacity': '0.35' }));
+  [yMin, yMax].forEach((tick) => {
+    const label = svg('text', { x: pad.l - 8, y: y(tick) + 4, 'text-anchor': 'end',
+      'font-family': 'monospace', 'font-size': '11', fill: 'currentColor', 'fill-opacity': '0.65' });
+    label.textContent = tick.toFixed(2);
+    chart.appendChild(label);
+  });
+  const marks = ranked.map((entry, i) => {
+    const cx = x(i);
+    const rank = svg('text', { x: cx, y: height - pad.b + 16, 'text-anchor': 'middle',
+      'font-family': 'monospace', 'font-size': '11', fill: 'currentColor', 'fill-opacity': '0.65' });
+    rank.textContent = String(i + 1);
+    chart.appendChild(rank);
+    if (entry.distance === null) { return null; }
+    const stem = svg('line', { x1: cx, x2: cx, y1: y(yMin), y2: y(yMin),
+      stroke: 'currentColor', 'stroke-opacity': '0.45' });
+    const dot = svg('circle', { cx: cx, cy: y(yMin), r: 5, fill: 'var(--accent)' });
+    dot.appendChild(svg('title')).textContent = 'rank ' + (i + 1) + ' · ' + entry.distance.toFixed(4);
+    chart.append(stem, dot);
+    return { stem, dot, distance: entry.distance };
+  });
+  candidatePlot.replaceChildren(chart);
+  tween(560, (t) => {
+    marks.forEach((mark) => {
+      if (!mark) { return; }
+      const cy = y(mark.distance * t);
+      mark.dot.setAttribute('cy', cy);
+      mark.stem.setAttribute('y2', cy);
+    });
+  });
+}
+
+/* |vᵢ − q8ᵢ/127| for a fixed subset of the run's values, scaled to the run's
+ * own peak so the shape reads; the caption carries the measured maximum. */
+function drawQuantization(vector, quantized, error) {
+  const subset = [];
+  for (let i = 0; i < vector.length; i += 8) {
+    subset.push(Math.abs(vector[i] - quantized[i] / 127));
+  }
+  const peak = Math.max(...subset, error) || 1e-6;
+  const bars = subset.map(() => {
+    const bar = document.createElement('i');
+    bar.setAttribute('data-pos', '');
+    bar.style.alignSelf = 'flex-end';
+    bar.style.height = '0%';
+    return bar;
+  });
+  quantPlot.replaceChildren(...bars);
+  tween(520, (t) => {
+    bars.forEach((bar, i) => {
+      bar.style.height = Math.max(2, Math.min(100, (subset[i] / peak) * 100 * t)) + '%';
+    });
+  });
+  quantCap.textContent = 'every 8th value · ' + subset.length + ' of ' + vector.length +
+    ' values · max |vᵢ − q8ᵢ/127| = ' + error.toFixed(6) +
+    ' · bars scaled to this run\u2019s peak';
+}
+
+function quantizeOne(value) {
+  return Math.max(-127, Math.min(127, Math.round(value * 127)));
+}
+
+function squaredDistance(vector, blob) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  let sum = 0;
+  for (let i = 0; i < vector.length; i++) {
+    const delta = vector[i] - view.getFloat32(i * 4, true);
+    sum += delta * delta;
+  }
+  return sum;
+}
+
+const MAP_W = 640, MAP_H = 420, MAP_PAD = 24;
+const DECISION = { merge: 'propose merge', review: 'send to review', separate: 'leave separate' };
+
+function visibleRanked() {
+  if (!current) { return []; }
+  if (filter === 'gtin') {
+    return current.ranked.filter((entry) => entry.row && entry.row.gtin === current.sample.gtin);
+  }
+  return current.ranked;
+}
+
+function selectedEntry() {
+  return current ? current.ranked.find((entry) => entry.id === selectedId) || null : null;
+}
+
+/* The catalog on its first two build-time axes. Orientation only: every
+ * coordinate is read from the index or projected by its shipped basis. */
+function drawMap(ranked, projection) {
+  const xs = catalog.rows.map((row) => row.x).concat([projection[0]]);
+  const ys = catalog.rows.map((row) => row.y).concat([projection[1]]);
+  ranked.forEach((entry) => {
+    if (entry.row) { xs.push(entry.row.x); ys.push(entry.row.y); }
+  });
+  let xMin = Math.min(...xs), xMax = Math.max(...xs);
+  let yMin = Math.min(...ys), yMax = Math.max(...ys);
+  if (!Number.isFinite(xMin) || !Number.isFinite(yMin)) { xMin = -1; xMax = 1; yMin = -1; yMax = 1; }
+  const spanX = (xMax - xMin) || 1, spanY = (yMax - yMin) || 1;
+  xMin -= spanX * 0.06; xMax += spanX * 0.06;
+  yMin -= spanY * 0.06; yMax += spanY * 0.06;
+  const x = (value) => MAP_PAD + ((value - xMin) / (xMax - xMin)) * (MAP_W - 2 * MAP_PAD);
+  const y = (value) => MAP_H - MAP_PAD - ((value - yMin) / (yMax - yMin)) * (MAP_H - 2 * MAP_PAD);
+  const chart = svg('svg', { viewBox: '0 0 ' + MAP_W + ' ' + MAP_H, role: 'group',
+    'aria-label': 'Catalog map on PCA axes 1 and 2. Faint marks are the 600 shipped products, ' +
+      'the numbered rings are the candidates, and the accent mark is the live query.' });
+  chart.appendChild(svg('line', { x1: MAP_PAD, x2: MAP_W - MAP_PAD, y1: MAP_H - MAP_PAD, y2: MAP_H - MAP_PAD,
+    stroke: 'currentColor', 'stroke-opacity': '0.25' }));
+  const axisOne = svg('text', { x: MAP_W - MAP_PAD, y: MAP_H - MAP_PAD + 15, 'text-anchor': 'end',
+    'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+  axisOne.textContent = 'axis 1 →';
+  const axisTwo = svg('text', { x: MAP_PAD, y: MAP_PAD + 10, 'text-anchor': 'start',
+    'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.6' });
+  axisTwo.textContent = '↑ axis 2';
+  chart.append(axisOne, axisTwo);
+  catalog.rows.forEach((row) => chart.appendChild(svg('circle', {
+    class: 'cat-dot', cx: x(row.x), cy: y(row.y), r: 1.7
+  })));
+  const rings = ranked.map((entry, index) => {
+    if (!entry.row) { return null; }
+    const gnode = svg('g', { class: 'cat-ring', 'data-id': entry.id, tabindex: '0', role: 'button',
+      'aria-label': 'candidate ' + (index + 1) + ', ' + entry.row.description + ', ' +
+        (entry.row.gtin === current.sample.gtin ? 'same GTIN' : 'different GTIN') });
+    gnode.appendChild(svg('title')).textContent =
+      'candidate ' + (index + 1) + ' · ' + entry.row.description;
+    const circle = svg('circle', { cx: x(entry.row.x), cy: y(entry.row.y), r: 9 });
+    const label = svg('text', { x: x(entry.row.x), y: y(entry.row.y) });
+    label.textContent = String(index + 1);
+    gnode.append(circle, label);
+    gnode.addEventListener('click', () => selectCandidate(entry.id));
+    gnode.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectCandidate(entry.id);
+      }
+    });
+    chart.appendChild(gnode);
+    return { node: gnode, circle, index };
+  }).filter(Boolean);
+  const qx = x(projection[0]), qy = y(projection[1]);
+  const marker = svg('g', { class: 'cat-query' });
+  const halo = svg('circle', { class: 'cat-query-ring', cx: qx, cy: qy, r: 9, opacity: '0.55' });
+  const burst = svg('circle', { class: 'cat-query-ring', cx: qx, cy: qy, r: 4, opacity: '1' });
+  const dot = svg('circle', { class: 'cat-query-dot', cx: qx, cy: qy, r: 4.5 });
+  const label = svg('text', { x: qx + 13, y: qy < 22 ? qy + 18 : qy - 9, 'font-family': 'monospace', 'font-size': '10',
+    fill: 'var(--accent)' });
+  label.textContent = 'query';
+  marker.append(halo, burst, dot, label);
+  marker.appendChild(svg('title')).textContent = 'live query · ' + current.sample.description;
+  chart.appendChild(marker);
+  mapNode.replaceChildren(chart);
+  rings.forEach((ring) => {
+    ring.circle.setAttribute('r', '0');
+    ring.node.setAttribute('opacity', '0');
+  });
+  burst.setAttribute('r', '3');
+  burst.setAttribute('opacity', '1');
+  dot.setAttribute('opacity', '0');
+  tween(620, (t) => {
+    rings.forEach((ring) => {
+      const local = Math.max(0, Math.min(1, (t - ring.index * 0.07) / 0.55));
+      ring.circle.setAttribute('r', String(9 * local));
+      ring.node.setAttribute('opacity', String(local));
+    });
+    dot.setAttribute('opacity', String(Math.min(1, t / 0.5)));
+    burst.setAttribute('opacity', String(Math.max(0, 0.9 * (1 - t))));
+    burst.setAttribute('r', String(4 + 18 * t));
+  });
+}
+
+function renderTable() {
+  if (!current) { hits.replaceChildren(); return; }
+  const visible = visibleRanked();
+  if (!visible.length) {
+    hits.replaceChildren(el('tr', {}, [el('td', { colspan: '4',
+      text: filter === 'gtin'
+        ? 'No candidate shares this identifier. None of the five nearest rows carries the same GTIN.'
+        : 'No candidate rows were returned for this query.' })]));
+    return;
+  }
+  hits.replaceChildren(...visible.map((entry) => {
+    const row = entry.row;
+    const same = row && row.gtin === current.sample.gtin;
+    const rank = current.ranked.indexOf(entry) + 1;
+    return el('tr', {
+      class: same ? null : 'retail-hit',
+      'data-id': entry.id,
+      tabindex: '0',
+      'aria-pressed': entry.id === selectedId ? 'true' : 'false',
+      onclick: () => selectCandidate(entry.id),
+      onkeydown: (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectCandidate(entry.id);
+        }
+      }
+    }, [
+      el('td', { text: String(rank) }),
+      el('td', { text: entry.distance === null ? '—' : entry.distance.toFixed(4) }),
+      el('td', {}, [
+        el('b', { text: row ? row.description : 'rowid ' + entry.id.replace('rowid:', '') }),
+        el('br'),
+        el('span', { text: row
+          ? row.brand + ' · GTIN ' + row.gtin + (row.pack ? ' · ' + row.pack : '')
+          : '' })
+      ]),
+      el('td', { text: !row ? 'unknown' : same ? 'same GTIN' : 'different GTIN' })
+    ]);
+  }));
+}
+
+function recordValue(value) {
+  return value === null || value === undefined || value === '' ? '—' : String(value);
+}
+
+function renderInspector() {
+  const entry = selectedEntry();
+  if (!current || !entry) {
+    inspector.replaceChildren(el('p', { class: 'retail-note',
+      text: 'Select a candidate in the table or on the map to compare its record with the query.' }));
+    return;
+  }
+  const row = entry.row;
+  const fields = [
+    ['description', current.sample.description, row ? row.description : '—'],
+    ['brand', current.sample.brand, row ? row.brand : '—'],
+    ['GTIN', current.sample.gtin, row ? row.gtin : '—'],
+    ['pack', current.sample.pack, row ? row.pack : '—'],
+    ['category', current.sample.category, row ? row.category : '—']
+  ];
+  const body = fields.map(([label, query, candidate]) => {
+    const a = recordValue(query), b = recordValue(candidate);
+    return el('tr', {}, [
+      el('td', { text: label }),
+      el('td', { text: a }),
+      el('td', { text: b }),
+      el('td', { text: a === b ? 'same' : 'different' })
+    ]);
+  });
+  const same = !!row && row.gtin === current.sample.gtin;
+  const verdict = el('p', { class: 'verdict', 'data-review': same ? null : '' }, [
+    el('b', { text: !row ? 'GTIN UNKNOWN' : same ? 'SAME GTIN' : 'DIFFERENT GTIN' }),
+    document.createTextNode(!row
+      ? 'The row has no shipped GTIN, so the identifier cannot settle this candidate.'
+      : same
+        ? 'The record identifiers agree. Merge still needs the pack and brand checks.'
+        : 'The record identifiers differ, so merge is disabled. The similar description is why the row is a candidate.')
+  ]);
+  inspector.replaceChildren(
+    table('selected candidate against the query', ['field', 'query', 'candidate', 'compare'], body),
+    verdict
+  );
+}
+
+function renderTray() {
+  const entry = selectedEntry();
+  decisionButtons.forEach((button) => {
+    const value = button.dataset.decision;
+    const active = !!entry && proposals.get(entry.id) === value;
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.disabled = !entry || (value === 'merge' && !(entry.row && entry.row.gtin === current.sample.gtin));
+  });
+  const entries = [...proposals.entries()]
+    .map(([id, decision]) => ({ id, decision, entry: current ? current.ranked.find((item) => item.id === id) : null }))
+    .filter((item) => item.entry);
+  if (!entries.length) {
+    trayList.replaceChildren(el('li', { class: 'cat-tray__empty', text: 'no proposals yet' }));
+    trayClear.hidden = true;
+    return;
+  }
+  trayList.replaceChildren(...entries.map((item) => el('li', {}, [
+    el('b', { text: item.entry.row ? item.entry.row.description : 'rowid ' + item.id.replace('rowid:', '') }),
+    document.createTextNode(' · ' + DECISION[item.decision])
+  ])));
+  trayClear.hidden = false;
+}
+
+function syncSelection() {
+  hits.querySelectorAll('tr[data-id]').forEach((row) => {
+    row.setAttribute('aria-pressed', row.dataset.id === selectedId ? 'true' : 'false');
+  });
+  mapNode.querySelectorAll('.cat-ring').forEach((ring) => {
+    if (ring.dataset.id === selectedId) { ring.setAttribute('data-selected', ''); }
+    else { ring.removeAttribute('data-selected'); }
+  });
+}
+
+function selectCandidate(id) {
+  if (!current) { return; }
+  selectedId = current.ranked.some((entry) => entry.id === id) ? id : null;
+  syncSelection();
+  renderInspector();
+  renderTray();
+}
+
+function renderMapFilter() {
+  const visible = new Set(visibleRanked().map((entry) => entry.id));
+  mapNode.querySelectorAll('.cat-ring').forEach((ring) => {
+    if (visible.has(ring.dataset.id)) {
+      ring.removeAttribute('display');
+      ring.setAttribute('tabindex', '0');
+      ring.removeAttribute('aria-hidden');
+    } else {
+      ring.setAttribute('display', 'none');
+      ring.setAttribute('tabindex', '-1');
+      ring.setAttribute('aria-hidden', 'true');
+    }
+  });
+}
+
+function setFilter(mode) {
+  filter = mode;
+  filterAll.setAttribute('aria-pressed', mode === 'all' ? 'true' : 'false');
+  filterGtin.setAttribute('aria-pressed', mode === 'gtin' ? 'true' : 'false');
+  if (!current) { return; }
+  const visible = visibleRanked();
+  if (!visible.some((entry) => entry.id === selectedId)) {
+    selectedId = visible.length ? visible[0].id : null;
+  }
+  renderTable();
+  syncSelection();
+  renderMapFilter();
+  renderInspector();
+  renderTray();
+}
+
+function focusStage(index) {
+  const targets = [readout, panel('map'), panel('equations'), panel('candidates'), panel('evidence')];
+  const target = targets[index];
+  if (target) {
+    target.scrollIntoView({ behavior: motionAllowed() ? 'smooth' : 'auto', block: 'start' });
+  }
+}
+
+async function run(sample) {
+  if (!section) { return; }
+  running = samples.indexOf(sample);
+  g.begin();
+  setState('running');
+  out.hidden = true;
+  current = null;
+  selectedId = null;
+  filter = 'all';
+  proposals = new Map();
+  filterAll.setAttribute('aria-pressed', 'true');
+  filterGtin.setAttribute('aria-pressed', 'false');
+  hits.replaceChildren();
+  mapNode.replaceChildren();
+  renderInspector();
+  renderTray();
+  flow.reset();
+  flowText.fill('—');
+  flowText[0] = sample.description;
+  flow.setValues(flowText);
+  flow.through(0);
+  try {
+    await pause(180);
+
+    const vector = await g.embed(section.model, sample.text);
+    const norm = Math.sqrt([...vector].reduce((sum, value) => sum + value * value, 0));
+    const unit = Float32Array.from(vector, (value) => value / (norm || 1));
+    flowSet(1, vector.length + ' values · norm ' + norm.toFixed(3));
+    await pause(180);
+
+    const quantized = [...unit].map(quantizeOne);
+    const error = Math.max(...[...unit].map((value, i) => Math.abs(value - quantized[i] / 127)));
+    flowSet(2, 'int8 · max error ' + error.toFixed(4));
+    await pause(160);
+
+    const byRow = new Map(catalog.rows.map((row) => [row.rowid, row]));
+    const found = (await g.retailSearch(unit, 6))
+      .filter((hit) => !byRow.get(hit.rowid) || byRow.get(hit.rowid).fdc_id !== sample.fdc_id)
+      .slice(0, 5);
+    const ranked = found.map((hit) => {
+      const row = byRow.get(hit.rowid);
+      return {
+        id: row ? 'fdc:' + row.fdc_id : 'rowid:' + hit.rowid,
+        row,
+        distance: row && row.embedding ? squaredDistance(unit, row.embedding) : null
+      };
+    });
+    flowSet(3, ranked.length + ' neighbours · best ' +
+      (ranked[0] && ranked[0].distance !== null ? ranked[0].distance.toFixed(4) : '—'));
+    await pause(160);
+
+    const region = await g.retailAssign(unit);
+    const projection = await g.retailProject(unit);
+    const best = ranked[0];
+    const bestRow = best && best.row;
+    const identity = bestRow
+      ? (bestRow.gtin === sample.gtin ? 'same GTIN' : 'different GTIN')
+      : 'GTIN unknown';
+    flowSet(4, identity + ' · margin ' + region.margin.toFixed(4));
+
+    current = { sample, ranked, region, projection };
+
+    readout.replaceChildren(
+      el('span', { text: 'query ' }), el('b', { class: 'retail-mark', text: sample.description }),
+      el('span', { text: ' · ' + sample.brand + ' · ' + sample.gtin + ' · ' + sample.category }),
+      el('span', { class: 'cat-region', text: ' · region ' + region.nearest.label.split(' · ')[0] +
+        ' · margin ' + region.margin.toFixed(4) + ' · catalog organisation' })
+    );
+
+    eqVector.textContent = 'v = EMB(sample)\n||v|| = ' + norm.toFixed(6) +
+      '\nv̂ = v / ||v|| · every product shares this length';
+    eqDistance.textContent = 'd²(q,p) = Σ(qᵢ − pᵢ)²\nd² = ' +
+      (best && best.distance !== null ? best.distance.toFixed(6) : '—') +
+      (bestRow ? '\np = ' + (bestRow.description.length > 30 ? bestRow.description.slice(0, 27) + '…' : bestRow.description) : '');
+    eqQuant.textContent = 'q8ᵢ = round(127 · qᵢ)\nmax |qᵢ − q8ᵢ/127| = ' + error.toFixed(6) +
+      '\nsqlite-vec searches q8; the table above recomputes d² from float32';
+    eqRegion.textContent = 'c* = argmin_c d²(q,c)\nc* = ' + region.nearest.label +
+      '\nd₁ = ' + region.nearest.distance.toFixed(6) + ' · d₂ = ' + region.runner_up.distance.toFixed(6) +
+      '\nmargin = d₂ − d₁ = ' + region.margin.toFixed(6);
+
+    renderTable();
+    drawCandidates(ranked, sample);
+    drawQuantization(unit, quantized, error);
+    out.hidden = false;
+    drawMap(ranked, projection);
+    const visible = visibleRanked();
+    selectedId = visible.length ? visible[0].id : null;
+    syncSelection();
+    renderInspector();
+    renderTray();
+    if (motionAllowed()) {
+      [...hits.children].forEach((row, i) => row.animate(
+        [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 260, delay: i * 55, easing: 'ease-out', fill: 'backwards' }));
+    }
+    setState('ready');
+  } catch (err) {
+    out.hidden = true;
+    setState(err.state || 'error', err.message);
+  } finally {
+    unfold(root, g.trace());
+  }
+}
+
+function start() {
+  if (started || !section || !samples.length) { return; }
+  started = true;
+  run(samples[0]);
+}
+
+function plotComparison(node, tableNode, caption, config) {
+  const cells = report.comparison.filter((cell) =>
+    cell.scale === config.scale && cell.centroids === config.centroids);
+  const width = 720, height = 260, pad = { l: 58, r: 14, t: 12, b: 34 };
+  const times = cells.map((cell) => cell.time_s);
+  const losses = cells.map((cell) => cell.loss);
+  const xMax = Math.max(...times) * 1.08 || 1;
+  const yMin = Math.min(...losses) * 0.98;
+  const yMax = Math.max(...losses) * 1.01;
+  const x = (value) => pad.l + (value / xMax) * (width - pad.l - pad.r);
+  const y = (value) => height - pad.b - ((value - yMin) / (yMax - yMin)) * (height - pad.t - pad.b);
+  const root = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Held-out squared L2 loss against training time for e-means and Lloyd k-means.' });
+  [0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
+    const value = yMin + tick * (yMax - yMin);
+    root.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: y(value), y2: y(value),
+      stroke: 'currentColor', 'stroke-opacity': '0.18' }));
+    const label = svg('text', { x: pad.l - 8, y: y(value) + 4, 'text-anchor': 'end',
+      'font-family': 'monospace', 'font-size': '11', fill: 'currentColor', 'fill-opacity': '0.65' });
+    label.textContent = value.toFixed(1);
+    root.appendChild(label);
+  });
+  [0, 0.5, 1].forEach((tick) => {
+    const label = svg('text', { x: x(tick * xMax), y: height - pad.b + 16, 'text-anchor': 'middle',
+      'font-family': 'monospace', 'font-size': '11', fill: 'currentColor', 'fill-opacity': '0.65' });
+    label.textContent = (tick * xMax).toFixed(2) + ' s';
+    root.appendChild(label);
+  });
+  cells.forEach((cell) => {
+    const point = svg('circle', {
+      cx: x(cell.time_s), cy: y(cell.loss), r: cell.method === 'emeans' ? 5 : 4,
+      fill: cell.method === 'emeans' ? 'currentColor' : 'none',
+      stroke: 'currentColor', 'stroke-width': cell.method === 'emeans' ? '0' : '1.6'
+    });
+    point.appendChild(svg('title')).textContent = cell.method + ' · seed ' + cell.seed +
+      ' · loss ' + cell.loss + ' · ' + cell.time_s + ' s';
+    root.appendChild(point);
+  });
+  node.replaceChildren(root);
+  caption.textContent = 'Held-out loss after final-centroid reassignment, scale ' + config.scale +
+    ', ' + config.centroids + ' centroids, seeds ' + report.grid.seeds.join(', ') +
+    '. Every point is a row in the table below.';
+  tableNode.replaceChildren(table('the plotted points · one row per seed and method', ['seed', 'method', 'loss', 'time (s)', 'matched Lloyd at'],
+    cells.slice().sort((a, b) => a.seed - b.seed || a.method.localeCompare(b.method)).map((cell) =>
+      cellRow([cell.seed, cell.method, cell.loss.toFixed(4), cell.time_s.toFixed(4),
+        cell.method === 'emeans'
+          ? (cell.time_to_match_lloyd.matched ? 'pass ' + cell.time_to_match_lloyd.matched_at_pass : 'not reached')
+          : '—']))));
+}
+
+function plotSeeds(node, tableNode, caption) {
+  const spread = report.seed_spread.slice().sort((a, b) =>
+    a.scale - b.scale || a.centroids - b.centroids || a.method.localeCompare(b.method));
+  const width = 720, height = 240, pad = { l: 58, r: 14, t: 12, b: 34 };
+  const yMax = Math.max(...spread.map((row) => row.mean + row.stdev)) * 1.02 || 1;
+  const band = (width - pad.l - pad.r) / spread.length;
+  const y = (value) => height - pad.b - (value / yMax) * (height - pad.t - pad.b);
+  const root = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, role: 'img',
+    'aria-label': 'Mean held-out loss with one standard deviation across seeds, per scale, centroid count and method.' });
+  root.appendChild(svg('line', { x1: pad.l, x2: width - pad.r, y1: y(0), y2: y(0), stroke: 'currentColor', 'stroke-opacity': '0.4' }));
+  spread.forEach((row, i) => {
+    const cx = pad.l + band * (i + 0.5);
+    root.appendChild(svg('line', { x1: cx, x2: cx, y1: y(row.mean - row.stdev), y2: y(row.mean + row.stdev),
+      stroke: 'currentColor', 'stroke-width': '2', 'stroke-opacity': row.method === 'emeans' ? '0.85' : '0.35' }));
+    root.appendChild(svg('circle', { cx: cx, cy: y(row.mean), r: 4,
+      fill: row.method === 'emeans' ? 'currentColor' : 'none', stroke: 'currentColor', 'stroke-width': '1.6' }));
+    const label = svg('text', { x: cx, y: height - pad.b + 16, 'text-anchor': 'middle',
+      'font-family': 'monospace', 'font-size': '10', fill: 'currentColor', 'fill-opacity': '0.65' });
+    label.textContent = row.scale + '/' + row.centroids;
+    root.appendChild(label);
+  });
+  node.replaceChildren(root);
+  caption.textContent = 'Mean held-out loss with one standard deviation across seeds, by scale and centroid count. Filled marks are e-means and hollow marks are Lloyd.';
+  tableNode.replaceChildren(table('seed spread · mean, deviation and range per scale and centroid count', ['scale', 'centroids', 'method', 'runs', 'mean', 'stdev', 'min', 'max'],
+    spread.map((row) => cellRow([row.scale, row.centroids, row.method, row.runs,
+      row.mean.toFixed(4), row.stdev.toFixed(4), row.min.toFixed(4), row.max.toFixed(4)]))));
+}
+
+filterAll.addEventListener('click', () => setFilter('all'));
+filterGtin.addEventListener('click', () => setFilter('gtin'));
+decisionButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    const entry = selectedEntry();
+    if (!entry || button.disabled) { return; }
+    proposals.set(entry.id, button.dataset.decision);
+    renderTray();
+  });
+});
+trayClear.addEventListener('click', () => { proposals.clear(); renderTray(); });
+
+Promise.all([g.retailCatalog(), g.retail(), g.retailReport()]).then(([data, sectionValue, reportValue]) => {
+  catalog = data;
+  samples = data.samples;
+  section = sectionValue;
+  report = reportValue;
+
+  pick.replaceChildren(...samples.map((sample, i) => el('button', {
+    type: 'button', 'aria-pressed': i === 0 ? 'true' : 'false',
+    text: sample.description,
+    onclick: (event) => {
+      pick.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      event.currentTarget.setAttribute('aria-pressed', 'true');
+      if (motionAllowed()) {
+        event.currentTarget.animate(
+          [{ transform: 'scale(0.97)' }, { transform: 'scale(1)' }],
+          { duration: 180, easing: 'ease-out' });
+      }
+      run(sample);
+    }
+  })));
+
+  countUp(document.querySelector('[data-fig-shipped]'), report.populations.shipped);
+  revealOnScroll(document, '[data-reveal]');
+  document.querySelector('[data-fig-model]').textContent = section.model;
+  document.querySelector('[data-fig-dim]').textContent = section.dimension;
+  document.querySelector('[data-fig-regions]').textContent = section.centroid_count;
+  document.querySelector('[data-fig-recall]').textContent = Number(section.retrieval.recall_at_k).toFixed(3);
+  document.querySelector('[data-fig-k]').textContent = section.retrieval.k;
+  document.querySelector('[data-prov-source]').textContent = section.source.catalog;
+  document.querySelector('[data-prov-versions]').textContent =
+    section.source.releases.map((release) => release.version).join(' → ');
+  document.querySelector('[data-prov-model]').textContent =
+    section.model + ' · ' + section.dimension + 'd · ' + section.normalization + ' normalized';
+  document.querySelector('[data-prov-populations]').textContent =
+    report.populations.training.toLocaleString('en-US') + ' training · ' +
+    report.populations.held_out.toLocaleString('en-US') + ' held out · ' +
+    report.populations.overlap.new.toLocaleString('en-US') + ' new ids';
+  document.querySelector('[data-prov-terms]').textContent =
+    section.source.terms.decision + ' · ' + section.source.attribution;
+  plotComparison(document.querySelector('[data-plot-svg]'), document.querySelector('[data-plot-table]'),
+    document.querySelector('[data-plot-cap]'), report.grid.canonical);
+  plotSeeds(document.querySelector('[data-seed-svg]'), document.querySelector('[data-seed-table]'),
+    document.querySelector('[data-seed-cap]'));
+
+  start();
+}).catch((err) => setState(err.state || 'error', err.message));
+</script>
+<script src="../assets/js/nav.js" defer></script>
+<script src="../assets/js/tldr.js" defer></script>
+</body>
+</html>

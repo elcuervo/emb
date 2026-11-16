@@ -154,6 +154,19 @@
           asciinema-agg
         ]) ++ [ pkgsWrangler.wrangler ];
 
+        # The offline retail analysis: NumPy and the pinned Faiss CPU wheel
+        # (`NumpyEmeans` and `Kmeans`, installed from `requirements.txt`). It is
+        # its own shell because the site and the server never acquire a
+        # clustering runtime; only `just website-retail-analysis` enters it.
+        retailDeps = (with pkgs; [
+          python3
+          python3Packages.pip
+          python3Packages.numpy
+          # The PyPI faiss-cpu wheel links libstdc++ and zlib dynamically.
+          stdenv.cc.cc.lib
+          zlib
+        ]);
+
         # The CGo/runtime environment the server binary needs. Everything
         # that runs `bin/emb` outside this shell fails to find the ONNX
         # shared library — see AGENTS.md.
@@ -238,6 +251,20 @@
           website = pkgs.mkShell {
             buildInputs = websiteDeps;
             shellHook = websiteHook;
+          };
+
+          # `nix develop .#retail` — the pinned offline analysis environment.
+          # Faiss' e-means contribution is newer than nixpkgs' CPU package, so
+          # the exact `faiss-cpu` wheel is installed from
+          # `tools/retail/requirements.txt` into the ignored `.deps/` by
+          # `just website-retail-analysis`. No Go, no ONNX, no site tooling.
+          retail = pkgs.mkShell {
+            buildInputs = retailDeps;
+            shellHook = ''
+              export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.zlib}/lib:$LD_LIBRARY_PATH"
+              echo "retail: \`just website-retail-analysis\` embeds through a local emb and trains";
+              echo "        Faiss NumpyEmeans and Kmeans from tools/retail/requirements.txt.";
+            '';
           };
         };
       });

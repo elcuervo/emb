@@ -1,0 +1,9 @@
+fdc_id,brand_owner,brand_name,subbrand_name,gtin_upc,ingredients,not_a_significant_source_of,serving_size,serving_size_unit,household_serving_fulltext,branded_food_category,data_source,package_weight,modified_date,available_date,market_country,discontinued_date,preparation_state_code,trade_channel,short_description
+1001,Acme,Acme Cola,,00012345678905,"Carbonated water, sugar",,355,ml,1 can,Soda,LI,12 fl oz,2026-01-02,2025-12-01,United States,,,,Acme Cola
+1002,Acme,Acme Diet Cola,,00012345678905,"Carbonated water, aspartame",,355,ml,1 can,Soda,LI,12 fl oz,2026-01-02,2025-12-01,United States,,,,Acme Diet Cola
+1003,Contoso,Contoso Chips,,00055555555550,,,,,,Snacks,LI,,,,United States,,,,
+1004,,,,00012345678912,"Potato, salt",,28,g,1 oz,,LI,1 oz,2026-01-02,2025-12-01,United States,,,,Contoso Crisps
+1005,BrandX,BrandX Juice,,,Apple juice,,240,ml,1 cup,Juice,LI,64 fl oz,2026-01-02,2025-12-01,United States,,,,BrandX Apple Juice
+1006,BrandY,BrandY Bread,,00098765432109,"Wheat flour, water",,,,,Bakery,LI,,2026-01-02,2025-12-01,United States,,,,BrandY Wheat Bread
+1007,BrandZ,BrandZ Milk,,00011111111116,Milk,,240,ml,1 cup,Dairy,LI,1 gal,2026-01-02,2025-12-01,United States,2025-06-01,,,BrandZ Whole Milk
+1001,Acme,Acme Cola,,00012345678905,"Carbonated water, sugar",,355,ml,1 can,Soda,LI,12 fl oz,2026-02-03,2025-12-01,United States,,,,Acme Cola

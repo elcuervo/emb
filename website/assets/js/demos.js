@@ -208,6 +208,15 @@ function f32Bytes(vector) {
 /* The dot product of a query with a stored float32 vector. Media vectors are
  * unit-length, so this is the cosine the plate prints — computed once, here,
  * rather than re-implemented by every plate that ranks a medium. */
+/* A float32 blob read as a JS array: the projection's mean and basis are stored
+ * as the server's own little-endian floats, like the media vectors. */
+function f32(blob) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  const out = new Array(blob.byteLength >> 2);
+  for (let i = 0; i < out.length; i++) { out[i] = view.getFloat32(i * 4, true); }
+  return out;
+}
+
 function dotF32(vector, blob) {
   const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
   let dot = 0;
@@ -444,6 +453,156 @@ export function gallery() {
         entries.push([track, offset]);
       }
       return library;
+    },
+
+    /* ── the retail catalog ─────────────────────────────────────────
+     * Two plates share one committed stage: a bounded product catalog from
+     * the training release, fixed samples from both releases, and frozen
+     * centroids. Everything here is read from the same manifest and the same
+     * SQLite file as the rest of the gallery; the report is the only second
+     * fetch, and it is the generated one, not a page constant. */
+
+    async retail() {
+      const section = ((await index()).manifest || {}).retail;
+      if (!section) {
+        throw new SandboxError('error', 'the index holds no retail stage');
+      }
+      return section;
+    },
+
+    /* The generated report: measured comparison, distributions, clusters. */
+    async retailReport() {
+      const section = await this.retail();
+      const response = await fetch(new URL('../demo/' + section.report, import.meta.url));
+      if (!response.ok) {
+        throw new SandboxError('unavailable', 'the retail report is not on this origin');
+      }
+      return response.json();
+    },
+
+    /* The shipped rows and the fixed samples, in the committed order. */
+    async retailCatalog() {
+      const section = await this.retail();
+      const db = (await index()).db;
+      const order = new Map(section.samples.catalog.map((id, i) => [id, i]));
+      const rows = db.exec({
+        sql: 'SELECT rowid, fdc_id, description, brand, gtin, category, pack, text, sample, embedding, ' +
+          'x, y, z, cluster FROM retail_products ORDER BY rowid',
+        rowMode: 'array', returnValue: 'resultRows'
+      }).map((r) => ({
+        rowid: r[0], fdc_id: r[1], description: r[2], brand: r[3], gtin: r[4],
+        category: r[5], pack: r[6], text: r[7], sample: !!r[8], embedding: r[9],
+        x: r[10], y: r[11], z: r[12], cluster: r[13],
+        sample_order: order.has(r[1]) ? order.get(r[1]) : null
+      }));
+      const arrivals = db.exec({
+        sql: 'SELECT fdc_id, description, brand, gtin, category, pack, text, x, y, z, cluster ' +
+          'FROM retail_arrivals WHERE sample = 1 ORDER BY rowid',
+        rowMode: 'array', returnValue: 'resultRows'
+      }).map((r) => ({
+        fdc_id: r[0], description: r[1], brand: r[2], gtin: r[3],
+        category: r[4], pack: r[5], text: r[6],
+        x: r[7], y: r[8], z: r[9], cluster: r[10]
+      }));
+      return { rows: rows, samples: rows.filter((r) => r.sample_order !== null)
+        .sort((a, b) => a.sample_order - b.sample_order), arrivals: arrivals };
+    },
+
+    /* The frozen centroid table: a normal table so the plate can read the
+     * nearest and runner-up distances itself, not a top-k reply. */
+    async retailCentroids() {
+      const section = await this.retail();
+      const db = (await index()).db;
+      return db.exec({
+        sql: 'SELECT id, label, vector, x, y, z FROM retail_centroids WHERE model = ? ORDER BY id',
+        bind: [section.model], rowMode: 'array', returnValue: 'resultRows'
+      }).map((r) => ({ id: r[0], label: r[1], vector: r[2], x: r[3], y: r[4], z: r[5] }));
+    },
+
+    /* The held-out reference cloud, projected by the same build-time PCA. */
+    async retailHeldOut() {
+      const db = (await index()).db;
+      return db.exec({
+        sql: 'SELECT x, y, z, cluster FROM retail_heldout ORDER BY rowid',
+        rowMode: 'array', returnValue: 'resultRows'
+      }).map((r) => ({ x: r[0], y: r[1], z: r[2], cluster: r[3] }));
+    },
+
+    /* Project a live embedding into the shipped 3D field: (v - mean) · basis. */
+    async retailProject(vector) {
+      const db = (await index()).db;
+      const row = rows(db, 'SELECT mean, basis FROM retail_projection ORDER BY rowid LIMIT 1')[0];
+      if (!row) {
+        throw new SandboxError('error', 'the index holds no retail projection');
+      }
+      const mean = f32(row[0]);
+      const basis = f32(row[1]);
+      const out = [0, 0, 0];
+      for (let axis = 0; axis < 3; axis++) {
+        let sum = 0;
+        for (let i = 0; i < vector.length; i++) {
+          sum += (vector[i] - mean[i]) * basis[axis * vector.length + i];
+        }
+        out[axis] = sum;
+      }
+      return out;
+    },
+
+    /* One exact assignment: the two closest frozen centroids and the margin
+     * between them. The model, dimension and normalization are checked before
+     * any distance is computed; a mismatch returns an error and no verdict. */
+    async retailAssign(vector, modelName) {
+      const section = await this.retail();
+      if (modelName && modelName !== section.model) {
+        throw new SandboxError('error', 'the centroids were trained with ' + section.model +
+          ', not ' + modelName + '; the assignment would be meaningless');
+      }
+      if (vector.length !== section.dimension) {
+        throw new SandboxError('error', 'the live query has ' + vector.length +
+          ' dimensions and the centroids have ' + section.dimension + '; no assignment');
+      }
+      if (section.normalization !== 'l2') {
+        throw new SandboxError('error', 'the centroids were built with "' + section.normalization +
+          '" normalization; this client only assigns L2-normalized queries');
+      }
+      let norm = 0;
+      for (let i = 0; i < vector.length; i++) { norm += vector[i] * vector[i]; }
+      norm = Math.sqrt(norm);
+      if (!(Math.abs(norm - 1) < 0.01)) {
+        throw new SandboxError('error', 'the live query is not L2-normalized (norm ' + norm.toFixed(3) +
+          '); the frozen centroids cannot be used');
+      }
+      const centroids = await this.retailCentroids();
+      let best = null, second = null;
+      for (const centroid of centroids) {
+        const view = new DataView(centroid.vector.buffer, centroid.vector.byteOffset, centroid.vector.byteLength);
+        let distance = 0;
+        for (let i = 0; i < vector.length; i++) {
+          const delta = vector[i] - view.getFloat32(i * 4, true);
+          distance += delta * delta;
+        }
+        const entry = { id: centroid.id, label: centroid.label, distance: distance };
+        if (!best || distance < best.distance) { second = best; best = entry; }
+        else if (!second || distance < second.distance) { second = entry; }
+      }
+      if (!best || !second) {
+        throw new SandboxError('error', 'the index holds fewer than two frozen centroids');
+      }
+      return { nearest: best, runner_up: second, margin: second.distance - best.distance };
+    },
+
+    /* The product table's own k-nearest search. The table entry is the
+     * retail model's manifest entry; the query vector was embedded by the
+     * base model, which is the same model the table was built with. */
+    async retailSearch(vector, k) {
+      const section = await this.retail();
+      const { db, manifest } = await index();
+      const entry = table(manifest, section.model_entry);
+      const limit = Math.max(1, Math.min(Number(k) || 7, 32));
+      return run(async () => rows(db,
+        'SELECT rowid, distance FROM ' + entry.table +
+        ' WHERE embedding MATCH vec_int8(?) AND k = ? ORDER BY distance',
+        [quantize(vector), limit]).map((r) => ({ rowid: r[0], distance: r[1] })));
     },
 
     /* The passages a rowid set names, in the order asked. */

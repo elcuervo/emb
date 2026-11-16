@@ -1,0 +1,6 @@
+# The offline analysis environment. These exact wheels are installed into the
+# ignored `.deps/` by `just website-retail-analysis`, inside `nix develop .#retail`
+# (Python 3.13). faiss-cpu 1.16 is the first release carrying contrib/e_means,
+# which nixpkgs' older Faiss package does not ship.
+faiss-cpu==1.16.0
+numpy==2.5.4

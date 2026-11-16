@@ -141,6 +141,23 @@ def build_manifest(final: Path, data: bytes, meta: dict) -> dict:
     base["models"] = models
     if media:
         base["media"] = media
+    retail = meta.get("retail")
+    if retail:
+        # The product search is a `vec0` table like every other: the client
+        # finds it through `models[]` by its manifest name (`retail-<model>`),
+        # while the centroid table stays a normal table so assignment can read
+        # nearest and runner-up distances rather than a top-k reply.
+        if any(entry.get("name") == retail["model_entry"] for entry in models):
+            sys.exit(f"demo_index: the manifest already names {retail['model_entry']!r}")
+        models.append({
+            "name": retail["model_entry"],
+            "table": retail["table"],
+            "dimension": retail["dimension"],
+            "element_type": "int8",
+            "vector_type": "vec_int8",
+            "quantization": "int8",
+        })
+        base["retail"] = retail
     if "fingerprints" in meta:
         base["fingerprints"] = meta["fingerprints"]
     base["asset"] = {
@@ -184,6 +201,19 @@ def finalize() -> int:
     db.execute("VACUUM")
     meta = read_meta(db)
     db.close()
+
+    if MANIFEST_PATH.exists() and "retail" not in meta:
+        try:
+            published = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            published = {}
+        if published.get("retail"):
+            sys.exit(
+                "demo_index: the published index carries the retail tables, but this working file "
+                "does not; a text-only rebuild would silently drop them.\n"
+                "  run `just website-retail` (text stage, retail stage, one finalize), "
+                "or restore the working file before finalizing."
+            )
 
     data = canonicalise(WORK_DB.read_bytes())
     WORK_DB.write_bytes(data)

@@ -1,8 +1,8 @@
 {
   "asset": {
-    "bytes": 11087872,
-    "db": "gallery-604639a4.db",
-    "hash": "604639a4"
+    "bytes": 13045760,
+    "db": "gallery-ef685334.db",
+    "hash": "ef685334"
   },
   "attribution": "Texts: Edgar Allan Poe (1809–1849), public domain, via Project Gutenberg.",
   "corpus": {
@@ -658,9 +658,458 @@
       "quantization": "float32",
       "table": "vec_xclip",
       "vector_type": "vec_f32"
+    },
+    {
+      "dimension": 384,
+      "element_type": "int8",
+      "name": "retail-minilm",
+      "quantization": "int8",
+      "table": "vec_retail_minilm",
+      "vector_type": "vec_int8"
     }
   ],
   "precision": "int8",
+  "retail": {
+    "catalog_sha256": "2946976293d3ee85b90bef4068843f8efbc6a29b2139c1c37a42f516b2542a2f",
+    "centroid_count": 64,
+    "centroid_table": "retail_centroids",
+    "centroids_sha256": "b728a88b47a769ae7620f40d3e75a1b0125ee69524acf6b5fcff6b252589667b",
+    "clusters": [
+      {
+        "count": 41,
+        "id": 0,
+        "label": "Pickles, Olives, Peppers & Relishes 14% · Herbs & Spices 9%"
+      },
+      {
+        "count": 20,
+        "id": 1,
+        "label": "Yogurt 20% · Wholesome Snacks 15%"
+      },
+      {
+        "count": 22,
+        "id": 2,
+        "label": "Other Soups 27% · Prepared Soups 27%"
+      },
+      {
+        "count": 20,
+        "id": 3,
+        "label": "Meat/Poultry/Other Animals Unprepared/Unprocessed 20% · Pepperoni, Salami & Cold Cuts 20%"
+      },
+      {
+        "count": 15,
+        "id": 4,
+        "label": "Meat/Poultry/Other Animals - Prepared/Processed 26%"
+      },
+      {
+        "count": 13,
+        "id": 5,
+        "label": "Other Drinks 23% · Other Cooking Sauces 15%"
+      },
+      {
+        "count": 20,
+        "id": 6,
+        "label": "Fruit & Vegetable Juice, Nectars & Fruit Drinks 75% · Soda 10%"
+      },
+      {
+        "count": 16,
+        "id": 7,
+        "label": "Pickles, Olives, Peppers & Relishes 68% · Vegetable & Cooking Oils 31%"
+      },
+      {
+        "count": 17,
+        "id": 8,
+        "label": "Cakes, Cupcakes, Snack Cakes 23% · Cookies & Biscuits 11%"
+      },
+      {
+        "count": 12,
+        "id": 9,
+        "label": "Vegetable & Cooking Oils 75% · Salad Dressing & Mayonnaise 16%"
+      },
+      {
+        "count": 17,
+        "id": 10,
+        "label": "Baking/Cooking Mixes/Supplies 29% · Dough Based Products / Meals 11%"
+      },
+      {
+        "count": 32,
+        "id": 11,
+        "label": "Breads & Buns 43% · Flours & Corn Meal 21%"
+      },
+      {
+        "count": 18,
+        "id": 12,
+        "label": "Popcorn, Peanuts, Seeds & Related Snacks 38% · Nut & Seed Butters 22%"
+      },
+      {
+        "count": 42,
+        "id": 13,
+        "label": "Soda 50% · Water 35%"
+      },
+      {
+        "count": 40,
+        "id": 14,
+        "label": "Pickles, Olives, Peppers & Relishes 10% · Candy 10%"
+      },
+      {
+        "count": 27,
+        "id": 15,
+        "label": "Snack, Energy & Granola Bars 62% · Processed Cereal Products 11%"
+      },
+      {
+        "count": 46,
+        "id": 16,
+        "label": "Yogurt 45% · Milk 21%"
+      },
+      {
+        "count": 34,
+        "id": 17,
+        "label": "Chocolate 50% · Popcorn, Peanuts, Seeds & Related Snacks 8%"
+      },
+      {
+        "count": 16,
+        "id": 18,
+        "label": "Rice 37% · Entrees, Sides & Small Meals 18%"
+      },
+      {
+        "count": 27,
+        "id": 19,
+        "label": "Canned & Bottled Beans 59% · Canned Vegetables 14%"
+      },
+      {
+        "count": 20,
+        "id": 20,
+        "label": "Cereal 45% · Sport Drinks 10%"
+      },
+      {
+        "count": 24,
+        "id": 21,
+        "label": "Granulated, Brown & Powdered Sugar 33% · Syrups & Molasses 12%"
+      },
+      {
+        "count": 56,
+        "id": 22,
+        "label": "Frozen Vegetables 19% · Pre-Packaged Fruit & Vegetables 7%"
+      },
+      {
+        "count": 12,
+        "id": 23,
+        "label": "Popcorn, Peanuts, Seeds & Related Snacks 41%"
+      },
+      {
+        "count": 6,
+        "id": 24,
+        "label": "Other Deli 16% · Other Cooking Sauces 16%"
+      },
+      {
+        "count": 23,
+        "id": 25,
+        "label": "Cream 13% · Milk Additives 8%"
+      },
+      {
+        "count": 31,
+        "id": 26,
+        "label": "Cheese 45% · Frozen Dinners & Entrees 16%"
+      },
+      {
+        "count": 42,
+        "id": 27,
+        "label": "Wholesome Snacks 21% · Candy 14%"
+      },
+      {
+        "count": 5,
+        "id": 28,
+        "label": "Ketchup, Mustard, BBQ & Cheese Sauce 80% · Jam, Jelly & Fruit Spreads 20%"
+      },
+      {
+        "count": 15,
+        "id": 29,
+        "label": "Frozen Fish & Seafood 33% · Other Soups 13%"
+      },
+      {
+        "count": 17,
+        "id": 30,
+        "label": "Snacks 23% · Pre-Packaged Fruit & Vegetables 11%"
+      },
+      {
+        "count": 44,
+        "id": 31,
+        "label": "Ice Cream & Frozen Yogurt 93% · Other Frozen Desserts 4%"
+      },
+      {
+        "count": 9,
+        "id": 32,
+        "label": "Ice Cream & Frozen Yogurt 22% · Yogurt 22%"
+      },
+      {
+        "count": 25,
+        "id": 33,
+        "label": "Pickles, Olives, Peppers & Relishes 24% · Pre-Packaged Fruit & Vegetables 20%"
+      },
+      {
+        "count": 29,
+        "id": 34,
+        "label": "Cakes, Cupcakes, Snack Cakes 24% · Puddings & Custards 17%"
+      },
+      {
+        "count": 24,
+        "id": 35,
+        "label": "Iced & Bottle Tea 37% · Other Drinks 25%"
+      },
+      {
+        "count": 7,
+        "id": 36,
+        "label": "Plant Based Water 14% · Snack, Energy & Granola Bars 14%"
+      },
+      {
+        "count": 57,
+        "id": 37,
+        "label": "Cheese 77% · Other Snacks 5%"
+      },
+      {
+        "count": 10,
+        "id": 38,
+        "label": "Other Drinks 40% · Milk Additives 20%"
+      },
+      {
+        "count": 30,
+        "id": 39,
+        "label": "Canned Soup 13% · Cooked & Prepared 10%"
+      },
+      {
+        "count": 20,
+        "id": 40,
+        "label": "Frozen Patties and Burgers 25% · Chili & Stew 10%"
+      },
+      {
+        "count": 20,
+        "id": 41,
+        "label": "Cereal 50% · Processed Cereal Products 25%"
+      },
+      {
+        "count": 8,
+        "id": 42,
+        "label": "Bacon, Sausages & Ribs 37% · Salad Dressing & Mayonnaise 12%"
+      },
+      {
+        "count": 16,
+        "id": 43,
+        "label": "Sausages, Hotdogs & Brats 56% · Other Meats 12%"
+      },
+      {
+        "count": 34,
+        "id": 44,
+        "label": "Ketchup, Mustard, BBQ & Cheese Sauce 23% · Oriental, Mexican & Ethnic Sauces 17%"
+      },
+      {
+        "count": 31,
+        "id": 45,
+        "label": "Chocolate 38% · Candy 19%"
+      },
+      {
+        "count": 24,
+        "id": 46,
+        "label": "Pizza 70% · Other Deli 12%"
+      },
+      {
+        "count": 11,
+        "id": 47,
+        "label": "Chips, Pretzels & Snacks 72% · Sandwiches/Filled Rolls/Wraps 9%"
+      },
+      {
+        "count": 26,
+        "id": 48,
+        "label": "Candy 19% · Jam, Jelly & Fruit Spreads 11%"
+      },
+      {
+        "count": 23,
+        "id": 49,
+        "label": "Popcorn, Peanuts, Seeds & Related Snacks 17% · Prepared Subs & Sandwiches 8%"
+      },
+      {
+        "count": 6,
+        "id": 50,
+        "label": "Non Alcoholic Beverages Ready to Drink 33% · Sport Drinks 16%"
+      },
+      {
+        "count": 45,
+        "id": 51,
+        "label": "Candy 86% · Ice Cream & Frozen Yogurt 4%"
+      },
+      {
+        "count": 26,
+        "id": 52,
+        "label": "Seasoning Mixes, Salts, Marinades & Tenderizers 19% · Popcorn, Peanuts, Seeds & Related Snacks 15%"
+      },
+      {
+        "count": 16,
+        "id": 53,
+        "label": "Tomatoes 62% · Ketchup, Mustard, BBQ & Cheese Sauce 6%"
+      },
+      {
+        "count": 27,
+        "id": 54,
+        "label": "Salad Dressing & Mayonnaise 18% · Pasta by Shape & Type 11%"
+      },
+      {
+        "count": 9,
+        "id": 55,
+        "label": "Dips & Salsa 66% · Seasoning Mixes, Salts, Marinades & Tenderizers 22%"
+      },
+      {
+        "count": 23,
+        "id": 56,
+        "label": "Chips, Pretzels & Snacks 52% · Canned Vegetables 8%"
+      },
+      {
+        "count": 25,
+        "id": 57,
+        "label": "Pasta by Shape & Type 100%"
+      },
+      {
+        "count": 37,
+        "id": 58,
+        "label": "Cookies & Biscuits 56% · Cake, Cookie & Cupcake Mixes 8%"
+      },
+      {
+        "count": 25,
+        "id": 59,
+        "label": "Other Deli 12% · Seasoning Mixes, Salts, Marinades & Tenderizers 12%"
+      },
+      {
+        "count": 38,
+        "id": 60,
+        "label": "Popcorn, Peanuts, Seeds & Related Snacks 63% · Plant Based Milk 10%"
+      },
+      {
+        "count": 6,
+        "id": 61,
+        "label": "Pickles, Olives, Peppers & Relishes 83% · Alcohol 16%"
+      },
+      {
+        "count": 10,
+        "id": 62,
+        "label": "Popcorn, Peanuts, Seeds & Related Snacks 90% · Snacks 10%"
+      },
+      {
+        "count": 13,
+        "id": 63,
+        "label": "Frozen Fish & Seafood 30% · Canned Seafood 23%"
+      }
+    ],
+    "dimension": 384,
+    "model": "minilm",
+    "model_entry": "retail-minilm",
+    "normalization": "l2",
+    "populations": {
+      "arrivals": 600,
+      "category_role": "retained as metadata; never passed to clustering",
+      "clustering_input_fields": [
+        "description",
+        "brand"
+      ],
+      "held_out": 1500,
+      "overlap": {
+        "common": 1999950,
+        "earlier_ids": 1999950,
+        "later_ids": 2010212,
+        "new": 10262,
+        "removed": 0,
+        "revised": 0,
+        "unchanged": 1999950
+      },
+      "shipped": 600,
+      "training": 8000
+    },
+    "projection": {
+      "axes": 3,
+      "fit": "shipped product embeddings",
+      "method": "pca"
+    },
+    "report": "retail/report.json",
+    "report_sha256": "e03dc4bd34e67e484a0aa8f5b40a4f400236e34f5cb8e78f50be16dd4782777e",
+    "retrieval": {
+      "k": 10,
+      "recall_at_k": 0.975
+    },
+    "review_rule": {
+      "comparison": "greater_than",
+      "source": "held-out earlier-release nearest p95",
+      "statistic": "nearest",
+      "threshold": 0.736128,
+      "verdict": "review"
+    },
+    "sample_count": 16,
+    "samples": {
+      "arrivals": [
+        2769044,
+        2769684,
+        2774513,
+        2775966,
+        2776329,
+        2771929,
+        2778295,
+        2777938
+      ],
+      "catalog": [
+        707702,
+        2458951,
+        477945,
+        397645,
+        2450123,
+        592484,
+        592462,
+        2399514
+      ]
+    },
+    "seed": 1,
+    "source": {
+      "attribution": "U.S. Department of Agriculture (USDA), Agricultural Research Service. FoodData Central: USDA Global Branded Food Products Database. Internet: fdc.nal.usda.gov.",
+      "catalog": "USDA FoodData Central — USDA Global Branded Food Products Database (GBFPD)",
+      "catalog_page": "https://fdc.nal.usda.gov/download-datasets/",
+      "documentation": "https://fdc.nal.usda.gov/GBFPD_Documentation.html",
+      "overlap": {
+        "common": 1999950,
+        "earlier_ids": 1999950,
+        "later_ids": 2010212,
+        "new": 10262,
+        "removed": 0,
+        "revised": 0,
+        "unchanged": 1999950
+      },
+      "releases": [
+        {
+          "bytes": 448767220,
+          "published": "2026-04-30",
+          "role": "training",
+          "sha256": "26050a5d03197469813754743a21ee0fad4ccf22b6aac2a995846a987719fc49",
+          "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_branded_food_csv_2026-04-30.zip",
+          "version": "2026-04-30"
+        },
+        {
+          "bytes": 451954262,
+          "published": "2026-10-29",
+          "role": "evaluation",
+          "sha256": "17f1e52ea91854d8c6c266487597bf1dd6ce63441bfe27c9e61f64e2768440c7",
+          "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_branded_food_csv_2026-10-29.zip",
+          "version": "2026-10-29"
+        }
+      ],
+      "terms": {
+        "attribution": "U.S. Department of Agriculture (USDA), Agricultural Research Service. FoodData Central: USDA Global Branded Food Products Database. Internet: fdc.nal.usda.gov.",
+        "basis": [
+          "The download page offers these archives for download without registration or a licence click-through: https://fdc.nal.usda.gov/download-datasets/",
+          "FoodData Central is a U.S. Government work published by a federal agency. Under 17 U.S.C. §105, copyright protection does not extend to works of the U.S. Government; no copyright notice or restricted-use licence is attached to the downloadable files.",
+          "The GBFPD documentation states that product information is received from food-industry data providers and that the data are downloadable and searchable at fdc.nal.usda.gov: https://fdc.nal.usda.gov/GBFPD_Documentation.html",
+          "The published base is bounded to the selected product rows and aggregate measurements; no provider-private fields, customer data, receipts, or card data exist in the source files.",
+          "Attribution and the suggested citation are carried by every plate and by the generated report."
+        ],
+        "checked": "2026-11-13",
+        "decision": "permitted",
+        "recheck": "Re-read the download page, the GBFPD documentation and this record before changing either pinned archive; stop the build if the terms cannot be re-verified."
+      }
+    },
+    "table": "vec_retail_minilm"
+  },
   "sqlite_vec": "v0.1.6",
   "vector_type": "vec_int8"
 }
