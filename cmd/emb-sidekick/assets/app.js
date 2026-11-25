@@ -28,18 +28,20 @@
     return parent;
   }
   function valid(value) { return typeof value === 'number' && Number.isFinite(value); }
-  function number(value, digits = 1) {
+  function number(value) {
     if (!valid(value)) return 'Unavailable';
-    return new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(value);
+    // Integers render without layout surprises; a real fraction of one still reads as non-zero.
+    if (value > 0 && value < 1) return '<1';
+    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
   }
-  function measure(value, suffix, digits = 1) { return valid(value) ? `${number(value, digits)} ${suffix}` : 'Unavailable'; }
+  function measure(value, suffix) { return valid(value) ? `${number(value)} ${suffix}` : 'Unavailable'; }
   function rate(value, suffix) { return measure(value, `${suffix}/s`); }
   function latency(value) {
     if (!valid(value)) return 'Unavailable';
-    return value >= 1000 ? measure(value / 1000, 'ms', 2) : measure(value, 'µs', 0);
+    return value >= 1000 ? measure(value / 1000, 'ms') : measure(value, 'µs');
   }
   function memory(value) { return measure(value, 'MB'); }
-  function percent(value, digits = 1) { return measure(valid(value) ? value * 100 : null, '%', digits); }
+  function percent(value) { return measure(valid(value) ? value * 100 : null, '%'); }
   function cpu(value) { return measure(value, '%'); }
   function stamp(value) {
     const time = typeof value === 'number' ? value : Date.parse(value);
@@ -171,14 +173,14 @@
     if (last >= 0) item('circle', { class: 'end-dot', cx: x(last).toFixed(2), cy: y(values[last]).toFixed(2), r: 1.6 });
     return svg;
   }
-  function meterRow(label, value, fraction, tone, description) {
+  function meterRow(label, value, fraction, tone) {
     const group = document.createDocumentFragment();
     const row = element('div', 'meter-row');
     append(row, element('span', 'label', label), element('span', 'value', value));
     const track = element('div', 'meter');
     track.dataset.tone = tone;
     track.setAttribute('role', 'img');
-    track.setAttribute('aria-label', description);
+    track.setAttribute('aria-label', `${label}: ${value}`);
     const fill = element('span', 'fill');
     fill.style.width = `${Math.max(0, Math.min(100, fraction * 100)).toFixed(1)}%`;
     track.append(fill);
@@ -238,12 +240,12 @@
     }
     [top, (top + bottom) / 2, bottom].forEach((row, index) => {
       svgItem('line', { class: 'gridline', x1: left, x2: right, y1: row, y2: row });
-      svgItem('text', { class: 'axis', x: left - 9, y: row + 4, 'text-anchor': 'end' }, number(max * (1 - index / 2), 1));
+      svgItem('text', { class: 'axis', x: left - 9, y: row + 4, 'text-anchor': 'end' }, number(max * (1 - index / 2)));
     });
     svgItem('text', { class: 'axis', x: left, y: 199 }, first);
     svgItem('text', { class: 'axis', x: right, y: 199, 'text-anchor': 'end' }, last);
     svgItem('text', { class: 'axis', x: right, y: 12, 'text-anchor': 'end' }, unit);
-    series.forEach((values, seriesIndex) => {
+    series.forEach(values => {
       let segment = '';
       values.forEach((value, index) => {
         if (!valid(value)) { segment = ''; return; }
@@ -253,18 +255,13 @@
         // Separate paths at missing samples and polling gaps; a single-point run remains a dot.
         const nextGap = index === values.length - 1 || !valid(values[index + 1]) || times[index + 1] - times[index] > 3500;
         if (nextGap) {
-          if (segment.includes('L')) svgItem('path', { class: seriesIndex ? 'trace secondary' : 'trace', d: segment });
+          if (segment.includes('L')) svgItem('path', { class: 'trace', d: segment });
           else svgItem('circle', { class: 'end-dot', cx: x(index), cy: y(value), r: 2.6 });
           segment = '';
         }
       });
     });
     figure.append(svg);
-    if (fields.length > 1) {
-      const legend = element('p', 'chart-legend');
-      fields.forEach((field, index) => legend.append(element('span', index ? 'secondary' : '', field.label)));
-      figure.append(legend);
-    }
     return figure;
   }
   function navButton(label, key, selected, action) {
@@ -309,7 +306,7 @@
       stat('p95 latency', latency(node.p95_us), 'Server percentile'),
       stat('p99 latency', latency(node.p99_us), 'Server percentile'),
       stat('p95 of recent events', rolling.count >= 10 ? latency(rolling.value) : 'Unavailable',
-        rolling.count >= 10 ? `p95 of the last ${number(rolling.count, 0)} measured requests in ${windowMinutes} min` : `${number(rolling.count, 0)} measured requests in ${windowMinutes} min; 10 needed`));
+        rolling.count >= 10 ? `p95 of the last ${number(rolling.count)} measured requests in ${windowMinutes} min` : `${number(rolling.count)} measured requests in ${windowMinutes} min; 10 needed`));
     tail.append(grid);
     return tail;
   }
@@ -319,31 +316,27 @@
     const rows = [];
     if (valid(point.cache_hit_rate)) {
       const hit = point.cache_hit_rate;
-      rows.push(meterRow('Cache hit ratio', percent(hit), hit, pressureTone(1 - hit), `Cache hit ratio ${percent(hit)} of cache lookups.`));
+      rows.push(meterRow('Cache hit ratio', percent(hit), hit, pressureTone(1 - hit)));
     }
     const models = Array.isArray(node.models) ? node.models : [];
-    let busy = 0, total = 0, reporting = 0;
+    let busy = 0, total = 0;
     models.forEach(model => {
       const sample = model.point || {};
       if (valid(sample.sessions_busy) && valid(sample.sessions_total)) {
         busy += sample.sessions_busy;
         total += sample.sessions_total;
-        reporting += 1;
       }
     });
-    if (reporting && total > 0) {
-      rows.push(meterRow('Sessions busy', `${number(busy, 0)} / ${number(total, 0)}`, busy / total, pressureTone(busy / total),
-        `Sessions busy: ${number(busy, 0)} of ${number(total, 0)} across ${reporting === 1 ? '1 model' : `${number(reporting, 0)} models`}.`));
-    }
+    if (total > 0) rows.push(meterRow('Sessions busy', `${number(busy)} / ${number(total)}`, busy / total, pressureTone(busy / total)));
     if (valid(point.err_rate) && valid(point.req_rate) && point.req_rate > 0) {
       const share = point.err_rate / point.req_rate;
       const tone = share === 0 ? 'good' : share >= 0.05 ? 'hot' : 'warn';
-      rows.push(meterRow('Error share of requests', percent(share, 2), share, tone, `Errors are ${percent(share, 2)} of requests at ${rate(point.req_rate, 'req')}.`));
+      rows.push(meterRow('Error share of requests', percent(share), share, tone));
     }
     if (valid(point.cpu_pct)) {
       const above = point.cpu_pct > 100;
       rows.push(meterRow(above ? 'CPU usage above one CPU' : 'CPU usage', `${cpu(point.cpu_pct)} of one CPU`, point.cpu_pct / 100,
-        above ? 'hot' : pressureTone(point.cpu_pct / 100), `CPU usage ${cpu(point.cpu_pct)} of one CPU${above ? ', above one full CPU' : ''}.`));
+        above ? 'hot' : pressureTone(point.cpu_pct / 100)));
     }
     if (!rows.length) pressure.append(warning('No cache, session, error or CPU measurement in the latest point.'));
     rows.forEach(row => pressure.append(row));
@@ -355,11 +348,11 @@
       metric('Requests/s', rate(fleet.req_rate, 'req'), 'Fleet total'),
       metric('Tokens/s', rate(fleet.tok_rate, 'tok'), 'Fleet total'),
       metric('p95 latency', latency(fleet.p95_us), 'Recent completed requests'),
-      metric('Nodes', number(fleet.discovered, 0), 'Discovered members')
+      metric('Nodes', number(fleet.discovered), 'Discovered members')
     ], fleet.history));
     content.append(titleBand('Fleet overview', 'Every discovered node. Select a row to inspect its measured history.', fleet.health, fleet.reason || snapshot.error, [
-      ['Membership', `${number(fleet.discovered, 0)} discovered · ${number(fleet.active, 0)} active · ${number(fleet.idle, 0)} idle`],
-      ['Orphaned', number(fleet.orphaned, 0)],
+      ['Membership', `${number(fleet.discovered)} discovered · ${number(fleet.active)} active · ${number(fleet.idle)} idle`],
+      ['Orphaned', number(fleet.orphaned)],
       ['Snapshot', `${stamp(snapshot.at)} local`]
     ]));
     const trends = section('Fleet history', `${windowMinutes} min window · measured points only`);
@@ -403,7 +396,7 @@
   function modelView(model) {
     const detail = element('section', 'model-detail');
     const head = element('div', 'section-head');
-    append(head, element('h2', '', model.name || 'Unnamed model'), element('p', 'meta', [model.status, valid(model.dim) ? `${number(model.dim, 0)} dimensions` : null, model.pooling, model.quantization].filter(Boolean).join(' · ') || 'Identity unavailable'));
+    append(head, element('h2', '', model.name || 'Unnamed model'), element('p', 'meta', [model.status, valid(model.dim) ? `${number(model.dim)} dimensions` : null, model.pooling, model.quantization].filter(Boolean).join(' · ') || 'Identity unavailable'));
     detail.append(head);
     const metrics = element('div', 'metric-line');
     append(metrics, metric('Requests/s', rate(model.point?.req_rate, 'req'), 'Model throughput'), metric('Tokens/s', rate(model.point?.tok_rate, 'tok'), 'Model throughput'), metric('Lifetime average latency', latency(model.point?.avg_latency_us), 'All completed requests'), metric('Error rate', rate(model.point?.err_rate, 'err'), 'Measured model errors'));
@@ -419,8 +412,8 @@
     const latencyBlock = element('div', 'detail-block');
     append(latencyBlock, element('h2', '', 'Latency and scheduling'), facts([
       ['p50 / p95 / p99', `${latency(model.p50_us)} / ${latency(model.p95_us)} / ${latency(model.p99_us)}`],
-      ['Cumulative dispatch wait', latency(model.point?.dispatch_wait_us)], ['Cumulative admission wait', latency(model.point?.admission_wait_us)], ['Cumulative inference run', latency(model.point?.run_us)], ['Lifetime runs', number(model.point?.runs, 0)],
-      ['Busy / total sessions', `${number(model.point?.sessions_busy, 0)} / ${number(model.point?.sessions_total, 0)}`]
+      ['Cumulative dispatch wait', latency(model.point?.dispatch_wait_us)], ['Cumulative admission wait', latency(model.point?.admission_wait_us)], ['Cumulative inference run', latency(model.point?.run_us)], ['Lifetime runs', number(model.point?.runs)],
+      ['Busy / total sessions', `${number(model.point?.sessions_busy)} / ${number(model.point?.sessions_total)}`]
     ]));
     const cacheBlock = element('div', 'detail-block');
     append(cacheBlock, element('h2', '', 'Cache and freshness'), facts([
@@ -440,7 +433,7 @@
   const EVENTS_SHOWN = 8;
   function eventView(recent) {
     const shown = recent.slice(0, EVENTS_SHOWN);
-    const meta = `${shown.length < recent.length ? `Newest ${shown.length} of ${number(recent.length, 0)}` : `Newest ${shown.length}`} · ${windowMinutes} min window · no payloads`;
+    const meta = `${shown.length < recent.length ? `Newest ${shown.length} of ${number(recent.length)}` : `Newest ${shown.length}`} · ${windowMinutes} min window · no payloads`;
     const list = section('Completed requests', meta);
     list.classList.add('events');
     if (!shown.length) { list.append(warning('No completed requests in this window.')); return list; }
@@ -459,7 +452,7 @@
       append(summary, element('span', 'event-time', stamp(event.at_us / 1000)), element('span', '', latency(event.latency_us)), element('span', 'event-model', event.model || 'Unattributed model'), result);
       const body = element('div', 'event-facts');
       body.append(facts([
-        ['Cache path', valid(event.cached_texts) ? event.cached_texts > 0 ? `${number(event.cached_texts, 0)} cached texts` : 'No cached texts' : 'Unavailable'],
+        ['Cache path', valid(event.cached_texts) ? event.cached_texts > 0 ? `${number(event.cached_texts)} cached texts` : 'No cached texts' : 'Unavailable'],
         ['Attribution', event.attributed === true ? 'Measured' : 'Unavailable'],
         ['Dispatch', event.attributed === true ? latency(event.dispatch_us) : 'Unavailable'],
         ['Admission', event.attributed === true ? latency(event.admit_us) : 'Unavailable'],
@@ -479,7 +472,7 @@
       metric('Requests/s', rate(point.req_rate, 'req'), 'Node total'),
       metric('Tokens/s', rate(point.tok_rate, 'tok'), 'Node total'),
       metric('Error rate', rate(point.err_rate, 'err'), 'Measured failures'),
-      metric('Active requests', number(point.active, 0), 'In flight now')
+      metric('Active requests', number(point.active), 'In flight now')
     ], node.history));
     content.append(titleBand(node.name || node.address || 'Unnamed node', `${node.address || 'Address unavailable'} · ${node.orphaned ? 'orphaned peer · ' : ''}${(node.state || 'starting').replaceAll('_', ' ')}`, node.health, node.reason, [
       ['Last success', node.last_ok ? `${stamp(node.last_ok)} local · ${timeAgo(node.last_ok)}` : 'No successful sample'],
@@ -489,8 +482,8 @@
     append(secondary,
       metric('CPU usage', cpu(point.cpu_pct), 'Percent of one CPU'),
       metric('Memory', memory(point.mem_mb), 'Resident memory'),
-      metric('Connections', number(point.conns, 0), 'Open client connections'),
-      metric('Uptime', valid(point.uptime_secs) ? `${number(point.uptime_secs / 3600, 1)} h` : 'Unavailable', 'Since process start'));
+      metric('Connections', number(point.conns), 'Open client connections'),
+      metric('Uptime', valid(point.uptime_secs) ? `${number(point.uptime_secs / 60)} min` : 'Unavailable', 'Since process start'));
     content.append(secondary);
     content.append(pressureSection(node));
     content.append(tailSection(node, recent));
@@ -502,8 +495,8 @@
       chart('Memory', node.history, [{ key: 'mem_mb', label: 'Memory MB' }], 'MB', memory),
       chart('CPU usage', node.history, [{ key: 'cpu_pct', label: 'CPU %' }], '%', cpu),
       chart('Cache hit ratio', node.history, [{ key: 'cache_hit_rate', label: 'Cache hit' }], '%', value => percent(value)),
-      chart('Connections', node.history, [{ key: 'conns', label: 'Connections' }], 'count', value => number(value, 0)),
-      chart('Active requests', node.history, [{ key: 'active', label: 'In flight' }], 'requests', value => number(value, 0)));
+      chart('Connections', node.history, [{ key: 'conns', label: 'Connections' }], 'count', value => number(value)),
+      chart('Active requests', node.history, [{ key: 'active', label: 'In flight' }], 'requests', value => number(value)));
     traffic.append(charts);
     content.append(traffic);
     const diagnostics = element('section', 'detail-grid');
@@ -516,8 +509,8 @@
     ]));
     const compute = element('div', 'detail-block');
     append(compute, element('h2', '', 'Compute budget'), facts([
-      ['CPU token budget', point.cpu_plan_known === true ? number(point.cpu_budget, 0) : 'Unavailable'],
-      ['Active CPU tokens', point.cpu_plan_known === true ? number(point.cpu_active_tokens, 0) : 'Unavailable']
+      ['CPU token budget', point.cpu_plan_known === true ? number(point.cpu_budget) : 'Unavailable'],
+      ['Active CPU tokens', point.cpu_plan_known === true ? number(point.cpu_active_tokens) : 'Unavailable']
     ]));
     if (node.advice) compute.append(advice(node.advice));
     append(diagnostics, service, compute);
@@ -538,7 +531,7 @@
         row.setAttribute('aria-label', `Open model ${model.name || 'unnamed'}. ${rate(model.point?.req_rate, 'req')}. Lifetime average latency ${latency(model.point?.avg_latency_us)}.`);
         const identity = element('span');
         append(identity, element('span', 'row-name', model.name || 'Unnamed model'), element('span', 'row-sub', model.status || 'Status unavailable'));
-        append(row, identity, rowCell('Requests', rate(model.point?.req_rate, 'req'), 'row-value'), rowCell('Lifetime average latency', latency(model.point?.avg_latency_us), 'row-value'), rowCell('Errors', rate(model.point?.err_rate, 'err'), 'row-value'), rowCell('Sessions busy / total', `${number(model.point?.sessions_busy, 0)} / ${number(model.point?.sessions_total, 0)}`, 'row-value'));
+        append(row, identity, rowCell('Requests', rate(model.point?.req_rate, 'req'), 'row-value'), rowCell('Lifetime average latency', latency(model.point?.avg_latency_us), 'row-value'), rowCell('Errors', rate(model.point?.err_rate, 'err'), 'row-value'), rowCell('Sessions busy / total', `${number(model.point?.sessions_busy)} / ${number(model.point?.sessions_total)}`, 'row-value'));
         row.addEventListener('click', () => { modelName = model.name === modelName ? null : model.name; render(false); });
         table.append(row);
       });
