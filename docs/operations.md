@@ -284,6 +284,8 @@ The default `-listen 127.0.0.1:8080` accepts local viewers only. For remote oper
 
 Open the listener URL in a browser. A single-node target opens its node detail; a fleet opens the fleet overview. Select a node to inspect its model rates, latency, cache, CPU/resources, and recent completed-request events; select a model for its activity and phase evidence. Navigation changes only the browser view, never the monitored targets. Missing measurements are shown as unavailable, not as zero, and request texts are not displayed. The live stream and `GET /api/snapshot` expose complete read-only snapshots; no browser command endpoint exists. Histories hold up to five minutes of one-second samples **in memory only**; request events are limited to five minutes or 4096 per node, the snapshot carries the most recent 128, and the browser table shows the newest 8. Response-size limits can shorten the displayed history. A sidekick restart discards all history, and older observations are not retained or exported.
 
+![The sidekick node dashboard under load: requests and tokens per second with a five minute sparkline, cache, session, error and CPU meters, server p50/p95/p99 beside an event-derived p95, request, token, memory, CPU, cache, connection and in-flight charts, both loaded models, and the newest eight completed requests](assets/sidekick-node-86eb0fe0.png)
+
 ## Monitoring: emb-top
 
 `emb-top` is a live terminal dashboard for a running `emb` node. It connects
