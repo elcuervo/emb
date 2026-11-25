@@ -225,6 +225,9 @@ jobs:
           sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
           rm /tmp/libtokenizers.tgz
 
+      # microsoft/onnxruntime publishes no release archive on GitHub any more, so
+      # the runtime comes from the official NuGet package: headers under
+      # build/native/include, the shared library under runtimes/<rid>/native.
       - name: Install ONNX Runtime
         run: |
           url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
