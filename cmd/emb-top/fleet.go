@@ -38,10 +38,11 @@ const (
 // fleetNode is one monitored node: its identity, its independent poll state
 // (reusing the single-node dashboard's model) and its membership bookkeeping.
 type fleetNode struct {
-	key  string // stable row identity: a per-node name, else the address
-	spec string // the specification that produced it
-	name string // DNS name this row follows, "" for a literal address
-	addr string // host:port dialed
+	key     string // stable row identity: a per-node name, else the address
+	spec    string // the specification that produced it
+	name    string // DNS name this row follows, "" for a literal address
+	addr    string // host:port dialed
+	tlsName string // DNS name verified for this row's current source
 
 	tui tuiModel // per-node dashboard state, charts and sampler
 
@@ -171,6 +172,7 @@ func (f *fleet) addNode(rn embtop.ResolvedNode) *fleetNode {
 		spec:      rn.Spec,
 		name:      rn.Name,
 		addr:      rn.Addr,
+		tlsName:   rn.TLSName,
 		tui:       newTUI(f.newClient(rn.Addr, rn.TLSName), f.opts.interval, f.opts.window),
 		resolved:  true,
 		firstSeen: f.nextSeen,
@@ -233,49 +235,59 @@ func (f *fleet) refreshSync() {
 func (f *fleet) applyResolved(resolved []embtop.ResolvedNode) {
 	f.lastRefresh = f.now()
 	f.refreshNow = false
-	seen := make(map[string]bool, len(resolved))
+	seen := make(map[*fleetNode]bool, len(resolved))
+	members := make([]embtop.Member, 0, len(f.nodes)+len(resolved))
+	for _, n := range f.nodes {
+		members = append(members, embtop.Member{Key: n.key, Spec: n.spec, Addr: n.addr})
+	}
 	for _, rn := range resolved {
-		seen[rn.Key] = true
-		if n := f.byKey[rn.Key]; n != nil {
-			if n.addr != rn.Addr { // a name's record moved: follow it
-				n.tui.client.SetAddr(rn.Addr)
-				n.addr = rn.Addr
-				n.tui.reset()
+		key, found := embtop.MatchMember(rn, members)
+		if !found {
+			seen[f.addNode(rn)] = true
+			members = append(members, embtop.Member{Key: rn.Key, Spec: rn.Spec, Addr: rn.Addr})
+			continue
+		}
+		n := f.byKey[key]
+		if n.key != rn.Key {
+			if displaced := f.byKey[rn.Key]; displaced != nil && displaced != n {
+				// The name contracted onto an already-known peer: keep the
+				// old, now-orphaned row separately instead of polling B twice.
+				displaced.key = displaced.addr
+				f.byKey[displaced.key] = displaced
+				for i := range members {
+					if members[i].Key == rn.Key {
+						members[i].Key = displaced.key
+						break
+					}
+				}
 			}
-			n.name = rn.Name
-			n.resolved = true
-			continue
+			delete(f.byKey, n.key)
+			n.key = rn.Key
+			f.byKey[n.key] = n
 		}
-		if n := f.rekeySameNode(rn); n != nil {
-			continue
+		if n.addr != rn.Addr || n.tlsName != rn.TLSName {
+			_ = n.tui.client.Close() // SetAddr leaves old connections intact
+			n.tui.client.SetAddr(rn.Addr)
+			if setter, ok := n.tui.client.(interface{ SetTLSServerName(string) }); ok {
+				setter.SetTLSServerName(tlsServerName(f.opts, rn.TLSName))
+			}
+			n.addr, n.tlsName = rn.Addr, rn.TLSName
+			n.tui.reset()
 		}
-		f.addNode(rn)
+		n.spec, n.name, n.resolved = rn.Spec, rn.Name, true
+		for i := range members {
+			if members[i].Key == key {
+				members[i].Key, members[i].Spec, members[i].Addr = rn.Key, rn.Spec, rn.Addr
+				break
+			}
+		}
+		seen[n] = true
 	}
 	for _, n := range f.nodes {
-		if !seen[n.key] {
+		if !seen[n] {
 			n.resolved = false
 		}
 	}
-}
-
-// rekeySameNode adopts the row a specification already has for rn's address,
-// for the transition between the two key shapes: one address is keyed by the
-// specification (so the row follows the name), several are keyed by address (so
-// every pod has its own row). Without it the same node is added under the new
-// key while the old row keeps polling it, which shows and counts it twice.
-func (f *fleet) rekeySameNode(rn embtop.ResolvedNode) *fleetNode {
-	for _, n := range f.nodes {
-		if n.spec != rn.Spec || n.addr != rn.Addr {
-			continue
-		}
-		delete(f.byKey, n.key)
-		n.key = rn.Key
-		f.byKey[n.key] = n
-		n.name = rn.Name
-		n.resolved = true
-		return n
-	}
-	return nil
 }
 
 // prune removes a node only once it is both unresolved and unreachable beyond
@@ -285,8 +297,7 @@ func (f *fleet) prune() {
 	now := f.now()
 	kept := f.nodes[:0]
 	for _, n := range f.nodes {
-		remove := !n.resolved && !n.reachable &&
-			!n.unreachableSince.IsZero() && now.Sub(n.unreachableSince) > f.grace
+		remove := embtop.PruneOrphan(n.resolved, n.reachable, n.unreachableSince, now, f.grace)
 		if remove {
 			_ = n.tui.client.Close()
 			delete(f.byKey, n.key)
@@ -541,18 +552,11 @@ func (f *fleet) clampSel() {
 // aggregate sums the reachable nodes' latest rates and gauges. Summing each
 // node's own rate keeps a rejoining node from spiking the total.
 func (f *fleet) aggregate() (req, tok, errRate float64, active, conns int64) {
+	var total embtop.FleetTotals
 	for _, n := range f.nodes {
-		if !n.reachable {
-			continue
-		}
-		p := n.tui.sampler.Latest
-		req += p.ReqRate
-		tok += p.TokRate
-		errRate += p.ErrRate
-		active += p.Active
-		conns += p.Conns
+		total.Add(n.tui.sampler.Latest, n.reachable)
 	}
-	return
+	return total.ReqRate, total.TokRate, total.ErrRate, total.Active, total.Conns
 }
 
 func (f *fleet) pushAggregate() {

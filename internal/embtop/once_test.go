@@ -148,9 +148,9 @@ func TestRunOnceKeepsFirstSeenModelOrder(t *testing.T) {
 
 func TestFleetAggregateCacheHitRateStaysBounded(t *testing.T) {
 	// Two nodes at 100% and 0% must aggregate to 50%, not 150%.
-	a := &onceNode{label: "a", sampler: NewSampler(4), res: &PollResult{CacheHits: 100}, sampled: true}
+	a := &onceNode{label: "a", sampler: NewSampler(4), res: &PollResult{CacheHits: 100, PerModel: map[string]*ModelStats{"m": {CacheMaxBytes: 100}}}, sampled: true}
 	a.sampler.Push(&PollResult{CacheHits: 100})
-	b := &onceNode{label: "b", sampler: NewSampler(4), res: &PollResult{CacheMisses: 100}, sampled: true}
+	b := &onceNode{label: "b", sampler: NewSampler(4), res: &PollResult{CacheMisses: 100, PerModel: map[string]*ModelStats{"m": {CacheMaxBytes: 100}}}, sampled: true}
 	b.sampler.Push(&PollResult{CacheMisses: 100})
 
 	out := string(appendFleetAggregate(nil, []*onceNode{a, b}, FleetRecommendation{}))
@@ -164,6 +164,32 @@ func TestFleetAggregateCacheHitRateStaysBounded(t *testing.T) {
 	}
 	if f != 50 {
 		t.Fatalf("aggregate cache_hit_rate = %v, want 50 (ratio of summed counters)", f)
+	}
+}
+
+func TestOnceOmitsCacheFieldsWithoutConfiguredCache(t *testing.T) {
+	res := &PollResult{PerModel: map[string]*ModelStats{"m": {}}}
+	for _, output := range []string{
+		string(appendAggregateFields(nil, &Point{}, res)),
+		string(appendFleetAggregate(nil, []*onceNode{{sampler: NewSampler(1), res: res, sampled: true}}, FleetRecommendation{})),
+	} {
+		for _, field := range []string{"cache_hits", "cache_misses", "cache_hit_rate"} {
+			if _, ok := parseKV(output, field); ok {
+				t.Errorf("%s fabricated without cache capacity in %q", field, output)
+			}
+		}
+	}
+	res.PerModel["m"].CacheMaxBytes = 1024
+	line := string(appendAggregateFields(nil, &Point{}, res))
+	if _, ok := parseKV(line, "cache_hits"); !ok {
+		t.Fatal("configured empty cache omitted its measured zero counter")
+	}
+	if _, ok := parseKV(line, "cache_hit_rate"); ok {
+		t.Fatal("empty cache reported a zero ratio without any lookups")
+	}
+	res.CacheMisses = 1
+	if got, ok := parseKV(string(appendAggregateFields(nil, &Point{}, res)), "cache_hit_rate"); !ok || got != "0.0" {
+		t.Fatalf("all-miss cache rate = %q (ok=%v), want 0.0%%", got, ok)
 	}
 }
 

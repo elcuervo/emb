@@ -257,6 +257,33 @@ measure the round trip, never the server's internal phases: use this page's
 `emb.dispatch.wait`, `emb.inference.duration` and `emb.sessions.busy` for
 queueing-versus-compute, and join the two on `model`.
 
+## Monitoring: emb-sidekick
+
+`emb-sidekick` is a standalone, read-only web monitor for an `emb` node or DNS-discovered fleet. Build it with `just build` or take `emb-sidekick` from a platform release archive; it needs neither ONNX Runtime nor Ruby. Run it where it can reach the EMB nodes (and, for a private fleet name, the VPC's DNS resolver):
+
+```bash
+# one node; open http://127.0.0.1:8080
+emb-sidekick -node 127.0.0.1:6379
+
+# explicit nodes or a name with one A/AAAA record per node
+emb-sidekick -nodes 10.0.1.10:6379,10.0.1.11:6379
+emb-sidekick -nodes emb.internal:6379
+
+# upstream AUTH password is read from the environment, not a URL or browser input
+EMB_SIDEKICK_PASSWORD='your-upstream-password' emb-sidekick -node emb.internal:6379 -tls
+
+# bind on a private VPC interface only when the ingress is restricted
+emb-sidekick -nodes emb.internal:6379 -listen 10.0.1.20:8080
+```
+
+`-node` is repeatable; `-nodes` accepts comma-separated targets. A bare host uses port 6379. A name expands to its address records and is re-resolved while watching; an IP literal or `localhost` stays one node. With `-tls`, certificates are verified against the configured DNS name even when a resolved IP is dialled. Use `-tls-server-name <name>` only when the certificate's name differs from the target. TLS verification is not disabled for convenience. `EMB_SIDEKICK_PASSWORD` authenticates to the upstream EMB server; it does **not** authenticate browser viewers.
+
+At most 64 nodes can be configured or retained, including DNS-discovered nodes and responsive former fleet members. A larger configured list is rejected at startup; if DNS expands beyond the limit, the snapshot reports an error. Newly discovered peers wait while retained rows occupy the limit.
+
+The default `-listen 127.0.0.1:8080` accepts local viewers only. For remote operators, bind explicitly to a private VPC address and restrict ingress to an operator VPN, bastion, or an authenticated reverse proxy with an ACL. **HTTP is not authentication**: anyone who can connect to the listener can read the monitor's operational data. Do not expose its plain-HTTP listener to the public internet; terminate browser TLS at the protected ingress if needed. The page and all browser assets are embedded and same-origin; runtime access requires only the configured EMB targets and, for discovery, VPC DNS. There is no CDN or external browser asset dependency.
+
+Open the listener URL in a browser. A single-node target opens its node detail; a fleet opens the fleet overview. Select a node to inspect its model rates, latency, cache, CPU/resources, and recent completed-request events; select a model for its activity and phase evidence. Navigation changes only the browser view, never the monitored targets. Missing measurements are shown as unavailable, not as zero, and request texts are not displayed. The live stream and `GET /api/snapshot` expose complete read-only snapshots; no browser command endpoint exists. Histories hold up to five minutes of one-second samples **in memory only**; request events are limited to five minutes or 4096 per node, with the most recent 128 shown. Response-size limits can shorten the displayed history. A sidekick restart discards all history, and older observations are not retained or exported.
+
 ## Monitoring: emb-top
 
 `emb-top` is a live terminal dashboard for a running `emb` node. It connects

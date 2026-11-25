@@ -131,6 +131,7 @@ type ModelPoint struct {
 	RunUs           int64
 	SessionsBusy    int64
 	SessionsTotal   int64
+	PhasesKnown     bool
 }
 
 // Sampler diffs cumulative counters between polls into rates and keeps a
@@ -189,6 +190,19 @@ func (s *Sampler) PushEvents(evs []Event) {
 	if len(s.Events) > EventWindowBounds {
 		s.Events = s.Events[len(s.Events)-EventWindowBounds:]
 	}
+}
+
+// TrimEventsSince discards events older than the retained monitoring window.
+func (s *Sampler) TrimEventsSince(since time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.Events[:0]
+	for _, event := range s.Events {
+		if !time.UnixMicro(event.AtUs).Before(since) {
+			kept = append(kept, event)
+		}
+	}
+	s.Events = kept
 }
 
 // Reset discards all state (used on reconnect: counters are rebased).
@@ -318,6 +332,7 @@ func (s *Sampler) Push(res *PollResult) Point {
 		mpnt.RunUs = cur.EmbedRunUs
 		mpnt.SessionsBusy = cur.EmbedSessionsBusy
 		mpnt.SessionsTotal = cur.EmbedSessionsTotal
+		mpnt.PhasesKnown = cur.EmbedPhasesKnown
 		mp[name] = mpnt
 	}
 
