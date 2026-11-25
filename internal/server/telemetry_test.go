@@ -384,10 +384,23 @@ func TestTelemetryEndToEnd(t *testing.T) {
 	}
 
 	mu.Lock()
-	last := bodies[len(bodies)-1]
+	captured := append([][]byte(nil), bodies...)
 	mu.Unlock()
 
-	req := decodeOTLP(t, last)
+	// The batch's delta rides exactly one export. A later export legitimately
+	// carries zero, so read the newest one that actually saw the requests
+	// instead of assuming the last body arrived before the delta was consumed.
+	var req map[string]any
+	for i := len(captured) - 1; i >= 0; i-- {
+		candidate := decodeOTLP(t, captured[i])
+		if requestsDelta(t, candidate) > 0 {
+			req = candidate
+			break
+		}
+	}
+	if req == nil {
+		t.Fatalf("no export carried a positive emb.requests delta (%d exports)", len(captured))
+	}
 	attrs := resourceAttrs(t, req)
 	if attrs["service.name"] != "emb" {
 		t.Errorf("resource service.name = %q", attrs["service.name"])
@@ -462,6 +475,30 @@ func metricByName(t *testing.T, req map[string]any, name string) map[string]any 
 	}
 	t.Fatalf("metric %q not found", name)
 	return nil
+}
+
+// requestsDelta reads the emb.requests sum's single data point, 0 when the
+// export carried no counted request.
+func requestsDelta(t *testing.T, req map[string]any) int64 {
+	t.Helper()
+	metric := metricByName(t, req, "emb.requests")
+	sum, _ := metric["sum"].(map[string]any)
+	points, _ := sum["dataPoints"].([]any)
+	if len(points) == 0 {
+		return 0
+	}
+	point, _ := points[0].(map[string]any)
+	switch n := point["asInt"].(type) {
+	case string:
+		value, err := strconv.ParseInt(n, 10, 64)
+		if err != nil {
+			return 0
+		}
+		return value
+	case float64:
+		return int64(n)
+	}
+	return 0
 }
 
 func attributesMap(v any) map[string]string {
