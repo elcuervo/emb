@@ -43,10 +43,13 @@ jobs:
 
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Test
         run: go test -short ./internal/config/... ./internal/hfhub/...
@@ -111,10 +114,13 @@ jobs:
 
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Build binary
         run: |
@@ -342,10 +348,13 @@ jobs:
 
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Build emb binary
         run: |
