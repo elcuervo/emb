@@ -25,6 +25,7 @@ func TestMonitorMembershipAndFailureRecovery(t *testing.T) {
 		}
 	}()
 	n := m.nodes[0]
+	handle := n.id
 	m.applyPoll(pollResult{n: n, generation: n.generation, dialed: true, result: &embtop.PollResult{TotalRequests: 100, UptimeSecs: 50}})
 	at = at.Add(time.Second)
 	m.applyPoll(pollResult{n: n, generation: n.generation, result: &embtop.PollResult{TotalRequests: 104, UptimeSecs: 51}})
@@ -58,8 +59,8 @@ func TestMonitorMembershipAndFailureRecovery(t *testing.T) {
 	if len(m.nodes) != 2 {
 		t.Fatal("answering orphan dropped")
 	}
-	if m.byKey[n.key] != n || m.byKey["fleet.example:6379"] != m.nodes[1] || m.nodes[0].id != "fleet.example:6379" || m.nodes[1].id != "127.0.0.1:2" {
-		t.Fatal("DNS contraction lost stable row IDs or duplicated a dial target")
+	if m.byKey[n.key] != n || m.byKey["fleet.example:6379"] != m.nodes[1] || n.id != handle || m.nodes[1].id == handle {
+		t.Fatal("DNS contraction lost stable row handles or duplicated one")
 	}
 	m.resolveError = "DNS resolution unavailable"
 	if m.buildSnapshot().Error == "" {
@@ -159,5 +160,25 @@ func TestFlagTargetsRequiredAndTLS(t *testing.T) {
 	}
 	if _, err := parseFlags(targets); err == nil {
 		t.Fatal("unbounded upstream node count accepted")
+	}
+}
+
+// An untrusted certificate names an "unknown authority", which contains "auth":
+// it must not be reported as a rejected credential.
+func TestUnknownAuthorityIsTLSNotAuthentication(t *testing.T) {
+	spec, _ := embtop.ParseNodeSpec("fleet.example:6379")
+	m := newMonitor([]embtop.NodeSpec{spec}, "", false, "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.applyResolution(ctx, resolveResult{nodes: []embtop.ResolvedNode{{Key: "fleet.example:6379", Spec: "fleet.example:6379", Addr: "127.0.0.1:1"}}})
+	defer func() {
+		for _, n := range m.nodes {
+			close(n.stop)
+		}
+	}()
+	n := m.nodes[0]
+	m.applyPoll(pollResult{n: n, generation: n.generation, err: errors.New("x509: certificate signed by unknown authority")})
+	if got := m.buildSnapshot().Nodes[0]; got.Reason != "TLS verification failed" || got.State == "auth_failed" {
+		t.Fatalf("unknown authority classified as %q/%q", got.State, got.Reason)
 	}
 }

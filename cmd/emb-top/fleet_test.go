@@ -284,7 +284,7 @@ func TestDueRefreshOnIntervalAndUnreachable(t *testing.T) {
 		t.Fatal("dueRefresh false after the interval")
 	}
 	f.lastRefresh = clock
-	f.applyPoll(nodePollMsg{key: a, err: errors.New("gone")})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], err: errors.New("gone")})
 	if !f.dueRefresh() {
 		t.Fatal("an unreachable node did not request an immediate refresh")
 	}
@@ -301,12 +301,12 @@ func TestUnresolvedNodeStaysUntilUnreachableGrace(t *testing.T) {
 	if f.nodes[0].resolved {
 		t.Fatal("node still resolved after the name vanished")
 	}
-	f.applyPoll(nodePollMsg{key: a, res: fakePoll(10, 100, 0, 0)})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], res: fakePoll(10, 100, 0, 0)})
 	f.prune()
 	if len(f.nodes) != 1 {
 		t.Fatal("an orphaned but answering node was dropped")
 	}
-	f.applyPoll(nodePollMsg{key: a, err: errors.New("down")})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], err: errors.New("down")})
 	clock = clock.Add(30 * time.Second)
 	f.prune()
 	if len(f.nodes) != 1 {
@@ -373,8 +373,8 @@ func TestUnreachableNodeKeepsLastValues(t *testing.T) {
 	client := &fakeNodeClient{addr: a}
 	f := fakeFleet(nil, map[string]dashboardClient{a: client}, rn(a))
 	n := f.nodes[0]
-	f.applyPoll(nodePollMsg{key: a, res: fakePoll(10, 100, 0, 0)})
-	f.applyPoll(nodePollMsg{key: a, err: errors.New("down")})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], res: fakePoll(10, 100, 0, 0)})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], err: errors.New("down")})
 	if n.reachable {
 		t.Fatal("node still marked reachable")
 	}
@@ -393,15 +393,15 @@ func TestReconnectRebasesRates(t *testing.T) {
 	clock := time.Unix(0, 0)
 	n.tui.sampler.SetClock(func() time.Time { return clock })
 
-	f.applyPoll(nodePollMsg{key: a, res: fakePoll(100, 1000, 0, 0), dialed: true})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], res: fakePoll(100, 1000, 0, 0), dialed: true})
 	clock = clock.Add(time.Second)
-	f.applyPoll(nodePollMsg{key: a, res: fakePoll(200, 2000, 0, 0)})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], res: fakePoll(200, 2000, 0, 0)})
 	if got := n.tui.sampler.Latest.ReqRate; got != 100 {
 		t.Fatalf("steady rate = %v, want 100", got)
 	}
 	// The node restarts with reset counters; the fresh connection rebases.
 	clock = clock.Add(time.Second)
-	f.applyPoll(nodePollMsg{key: a, res: fakePoll(5, 50, 0, 0), dialed: true})
+	f.applyPoll(nodePollMsg{node: f.byKey[a], res: fakePoll(5, 50, 0, 0), dialed: true})
 	if got := n.tui.sampler.Latest.ReqRate; got != 0 {
 		t.Fatalf("rejoin rate = %v, want 0 (rebased, no spike)", got)
 	}
@@ -459,7 +459,7 @@ func TestStalledNodeDoesNotBlockTheNextTick(t *testing.T) {
 		t.Fatal("the next tick was not scheduled while a poll is outstanding")
 	}
 	// Deliver the fast node's result; the slow node's poll stays outstanding.
-	um, _ = f.Update(nodePollMsg{key: b, res: fakePoll(10, 100, 0, 0)})
+	um, _ = f.Update(nodePollMsg{node: f.byKey[b], res: fakePoll(10, 100, 0, 0)})
 	f = um.(*fleet)
 	um, _ = f.Update(tickMsg{})
 	f = um.(*fleet)

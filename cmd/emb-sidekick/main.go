@@ -104,7 +104,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	m := newMonitor(o.specs, password, o.useTLS, o.tlsName)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	server := &http.Server{Addr: o.listen, Handler: m.handler(), ReadHeaderTimeout: 5 * time.Second, MaxHeaderBytes: 8192, IdleTimeout: 30 * time.Second}
+	server := &http.Server{Addr: o.listen, Handler: m.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, MaxHeaderBytes: 8192, IdleTimeout: 30 * time.Second}
 	listener, err := net.Listen("tcp", o.listen)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "emb-sidekick: listen:", err)

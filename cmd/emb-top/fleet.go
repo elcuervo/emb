@@ -313,7 +313,7 @@ func (f *fleet) prune() {
 // ---- polling ----
 
 type nodePollMsg struct {
-	key    string
+	node   *fleetNode
 	res    *embtop.PollResult
 	dialed bool
 	err    error
@@ -326,16 +326,16 @@ func (f *fleet) pollOnce(n *fleetNode) nodePollMsg {
 	afterSeq := n.tui.lastSeq
 	dialed, err := client.EnsureConn()
 	if err != nil {
-		return nodePollMsg{key: n.key, err: err}
+		return nodePollMsg{node: n, err: err}
 	}
 	if dialed {
 		afterSeq = 0 // a fresh (or restarted) node numbers events from the start
 	}
 	res, err := client.Poll(append([]string(nil), n.tui.known...), afterSeq)
 	if err != nil {
-		return nodePollMsg{key: n.key, err: err}
+		return nodePollMsg{node: n, err: err}
 	}
-	return nodePollMsg{key: n.key, res: res, dialed: dialed}
+	return nodePollMsg{node: n, res: res, dialed: dialed}
 }
 
 func (f *fleet) pollCmd(n *fleetNode) tea.Cmd {
@@ -368,7 +368,7 @@ func (f *fleet) pollAllSync() int {
 // rebases that node's sampler so the aggregate cannot spike against counters
 // from before the gap.
 func (f *fleet) applyPoll(m nodePollMsg) {
-	n := f.byKey[m.key]
+	n := m.node
 	if n == nil {
 		return
 	}

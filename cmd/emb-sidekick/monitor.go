@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ type monitor struct {
 
 	nodes        []*node
 	byKey        map[string]*node
+	nextID       int
 	resolveError string
 	fleetHistory []fleetPoint
 	results      chan pollResult
@@ -101,7 +103,10 @@ func (m *monitor) startWorker(ctx context.Context, n *node, rn embtop.ResolvedNo
 	client.SetTimeout(3 * time.Second)
 	go func() {
 		defer func() { _ = client.Close() }()
-		tick <- struct{}{} // the first sample need not wait one interval
+		select {
+		case tick <- struct{}{}: // the first sample need not wait one interval
+		default: // the poll ticker already queued a sample
+		}
 		var known []string
 		var cursor uint64
 		for {
@@ -172,7 +177,10 @@ func (m *monitor) applyResolution(ctx context.Context, result resolveResult) {
 				m.resolveError = "Fleet exceeds 64-node limit; new peers are waiting for orphan expiry"
 				continue
 			}
-			n := &node{id: rn.Key, key: rn.Key, spec: rn.Spec, name: rn.Name, address: rn.Addr, tlsName: rn.TLSName, resolved: true, sampler: embtop.NewSampler(historyPoints)}
+			// The id is the browser's row handle, not the resolution key: a
+			// rekeyed row keeps its id so two rows can never share one.
+			m.nextID++
+			n := &node{id: fmt.Sprintf("node-%d", m.nextID), key: rn.Key, spec: rn.Spec, name: rn.Name, address: rn.Addr, tlsName: rn.TLSName, resolved: true, sampler: embtop.NewSampler(historyPoints)}
 			n.sampler.SetClock(m.now)
 			m.nodes = append(m.nodes, n)
 			m.byKey[n.key] = n
@@ -248,11 +256,13 @@ func (m *monitor) applyPoll(msg pollResult) {
 		if n.unreachableSince.IsZero() {
 			n.unreachableSince = now
 		}
+		// TLS first: "certificate signed by unknown authority" contains "auth".
+		reason := strings.ToLower(msg.err.Error())
 		switch {
-		case strings.Contains(strings.ToLower(msg.err.Error()), "auth"), strings.Contains(strings.ToLower(msg.err.Error()), "noauth"):
-			n.failure = "authentication rejected"
-		case strings.Contains(strings.ToLower(msg.err.Error()), "tls"), strings.Contains(strings.ToLower(msg.err.Error()), "certificate"), strings.Contains(strings.ToLower(msg.err.Error()), "x509"):
+		case strings.Contains(reason, "tls"), strings.Contains(reason, "certificate"), strings.Contains(reason, "x509"):
 			n.failure = "TLS verification failed"
+		case strings.Contains(reason, "auth"), strings.Contains(reason, "noauth"):
+			n.failure = "authentication rejected"
 		default:
 			n.failure = "connection unavailable"
 		}

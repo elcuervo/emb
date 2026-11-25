@@ -42,7 +42,7 @@
   }
   function memory(value) { return measure(value, 'MB'); }
   function percent(value) { return measure(valid(value) ? value * 100 : null, '%'); }
-  function cpu(value) { return measure(value, '%'); }
+  function percentage(value) { return measure(value, '%'); }
   function stamp(value) {
     const time = typeof value === 'number' ? value : Date.parse(value);
     return Number.isFinite(time) ? shortTime.format(time) : 'Unavailable';
@@ -289,7 +289,7 @@
   function recentEvents(events) {
     const reference = Date.parse(snapshot.at);
     return (Array.isArray(events) ? events : [])
-      .filter(event => valid(event.at_us) && (!Number.isFinite(reference) || event.at_us * 1000 >= reference - windowMinutes * 60000))
+      .filter(event => valid(event.at_us) && (!Number.isFinite(reference) || event.at_us / 1000 >= reference - windowMinutes * 60000))
       .sort((left, right) => right.at_us - left.at_us);
   }
   function eventP95(recent) {
@@ -316,7 +316,7 @@
     const rows = [];
     if (valid(point.cache_hit_rate)) {
       const hit = point.cache_hit_rate;
-      rows.push(meterRow('Cache hit ratio', percent(hit), hit, pressureTone(1 - hit)));
+      rows.push(meterRow('Cache hit ratio', percentage(hit), hit / 100, pressureTone(1 - hit / 100)));
     }
     const models = Array.isArray(node.models) ? node.models : [];
     let busy = 0, total = 0;
@@ -335,7 +335,7 @@
     }
     if (valid(point.cpu_pct)) {
       const above = point.cpu_pct > 100;
-      rows.push(meterRow(above ? 'CPU usage above one CPU' : 'CPU usage', `${cpu(point.cpu_pct)} of one CPU`, point.cpu_pct / 100,
+      rows.push(meterRow(above ? 'CPU usage above one core average' : 'CPU usage', `${percentage(point.cpu_pct)} per core`, point.cpu_pct / 100,
         above ? 'hot' : pressureTone(point.cpu_pct / 100)));
     }
     if (!rows.length) pressure.append(warning('No cache, session, error or CPU measurement in the latest point.'));
@@ -406,7 +406,7 @@
       chart('Model requests', model.history, [{ key: 'req_rate', label: 'Requests/s' }], 'req/s', value => rate(value, 'req')),
       chart('Model tokens', model.history, [{ key: 'tok_rate', label: 'Tokens/s' }], 'tok/s', value => rate(value, 'tok')),
       chart('Lifetime average request latency', model.history, [{ key: 'avg_latency_us', label: 'Lifetime mean latency' }], 'µs', latency),
-      chart('Cache hit ratio', model.history, [{ key: 'cache_hit_rate', label: 'Cache hit' }], '%', value => percent(value)));
+      chart('Cache hit ratio', model.history, [{ key: 'cache_hit_rate', label: 'Cache hit' }], '%', percentage));
     detail.append(plots);
     const blocks = element('div', 'detail-grid');
     const latencyBlock = element('div', 'detail-block');
@@ -417,7 +417,7 @@
     ]));
     const cacheBlock = element('div', 'detail-block');
     append(cacheBlock, element('h2', '', 'Cache and freshness'), facts([
-      ['Cache hit ratio', percent(model.point?.cache_hit_rate)], ['Attribution', model.point?.stale === true ? 'Stale measurement' : model.point?.stale === false ? 'Current measurement' : 'Unavailable'],
+      ['Cache hit ratio', percentage(model.point?.cache_hit_rate)], ['Attribution', model.point?.stale === true ? 'Stale measurement' : model.point?.stale === false ? 'Current measurement' : 'Unavailable'],
       ['Latest point', model.point?.at ? `${stamp(model.point.at)} local` : 'Unavailable']
     ]));
     if (model.advice) cacheBlock.append(advice(model.advice));
@@ -480,7 +480,7 @@
     ]));
     const secondary = element('div', 'metric-line');
     append(secondary,
-      metric('CPU usage', cpu(point.cpu_pct), 'Percent of one CPU'),
+      metric('CPU usage', percentage(point.cpu_pct), 'Average per core'),
       metric('Memory', memory(point.mem_mb), 'Resident memory'),
       metric('Connections', number(point.conns), 'Open client connections'),
       metric('Uptime', valid(point.uptime_secs) ? `${number(point.uptime_secs / 60)} min` : 'Unavailable', 'Since process start'));
@@ -493,8 +493,8 @@
       chart('Requests', node.history, [{ key: 'req_rate', label: 'Requests/s' }], 'req/s', value => rate(value, 'req')),
       chart('Tokens', node.history, [{ key: 'tok_rate', label: 'Tokens/s' }], 'tok/s', value => rate(value, 'tok')),
       chart('Memory', node.history, [{ key: 'mem_mb', label: 'Memory MB' }], 'MB', memory),
-      chart('CPU usage', node.history, [{ key: 'cpu_pct', label: 'CPU %' }], '%', cpu),
-      chart('Cache hit ratio', node.history, [{ key: 'cache_hit_rate', label: 'Cache hit' }], '%', value => percent(value)),
+      chart('CPU usage', node.history, [{ key: 'cpu_pct', label: 'CPU %' }], '%', percentage),
+      chart('Cache hit ratio', node.history, [{ key: 'cache_hit_rate', label: 'Cache hit' }], '%', percentage),
       chart('Connections', node.history, [{ key: 'conns', label: 'Connections' }], 'count', value => number(value)),
       chart('Active requests', node.history, [{ key: 'active', label: 'In flight' }], 'requests', value => number(value)));
     traffic.append(charts);
