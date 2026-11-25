@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#111110">
   <meta name="robots" content="noindex, nofollow">
   <title>emb sidekick · live monitor</title>
@@ -14,24 +15,24 @@
   <div class="shell">
     <header class="masthead">
       <div class="identity"><strong class="mark">emb</strong><span class="product">sidekick <span class="separator">/</span> read-only monitor</span></div>
-      <div class="connection" id="connection" role="status" aria-live="polite" aria-atomic="true">Connecting to monitor…</div>
+      <div class="connection" id="connection" role="status" aria-live="polite" aria-atomic="true">Connecting to the monitor</div>
     </header>
     <div class="toolbar">
       <nav id="navigation" aria-label="Monitor views"></nav>
       <div class="range" role="group" aria-label="History window">
-        <span class="range-label">WINDOW</span>
+        <span class="range-label">Window</span>
         <button type="button" data-range="1" aria-pressed="false">1m</button>
         <button type="button" data-range="5" aria-pressed="true">5m</button>
       </div>
     </div>
     <main id="main" tabindex="-1">
       <section class="waiting" aria-labelledby="waiting-title">
-        <h1 id="waiting-title">Connecting to your nodes.</h1>
-        <p>Waiting for the first measured snapshot. No sample is available yet.</p>
+        <h1 id="waiting-title">Connecting.</h1>
+        <p>The first measured snapshot has not arrived. Numbers appear as soon as a node answers.</p>
       </section>
     </main>
-    <footer class="foot"><span>EMB / SIDEKICK</span><span>Live measurements only · up to five minutes in memory · no request payloads</span></footer>
+    <footer class="foot"><span>emb / sidekick</span><span>Read-only · five minutes of history in memory · no request payloads</span></footer>
   </div>
-  <noscript><div class="noscript">JavaScript is required to show live measurements. The monitor cannot display data without it.</div></noscript>
+  <noscript><div class="noscript">JavaScript is required.</div></noscript>
 </body>
 </html>

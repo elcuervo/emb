@@ -363,7 +363,14 @@ func (m *monitor) record() {
 
 const maxFrameBytes = 8 << 20
 
-func (m *monitor) publishSnapshot(s snapshot) {
+func (m *monitor) publishSnapshot(s snapshot) { m.storeSnapshot(s, true) }
+
+// refreshLatest keeps GET /api/snapshot current without pushing a stream frame:
+// every connected viewer rebuilds its whole view per frame, so the stream is one
+// frame per second and poll results only refresh the retained snapshot.
+func (m *monitor) refreshLatest() { m.storeSnapshot(m.buildSnapshot(), false) }
+
+func (m *monitor) storeSnapshot(s snapshot, fanout bool) {
 	data, err := json.Marshal(s)
 	if err != nil {
 		return
@@ -408,6 +415,10 @@ func (m *monitor) publishSnapshot(s snapshot) {
 	}
 	m.mu.Lock()
 	m.latest = data
+	if !fanout {
+		m.mu.Unlock()
+		return
+	}
 	for ch := range m.viewers {
 		select {
 		case ch <- data:

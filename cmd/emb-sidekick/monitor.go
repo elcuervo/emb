@@ -289,7 +289,7 @@ func (m *monitor) applyPoll(msg pollResult) {
 		n.failure = ""
 	}
 	m.prune()
-	m.publish()
+	m.refreshLatest()
 }
 
 func (m *monitor) refresh(ctx context.Context) {
