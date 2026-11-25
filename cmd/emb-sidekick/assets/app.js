@@ -136,22 +136,35 @@
     const times = points.map(point => Date.parse(point.at));
     const max = Math.max(...readings) || 1;
     const x = index => points.length > 1 ? index / (points.length - 1) * 100 : 50;
-    const y = value => 26 - Math.max(0, value) / max * 24;
+    const y = value => 26 - Math.max(0, value) / max * 22;
     function item(tag, attrs) {
       const node = document.createElementNS(svgNS, tag);
       Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
       svg.append(node);
       return node;
     }
-    let segment = '';
+    item('line', { class: 'baseline', x1: 0, x2: 100, y1: 27.5, y2: 27.5 });
+    const runs = [];
+    let run = [];
     values.forEach((value, index) => {
       const gap = index > 0 && (!valid(values[index - 1]) || times[index] - times[index - 1] > 3500);
-      segment = valid(value) ? `${!segment || gap ? 'M' : 'L'}${x(index).toFixed(2)},${y(value).toFixed(2)} ` : '';
-      const end = valid(value) && (index === values.length - 1 || !valid(values[index + 1]) || times[index + 1] - times[index] > 3500);
-      if (end) {
-        if (segment.includes('L')) item('path', { class: 'trace', d: segment });
-        segment = '';
+      if (!valid(value) || gap) {
+        if (run.length) runs.push(run);
+        run = [];
+        if (!valid(value)) return;
       }
+      run.push(index);
+    });
+    if (run.length) runs.push(run);
+    runs.forEach(segment => {
+      const line = segment.map((index, i) => `${i ? 'L' : 'M'}${x(index).toFixed(2)},${y(values[index]).toFixed(2)}`).join(' ');
+      if (segment.length < 2) {
+        item('circle', { class: 'end-dot', cx: x(segment[0]).toFixed(2), cy: y(values[segment[0]]).toFixed(2), r: 1.6 });
+        return;
+      }
+      const head = `${x(segment[0]).toFixed(2)},27.5`, tail = `${x(segment[segment.length - 1]).toFixed(2)},27.5`;
+      item('path', { class: 'area', d: `M${head} ${line.replace(/^M/, 'L')} L${tail} Z` });
+      item('path', { class: 'trace', d: line });
     });
     let last = -1;
     values.forEach((value, index) => { if (valid(value)) last = index; });
@@ -424,15 +437,18 @@
     append(line, element('strong', '', 'Suggested check'), document.createTextNode(` ${String(text)}`));
     return line;
   }
+  const EVENTS_SHOWN = 8;
   function eventView(recent) {
-    const list = section('Completed requests', `Newest first · ${windowMinutes} min window · no payloads`);
+    const shown = recent.slice(0, EVENTS_SHOWN);
+    const meta = `${shown.length < recent.length ? `Newest ${shown.length} of ${number(recent.length, 0)}` : `Newest ${shown.length}`} · ${windowMinutes} min window · no payloads`;
+    const list = section('Completed requests', meta);
     list.classList.add('events');
-    if (!recent.length) { list.append(warning('No completed requests in this window.')); return list; }
+    if (!shown.length) { list.append(warning('No completed requests in this window.')); return list; }
     const table = element('div', 'table');
     const header = element('div', 'table-head');
     ['TIME', 'LATENCY', 'MODEL', 'RESULT'].forEach(label => header.append(element('span', '', label)));
     table.append(header);
-    recent.forEach(event => {
+    shown.forEach(event => {
       const details = element('details');
       details.dataset.eventKey = String(event.at_us);
       const summary = element('summary');
