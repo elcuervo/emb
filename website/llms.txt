@@ -29,6 +29,6 @@ Readable versions of the pages above, tracking the repository's `main` branch.
 
 ## Optional
 
-- [Demos](https://emb.is/demos/): small plates run against a real server, including the DNS zone where every name is a sentence
+- [Demos](https://emb.is/demos/): small plates run against a real server, including the DNS zone where every name is a sentence, and the sidekick, a live monitor at https://cli.emb.is/sidekick/
 - [BENCHMARK.md](https://raw.githubusercontent.com/elcuervo/emb/main/BENCHMARK.md): measured throughput and latency, with reproduction steps
 - [Releases](https://github.com/elcuervo/emb/releases): binaries and version notes
