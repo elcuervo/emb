@@ -617,7 +617,7 @@
     rangeButtons.forEach(option => option.setAttribute('aria-pressed', String(option === button)));
     render();
   }));
-  fetch('/api/snapshot', { headers: { Accept: 'application/json' } })
+  fetch('api/snapshot', { headers: { Accept: 'application/json' } })
     .then(response => { if (!response.ok) throw Error('Snapshot unavailable'); return response.json(); })
     .then(data => { if (!snapshot || Date.parse(data.at) >= Date.parse(snapshot.at)) receive(data, false); })
     .catch(() => { fetchError = true; if (!snapshot) main.replaceChildren(append(element('section', 'waiting'), element('h1', '', 'Cannot reach the monitor.'), element('p', '', 'The first snapshot is unavailable. Keep this page open; the live stream will reconnect automatically.'))); updateConnection(); });
@@ -625,7 +625,7 @@
     streamError = true;
     updateConnection();
   } else {
-    const source = new EventSource('/api/stream');
+    const source = new EventSource('api/stream');
     source.onmessage = event => {
       try { receive(JSON.parse(event.data), true); }
       catch (_) { streamError = true; updateConnection(); }

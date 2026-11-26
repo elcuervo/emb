@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"sort"
 	"strings"
@@ -78,6 +79,10 @@ type Bridge struct {
 	ready  atomic.Bool
 	everOK atomic.Bool
 
+	// sidekick is the monitor origin served under /sidekick/, or nil when the
+	// feature is off.
+	sidekick *url.URL
+
 	stats *statsService
 }
 
@@ -125,6 +130,17 @@ func (b *Bridge) Handler() http.Handler {
 	mux.HandleFunc("/api/stats", b.handleStatsStream)
 	mux.HandleFunc("/stats", b.handleStats)
 	mux.HandleFunc("/terminal.js", b.handleTerminalJS)
+	if b.sidekick != nil {
+		// The prefix is stripped so the monitor keeps serving at its own root:
+		// its page uses relative asset and API URLs, which work under either
+		// mount point. FlushInterval -1 keeps the SSE stream unbuffered.
+		proxy := httputil.NewSingleHostReverseProxy(b.sidekick)
+		proxy.FlushInterval = -1
+		mux.Handle("/sidekick/", http.StripPrefix("/sidekick", proxy))
+		mux.HandleFunc("/sidekick", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/sidekick/", http.StatusMovedPermanently)
+		})
+	}
 	mux.HandleFunc("/", b.handleTerminal)
 	return mux
 }
