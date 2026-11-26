@@ -2,26 +2,27 @@
 
 ## Context
 
-See `proposal.md` and `specs/emb-ruby-client/spec.md`. The server already accepts `EMB.IMGMULTI`; `Emb::Proxy#image` already handles byte normalization and BLOB/VALUES output decoding for one model. The module and client APIs delegate to the same default/instance client.
+See `proposal.md` and `specs/emb-ruby-client/spec.md`. The server already accepts `EMB.IMGMULTI`; `Emb::Proxy#image` already handles byte normalization and BLOB/VALUES output decoding for one model. `Emb.multi` is the existing eager block that collects `m[:model][text]` pairs and sends `EMB.MULTI`.
 
 ## Goals / Non-Goals
 
-**Goals:** expose the existing cross-model image command with predictable Ruby return shapes and the current binary-safety guarantees.
+**Goals:** expose the existing cross-model image command through the same eager block API as text, with predictable Ruby return shapes and the current binary-safety guarantees.
 
-**Non-Goals:** add image URL fetching, change the server protocol, defer this explicit call, or add per-pair output-projection options.
+**Non-Goals:** add image URL fetching, change the server protocol, defer this explicit block (it is eager by construction, like the text block), or invent a second pairs-list API beside `multi`.
 
 ## Decisions
 
-- Use `image_multi(pairs, format: :binary)` on both `Emb` and `Emb::Client`; each pair is `[model, bytes]`. This keeps the method explicit and avoids introducing another block DSL beside `multi`.
-- An empty pair list returns `[]` without I/O. Validate pair structure and format before sending; normalize image bytes through the same binary-safe path as `Proxy#image`.
-- Build one `EMB.IMGMULTI` command with optional leading `VALUES`, then ordered model/byte pairs. Do not chunk implicitly: the server already owns image-count truncation semantics and returns null slots visibly.
-- Reuse image output decoding for each non-null pair. BLOB results become maps of output names to float arrays; VALUES results retain their typed envelopes. A null slot remains `nil`; malformed response shape and transport/server errors remain errors.
+- Add `image(bytes, *more, format:, outputs:)` to the block's `PairCollector` with the same arguments as `Proxy#image`; a multi-image call contributes one image pair per image, so the block result holds one Hash per image in submission order. This makes single sends (`Emb[:model].image`) and multi sends behave identically apart from transport.
+- Text pairs keep `EMB.MULTI`; image pairs are grouped by reply format and output projection (the command's `VALUES`/`OUTPUTS` keywords precede all pairs, so incompatible calls cannot share one command) and chunked by `batch_size` like text. A block mixing both kinds sends one command per kind and reassembles results by submission index.
+- Validate the pair structure and format when the call is recorded (before the block's command is sent), and normalize image bytes through the same binary-safe path as `Proxy#image`.
+- Reuse image output decoding for every non-null result. BLOB results become maps of output names to float arrays; VALUES results retain their typed envelopes and the pair's `model` tag the server sends. Malformed response shape and transport/server errors remain errors.
 
 ## Risks / Trade-offs
 
-- [Risk] One very large explicit pair list can exceed the server's configured request limit → document that server-side image and command caps apply; preserve null truncation slots rather than hiding them.
-- [Risk] Per-model output names vary → decode maps from each returned pair independently instead of assuming a shared output schema.
+- [Risk] One very large explicit block can exceed the server's configured request limit → document that server-side image and command caps apply; preserve null truncation slots rather than hiding them.
+- [Risk] Per-model output names vary → decode each returned image independently instead of assuming a shared output schema.
+- [Risk] Mixed text/image blocks need more than one round trip → the block is an explicit eager API, and each command is still one round trip per kind.
 
 ## Migration Plan
 
-This is additive and eager. No existing client call changes. Ship the client method with focused fake-RESP tests and examples; rollback by removing the new methods, with no server or data migration.
+This is additive and eager. No existing client call changes. Ship the block support with focused fake-RESP tests and examples; rollback by removing the `image` collector method, with no server or data migration.

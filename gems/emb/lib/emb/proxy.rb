@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'image_command'
 require_relative 'values_reply'
 
 module Emb
@@ -53,8 +54,9 @@ module Emb
     # narrows the projection and may name any subset of the configured outputs.
     def image(image_bytes, *more, format: :binary, outputs: nil)
       format = normalize_format(format)
-      names = outputs.nil? ? [] : Array(outputs).map(&:to_s)
+      names = Array(outputs).map { |name| name.to_s.dup.freeze }
       images = [image_bytes, *more].map { |bytes| self.class.coerce_image_bytes(bytes) }
+      return deferred_image(images, format, names) if deferred?
 
       Emb::Telemetry.embed_call(operation: 'image', model: @name, texts: images.size,
                                 format: format, mode: 'eager') do
@@ -74,42 +76,23 @@ module Emb
 
     private
 
-    # image_args builds the command: model, the optional reply-format keyword,
-    # the optional OUTPUTS projection, then the images. Both keywords sit in
-    # their fixed positions, so OUTPUTS is only ever sent right after them.
-    def image_args(images, format, names)
-      args = ['EMB.IMG', @name.to_s]
-      args << 'VALUES' if format == :values
-      args << 'OUTPUTS' << names.join(',') unless names.empty?
-      args.concat(images)
+    def deferred?
+      @client.respond_to?(:lazy?) && @client.lazy?
+    end
+
+    # Deferred bytes must be captured now: an IO read or a caller mutating its
+    # string afterwards cannot change the pending request.
+    def deferred_image(images, format, names)
+      retained = images.map { |data| data.dup.force_encoding(Encoding::BINARY) }
+      Emb.build_image_loader(@client, @name, retained, format: format, names: names)
     end
 
     def image_reply(images, format, names)
-      reply = @client.send_command(*image_args(images, format, names))
-      decoder = format == :values ? :decode_values_map : :decode_blob_map
+      reply = @client.send_command(*ImageCommand.args(@name, images, format: format, names: names))
       return nil if reply.nil? && images.size == 1
-      return send(decoder, reply) if images.size == 1
+      return ImageCommand.decode(reply, format) if images.size == 1
 
-      Array(reply).map { |entry| entry.nil? ? nil : send(decoder, entry) }
-    end
-
-    # image_pairs normalizes one keyed reply (a flat name/value array under
-    # RESP2, an already-decoded Hash under RESP3) into name => value pairs.
-    def image_pairs(entry)
-      return entry if entry.is_a?(Hash)
-
-      Array(entry).each_slice(2).to_h
-    end
-
-    def decode_blob_map(entry)
-      image_pairs(entry).to_h { |name, value| [name, unpack_embedding(value)] }
-    end
-
-    def decode_values_map(entry)
-      image_pairs(entry).to_h do |name, value|
-        envelope = Emb::ValuesReply.parse(value)
-        [name, envelope.merge(values: Emb::ValuesReply.rows(envelope[:shape], envelope[:values]))]
-      end
+      Array(reply).map { |entry| entry.nil? ? nil : ImageCommand.decode(entry, format) }
     end
 
     # One packed vector for a single text, an array for several; a null slot
@@ -121,16 +104,8 @@ module Emb
       result.size == 1 ? result.first : result
     end
 
-    def unpack_embedding(entry)
-      entry&.unpack('e*')
-    end
-
     def normalize_format(format)
-      unless %i[binary values].include?(format)
-        raise ArgumentError, "unknown format #{format.inspect} (expected :binary or :values)"
-      end
-
-      format
+      ImageCommand.validate_format!(format)
     end
 
     def values_query(text, texts)

@@ -14,6 +14,21 @@ All notable changes to the `emb` gem are documented here. The format follows
 
 ### Added
 
+- Image calls defer under the configured lazy mode. `Emb[:model].image(bytes)`
+  under `lazy: :multi`/`:batch` sends nothing until forced, then coalesces
+  compatible calls (same model, format, and `outputs:` projection) into
+  `EMB.IMG` shares — serial under `:multi`, concurrent under `:batch` — while
+  keeping the eager single-image Hash / multi-image Array shape. Deferred bytes
+  are captured at call time and bounded per scope by `batch_size` image payloads
+  and the new `max_image_batch_bytes` (32 MiB default, global and per client);
+  exceeding either raises `Emb::ImageBatchLimitError` before anything is queued.
+- Image calls join the eager `Emb.multi` / `Client#multi` block exactly like
+  text: `m[:model].image(bytes, *more, format:, outputs:)` accepts the same
+  arguments as a single call and returns one output-name Hash per image in
+  submission order, `nil` for a failed or truncated pair. Compatible calls
+  (same format and `outputs:` projection) share one `EMB.IMGMULTI`; a block
+  mixing text and images sends `EMB.MULTI` and `EMB.IMGMULTI` and reassembles
+  results in submission order. `:values` decoding keeps the pair's `model` tag.
 - Optional OpenTelemetry instrumentation. With `opentelemetry-api` (and
   `opentelemetry-metrics-api` for metrics) installed, the client emits `emb.embed`,
   `emb.batch`, and `emb.share` spans plus `emb.client.*` metrics: per-call latency,

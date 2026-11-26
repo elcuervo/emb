@@ -26,26 +26,13 @@ module Emb
   # shaping, per-slice result mapping, and the bounded concurrent fan-out used
   # by `lazy: :batch`. Extended into Emb by batch.rb.
   module BatchDispatch
-    # Script batch items are [client, SCRIPT_ITEM, argv, decode]; embed items are
-    # [client, model, text, format]. argv is the fully built EMB.EVAL/EMB.EVSHA
-    # command and argv[3] its text count.
-    def script_item?(item)
-      item[1].equal?(SCRIPT_ITEM)
-    end
-
-    def item_model(item)
-      script_item?(item) ? item[2][1] : item[1]
-    end
-
-    def item_text_count(item)
-      script_item?(item) ? item[2][3].to_i : Array(item[2]).size
-    end
-
-    # :batch shares: per-model chunked EMB shares plus one share per script
-    # call. group_by preserves first-deferral order of the models.
-    def batch_shares(embeds, scripts, chunk)
+    # :batch shares: per-model chunked EMB shares, one or more EMB.IMG shares
+    # per compatible image group, plus one share per script call. group_by
+    # preserves first-deferral order of the models.
+    def batch_shares(embeds, scripts, images, chunk)
       slices = []
       embeds.group_by { |item| item[1] }.each_value { |group| slices.concat(pack_slices(group, chunk)) }
+      slices.concat(ImageBatch.shares(images))
       scripts.each { |item| slices << [item] }
       slices
     end
@@ -82,10 +69,14 @@ module Emb
       # Scripts keep their prebuilt argv and their raw reply (a Hash reply must
       # not be Array()-wrapped into pairs).
       return client.send_command(*slice.first[2]) if script_item?(slice.first)
+      return Array(client.send_command(*ImageBatch.args(slice))) if image_item?(slice.first)
 
+      Array(client.send_command(*embed_slice_args(slice)))
+    end
+
+    def embed_slice_args(slice)
       models = slice.map { |_, model, _, _| model }.uniq
-      args = models.size == 1 ? same_model_args(slice, models.first) : mixed_model_args(slice)
-      Array(client.send_command(*args))
+      models.size == 1 ? same_model_args(slice, models.first) : mixed_model_args(slice)
     end
 
     def same_model_args(slice, model)
@@ -123,6 +114,7 @@ module Emb
     # retry).
     def resolve_slice(loader, slice, results)
       return resolve_script_slice(loader, slice.first, results) if script_item?(slice.first)
+      return ImageBatch.resolve(loader, slice, results) if image_item?(slice.first)
       return ValuesBatch.resolve(loader, slice, results) if slice_format(slice) == :values
 
       resolve_entries(loader, slice, results)

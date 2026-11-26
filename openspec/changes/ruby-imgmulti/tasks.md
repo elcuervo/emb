@@ -1,11 +1,12 @@
 # Tasks
 
-## 1. Implement the client API
+## 1. Add image calls to the multi block
 
-- [ ] 1.1 Add `image_multi(pairs, format:)` to module and instance clients; validate pair shape and format before sending, and verify exact `EMB.IMGMULTI` arguments with client specs.
-- [ ] 1.2 Decode ordered BLOB/VALUES image maps and per-pair nulls using the existing image decoding path; verify binary bytes, empty input, partial failures, and malformed reply handling.
+- [x] 1.1 Add `image(bytes, *more, format:, outputs:)` to the `multi` block's pair collector, with the same arguments as `Proxy#image`; validate pair structure and format before any command is sent.
+- [x] 1.2 Send image pairs as `EMB.IMGMULTI` grouped by format and output projection, chunked by `batch_size`; keep text pairs on `EMB.MULTI` and reassemble mixed results in submission order.
 
-## 2. Document and verify
+## 2. Decode, document, and verify
 
-- [ ] 2.1 Document module-level and instance-level `image_multi` usage, result shapes, byte-only input, and server image limits; verify examples match the API contract.
-- [ ] 2.2 Run focused Ruby client image and multi-command specs to verify existing `proxy.image` and text `multi` behavior remains unchanged.
+- [x] 2.1 Decode ordered BLOB/VALUES image results and per-pair nulls with the existing image decoding path; verify binary bytes, multi-image calls, empty blocks, partial failures, and the pair `model` tag under VALUES.
+- [x] 2.2 Document block usage, result shapes, byte-only input, and server image limits; verify examples match the public Ruby API.
+- [x] 2.3 Run focused Ruby client image and multi-command specs to verify existing `proxy.image` and text `multi` behavior remains unchanged.

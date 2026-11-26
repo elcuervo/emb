@@ -3,10 +3,13 @@
 require 'batch_loader'
 require 'redis_client'
 require_relative 'batch_dispatch'
+require_relative 'image_batch'
+require_relative 'item_shape'
 require_relative 'values_batch'
 
 module Emb
   extend BatchDispatch
+  extend ItemShape
 
   BATCH_KEY = :emb
 
@@ -26,19 +29,24 @@ module Emb
   BATCH_BLOCK = lambda do |items, loader, _args|
     items.group_by(&:first).each do |client, client_items|
       chunk = client.respond_to?(:batch_size) && client.batch_size ? client.batch_size : Emb.configuration.batch_size
-      # Script items never coalesce (each call is its own share); split them out
-      # before packing embeds by model.
-      embeds, scripts = client_items.partition { |item| !script_item?(item) }
+      # Script items never coalesce (each call is its own share) and image
+      # items coalesce only with a compatible call; split both out before
+      # packing embeds by model.
+      embeds = client_items.select { |item| embed_item?(item) }
+      scripts = client_items.select { |item| script_item?(item) }
+      images = client_items.select { |item| image_item?(item) }
       parallel = client.respond_to?(:parallel_batch?) && client.parallel_batch?
 
-      # :batch — one or more plain EMB shares per model plus one share per
-      # script call, all dispatched concurrently. :multi — embeds coalesce
-      # across models into EMB/EMB.MULTI chunks, then scripts are sent one
-      # after another.
+      # :batch — one or more plain EMB shares per model, one or more EMB.IMG
+      # shares per compatible image group, plus one share per script call, all
+      # dispatched concurrently. :multi — embeds coalesce across models into
+      # EMB/EMB.MULTI chunks, then image groups and scripts are sent one after
+      # another.
       slices = if parallel
-                 batch_shares(embeds, scripts, chunk)
+                 batch_shares(embeds, scripts, images, chunk)
                else
-                 pack_slices(embeds, chunk) + scripts.map { |item| [item] }
+                 pack_slices(embeds, chunk) + ImageBatch.shares(images) +
+                   scripts.map { |item| [item] }
                end
       # A lone share stays on the forcing thread (no worker spawn).
       run_batch(client, slices, loader, concurrent: parallel && slices.size > 1)
@@ -50,6 +58,7 @@ module Emb
     # ...) are internal to BATCH_BLOCK; nothing outside Emb calls them with an
     # explicit receiver.
     private(*BatchDispatch.instance_methods(false))
+    private(*ItemShape.instance_methods(false))
 
     def build_batch_loader(client, model, text, format: :binary)
       unless %i[binary values].include?(format)
@@ -71,6 +80,14 @@ module Emb
         item, Telemetry.entry_for(client, operation: 'embed', model: model, texts: Array(text).size, format: format)
       )
       BatchLoader.for(item).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
+    end
+
+    # Deferred image calls join the same batch scope as embeds and scripts, so
+    # forcing any of them resolves all. Bounds (batch_size images and
+    # max_image_batch_bytes encoded bytes across the pending scope) are
+    # enforced before the item is queued; see ImageBatch.
+    def build_image_loader(client, model, images, format: :binary, names: [])
+      ImageBatch.build(client, model, images, format: format, names: names)
     end
 
     # Scripts join the same batch scope as embeds (same BATCH_KEY) so forcing

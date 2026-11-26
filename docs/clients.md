@@ -71,7 +71,22 @@ Emb[:dinov3].image(File.binread("cat.jpg"), outputs: ["patches"])
 # several images: one keyed Hash per requested slot, nil for a failed/truncated one
 Emb[:clip].image(File.binread("cat.jpg"), File.binread("dog.png"))
 # => [{ "embedding" => [0.01, ...] }, { "embedding" => [0.07, ...] }]
+
+# cross-model images ride the same eager block as text
+Emb.multi do |m|
+  m[:clip].image(File.binread("cat.jpg"))
+  m[:dinov3].image(File.binread("cat.jpg"))
+end
+# => [{ "embedding" => [...] }, { "embedding" => [...], "patches" => [...] }]
 ```
+
+The same calls exist on instance clients (`client[:clip].image(...)`,
+`client.multi { |m| ... }`). Under `lazy: :multi`/`:batch` image calls defer like
+embeds: nothing is sent until the value is used, compatible calls (same model,
+format, and `outputs:`) coalesce into one `EMB.IMG`, and a deferred scope is
+bounded by `batch_size` images and `max_image_batch_bytes` (32 MiB default).
+The explicit `multi` block stays eager, sends `EMB.IMGMULTI` for its image
+calls, and accepts the same `format:`/`outputs:` options as a single call.
 
 Gem list:
 

@@ -187,8 +187,9 @@ Emb.setup(
 ```
 
 See the [redis-client documentation](https://github.com/redis-rb/redis-client) for
-all available options. Only `pool`, `lazy`, and `batch_size` are handled by the
-gem — everything else passes through to `RedisClient.new`.
+all available options. Only `pool`, `lazy`, `batch_size`, and
+`max_image_batch_bytes` are handled by the gem — everything else passes through
+to `RedisClient.new`.
 
 ## Instance-based clients
 
@@ -395,6 +396,67 @@ client.multi do |m|
 end
 ```
 
+### Images
+
+`Emb[:clip].image(bytes)` embeds one or more raw encoded images (JPEG, PNG, GIF,
+WebP). The bytes go on the wire unchanged as a binary RESP bulk; an IO argument
+is read fully, and URLs are never fetched.
+
+```ruby
+Emb[:clip].image(File.binread("cat.jpg"))
+# => {"embedding" => [0.0123, ...]}
+
+Emb[:clip].image(io1, io2)                      # several images → Array of Hashes
+Emb[:dino].image(bytes, outputs: ["patches"])   # narrow the projection
+Emb[:clip].image(bytes, format: :values)        # dtype/shape/values envelope
+```
+
+Each reply is keyed by the model's configured output names; a failed or
+truncated slot is `nil`.
+
+Under `lazy: :multi` or `lazy: :batch` an image call defers like an embed:
+creating it sends nothing, forcing it resolves it. Deferred calls coalesce only
+when they share the model, reply format and `outputs:` projection; each
+compatible group is sent as one `EMB.IMG`. Compatible groups are serial under
+`:multi` and concurrent under `:batch`. Deferred mode captures the bytes at call
+time (an IO is read immediately), so mutating the string or closing the IO
+afterwards cannot change the request.
+
+Two limits bound one deferred scope, both enforced before a call is queued:
+
+- `batch_size` image payloads across the scope (default 512);
+- `max_image_batch_bytes` encoded bytes across the scope (default 32 MiB, the
+  server's per-image cap), set globally with
+  `Emb.configure { |c| c.max_image_batch_bytes = 64 * 1024 * 1024 }` or per
+  client with `Emb.new(max_image_batch_bytes: ...)`.
+
+A call that would exceed either raises `Emb::ImageBatchLimitError` naming the
+limit; that image is neither queued nor sent. The bound is released with the
+request/job batch scope, including when the scope raises.
+
+### Multi-model image batches
+
+Image calls join the same eager `Emb.multi` block as text. The call is the same
+`image` method, so single and multi sends accept identical options:
+
+```ruby
+Emb.multi do |m|
+  m[:clip].image(File.binread("cat.jpg"))
+  m[:dino].image(File.binread("cat.jpg"))
+end
+# => [{"embedding" => [...]}, {"embedding" => [...], "patches" => [...]}]
+```
+
+The block sends one `EMB.IMGMULTI` for image calls that share the format and
+`outputs:` projection (separate commands otherwise), and the text `EMB.MULTI`
+when the block also holds text pairs. Results come back in submission order, one
+Hash per image, with `nil` for a failed or truncated pair. Bytes are binary-safe
+and never URL-fetched. `format: :values` addresses each image's envelope and,
+like the server, also carries that pair's `model` tag; `outputs:` is per call.
+Server-side image count and byte caps still apply — a truncated pair comes back
+as `nil`, not an error. Like the text block, `Emb.multi` is always eager, even on
+a `lazy:` client.
+
 ### Script replies
 
 `Emb.eval` / `Emb.evalsha` run a Lua script against a model (KEYS = texts,
@@ -440,7 +502,9 @@ Shares fan out across the configured instances (one share per instance when the
 share count allows) or across the instance's pool connections when a single url is
 configured. Either mode fans out as soon as a scope resolves into more than one
 share — a two-model scope runs concurrently even when it fits in one `batch_size`
-chunk. Deferred work is powered by the
+chunk. Deferred image calls join the same scope (see [Images](#images)): they
+coalesce per model/format/projection and are bounded by `batch_size` and
+`max_image_batch_bytes`. Deferred work is powered by the
 [batch-loader](https://github.com/exAspArk/batch-loader) gem:
 
 ```ruby

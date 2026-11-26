@@ -17,16 +17,16 @@ Image calls SHALL remain eager when `lazy: false` and SHALL defer within the cur
 
 ### Requirement: Deferred image calls coalesce within a scope
 
-Deferred image items SHALL be grouped by client, model, format, and output projection. Each group SHALL be chunked by image count and sent as `EMB.IMG`; `:multi` SHALL execute chunks serially, while `:batch` SHALL dispatch independent compatible groups concurrently. Results SHALL be reassembled in original deferral order.
+Deferred image items SHALL be grouped by client, model, format, and output projection. Each group SHALL be sent as one `EMB.IMG` share, whose image count is already bounded by `batch_size` at deferral; `:multi` SHALL execute shares serially, while `:batch` SHALL dispatch independent compatible groups concurrently. Results SHALL be reassembled in original deferral order.
 
 #### Scenario: Same-model images coalesce in multi mode
 - **WHEN** several compatible image calls for one model are created under `lazy: :multi` and one is forced
-- **THEN** the images are sent in bounded `EMB.IMG` chunks, serially
+- **THEN** the images are sent as bounded `EMB.IMG` shares, serially
 - **AND** each call receives its result in creation order
 
 #### Scenario: Independent model groups run concurrently in batch mode
 - **WHEN** compatible image calls for multiple models are created under `lazy: :batch` and one is forced
-- **THEN** each model's bounded `EMB.IMG` chunks are dispatched concurrently
+- **THEN** each model's bounded `EMB.IMG` shares are dispatched concurrently
 - **AND** each result is reassembled in deferral order
 
 #### Scenario: Different output projections are not merged

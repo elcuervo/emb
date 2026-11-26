@@ -3,7 +3,7 @@
 module Emb
   class Configuration
     OPTIONS = %i[
-      host port url pool lazy batch_size driver protocol
+      host port url pool lazy batch_size max_image_batch_bytes driver protocol
       connect_timeout read_timeout write_timeout reconnect_attempts
     ].freeze
 
@@ -36,6 +36,19 @@ module Emb
       @protocol = value
     end
 
+    # Deferred image calls retain their encoded bytes until the scope is
+    # forced: README.md#images. Must be a positive Integer (32 MiB by default).
+    def max_image_batch_bytes=(value)
+      self.class.validate_image_batch_bytes!(value)
+      @max_image_batch_bytes = value
+    end
+
+    def self.validate_image_batch_bytes!(value)
+      return if value.is_a?(Integer) && value.positive?
+
+      raise ArgumentError, "max_image_batch_bytes must be a positive Integer (got #{value.inspect})"
+    end
+
     def initialize
       self.host = 'localhost'
       self.port = 6379
@@ -43,6 +56,23 @@ module Emb
       self.pool = 5
       self.lazy = false
       self.batch_size = 512
+      # Deferred image payloads are bounded by total encoded bytes as well as
+      # by batch_size; the default matches the server's per-image byte cap.
+      apply_image_defaults
+      apply_network_defaults
+    end
+
+    def to_h
+      OPTIONS.to_h { |key| [key, public_send(key)] }
+    end
+
+    private
+
+    def apply_image_defaults
+      self.max_image_batch_bytes = 32 * 1024 * 1024
+    end
+
+    def apply_network_defaults
       self.driver = nil
       self.protocol = 2
       self.connect_timeout = nil
@@ -61,10 +91,6 @@ module Emb
       # retry per entry). Operation errors (server error replies) are never
       # retried.
       self.reconnect_attempts = 0
-    end
-
-    def to_h
-      OPTIONS.to_h { |key| [key, public_send(key)] }
     end
   end
 end
