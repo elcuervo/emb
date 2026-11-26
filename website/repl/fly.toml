@@ -45,15 +45,15 @@ kill_timeout = 40
   force_https = true
   # The machine suspends when it has no traffic and resumes on the next request.
   # Suspended, it is billed for its volume and not for CPU or memory; running,
-  # it is the same 4x/8 GB machine. `stop` would be cheaper still, but a stop
+  # it is the same 2x / 4 GB machine. `stop` would be cheaper still, but a stop
   # throws away the loaded models, so the next visitor waits for a boot that
   # loads every model from the volume. A suspend keeps the process, the loaded
-  # weights and the in-memory history, so the resume is the proxy's wake plus
-  # the first frame.
+  # weights and the in-memory history, and a resume was measured at well under a
+  # second on this app.
   #
   # This reverses the earlier always-on decision (it bought a cold-start-free
   # demo). The trade is the opposite one: an idle demo pays for nothing, and a
-  # first visit after idle pays a resume. The work ceiling still bounds what a
+  # first visit after idle pays the resume. The work ceiling still bounds what a
   # busy period can cost.
   auto_stop_machines = "suspend"
   auto_start_machines = true
@@ -81,26 +81,29 @@ kill_timeout = 40
   path = "/api/health"
 
 [[vm]]
-  # Sized from the measured set, not a guess. Resident memory is set by what the
-  # CPU execution provider materializes, not by the file on disk: it expands the
-  # weights to fp32 and keeps the dequantized copies, so a graph costs roughly
-  # 3-6x its file once its first call has run (docs/configuration.md).
+  # Sized from a measurement on the deployed machine, not from the file sizes.
+  # Resident memory is set by what the CPU execution provider materializes: it
+  # expands the weights to fp32 and keeps the dequantized copies, so a graph
+  # costs several times its file once its first call has run
+  # (docs/configuration.md).
   #
-  # What fits in 4 GB, from the measured figures:
-  #   text stack (minilm, bge-small, multilingual, sst2, clip)  ~1.10 GB
-  #   depth                                                      ~0.10 GB
-  #   laya-real, int8, after its first call                      ~2.28 GB
-  #   laya miniature                                             ~0.05 GB
-  # That is ~3.5 GB of 4 GB. The media models (CLAP + X-CLIP, ~1.2-1.3 GB
-  # resident) are what did not fit and were removed with the audio/video plate;
-  # `shared-cpu-2x` is the largest machine that can hold the rest, because shared
-  # CPU memory is capped at 2 GB per CPU.
+  # Measured here with all eight models loaded and one real `laya-real` call:
+  #   emb                              1.58-2.25 GiB
+  #   repl + sidekick + emb-top             0.06 GiB
+  #   MemAvailable            1.3 GiB of 3.83 GiB, after a 4-call burst
+  # An earlier docs figure put `laya-real` alone at 2.28 GiB; with this int8
+  # export and ONNX Runtime the whole set is smaller than that, so the 8 GB the
+  # first deployment needed was a property of the fp16 checkpoint.
+  #
+  # The next size down does not fit: `shared-cpu-1x` / 2 GB was deployed and the
+  # kernel OOM-killed emb while the models loaded (anon-rss 1.88 GB), restarting
+  # the machine. 4 GB is the balance: half of what the set used to need, with
+  # about 1.3 GiB spare at peak.
   #
   # `workers: 1` is pinned in sandbox.yaml (the bridge serializes upstream work
   # anyway), and on Linux the batch-determinism probe fails for these exports, so
   # each pool would otherwise degrade to `workers` sessions and multiply the
-  # resident weights. Re-check the resident set before adding a model, and
-  # re-measure if one changes: the next model has about 0.5 GB to live in.
+  # resident weights. Re-measure before adding a model.
   size = "shared-cpu-2x"
   memory = "4gb"
 
