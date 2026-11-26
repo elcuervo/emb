@@ -64,7 +64,7 @@ redis-cli -3 EMB minilm VALUES "hello world"
 | [Configuration](docs/configuration.md) | Config file, model options, images, batching, cache, snapshots |
 | [Image models](docs/image-models.md) | The DINOv3 catalog and both published ONNX dialects, named outputs, presets, per-dialect config recipes |
 | [Scripting](docs/scripting.md) | Lua `EMB.EVAL` / `EMB.EVSHA` surface and examples |
-| [Operations](docs/operations.md) | Health checks, limits, observability, `emb-top`, and `emb-stress` against a fleet |
+| [Operations](docs/operations.md) | Health checks, limits, observability, `emb-top`, `emb-sidekick` web monitoring, and fleet load testing |
 | [Clients](docs/clients.md) | Ruby, Python, and Go recipes |
 | [The DNS zone](docs/dns.md) | `dns.emb.is`: the emoji query grammar, the `TXT` replies, the HTTP surface, deployment |
 | [Development](#development) | Build, test, and dev-shell commands |
@@ -119,6 +119,12 @@ just dev              # Build and start the server
 # In another terminal:
 redis-cli EMB minilm "hello world"
 ```
+
+For a read-only browser view of that node, run
+`./bin/emb-sidekick -node 127.0.0.1:6379` in another terminal and open
+`http://127.0.0.1:8080`. See
+[sidekick operations](docs/operations.md#monitoring-emb-sidekick) for fleet
+discovery, upstream AUTH/TLS, and secure remote access.
 
 ## Commands
 
@@ -238,7 +244,7 @@ just deadcode        # Fail on unreachable production functions
 just cover           # Cross-package statement coverage (production + whole-repo totals)
 just coverage-gate   # Enforce coverage-floors.txt
 just bench           # Run Go benchmarks (just bench-all for the redis-benchmark suite)
-just build           # Build the emb binary
+just build           # Build emb, emb-top, emb-stress, and standalone emb-sidekick
 just dev             # Build and run the server
 just download-model  # Download a model from HuggingFace
 just verify-harness  # Unit-test the shared verification harness (no server/model/ONNX)

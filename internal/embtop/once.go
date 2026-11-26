@@ -193,9 +193,13 @@ func writeFleetOnceLine(out io.Writer, states []*onceNode) error {
 		b = appendRate(b, "tok_rate", p.TokRate)
 		b = appendRate(b, "err_rate", p.ErrRate)
 		b = appendRate(b, "cpu_pct", p.CPUPercent)
-		b = appendF(b, "cache_hits", st.res.CacheHits)
-		b = appendF(b, "cache_misses", st.res.CacheMisses)
-		b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
+		if hasCacheStats(st.res) {
+			b = appendF(b, "cache_hits", st.res.CacheHits)
+			b = appendF(b, "cache_misses", st.res.CacheMisses)
+			if st.res.CacheHits+st.res.CacheMisses > 0 {
+				b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
+			}
+		}
 		b = appendCPUPlanFields(b, &p)
 		b = appendRec(b, RecommendNode(st.sampler.Window).Kind)
 		b = appendAttribution(b, st.sampler)
@@ -227,12 +231,27 @@ func appendAggregateFields(b []byte, p *Point, res *PollResult) []byte {
 	b = appendF(b, "mem_mb", p.MemMB)
 	b = appendRate(b, "cpu_pct", p.CPUPercent)
 	b = appendF(b, "goroutines", p.Goroutines)
-	b = appendF(b, "cache_hits", res.CacheHits)
-	b = appendF(b, "cache_misses", res.CacheMisses)
-	b = appendF(b, "cache_evictions", res.CacheEvictions)
-	b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
+	if hasCacheStats(res) {
+		b = appendF(b, "cache_hits", res.CacheHits)
+		b = appendF(b, "cache_misses", res.CacheMisses)
+		b = appendF(b, "cache_evictions", res.CacheEvictions)
+		if res.CacheHits+res.CacheMisses > 0 {
+			b = appendRate(b, "cache_hit_rate", p.CacheHitRate)
+		}
+	}
 	b = appendCPUPlanFields(b, p)
 	return b
+}
+func hasCacheStats(res *PollResult) bool {
+	if res.CacheHits+res.CacheMisses+res.CacheEvictions > 0 {
+		return true
+	}
+	for _, model := range res.PerModel {
+		if model != nil && model.CacheMaxBytes > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // appendCPUPlanFields adds the process CPU plan, and nothing at all when the
@@ -260,6 +279,7 @@ func appendCPUPlanFields(b []byte, p *Point) []byte {
 func appendFleetAggregate(b []byte, states []*onceNode, rec FleetRecommendation) []byte {
 	var totalRequests, totalTokens, totalErrors, active, conns, mem, goroutines, models int64
 	var cacheHits, cacheMisses, cacheEvictions int64
+	hasCache := false
 	var req, tok, errRate, cpu float64
 	var cpuBudget, cpuActive, cpuPeak int64
 	var cpuAllowance float64
@@ -278,9 +298,12 @@ func appendFleetAggregate(b []byte, states []*onceNode, rec FleetRecommendation)
 		mem += p.MemMB
 		goroutines += p.Goroutines
 		models += int64(st.res.ModelsLoaded)
-		cacheHits += st.res.CacheHits
-		cacheMisses += st.res.CacheMisses
-		cacheEvictions += st.res.CacheEvictions
+		if hasCacheStats(st.res) {
+			hasCache = true
+			cacheHits += st.res.CacheHits
+			cacheMisses += st.res.CacheMisses
+			cacheEvictions += st.res.CacheEvictions
+		}
 		req += p.ReqRate
 		tok += p.TokRate
 		errRate += p.ErrRate
@@ -308,16 +331,14 @@ func appendFleetAggregate(b []byte, states []*onceNode, rec FleetRecommendation)
 	b = appendF(b, "mem_mb", mem)
 	b = appendRate(b, "cpu_pct", cpu)
 	b = appendF(b, "goroutines", goroutines)
-	b = appendF(b, "cache_hits", cacheHits)
-	b = appendF(b, "cache_misses", cacheMisses)
-	b = appendF(b, "cache_evictions", cacheEvictions)
-	// A ratio of summed counters, not a sum of per-node percentages, which
-	// could exceed 100 across nodes.
-	hitRate := 0.0
-	if t := cacheHits + cacheMisses; t > 0 {
-		hitRate = float64(cacheHits) / float64(t) * 100
+	if hasCache {
+		b = appendF(b, "cache_hits", cacheHits)
+		b = appendF(b, "cache_misses", cacheMisses)
+		b = appendF(b, "cache_evictions", cacheEvictions)
+		if t := cacheHits + cacheMisses; t > 0 {
+			b = appendRate(b, "cache_hit_rate", float64(cacheHits)/float64(t)*100)
+		}
 	}
-	b = appendRate(b, "cache_hit_rate", hitRate)
 	// The fleet's own advisory, as tokens a script can match on. The per-node
 	// sections carry each node's own kind.
 	b = appendFleetRec(b, rec)

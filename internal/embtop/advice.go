@@ -126,7 +126,7 @@ func Advise(in AdviceInput) Advice {
 	// No resource binds. The tail decides, when there is one worth deciding on.
 	if thin {
 		adv.Thin = true
-		adv.Text = fmt.Sprintf("no attribution: the p95 rests on %d events, %d of them runs — too thin to act on",
+		adv.Text = fmt.Sprintf("no attribution: the p95 rests on %d events, %d of them runs, too thin to act on",
 			in.Paths.Total, in.Paths.Reran)
 		return adv
 	}
@@ -361,23 +361,23 @@ func isCapacity(action string) bool {
 func actionVerb(action string) string {
 	switch action {
 	case ActionCPUBudget:
-		return "raise cpu_budget — "
+		return "raise cpu_budget: "
 	case ActionHostCPU:
-		return "raise the node's CPU entitlement — "
+		return "raise the node's CPU entitlement: "
 	case ActionThreads:
-		return "lower intra_op_threads — "
+		return "lower intra_op_threads: "
 	case ActionWorkers:
-		return "raise workers — "
+		return "raise workers: "
 	case ActionBatch:
-		return "widen the batch window — "
+		return "widen the batch window: "
 	case ActionCache:
-		return "grow the cache — "
+		return "grow the cache: "
 	case ActionModel:
-		return "take work off the model — "
+		return "take work off the model for "
 	case ActionMemory:
-		return "raise memory — "
+		return "raise memory: "
 	case ActionGrowth:
-		return "debug the growth — "
+		return "debug the growth: "
 	default:
 		return ""
 	}

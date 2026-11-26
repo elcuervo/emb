@@ -1,10 +1,10 @@
-// Package embtop provides the polling client, rate sampler, and headless
-// output shared by the emb-top TUI and its -once mode.
+// Package embtop provides RESP polling, rate sampling, and monitoring
+// interpretation shared by emb-top and emb-sidekick.
 //
 // It speaks RESP2 against a running emb node using only the commands the
 // server already exposes (EMB.MODELS, EMB.INFO, EMB.STATS, MONITOR, AUTH),
 // over the wire client in internal/resp. It imports nothing from
-// internal/server, so the tool builds without CGo/onnxruntime.
+// internal/server, so both tools build without CGo/onnxruntime.
 package embtop
 
 import (
@@ -175,6 +175,7 @@ type ModelStats struct {
 	EmbedRunUs           int64
 	EmbedRuns            int64
 	EmbedSessionsBusy    int64
+	EmbedPhasesKnown     bool // false on older nodes without measured phase counters
 	EmbedSessionsTotal   int64
 }
 
@@ -536,5 +537,6 @@ func parseModelStats(r Reply) *ModelStats {
 		EmbedSessionsBusy:    int64(intField(m, "embed_sessions_busy")),
 		EmbedSessionsTotal:   int64(intField(m, "embed_sessions_total")),
 	}
+	_, ms.EmbedPhasesKnown = m["embed_runs"]
 	return ms
 }

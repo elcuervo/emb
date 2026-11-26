@@ -74,6 +74,8 @@ build:
         -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-top ./cmd/emb-top
     CGO_ENABLED=0 go build \
         -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-stress ./cmd/emb-stress
+    CGO_ENABLED=0 go build \
+        -ldflags="-X main.version={{image_tag}}" -o ./bin/emb-sidekick ./cmd/emb-sidekick
 
 # Drive synthetic embedding load across a fleet with emb-stress, and learn
 # where the knee is. `target` is one host:port or a DNS name (expanded to one

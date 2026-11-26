@@ -43,10 +43,13 @@ jobs:
 
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Test
         run: go test -short ./internal/config/... ./internal/hfhub/...
@@ -111,10 +114,13 @@ jobs:
 
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Build binary
         run: |
@@ -125,17 +131,18 @@ jobs:
             go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb ./cmd/emb
           CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb-top ./cmd/emb-top
           CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb-stress ./cmd/emb-stress
+          CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-amd64/emb-sidekick ./cmd/emb-sidekick
 
       - name: Package artifact
         run: |
           VNUM="${TAG_NAME#v}"
           cp /opt/onnxruntime/lib/libonnxruntime.so* dist/linux-amd64/
           cd dist/linux-amd64
-          tar czf "../emb_${VNUM}_linux_amd64.tar.gz" emb emb-top emb-stress libonnxruntime.so*
+          tar czf "../emb_${VNUM}_linux_amd64.tar.gz" emb emb-top emb-stress emb-sidekick libonnxruntime.so*
           cd ../..
           tarball="dist/emb_${VNUM}_linux_amd64.tar.gz"
           tar tzf "$tarball" > /tmp/emb-members.txt
-          for member in emb emb-top emb-stress; do
+          for member in emb emb-top emb-stress emb-sidekick; do
             grep -qx "$member" /tmp/emb-members.txt || { echo "::error::$tarball is missing $member"; exit 1; }
           done
 
@@ -164,6 +171,11 @@ jobs:
       - name: Set tag name
         run: echo "TAG_NAME=${{ github.event.release.tag_name || github.ref_name || inputs.tag_name }}" >> $GITHUB_ENV
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
@@ -176,6 +188,10 @@ jobs:
             --build-arg TOKENIZERS_VERSION=${TOKENIZERS_VERSION} \
             --build-arg EMB_VERSION=${TAG_NAME#v} \
             .
+      - name: Build standalone sidekick
+        run: |
+          mkdir -p dist/linux-arm64-pkg
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/linux-arm64-pkg/emb-sidekick ./cmd/emb-sidekick
 
       - name: Package artifact
         run: |
@@ -186,11 +202,11 @@ jobs:
           cp dist/linux-arm64/usr/local/bin/emb-stress dist/linux-arm64-pkg/
           cp dist/linux-arm64/usr/lib/libonnxruntime.so* dist/linux-arm64-pkg/
           cd dist/linux-arm64-pkg
-          tar czf "../emb_${VNUM}_linux_arm64.tar.gz" emb emb-top emb-stress libonnxruntime.so*
+          tar czf "../emb_${VNUM}_linux_arm64.tar.gz" emb emb-top emb-stress emb-sidekick libonnxruntime.so*
           cd ../..
           tarball="dist/emb_${VNUM}_linux_arm64.tar.gz"
           tar tzf "$tarball" > /tmp/emb-members.txt
-          for member in emb emb-top emb-stress; do
+          for member in emb emb-top emb-stress emb-sidekick; do
             grep -qx "$member" /tmp/emb-members.txt || { echo "::error::$tarball is missing $member"; exit 1; }
           done
 
@@ -242,17 +258,18 @@ jobs:
             go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb ./cmd/emb
           CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb-top ./cmd/emb-top
           CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb-stress ./cmd/emb-stress
+          CGO_ENABLED=0 go build -ldflags="-X main.version=${TAG_NAME#v}" -o dist/emb-sidekick ./cmd/emb-sidekick
 
       - name: Package artifact
         run: |
           VNUM="${TAG_NAME#v}"
           cp -L /opt/homebrew/opt/onnxruntime/lib/libonnxruntime*.dylib dist/
           cd dist
-          tar czf "emb_${VNUM}_darwin_arm64.tar.gz" emb emb-top emb-stress libonnxruntime*.dylib
+          tar czf "emb_${VNUM}_darwin_arm64.tar.gz" emb emb-top emb-stress emb-sidekick libonnxruntime*.dylib
           cd ..
           tarball="dist/emb_${VNUM}_darwin_arm64.tar.gz"
           tar tzf "$tarball" > /tmp/emb-members.txt
-          for member in emb emb-top emb-stress; do
+          for member in emb emb-top emb-stress emb-sidekick; do
             grep -qx "$member" /tmp/emb-members.txt || { echo "::error::$tarball is missing $member"; exit 1; }
           done
 
@@ -331,10 +348,13 @@ jobs:
 
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Build emb binary
         run: |

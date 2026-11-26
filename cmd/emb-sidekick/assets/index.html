@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111110">
+  <meta name="robots" content="noindex, nofollow">
+  <title>sidekick</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to measurements</a>
+  <div class="shell">
+    <header class="masthead">
+      <div class="identity"><strong class="mark">emb</strong><span class="product">sidekick</span></div>
+      <div class="connection" id="connection" role="status" aria-live="polite" aria-atomic="true">Connecting to the monitor</div>
+    </header>
+    <div class="toolbar">
+      <nav id="navigation" aria-label="Monitor views"></nav>
+      <div class="range" role="group" aria-label="History window">
+        <span class="range-label">Window</span>
+        <button type="button" data-range="1" aria-pressed="false">1m</button>
+        <button type="button" data-range="5" aria-pressed="true">5m</button>
+      </div>
+    </div>
+    <main id="main" tabindex="-1">
+      <section class="waiting" aria-labelledby="waiting-title">
+        <h1 id="waiting-title">Connecting.</h1>
+        <p>The first measured snapshot has not arrived. Numbers appear as soon as a node answers.</p>
+      </section>
+    </main>
+    <footer class="foot"><span>sidekick</span><span>Five minutes of history in memory · no request payloads</span></footer>
+  </div>
+  <noscript><div class="noscript">JavaScript is required.</div></noscript>
+</body>
+</html>

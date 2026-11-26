@@ -225,13 +225,18 @@ jobs:
           sudo tar xzf /tmp/libtokenizers.tgz -C /opt/libtokenizers
           rm /tmp/libtokenizers.tgz
 
+      # microsoft/onnxruntime publishes no release archive on GitHub any more, so
+      # the runtime comes from the official NuGet package: headers under
+      # build/native/include, the shared library under runtimes/<rid>/native.
       - name: Install ONNX Runtime
         run: |
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION#v}.tgz" \
-            -o /tmp/onnx.tgz
-          sudo mkdir -p /opt/onnxruntime
-          sudo tar xzf /tmp/onnx.tgz -C /opt/onnxruntime --strip-components=1
-          rm /tmp/onnx.tgz
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          sudo mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib
+          sudo cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/
+          sudo cp /tmp/onnx/runtimes/linux-x64/native/libonnxruntime*.so /opt/onnxruntime/lib/
+          rm -rf /tmp/onnx /tmp/onnx.zip
 
       - name: Cache the minilm fixture
         uses: actions/cache@v4
@@ -510,12 +515,13 @@ jobs:
 
       - name: Install ONNX Runtime (arm64)
         run: |
-          ORT_VER="${ORT_VERSION#v}"
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/${ORT_VERSION}/onnxruntime-linux-aarch64-${ORT_VER}.tgz" \
-            -o /tmp/onnx.tgz
-          mkdir -p "${ORT_DIR}"
-          tar xzf /tmp/onnx.tgz -C "${ORT_DIR}" --strip-components=1
-          rm /tmp/onnx.tgz
+          url="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          curl -fsSL "$url" -o /tmp/onnx.zip
+          unzip -q /tmp/onnx.zip -d /tmp/onnx
+          mkdir -p "${ORT_DIR}/include" "${ORT_DIR}/lib"
+          cp /tmp/onnx/build/native/include/*.h "${ORT_DIR}/include/"
+          cp /tmp/onnx/runtimes/linux-arm64/native/libonnxruntime*.so "${ORT_DIR}/lib/"
+          rm -rf /tmp/onnx /tmp/onnx.zip
           echo "CGO_CFLAGS=-I${ORT_DIR}/include" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=${CGO_LDFLAGS} -L${ORT_DIR}/lib -lonnxruntime" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=${ORT_DIR}/lib" >> "$GITHUB_ENV"

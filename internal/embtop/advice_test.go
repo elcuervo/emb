@@ -238,7 +238,7 @@ func TestAdviseNamesTheHostAndRejectsWorkers(t *testing.T) {
 func TestAdviceTextNamesTheActionAndTheRejectedOne(t *testing.T) {
 	adv := Advice{Action: ActionCPUBudget, Text: "cpu budget is the limit: tokens 2/2 held", Rejected: ActionWorkers, Why: "callers are refused at the gate"}
 	line := AdviceText(adv)
-	if !strings.HasPrefix(line, "raise cpu_budget — ") {
+	if !strings.HasPrefix(line, "raise cpu_budget: ") {
 		t.Errorf("the line does not open with the action: %q", line)
 	}
 	if !strings.Contains(line, "not more workers: callers are refused at the gate") {
