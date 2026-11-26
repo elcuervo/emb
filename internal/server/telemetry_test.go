@@ -367,39 +367,33 @@ func TestTelemetryEndToEnd(t *testing.T) {
 	}
 	c.Close()
 
-	// Wait for at least two exports so the second can carry deltas.
+	// The request may not appear in either of the first exports. Keep scanning
+	// new exports until its delta arrives or the deadline expires.
 	deadline := time.After(5 * time.Second)
-	for {
+	var (
+		captured [][]byte
+		req      map[string]any
+	)
+	for req == nil {
 		mu.Lock()
-		n := len(bodies)
+		next := append([][]byte(nil), bodies[len(captured):]...)
 		mu.Unlock()
-		if n >= 2 {
+		for _, body := range next {
+			captured = append(captured, body)
+			candidate := decodeOTLP(t, body)
+			if requestsDelta(t, candidate) > 0 {
+				req = candidate
+				break
+			}
+		}
+		if req != nil {
 			break
 		}
 		select {
 		case <-hit:
 		case <-deadline:
-			t.Fatal("timed out waiting for telemetry exports")
+			t.Fatalf("no export carried a positive emb.requests delta (%d exports)", len(captured))
 		}
-	}
-
-	mu.Lock()
-	captured := append([][]byte(nil), bodies...)
-	mu.Unlock()
-
-	// The batch's delta rides exactly one export. A later export legitimately
-	// carries zero, so read the newest one that actually saw the requests
-	// instead of assuming the last body arrived before the delta was consumed.
-	var req map[string]any
-	for i := len(captured) - 1; i >= 0; i-- {
-		candidate := decodeOTLP(t, captured[i])
-		if requestsDelta(t, candidate) > 0 {
-			req = candidate
-			break
-		}
-	}
-	if req == nil {
-		t.Fatalf("no export carried a positive emb.requests delta (%d exports)", len(captured))
 	}
 	attrs := resourceAttrs(t, req)
 	if attrs["service.name"] != "emb" {
