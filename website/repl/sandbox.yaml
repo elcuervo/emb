@@ -36,7 +36,7 @@ max_pairs: 8
 max_command_bytes: 1048576
 
 # The image surface is enabled for two plates — the preloaded zeroshot preset and
-# PLATE VII's own dense-features model — and bounded before decode: at most two
+# PLATE VI's own dense-features model — and bounded before decode: at most two
 # images per command (the plate sends one), a quarter of a megabyte each on the
 # wire, and one megapixel of decoded pixels. The bridge enforces the same counts (see
 # `Limits.MaxImages`/`MaxImageBytes`), and only the preloaded image preset may
@@ -144,7 +144,7 @@ models:
       - presets/zeroshot.lua
       - presets/clip_text.lua
 
-  # PLATE VII's one model: a real monocular depth model, because a dense feature
+  # PLATE VI's one model: a real monocular depth model, because a dense feature
   # map is not a depth map (docs/image-models.md). Depth Anything V2 Small is
   # Apache-2.0, 25M parameters; the int8 member is 27 MB on disk and ~100 MB
   # resident once the CPU provider dequantizes it — noise beside laya-real.
@@ -165,58 +165,6 @@ models:
           tensor: predicted_depth
           select: map
 
-  # The real audio and video models: CLAP (text-audio) and X-CLIP (text-video),
-  # each a pair of towers sharing one 512-d space. CLAP's text tower takes only
-  # `input_ids` (no attention_mask); X-CLIP declares fixed axes, so its text
-  # tower is exactly [1,77] and its video tower [1,8,3,224,224]. The audio tower
-  # is the one preloaded preset besides zeroshot that the bridge admits binary
-  # for, because a browser can compute the mel it wants.
-  clap-audio:
-    model_repo: Xenova/clap-htsat-unfused
-    onnx_file: onnx/audio_model_quantized.onnx
-    onnx: /data/models/int8/clap/audio_model_quantized.onnx
-    tokenizer: /data/models/int8/clap/tokenizer.json
-    # Like the embedding models above, the pool is pinned to one session: the
-    # batch-determinism probe fails for these exports on Linux, so an unset
-    # `workers` auto-tunes to one session per vCPU and multiplies the resident
-    # weights. Four sessions of X-CLIP fp32 OOM-killed the 8 GB machine.
-    workers: 1
-    script_preload: true
-    script_workers: 1
-    scripts:
-      - presets/clap_audio.lua
-  clap-text:
-    model_repo: Xenova/clap-htsat-unfused
-    onnx_file: onnx/text_model_quantized.onnx
-    onnx: /data/models/int8/clap/text_model_quantized.onnx
-    tokenizer: /data/models/int8/clap/tokenizer.json
-    workers: 1
-    script_preload: true
-    script_workers: 1
-    scripts:
-      - presets/clap_text.lua
-  xclip-video:
-    model_repo: imbcmdth/xclip-onnx
-    onnx_file: video_tower.onnx
-    tokenizer_repo: microsoft/xclip-base-patch16-kinetics-600
-    onnx: /data/models/fp32/xclip/video_tower.onnx
-    tokenizer: /data/models/fp32/xclip/tokenizer.json
-    workers: 1
-    script_preload: true
-    script_workers: 1
-    scripts:
-      - presets/xclip_video.lua
-  xclip-text:
-    model_repo: imbcmdth/xclip-onnx
-    onnx_file: text_tower.onnx
-    tokenizer_repo: microsoft/xclip-base-patch16-kinetics-600
-    onnx: /data/models/fp32/xclip/text_tower.onnx
-    tokenizer: /data/models/fp32/xclip/tokenizer.json
-    workers: 1
-    script_preload: true
-    script_workers: 1
-    scripts:
-      - presets/xclip_text.lua
 
   # The decision model: a 32-hidden miniature of the Laya architecture shipped
   # inside the image (testdata/laya) rather than downloaded. Its weights are

@@ -263,7 +263,7 @@ longer asks for.
 | `VALUES` anywhere in the image family | bridge | `EMB.IMG accepts only <model> BLOB [OUTPUTS <name>[,...]] with one image, for the sandbox's depth models` |
 | an image model the sandbox does not serve | bridge | `EMB.IMG serves only the sandbox's own image models (depth), not "dinov3"` |
 | a second image | bridge | `EMB.IMG takes exactly one image per call` |
-| `EMB.IMGMULTI` with image bytes | bridge | `binary arguments are accepted only by the sandbox's image or audio preset` |
+| `EMB.IMGMULTI` with image bytes | bridge | `binary arguments are accepted only by the sandbox's image preset` |
 | a map whose tensor is not `size × size` | server | refused rather than shifted; `start` or `grid` on a map fails the boot |
 | `VALUES` on a map | server | `-ERR image output "depth" is a map; request it with BLOB (70756 float32 values)` — decided before the cache or any run |
 

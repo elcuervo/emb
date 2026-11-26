@@ -43,13 +43,21 @@ kill_timeout = 40
 [http_service]
   internal_port = 8080
   force_https = true
-  # The machine stays running. Cost was accepted in exchange for removing the
-  # cold-start path, the wake-and-retry client state, and the proxy-timeout
-  # cliff on the first model download. The work ceiling, not autostop, is the
-  # cost ceiling.
-  auto_stop_machines = "off"
+  # The machine suspends when it has no traffic and resumes on the next request.
+  # Suspended, it is billed for its volume and not for CPU or memory; running,
+  # it is the same 4x/8 GB machine. `stop` would be cheaper still, but a stop
+  # throws away the loaded models, so the next visitor waits for a boot that
+  # loads every model from the volume. A suspend keeps the process, the loaded
+  # weights and the in-memory history, so the resume is the proxy's wake plus
+  # the first frame.
+  #
+  # This reverses the earlier always-on decision (it bought a cold-start-free
+  # demo). The trade is the opposite one: an idle demo pays for nothing, and a
+  # first visit after idle pays a resume. The work ceiling still bounds what a
+  # busy period can cost.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ["app"]
 
 [[http_service.checks]]
@@ -76,20 +84,25 @@ kill_timeout = 40
   # Sized from the measured set, not a guess. Resident memory is set by what the
   # CPU execution provider materializes, not by the file on disk: it expands the
   # weights to fp32 and keeps the dequantized copies, so a graph costs roughly
-  # 3-6x its file once its first call has run (docs/configuration.md). The real
-  # `typed-decisions` checkpoint dominates: as the 806 MB fp16 export the first
-  # deployment mounted it cost ~4.9 GB resident, which OOM-killed this machine in
-  # a loop once the media models were resident beside it; as the int8 export the
-  # sandbox mounts now it measures ~2.3 GB (sandbox.yaml's `laya-real` entry).
+  # 3-6x its file once its first call has run (docs/configuration.md).
+  #
+  # What fits in 4 GB, from the measured figures:
+  #   text stack (minilm, bge-small, multilingual, sst2, clip)  ~1.10 GB
+  #   depth                                                      ~0.10 GB
+  #   laya-real, int8, after its first call                      ~2.28 GB
+  #   laya miniature                                             ~0.05 GB
+  # That is ~3.5 GB of 4 GB. The media models (CLAP + X-CLIP, ~1.2-1.3 GB
+  # resident) are what did not fit and were removed with the audio/video plate;
+  # `shared-cpu-2x` is the largest machine that can hold the rest, because shared
+  # CPU memory is capped at 2 GB per CPU.
   #
   # `workers: 1` is pinned in sandbox.yaml (the bridge serializes upstream work
   # anyway), and on Linux the batch-determinism probe fails for these exports, so
   # each pool would otherwise degrade to `workers` sessions and multiply the
-  # resident weights. 8 GB holds the int8 set with headroom; it requires
-  # `shared-cpu-4x` because shared CPU memory is capped at 2 GB per CPU. Re-check
-  # the resident set before adding a model, and re-measure if one changes.
-  size = "shared-cpu-4x"
-  memory = "8gb"
+  # resident weights. Re-check the resident set before adding a model, and
+  # re-measure if one changes: the next model has about 0.5 GB to live in.
+  size = "shared-cpu-2x"
+  memory = "4gb"
 
 [mounts]
   # Models download onto the volume on the first boot and load from disk after
