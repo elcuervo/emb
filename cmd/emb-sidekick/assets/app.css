@@ -1,6 +1,6 @@
-@font-face { font-family: Archivo; src: url('/assets/fonts/archivo-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: Public Sans; src: url('/assets/fonts/public-sans-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: JetBrains Mono; src: url('/assets/fonts/jetbrains-mono-var-latin.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
+@font-face { font-family: Archivo; src: url('fonts/archivo-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: Public Sans; src: url('fonts/public-sans-var-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: JetBrains Mono; src: url('fonts/jetbrains-mono-var-latin.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
 :root { color-scheme: dark; --paper: #F3F0E8; --ink: #0B0B0B; --dark: #111110; --signal: #FF5A1F; --rule: #292823; --secondary: #B8B5AC; --soft: #D5D1C6; --warn: #E5B57C; --pad: clamp(18px, 3vw, 52px); font-family: 'Public Sans', sans-serif; font-size: 15px; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--dark); color: var(--paper); line-height: 1.45; }

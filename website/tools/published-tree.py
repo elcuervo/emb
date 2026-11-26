@@ -130,6 +130,7 @@ SERVED = frozenset(
         "demos/laya.html",
         "demos/dns.html",
         "demos/multilingual.html",
+        "demos/monitor.html",
         "demos/media/video/volcano.mp4",
         "demos/media/video/moon.mp4",
         "demos/media/video/arecibo.mp4",
@@ -194,6 +195,7 @@ SERVED = frozenset(
         "assets/img/terrain-slope.png",
         "assets/img/terrain-west.png",
         "assets/img/og.png",
+        "assets/img/sidekick-node.png",
         "assets/img/speckle.svg",
     }
 )

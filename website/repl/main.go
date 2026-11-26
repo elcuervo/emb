@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -29,6 +30,7 @@ func main() {
 	trustProxy := flag.Bool("trust-proxy", false, "key the per-client rate limit on X-Forwarded-For (only when a trusted proxy sets it)")
 	timeout := flag.Duration("timeout", 0, "per-command upstream deadline (0 = default)")
 	embTop := flag.String("emb-top", "emb-top", "path to the emb-top binary that feeds the live dashboard")
+	sidekick := flag.String("sidekick", "", "sidekick monitor origin to serve under /sidekick/ (empty = off)")
 	statsEvery := flag.Duration("stats-interval", statsInterval, "poll interval for the live dashboard")
 	statsWindowPolls := flag.Int("stats-window", statsWindow, "history window in polls for the live dashboard")
 	flag.Parse()
@@ -44,6 +46,13 @@ func main() {
 	}
 
 	b := NewBridge(*upstream, p, limits, strings.Split(*origins, ","), *trustProxy)
+	if *sidekick != "" {
+		origin, err := url.Parse(*sidekick)
+		if err != nil {
+			log.Fatalf("repl: sidekick: %v", err)
+		}
+		b.sidekick = origin
+	}
 
 	// The live dashboard is a child process, so a stop signal must reach it.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -136,9 +136,9 @@
       "file": "demos/index.html",
       "path": "/demos/",
       "indexable": true,
-      "title": "emb \u2014 the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium",
-      "description": "Fifteen small demonstrations run against a real embeddings server and a real vector index. They show what a vector is, why retrieval by meaning works, why two models produce two incomparable spaces, what a call costs, and what a script can compute and decide beside the model. They also show how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure.",
-      "social_description": "A gallery of fifteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus."
+      "title": "emb \u2014 the demos gallery: vectors, similarity, search, the atlas, the image, the parts, the graph, the decision, the zone, the medium, the sidekick",
+      "description": "Sixteen small demonstrations run against a real embeddings server and a real vector index. They show what a vector is, why retrieval by meaning works, why two models produce two incomparable spaces, what a call costs, and what a script can compute and decide beside the model. They also show how a DNS zone asks the same model a question, how a fingerprint names a recording while an embedding only describes it, and how one depth map turns a photograph into a surface you can measure. The gallery also opens a live, read-only dashboard of a server under load.",
+      "social_description": "A gallery of sixteen demos that embed real text, images and media and search a real index, over one author's public-domain corpus."
     },
     {
       "file": "demos/laya.html",
@@ -166,6 +166,14 @@
       "social_title": "emb \u2014 demos: the medium \u2014 name the tune, find the moment",
       "social_description": "A fingerprint names the exact recording; an embedding says what kind of thing it is. Then a clip is searched frame by frame by a phrase.",
       "twitter_description": "A fingerprint names the exact recording; an embedding says what kind of thing it is."
+    },
+    {
+      "file": "demos/monitor.html",
+      "path": "/demos/monitor.html",
+      "indexable": true,
+      "title": "emb \u00b7 demos: the sidekick \u00b7 a dashboard that answers under load",
+      "description": "emb-sidekick is a read-only web monitor for an emb node. It reads requests, tokens, errors, in-flight work, cache and session pressure, per-model percentiles, memory and CPU, and keeps five minutes of one-second samples in memory.",
+      "social_description": "A read-only dashboard for an emb node: rates, errors, in-flight work, cache and session meters, per-model latency and resource use, streamed live."
     },
     {
       "file": "demos/multilingual.html",

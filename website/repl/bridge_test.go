@@ -1323,3 +1323,58 @@ func TestDecodeBinaryOnlyForAllowlistedPresets(t *testing.T) {
 		}
 	})
 }
+
+// --- the sidekick mount ----------------------------------------------------
+
+func TestSidekickIsProxiedUnderItsPrefix(t *testing.T) {
+	paths := make(chan string, 4)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths <- r.URL.Path
+		_, _ = io.WriteString(w, "console.log('sidekick')")
+	}))
+	defer upstream.Close()
+
+	b := newTestBridge(t, "127.0.0.1:1", presets{}, testLimits())
+	origin, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parse origin: %v", err)
+	}
+	b.sidekick = origin
+	srv := httptest.NewServer(b.Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/sidekick/assets/app.js")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := <-paths; got != "/assets/app.js" {
+		t.Fatalf("upstream path = %q, want the prefix stripped", got)
+	}
+
+	// A path that climbs out of the prefix is cleaned by the mux, not proxied.
+	rec := httptest.NewRecorder()
+	b.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sidekick/../api/exec", nil))
+	if rec.Code < 300 || rec.Code > 399 {
+		t.Fatalf("escape status = %d, want a redirect to the cleaned path", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/api/exec" {
+		t.Fatalf("escape Location = %q, want /api/exec", loc)
+	}
+	select {
+	case p := <-paths:
+		t.Fatalf("escape reached the upstream as %q", p)
+	default:
+	}
+
+	// Without the flag the same path is not served at all.
+	plain := newTestBridge(t, "127.0.0.1:1", presets{}, testLimits())
+	rec = httptest.NewRecorder()
+	plain.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sidekick/assets/app.js", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unconfigured status = %d, want 404", rec.Code)
+	}
+}
