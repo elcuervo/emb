@@ -43,13 +43,21 @@ kill_timeout = 40
 [http_service]
   internal_port = 8080
   force_https = true
-  # The machine stays running. Cost was accepted in exchange for removing the
-  # cold-start path, the wake-and-retry client state, and the proxy-timeout
-  # cliff on the first model download. The work ceiling, not autostop, is the
-  # cost ceiling.
-  auto_stop_machines = "off"
+  # The machine suspends when it has no traffic and resumes on the next request.
+  # Suspended, it is billed for its volume and not for CPU or memory; running,
+  # it is the same 2x / 4 GB machine. `stop` would be cheaper still, but a stop
+  # throws away the loaded models, so the next visitor waits for a boot that
+  # loads every model from the volume. A suspend keeps the process, the loaded
+  # weights and the in-memory history, and a resume was measured at well under a
+  # second on this app.
+  #
+  # This reverses the earlier always-on decision (it bought a cold-start-free
+  # demo). The trade is the opposite one: an idle demo pays for nothing, and a
+  # first visit after idle pays the resume. The work ceiling still bounds what a
+  # busy period can cost.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ["app"]
 
 [[http_service.checks]]
@@ -73,23 +81,31 @@ kill_timeout = 40
   path = "/api/health"
 
 [[vm]]
-  # Sized from the measured set, not a guess. Resident memory is set by what the
-  # CPU execution provider materializes, not by the file on disk: it expands the
-  # weights to fp32 and keeps the dequantized copies, so a graph costs roughly
-  # 3-6x its file once its first call has run (docs/configuration.md). The real
-  # `typed-decisions` checkpoint dominates: as the 806 MB fp16 export the first
-  # deployment mounted it cost ~4.9 GB resident, which OOM-killed this machine in
-  # a loop once the media models were resident beside it; as the int8 export the
-  # sandbox mounts now it measures ~2.3 GB (sandbox.yaml's `laya-real` entry).
+  # Sized from a measurement on the deployed machine, not from the file sizes.
+  # Resident memory is set by what the CPU execution provider materializes: it
+  # expands the weights to fp32 and keeps the dequantized copies, so a graph
+  # costs several times its file once its first call has run
+  # (docs/configuration.md).
+  #
+  # Measured here with all eight models loaded and one real `laya-real` call:
+  #   emb                              1.58-2.25 GiB
+  #   repl + sidekick + emb-top             0.06 GiB
+  #   MemAvailable            1.3 GiB of 3.83 GiB, after a 4-call burst
+  # An earlier docs figure put `laya-real` alone at 2.28 GiB; with this int8
+  # export and ONNX Runtime the whole set is smaller than that, so the 8 GB the
+  # first deployment needed was a property of the fp16 checkpoint.
+  #
+  # The next size down does not fit: `shared-cpu-1x` / 2 GB was deployed and the
+  # kernel OOM-killed emb while the models loaded (anon-rss 1.88 GB), restarting
+  # the machine. 4 GB is the balance: half of what the set used to need, with
+  # about 1.3 GiB spare at peak.
   #
   # `workers: 1` is pinned in sandbox.yaml (the bridge serializes upstream work
   # anyway), and on Linux the batch-determinism probe fails for these exports, so
   # each pool would otherwise degrade to `workers` sessions and multiply the
-  # resident weights. 8 GB holds the int8 set with headroom; it requires
-  # `shared-cpu-4x` because shared CPU memory is capped at 2 GB per CPU. Re-check
-  # the resident set before adding a model, and re-measure if one changes.
-  size = "shared-cpu-4x"
-  memory = "8gb"
+  # resident weights. Re-measure before adding a model.
+  size = "shared-cpu-2x"
+  memory = "4gb"
 
 [mounts]
   # Models download onto the volume on the first boot and load from disk after

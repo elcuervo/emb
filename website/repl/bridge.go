@@ -33,15 +33,14 @@ import (
 var terminalFS embed.FS
 
 // imagePresetName is the sandbox's image preset, and binaryPresetNames is the
-// set of preloaded presets admitted to carry binary arguments: the image preset,
-// and the audio encoder whose input is exactly the mel tensor a browser
-// computes. Binary is still refused for every other command, so a text preset
-// can never carry bytes.
+// set of preloaded presets admitted to carry binary arguments. Only the image
+// preset is left: the audio encoder that took a browser-computed mel went with
+// the audio models when the machine halved. Binary is still refused for every
+// other command, so a text preset can never carry bytes.
 const imagePresetName = "zeroshot"
 
 var binaryPresetNames = map[string]bool{
 	imagePresetName: true,
-	"clap_audio":    true,
 }
 
 // execRequest is the one command path: the argv a client would send to emb,
@@ -269,7 +268,7 @@ func (b *Bridge) decodeBinary(req execRequest) ([]string, map[int]bool, error) {
 		if len(req.Args) > 0 && strings.EqualFold(req.Args[0], "emb.img") {
 			return nil, nil, fmt.Errorf("EMB.IMG accepts only <model> BLOB [OUTPUTS <name>[,<name>...]] with one image, for the sandbox's %s models", imageModelNames())
 		}
-		return nil, nil, fmt.Errorf("binary arguments are accepted only by the sandbox's image or audio preset")
+		return nil, nil, fmt.Errorf("binary arguments are accepted only by the sandbox's image preset")
 	}
 	if b.limits.MaxImages > 0 && len(req.Bin) > b.limits.MaxImages {
 		return nil, nil, fmt.Errorf("request carries %d images, above the sandbox cap of %d", len(req.Bin), b.limits.MaxImages)

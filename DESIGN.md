@@ -89,13 +89,13 @@ does not depend on any face; the masthead's small mark is `Archivo` at 900.
 12px desktop / 14px mobile for every functional label, including the labels inside
 a plate's own diagram, and it now holds on every ground: the plate labels that sat
 at 10–10.5px were raised to it. Two steps were made explicit rather than left
-inside a `clamp()` — the section heads settle at 34px from 1360px up, and
-`demos/medium.html`'s third level is 16px — because a hierarchy a reader cannot
-see in the sheet is one nobody maintains. The frame the `emb-top` plate replays
-keeps its one-cell leading as a named token, `--frame-cell: 1.05`: JetBrains Mono
-draws its box characters 1.23em tall, so a 1.3 cell would leave a sub-pixel seam
-every row, and `assets/js/topviz.js` hands the player the same 1.05 so the still
-frame and the take stay on one grid.
+inside a `clamp()` — the section heads settle at 34px from 1360px up, and a plate's
+third level is 16px — because a hierarchy a reader cannot see in the sheet is one
+nobody maintains. The frame the `emb-top` plate replays keeps its one-cell leading
+as a named token, `--frame-cell: 1.05`: JetBrains Mono draws its box characters
+1.23em tall, so a 1.3 cell would leave a sub-pixel seam every row, and
+`assets/js/topviz.js` hands the player the same 1.05 so the still frame and the
+take stay on one grid.
 
 ## Display type
 
