@@ -119,7 +119,7 @@
       <h2 class="sec__h" id="what-it-measures-h">WHAT IT MEASURES</h2>
 
       <p class="block__deck">Requests and tokens per second, with a five-minute sparkline. Errors per second. In-flight requests: work the node has accepted and not yet finished. Cache hits, misses and evictions. Session pressure, which is how many model sessions are in use against how many the node holds.</p>
-      <p class="block__deck">Per model, the server's own p50, p95 and p99 latency sit beside an event-derived p95. The first three are the server percentiles the node reports. The event-derived p95 is computed by the monitor from completed-request events, so a gap between the two readings stays visible.</p>
+      <p class="block__deck">Per model, the node reports p50, p95 and p99 over its retained event window, and the page computes its own p95 from the 128 newest completed requests it receives. Both come from request events; they differ in how many events each covers, so a spike inside the last 128 stays visible when the wider window looks calm.</p>
       <p class="block__deck">Memory, CPU and connection counts complete the page. Every reading comes from the node's <span class="t-cmd">EMB.INFO</span>, <span class="t-cmd">EMB.STATS</span>, <span class="t-cmd">EMB.MODELS</span> and <span class="t-cmd">MONITOR</span> replies. A measurement the node does not provide is shown as unavailable, never as zero.</p>
     </div></div>
   </section>
@@ -129,7 +129,7 @@
       <h2 class="sec__h" id="why-it-matters-h">WHY IT MATTERS UNDER LOAD</h2>
 
       <p class="block__deck">A dashboard is worth the most when the node is busy, which is when a page that polls the node on every redraw would add work to the thing it is measuring. The sidekick polls once per second and keeps the history in its own process, so redrawing a chart costs the node nothing.</p>
-      <p class="block__deck">Latency percentiles answer different questions. p50 is what a typical caller waits. p95 and p99 show the tail, which is where a timeout lives. The event-derived p95 is a second opinion from the request events, so one slow model does not hide behind a healthy average.</p>
+      <p class="block__deck">Latency percentiles answer different questions. p50 is what a typical caller waits. p95 and p99 show the tail, which is where a timeout lives. The page's own p95 covers only the newest 128 requests, so one slow model shows there while the node's wider-window numbers can still look healthy.</p>
       <p class="block__deck">Cache and session pressure tell you where a slowdown comes from. A cache that stops hitting sends work back to the model. A session pool at its limit queues requests before they run. In-flight counts make that queue visible while it is happening.</p>
     </div></div>
   </section>

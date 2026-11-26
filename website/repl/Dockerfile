@@ -29,7 +29,8 @@ RUN set -eux; \
     esac; \
     curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg" \
       -o /tmp/onnx.zip; \
-    unzip -q /tmp/onnx.zip -d /tmp/onnx; \
+    # The Go image ships python3 but not unzip; its zipfile module opens the package.
+    python3 -m zipfile -e /tmp/onnx.zip /tmp/onnx; \
     mkdir -p /opt/onnxruntime/include /opt/onnxruntime/lib; \
     cp /tmp/onnx/build/native/include/*.h /opt/onnxruntime/include/; \
     cp /tmp/onnx/runtimes/${ORT_RID}/native/libonnxruntime*.so /opt/onnxruntime/lib/; \
