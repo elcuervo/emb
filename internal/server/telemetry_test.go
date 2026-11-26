@@ -461,27 +461,40 @@ func resourceAttrs(t *testing.T, req map[string]any) map[string]string {
 
 func metricByName(t *testing.T, req map[string]any, name string) map[string]any {
 	t.Helper()
-	rms := req["resourceMetrics"].([]any)
-	rm := rms[0].(map[string]any)
-	sms := rm["scopeMetrics"].([]any)
-	for _, sm := range sms {
-		metrics, _ := sm.(map[string]any)["metrics"].([]any)
-		for _, m := range metrics {
-			mm := m.(map[string]any)
-			if mm["name"] == name {
-				return mm
+	m, ok := findMetricByName(req, name)
+	if !ok {
+		t.Fatalf("metric %q not found", name)
+	}
+	return m
+}
+
+func findMetricByName(req map[string]any, name string) (map[string]any, bool) {
+	rms, _ := req["resourceMetrics"].([]any)
+	for _, rm := range rms {
+		rmMap, _ := rm.(map[string]any)
+		sms, _ := rmMap["scopeMetrics"].([]any)
+		for _, sm := range sms {
+			smMap, _ := sm.(map[string]any)
+			metrics, _ := smMap["metrics"].([]any)
+			for _, m := range metrics {
+				mm, _ := m.(map[string]any)
+				if mm["name"] == name {
+					return mm, true
+				}
 			}
 		}
 	}
-	t.Fatalf("metric %q not found", name)
-	return nil
+	return nil, false
 }
 
 // requestsDelta reads the emb.requests sum's single data point, 0 when the
 // export carried no counted request.
 func requestsDelta(t *testing.T, req map[string]any) int64 {
 	t.Helper()
-	metric := metricByName(t, req, "emb.requests")
+	metric, ok := findMetricByName(req, "emb.requests")
+	if !ok {
+		return 0
+	}
 	sum, _ := metric["sum"].(map[string]any)
 	points, _ := sum["dataPoints"].([]any)
 	if len(points) == 0 {
