@@ -343,7 +343,7 @@ func TestImageResourcesEmbedSingleRunBatched(t *testing.T) {
 	elem := plan.ElementCount()
 	a := make([]float32, elem)
 	b := make([]float32, elem)
-	got, err := res.Embed([][]float32{a, b}, outputs)
+	got, _, err := res.Embed([][]float32{a, b}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestImageResourcesMeanPoolNormalizes(t *testing.T) {
 	}
 	outputs := []ImageOutput{{Name: "embedding", Tensor: "last_hidden_state", Select: "mean", Rows: 1, Dim: 2}}
 	res := &ImageResources{Sessions: []onnx.NamedSession{fake}, Plan: plan, Outputs: outputs, Normalize: true}
-	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	got, _, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -718,7 +718,7 @@ func TestImageResourcesTokenGridValidation(t *testing.T) {
 		},
 	}}
 	res := &ImageResources{Sessions: []onnx.NamedSession{ok}, Plan: plan, Outputs: outputs, Normalize: false}
-	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	got, _, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -736,7 +736,7 @@ func TestImageResourcesTokenGridValidation(t *testing.T) {
 		},
 	}}
 	res = &ImageResources{Sessions: []onnx.NamedSession{short}, Plan: plan, Outputs: outputs}
-	_, err = res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	_, _, err = res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err == nil {
 		t.Fatal("expected a row-count refusal")
 	}

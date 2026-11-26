@@ -155,7 +155,7 @@ func TestMonitorEventShape(t *testing.T) {
 	c.Write([]byte("*3\r\n$3\r\nEMB\r\n$4\r\ntest\r\n$1\r\nx\r\n"))
 	readRESP(t, c)
 
-	// Under RESP3 each event is a map carrying the same eleven field names the
+	// Under RESP3 each event is a map carrying the same twelve field names the
 	// RESP2 array does, the original six plus this request's attribution.
 	c.Write([]byte("*1\r\n$7\r\nMONITOR\r\n"))
 	resp := readRESP(t, c)

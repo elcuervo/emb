@@ -47,15 +47,17 @@ type Event struct {
 	Texts     int
 	LatencyUs int64
 	Err       bool
-	// The request's attribution: how many of its texts the reply cache
-	// answered, whether the phases below were measured by the server, and the
-	// time its texts that were not cache-answered waited for a session or
-	// batch window, waited at the process CPU admission gate, and ran.
-	CachedTexts int
-	Attributed  bool
-	DispatchUs  int64
-	AdmitUs     int64
-	RunUs       int64
+	// The request's attribution: how many of its texts (or images, for image
+	// commands) the reply cache answered, whether the phases below were measured
+	// by the server, its image preprocessing time, and the time its work that
+	// was not cache-answered waited for a session or batch window, waited at the
+	// process CPU admission gate, and ran.
+	CachedTexts  int
+	Attributed   bool
+	PreprocessUs int64
+	DispatchUs   int64
+	AdmitUs      int64
+	RunUs        int64
 }
 
 // CacheServed reports whether every text of this event was answered from the
@@ -256,9 +258,10 @@ func (c *Client) Poll(known []string, afterSeq uint64) (*PollResult, error) {
 
 // parseEvents decodes the MONITOR reply: array of [seq, at_us, model,
 // texts, latency_us, err, cached_texts, attributed, dispatch_us, admit_us,
-// run_us] arrays. A server predating the attribution sends the first six
-// fields only: such an event is read without an attribution rather than as a
-// run that spent no time.
+// run_us, preprocess_us] arrays. Servers predating the appended fields send
+// fewer: an event is read with whatever attribution it carries rather than as a
+// run that spent no time, and a phase an older server never measured stays zero
+// because such an event is not attributed.
 func parseEvents(r Reply) []Event {
 	if r.Type != '*' {
 		return nil
@@ -284,6 +287,9 @@ func parseEvents(r Reply) []Event {
 			e.DispatchUs = row.Elems[8].Int
 			e.AdmitUs = row.Elems[9].Int
 			e.RunUs = row.Elems[10].Int
+		}
+		if len(row.Elems) >= 12 {
+			e.PreprocessUs = row.Elems[11].Int
 		}
 		evs = append(evs, e)
 	}

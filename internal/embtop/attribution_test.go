@@ -11,6 +11,7 @@ func TestParseEventsReadsTheAttribution(t *testing.T) {
 		{Type: ':', Int: 3}, {Type: ':', Int: 900}, {Type: ':', Int: 0},
 		{Type: ':', Int: 1}, {Type: ':', Int: 1},
 		{Type: ':', Int: 40}, {Type: ':', Int: 120}, {Type: ':', Int: 700},
+		{Type: ':', Int: 55},
 	}}
 	evs := parseEvents(Reply{Type: '*', Elems: []Reply{row}})
 	if len(evs) != 1 {
@@ -20,7 +21,7 @@ func TestParseEventsReadsTheAttribution(t *testing.T) {
 	if ev.CachedTexts != 1 || !ev.Attributed {
 		t.Errorf("path not decoded: %+v", ev)
 	}
-	if ev.DispatchUs != 40 || ev.AdmitUs != 120 || ev.RunUs != 700 {
+	if ev.DispatchUs != 40 || ev.AdmitUs != 120 || ev.RunUs != 700 || ev.PreprocessUs != 55 {
 		t.Errorf("phases not decoded: %+v", ev)
 	}
 	if !ev.Reran() {
@@ -47,6 +48,28 @@ func TestParseEventsWithoutAttribution(t *testing.T) {
 	}
 	if evs[0].DispatchUs != 0 || evs[0].AdmitUs != 0 || evs[0].RunUs != 0 {
 		t.Errorf("absent phases are not zero: %+v", evs[0])
+	}
+}
+
+func TestParseEventsWithoutPreprocess(t *testing.T) {
+	// A server predating the appended preprocess field sends eleven elements:
+	// the attribution is read, and the never-measured phase stays zero.
+	row := Reply{Type: '*', Elems: []Reply{
+		{Type: ':', Int: 1}, {Type: ':', Int: 10}, {Type: '$', Str: "m"},
+		{Type: ':', Int: 1}, {Type: ':', Int: 500}, {Type: ':', Int: 0},
+		{Type: ':', Int: 0}, {Type: ':', Int: 1},
+		{Type: ':', Int: 1}, {Type: ':', Int: 2}, {Type: ':', Int: 3},
+	}}
+	evs := parseEvents(Reply{Type: '*', Elems: []Reply{row}})
+	if len(evs) != 1 {
+		t.Fatalf("parsed %d events, want 1", len(evs))
+	}
+	ev := evs[0]
+	if !ev.Attributed || ev.RunUs != 3 {
+		t.Errorf("eleven-field event not decoded: %+v", ev)
+	}
+	if ev.PreprocessUs != 0 {
+		t.Errorf("an unmeasured preprocess phase decoded as %d, want 0", ev.PreprocessUs)
 	}
 }
 
@@ -88,9 +111,10 @@ func TestPathCountsAndUncachedPercentiles(t *testing.T) {
 	}
 }
 
-// TestPathCountsIgnoreUnattributedEvents keeps the population honest: an image
-// run carries no attribution, so it must not dilute the cached share nor pad a
-// thin text tail into one that looks big enough to act on.
+// TestPathCountsIgnoreUnattributedEvents keeps the population honest: an event
+// without attribution (an older server, or a request that failed before any
+// inference) says nothing about the path, so it must not dilute the cached share
+// nor pad a thin text tail into one that looks big enough to act on.
 func TestPathCountsIgnoreUnattributedEvents(t *testing.T) {
 	s := NewSampler(10)
 	events := []Event{

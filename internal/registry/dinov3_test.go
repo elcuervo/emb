@@ -121,7 +121,7 @@ func TestDINOv3CommunityExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preprocessing: %v", err)
 	}
-	got, err := res.Embed([][]float32{tensor}, res.Outputs)
+	got, _, err := res.Embed([][]float32{tensor}, res.Outputs)
 	if err != nil {
 		t.Fatalf("embedding: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestDINOv3KorniaExport(t *testing.T) {
 	}
 	// One image per run: the graph rejects a larger batch, which is why the
 	// server caps its chunk at BatchCap.
-	got, err := res.Embed([][]float32{tensor}, res.Outputs)
+	got, _, err := res.Embed([][]float32{tensor}, res.Outputs)
 	if err != nil {
 		t.Fatalf("embedding: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestDINOv3KorniaExport(t *testing.T) {
 
 	// A batch of two must be refused by the graph, which is the reason the chunk
 	// cap exists: the static axis is the constraint, not a server convention.
-	if _, err := res.Embed([][]float32{tensor, tensor}, res.Outputs); err == nil {
+	if _, _, err := res.Embed([][]float32{tensor, tensor}, res.Outputs); err == nil {
 		t.Fatal("batch-1 graph accepted a two-image run")
 	} else if !strings.Contains(err.Error(), "Expected: 1") {
 		t.Fatalf("batch error = %v, want the graph's static batch of 1", err)

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tidwall/redcon"
@@ -150,9 +151,9 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	total := len(imgArgs)
 
 	failed := false
-	// An image request's inference runs on its own named-tensor sessions, which
-	// keep no dispatch or run accounting, so its event carries the cache-served
-	// count and no phases: absent attribution, not a claim of a free run.
+	// The image path is attributed from embedImages on: preprocessing and the
+	// image-session phases are measured there. A request that fails before it
+	// reaches embedImages keeps the absent attribution.
 	var attribution requestAttribution
 	defer func() {
 		s.recordRequest(MonitorEvent{
@@ -211,8 +212,7 @@ func (s *Server) handleIMG(conn redcon.Conn, cmd redcon.Command) {
 	}
 	images := imgArgs[:n]
 
-	results, cached, errs := s.embedImages(modelName, res, outputs, images)
-	attribution.cachedTexts = cached
+	results, attribution, errs := s.embedImages(modelName, res, outputs, images)
 	for _, e := range errs {
 		if e != nil {
 			failed = true
@@ -291,8 +291,12 @@ func writeImageOutputValue(conn redcon.Conn, format replyFormat, o registry.Imag
 // preprocessed (in parallel) and run in bounded batched inferences that compute
 // every still-missing output from one run per chunk. results[i] is nil when
 // images[i] failed and errs[i] carries its error. A single bad image never fails
-// the others. The returned count is how many images the reply cache answered
-// completely.
+// the others.
+//
+// The returned attribution describes this request: attributed true (the request
+// reached the image path), how many images the reply cache answered completely,
+// preprocessing time measured around each plan.Tensor call, and the summed
+// dispatch/admission/run timings of its image-session runs.
 //
 // Work is chunked by a fixed tensor budget: an image expands to exactly
 // 3*size*size float32 values regardless of its encoded size, so a command
@@ -300,11 +304,11 @@ func writeImageOutputValue(conn redcon.Conn, format replyFormat, o registry.Imag
 // decoded tensors (plus one equally large contiguous batch) before any inference
 // runs. Chunking keeps peak memory proportional to the budget, not to the number
 // of images.
-func (s *Server) embedImages(modelName string, res *registry.ImageResources, outputs []registry.ImageOutput, images [][]byte) ([]map[string][]byte, int, []error) {
+func (s *Server) embedImages(modelName string, res *registry.ImageResources, outputs []registry.ImageOutput, images [][]byte) ([]map[string][]byte, requestAttribution, []error) {
 	results := make([]map[string][]byte, len(images))
 	errs := make([]error, len(images))
 	if len(images) == 0 {
-		return results, 0, errs
+		return results, requestAttribution{attributed: true}, errs
 	}
 
 	cached := 0
@@ -332,7 +336,9 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 		misses = append(misses, i)
 	}
 	if len(misses) == 0 {
-		return results, cached, errs
+		// Every image was cache-answered: an attributed request with no phases,
+		// because nothing ran.
+		return results, requestAttribution{cachedTexts: cached, attributed: true}, errs
 	}
 
 	// Per-request plan copy carries the server's live byte/pixel caps without
@@ -360,6 +366,12 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 		tensor []float32
 		err    error
 	}
+	var (
+		preprocessTotal time.Duration
+		dispatchTotal   time.Duration
+		admissionTotal  time.Duration
+		runTotal        time.Duration
+	)
 	for start := 0; start < len(misses); start += chunkSize {
 		end := start + chunkSize
 		if end > len(misses) {
@@ -393,17 +405,21 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 		}
 		sem := make(chan struct{}, workers)
 		var wg sync.WaitGroup
+		var preprocessNs atomic.Int64
 		for j, slot := range chunk {
 			wg.Add(1)
 			sem <- struct{}{}
 			go func(j, slot int) {
 				defer wg.Done()
 				defer func() { <-sem }()
+				t0 := time.Now()
 				t, err := plan.Tensor(images[slot])
+				preprocessNs.Add(int64(time.Since(t0)))
 				out[j] = preprocessed{slot: slot, tensor: t, err: err}
 			}(j, slot)
 		}
 		wg.Wait()
+		preprocessTotal += time.Duration(preprocessNs.Load())
 
 		tensors := make([][]float32, 0, len(out))
 		slots := make([]int, 0, len(out))
@@ -428,7 +444,11 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 				tensors = append(tensors, tensors[0])
 			}
 		}
-		computed, err := res.Embed(tensors, need)
+		computed, timing, err := res.Embed(tensors, need)
+		// A failed or refused run still paid its waits; only its results are lost.
+		dispatchTotal += timing.DispatchWait
+		admissionTotal += timing.AdmissionWait
+		runTotal += timing.Run
 		if err != nil {
 			for _, slot := range slots {
 				errs[slot] = err
@@ -462,7 +482,15 @@ func (s *Server) embedImages(modelName string, res *registry.ImageResources, out
 			results[i] = nil
 		}
 	}
-	return results, cached, errs
+	res.AddPreprocess(preprocessTotal)
+	return results, requestAttribution{
+		cachedTexts:   cached,
+		attributed:    true,
+		preprocess:    preprocessTotal,
+		dispatchWait:  dispatchTotal,
+		admissionWait: admissionTotal,
+		run:           runTotal,
+	}, errs
 }
 
 // handleIMGMULTI implements EMB.IMGMULTI [BLOB|VALUES] [OUTPUTS <name>[,...]]
@@ -561,7 +589,7 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, names []string, results []m
 	started := time.Now()
 	s.imageRequests.Add(1)
 	failed := false
-	// See handleIMG: the image path reports its cache-served count only.
+	// See handleIMG: attribution starts once embedImages measures the phases.
 	var attribution requestAttribution
 	defer func() {
 		s.recordRequest(MonitorEvent{
@@ -590,8 +618,7 @@ func (s *Server) processIMGMultiPair(pairs [][]byte, names []string, results []m
 		failed = true
 		return
 	}
-	embeddings, cached, errs := s.embedImages(model, res, outputs, [][]byte{data})
-	attribution.cachedTexts = cached
+	embeddings, attribution, errs := s.embedImages(model, res, outputs, [][]byte{data})
 	if len(errs) == 1 && errs[0] != nil {
 		failed = true
 		return

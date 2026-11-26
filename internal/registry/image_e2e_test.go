@@ -123,7 +123,7 @@ func TestImageEmbeddingEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preprocessing: %v", err)
 	}
-	embs, err := res.Embed([][]float32{tensor}, res.Outputs)
+	embs, _, err := res.Embed([][]float32{tensor}, res.Outputs)
 	if err != nil {
 		t.Fatalf("embedding: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestSigLIP2VisionAutoconfigAndReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preprocessing: %v", err)
 	}
-	embs, err := res.Embed([][]float32{tensor}, res.Outputs)
+	embs, _, err := res.Embed([][]float32{tensor}, res.Outputs)
 	if err != nil {
 		t.Fatalf("embedding: %v", err)
 	}

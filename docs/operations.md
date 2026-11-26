@@ -123,21 +123,34 @@ churn (and to confirm no memory leak: RSS/goroutines flat between polls).
 ### Dispatch and run counters
 
 `EMB.INFO <model>` and the per-model lines of `EMB.STATS` report, separately for
-the script path (`script_*`) and the embedding path (`embed_*`):
+the script path (`script_*`), the embedding path (`embed_*`) and the image path
+(`image_*`):
 
 - `dispatch_wait_us` — cumulative time requests spent waiting for a free
-  session or worker
-- `run_us` — cumulative ORT inference time
-- `runs` — inference runs
-- `sessions_busy` / `sessions_total` — live session occupancy
+  session or worker (image path: `image_dispatch_wait_us`)
+- `run_us` — cumulative ORT inference time (`image_run_us`)
+- `preprocess_us` — image path only: cumulative tensor preprocessing before
+  inference (`image_preprocess_us`)
+- `runs` — inference runs (`image_runs`)
+- `sessions_busy` / `sessions_total` — live session occupancy (image path:
+  `image_sessions_busy` / `image_sessions`)
 
 All are cumulative except the gauges, and reads are atomic. Derive an average
 from two reads: `(wait_us₂ − wait_us₁) / (runs₂ − runs₁)` is the mean dispatch
 wait per run, and the same for `run_us`. A serial workload keeps the mean wait
 near zero; when concurrency exceeds `sessions_total`, the wait grows and
 `sessions_busy` sits at `sessions_total`. A rising `run_us` at flat load points
-at CPU contention (see the thread budget in
-[configuration](./configuration.md#thread-budget)).
+points at CPU contention (see the thread budget in
+[configuration](./configuration.md#thread-budget)). Image phase totals share the
+request's `MONITOR` attribution rather than subtracting from whole-request
+latency, and reading them never opens an image session: a model whose image
+plan has not materialized reports zeroed totals and `0/0` sessions instead of
+being initialized by the read.
+
+`EMB.STATS` also carries `per_model_images`, the `" | "`-joined image totals for
+models with image traffic or an opened image pool, one segment per model:
+`name: preprocess=<n>us dispatch=<n>us admit=<n>us run=<n>us runs=<n> busy=<busy>/<total>`.
+Models without image traffic or an opened image pool have no segment.
 
 `MONITOR [seq] [limit]` exposes the last completed-request events (up to 8192,
 oldest evicted) for per-request visibility: latency percentiles, error and
@@ -147,18 +160,26 @@ stream — pass the last `seq` you saw to fetch only newer events, which is how
 [`emb-top`](#monitoring-emb-top) keeps its cost near zero. Request texts are
 never included.
 
-Every event carries `cached_texts` (how many of its texts the reply cache
-answered) and, when the server measured them, `dispatch_us`, `admit_us` and
-`run_us`: the time that request's *uncached* texts spent waiting for a session or
-batch window, waiting at the process CPU gate, and running. `attributed` says
-whether those phases were measured at all — a request served outside the
-embedding pool (an image run on its own tensor sessions) reports `attributed 0`
-with zero phases, which is absent attribution, not a free run. The phases never
-sum to more than the request's `latency_us`: whatever the latency includes beyond
-them (protocol, tokenization, the cache lookup, encoding) stays unattributed
-rather than being assigned to a phase. On a server that predates these fields the
-event is the original six fields, which a reader must treat as "not measured"
-rather than as zero.
+Every event carries `cached_texts` (how many of its items the reply cache
+answered — texts, or for `EMB.IMG`/`EMB.IMGMULTI` the cache-served images: a
+fully cached image counts once, a partially cached image counts just its
+misses) and, when the server measured them, `dispatch_us`, `admit_us`, `run_us`
+and `preprocess_us`: the time that request's *uncached* work spent waiting for a
+session or batch window, waiting at the process CPU gate, running, and — for an
+image request — preprocessing its tensors. Image work is attributed the same way
+through the same fields: a request that runs inference reports the phases it
+paid, a fully cache-served image request reports its cached items with no
+measured phase work and still reads `attributed 1` (the server measured that
+nothing ran), and a partial cache hit reports only the phases its misses
+incurred. `attributed` says whether those phases were measured at all — a
+request the server could not measure (for example one that failed before
+touching the image pipeline) reports `attributed 0` with zero phases, which is
+absent attribution, not a free run. The phases never sum to more than the
+request's `latency_us`: whatever the latency includes beyond them (protocol,
+tokenization, the cache lookup, encoding) stays unattributed rather than being
+assigned to a phase. On a server that predates these fields the event is the
+original six fields, which a reader must treat as "not measured" rather than as
+zero.
 
 `INFO [section...]` renders Redis-format sections; with no argument it returns
 all of them:
@@ -437,10 +458,11 @@ cpu_budget". Every rule has its own fixed thresholds and magnitude floors
 
 The tail rules read the per-request phases the node now publishes: `dispatch_us`
 (waiting for a session or batch window), `admit_us` (waiting at the process CPU
-gate) and `run_us` (ORT), each attributable to the request that paid it. A
-scripted evaluation reports them only when exactly one run happened while it was
-in flight — its model's counters are the model's, so under concurrency the delta
-would be somebody else's work and the event stays unattributed instead. A rule
+gate), `run_us` (ORT) and, for images, `preprocess_us` (tensor preprocessing),
+each attributable to the request that paid it. A scripted evaluation reports
+them only when exactly one run happened while it was in flight — its model's
+counters are the model's, so under concurrency the delta would be somebody
+else's work and the event stays unattributed instead. A rule
 fires only when one phase holds the majority of the measured time; otherwise the
 window is reported as spread. When the window is too small for the p95 to mean
 anything — fewer than eight events, or fewer than three that ran — the panel says

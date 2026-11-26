@@ -10,12 +10,24 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/elcuervo/emb/internal/config"
 	"github.com/elcuervo/emb/internal/imageproc"
 	"github.com/elcuervo/emb/internal/onnx"
+	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/pipeline"
 )
+
+// ImageRunTiming is what one Embed call paid: the wait for a free session, the
+// wait at the process CPU gate, and the run itself (admission wait excluded).
+// Runs is one when the run reached the graph and zero when admission refused it.
+type ImageRunTiming struct {
+	DispatchWait  time.Duration
+	AdmissionWait time.Duration
+	Run           time.Duration
+	Runs          int
+}
 
 // ImageOutput is one named product of a model's image branch, resolved at load:
 // which graph tensor it reads, how its rows are reduced, and the shape the
@@ -170,6 +182,16 @@ type ImageResources struct {
 	// statically declared batch dimension, or 0 when the axis is symbolic (an
 	// unbounded batch).
 	BatchCap int
+
+	// Dispatch observability (EMB.STATS/EMB.INFO): cumulative preprocessing,
+	// dispatch wait, admission wait and run microseconds, run count, and the
+	// live busy gauge.
+	preprocessUs    atomic.Int64
+	dispatchWaitUs  atomic.Int64
+	admissionWaitUs atomic.Int64
+	runUs           atomic.Int64
+	runs            atomic.Int64
+	busy            atomic.Int64
 }
 
 // Session returns the next named-tensor session for an image run, round-robin
@@ -183,54 +205,98 @@ func (r *ImageResources) Session() onnx.NamedSession {
 // test-injected pool without an idle channel (idle == nil) falls back to
 // round-robin.
 func (r *ImageResources) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, error) {
-	if r.idle == nil {
-		return r.Session().RunNamed(inputs)
-	}
-	sess := <-r.idle
-	out, err := sess.RunNamed(inputs)
-	r.idle <- sess
+	out, _, err := r.runTimed(inputs)
 	return out, err
+}
+
+// runTimed runs inputs on the first free session and reports the phases the
+// caller paid. Timings travel with the result rather than on the session: one
+// session is leased to several callers, so a field would be overwritten before
+// the run that paid it reads it.
+func (r *ImageResources) runTimed(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, ImageRunTiming, error) {
+	var timing ImageRunTiming
+	var sess onnx.NamedSession
+	if r.idle == nil {
+		sess = r.Session()
+	} else {
+		waitStart := time.Now()
+		sess = <-r.idle
+		timing.DispatchWait = time.Since(waitStart)
+		r.dispatchWaitUs.Add(timing.DispatchWait.Microseconds())
+	}
+	r.busy.Add(1)
+	runStart := time.Now()
+	out, waited, err := runNamedAdmitted(sess, inputs)
+	// The wait at the CPU gate is not run time, and a run admission never
+	// admitted is not a run.
+	if !permit.IsAdmissionError(err) {
+		r.runs.Add(1)
+		timing.Runs = 1
+	}
+	timing.AdmissionWait = waited
+	timing.Run = time.Since(runStart) - waited
+	r.admissionWaitUs.Add(waited.Microseconds())
+	r.runUs.Add(timing.Run.Microseconds())
+	r.busy.Add(-1)
+	if r.idle != nil {
+		r.idle <- sess
+	}
+	return out, timing, err
+}
+
+// AddPreprocess accumulates one image preprocessing duration.
+func (r *ImageResources) AddPreprocess(d time.Duration) {
+	r.preprocessUs.Add(d.Microseconds())
+}
+
+// DispatchCounters returns the image path's cumulative preprocessing, dispatch
+// wait, admission wait and run microseconds, run count, and live busy gauge.
+// The opened session total is ModelEntry.ImageFootprint's, not a second counter.
+func (r *ImageResources) DispatchCounters() (preprocessUs, dispatchWaitUs, admissionWaitUs, runUs, runs, busy int64) {
+	return r.preprocessUs.Load(), r.dispatchWaitUs.Load(), r.admissionWaitUs.Load(),
+		r.runUs.Load(), r.runs.Load(), r.busy.Load()
 }
 
 // Embed runs one batched inference over the preprocessed image tensors and
 // returns, per image, one float32 blob per requested output name. Exactly one
 // session run executes regardless of the batch size or how many outputs are
 // requested.
-func (r *ImageResources) Embed(tensors [][]float32, outs []ImageOutput) ([]map[string][]byte, error) {
+func (r *ImageResources) Embed(tensors [][]float32, outs []ImageOutput) ([]map[string][]byte, ImageRunTiming, error) {
+	var timing ImageRunTiming
 	n := len(tensors)
 	if n == 0 {
-		return nil, nil
+		return nil, timing, nil
 	}
 	if len(outs) == 0 {
-		return nil, fmt.Errorf("image request selected no outputs")
+		return nil, timing, fmt.Errorf("image request selected no outputs")
 	}
 	elem := r.Plan.ElementCount()
 	batch := make([]float32, n*elem)
 	for i, t := range tensors {
 		if len(t) != elem {
-			return nil, fmt.Errorf("image %d: tensor has %d elements, want %d", i, len(t), elem)
+			return nil, timing, fmt.Errorf("image %d: tensor has %d elements, want %d", i, len(t), elem)
 		}
 		copy(batch[i*elem:], t)
 	}
 	shape := []int64{int64(n), 3, int64(r.Plan.Size), int64(r.Plan.Size)}
-	outsByTensor, err := r.RunNamed([]onnx.NamedTensor{{
+	outsByTensor, timing, err := r.runTimed([]onnx.NamedTensor{{
 		Name:  r.Plan.Input,
 		Shape: shape,
 		DType: onnx.TensorFloat32,
 		Float: batch,
 	}})
 	if err != nil {
-		return nil, err
+		return nil, timing, err
 	}
 	results := make([]map[string][]byte, n)
 	for _, o := range outs {
 		tensor, ok := outsByTensor[o.Tensor]
 		if !ok {
-			return nil, fmt.Errorf("output tensor %q missing from graph result", o.Tensor)
+			return nil, timing, fmt.Errorf("output tensor %q missing from graph result", o.Tensor)
 		}
 		blobs, err := r.extract(tensor, n, o)
 		if err != nil {
-			return nil, err
+			return nil, timing, err
 		}
 		for i := range results {
 			if results[i] == nil {
@@ -239,7 +305,7 @@ func (r *ImageResources) Embed(tensors [][]float32, outs []ImageOutput) ([]map[s
 			results[i][o.Name] = blobs[i]
 		}
 	}
-	return results, nil
+	return results, timing, nil
 }
 
 // extract reduces one graph output to one float32 blob per image, refusing a
@@ -360,6 +426,9 @@ func (e *ModelEntry) ImageResources() (*ImageResources, error) {
 	if e.cfg.Image == nil {
 		// Text-only model; ImageRes is only ever set by test injection, before
 		// the server starts serving.
+		if e.ImageRes != nil {
+			e.imageResPtr.Store(e.ImageRes)
+		}
 		return e.ImageRes, nil
 	}
 	e.imageOnce.Do(func() {
@@ -367,7 +436,21 @@ func (e *ModelEntry) ImageResources() (*ImageResources, error) {
 			e.ImageRes, e.imageResErr = e.openImageResources()
 		}
 	})
+	if e.ImageRes != nil {
+		e.imageResPtr.Store(e.ImageRes)
+	}
 	return e.ImageRes, e.imageResErr
+}
+
+// ImageDispatch reports the image path's cumulative preprocessing, dispatch
+// wait, admission wait and run microseconds, run count, and live busy gauge,
+// without opening resources. Zero values mean the model has not opened an image
+// pool yet; the session total is ImageFootprint.
+func (e *ModelEntry) ImageDispatch() (preprocessUs, dispatchWaitUs, admissionWaitUs, runUs, runs, busy int64) {
+	if res := e.imageResPtr.Load(); res != nil {
+		return res.DispatchCounters()
+	}
+	return 0, 0, 0, 0, 0, 0
 }
 
 func (e *ModelEntry) openImageResources() (*ImageResources, error) {
