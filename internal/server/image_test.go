@@ -100,8 +100,11 @@ func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.
 func (f *fakeImageSession) Close() error { return nil }
 
 // RunNamedAdmitted implements the registry's admittedNamedSession so a test can
-// pin the admission phase instead of measuring wall time.
+// pin the admission phase instead of measuring wall time. The wait is spent, not
+// just reported: the server subtracts it from the timed run, which would go
+// negative for a wait that never happened.
 func (f *fakeImageSession) RunNamedAdmitted(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error) {
+	time.Sleep(f.admitWait)
 	out, err := f.RunNamed(inputs)
 	return out, f.admitWait, err
 }

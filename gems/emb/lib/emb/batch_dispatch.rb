@@ -69,7 +69,13 @@ module Emb
       # Scripts keep their prebuilt argv and their raw reply (a Hash reply must
       # not be Array()-wrapped into pairs).
       return client.send_command(*slice.first[2]) if script_item?(slice.first)
-      return Array(client.send_command(*ImageBatch.args(slice))) if image_item?(slice.first)
+
+      # A one-image EMB.IMG replies with one keyed map, several with an array of
+      # maps; resolve expects one entry per image in both cases.
+      if image_item?(slice.first)
+        reply = client.send_command(*ImageBatch.args(slice))
+        return slice.sum { |item| item[3].size } == 1 ? [reply] : Array(reply)
+      end
 
       Array(client.send_command(*embed_slice_args(slice)))
     end

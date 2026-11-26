@@ -64,6 +64,14 @@ module Emb
       [images.size == 1 ? decoded.first : decoded, offset + images.size]
     end
 
+    # Bytes this client's pending scope can still hold. The deferred path bounds
+    # IO reads by it, so the read itself refuses a stream over the limit.
+    def remaining_bytes(client)
+      _, used = pending_usage(client)
+      _, max_bytes = limits(client)
+      [max_bytes - used, 0].max
+    end
+
     # Enforces both bounds against the items already pending in this thread's
     # batch scope. Deriving the usage from batch-loader's own pending set (and
     # not a second counter) means the existing scope cleanup releases it,

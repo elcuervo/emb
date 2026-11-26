@@ -50,15 +50,24 @@ RSpec.describe Emb, '#image' do
     expect(many).to eq([{ 'embedding' => [1.0] }, { 'embedding' => [2.0] }])
   end
 
+  # The server writes one keyed map — a flat name/value array under RESP2 — when
+  # EMB.IMG carries a single image, and an array of maps only for several.
+  it 'decodes a one-image share from the flat keyed map the server writes' do
+    client = lazy_client(:multi)
+    allow(client).to receive(:send_command).and_return(['embedding', blob(1.0)])
+
+    expect(client[:clip].image('a'.b)).to eq('embedding' => [1.0])
+  end
+
   it 'groups by model, format, and projection instead of merging' do
     client = lazy_client(:multi)
     sent = []
     allow(client).to receive(:send_command) do |*args|
       sent << args
       if args.include?('VALUES')
-        [['patches', ['dtype', 'FLOAT', 'shape', [1, 1], 'values', ['1.0']]]]
+        ['patches', ['dtype', 'FLOAT', 'shape', [1, 1], 'values', ['1.0']]]
       else
-        [['embedding', blob(2.0)]]
+        ['embedding', blob(2.0)]
       end
     end
 
@@ -90,7 +99,7 @@ RSpec.describe Emb, '#image' do
     sent = []
     allow(client).to receive(:send_command) do |*args|
       sent << args
-      [['embedding', blob(1.0)]]
+      ['embedding', blob(1.0)]
     end
 
     bytes = +'original'
@@ -106,7 +115,7 @@ RSpec.describe Emb, '#image' do
     sent = []
     allow(client).to receive(:send_command) do |*args|
       sent << args
-      [['embedding', blob(1.0)]]
+      ['embedding', blob(1.0)]
     end
 
     io = StringIO.new("a\x00".b)
@@ -146,6 +155,16 @@ RSpec.describe Emb, '#image' do
       .to raise_error(Emb::ImageBatchLimitError, /max_image_batch_bytes \(8 bytes\)/)
   end
 
+  it 'refuses an oversized IO while reading it, before anything is queued' do
+    client = lazy_client(:multi, max_image_batch_bytes: 8)
+    sent = []
+    allow(client).to receive(:send_command) { |*args| sent << args }
+
+    expect { client[:clip].image(StringIO.new('x' * 64)) }
+      .to raise_error(Emb::ImageBatchLimitError, /max_image_batch_bytes/)
+    expect(sent).to be_empty
+  end
+
   it 'releases the pending bounds with the batch scope, including after an exception' do
     client = lazy_client(:multi, batch_size: 1)
     allow(client).to receive(:send_command).and_return([['embedding', blob(1.0)]])
@@ -177,7 +196,7 @@ RSpec.describe Emb, '#image' do
           cv.wait(mutex, remaining)
         end
       end
-      [['embedding', blob(args[1] == 'clip' ? 1.0 : 2.0)]]
+      args[1] == 'clip' ? ['embedding', blob(1.0)] : ['embedding', blob(2.0)]
     end
 
     clip = client[:clip].image('a'.b)

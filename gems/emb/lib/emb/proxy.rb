@@ -55,7 +55,7 @@ module Emb
     def image(image_bytes, *more, format: :binary, outputs: nil)
       format = normalize_format(format)
       names = Array(outputs).map { |name| name.to_s.dup.freeze }
-      images = [image_bytes, *more].map { |bytes| self.class.coerce_image_bytes(bytes) }
+      images = coerce_images([image_bytes, *more])
       return deferred_image(images, format, names) if deferred?
 
       Emb::Telemetry.embed_call(operation: 'image', model: @name, texts: images.size,
@@ -66,15 +66,36 @@ module Emb
 
     # coerce_image_bytes normalizes an image argument to a binary byte string
     # without transcoding: a String's bytes are preserved exactly (only the
-    # encoding label is set to ASCII-8BIT), and an IO is read fully.
-    def self.coerce_image_bytes(bytes)
-      data = bytes.respond_to?(:read) ? bytes.read : bytes
+    # encoding label is set to ASCII-8BIT), and an IO is read fully — or, with a
+    # limit, read only up to it so an oversized stream is never materialized.
+    def self.coerce_image_bytes(bytes, limit: nil)
+      data = bytes.respond_to?(:read) ? read_image_bytes(bytes, limit) : bytes
       data = data.to_s
       data = data.dup if data.frozen?
       data.force_encoding(Encoding::BINARY)
     end
 
+    def self.read_image_bytes(io, limit)
+      return io.read if limit.nil?
+
+      data = io.read(limit + 1)
+      return data if data.nil? || data.bytesize <= limit
+
+      raise ImageBatchLimitError, "image bytes would exceed max_image_batch_bytes (#{limit} bytes)"
+    end
+
     private
+
+    # A deferred call reads each IO against what its pending scope can still
+    # hold, so an oversized stream raises instead of being materialized.
+    def coerce_images(inputs)
+      budget = deferred? ? ImageBatch.remaining_bytes(@client) : nil
+      inputs.map do |bytes|
+        data = self.class.coerce_image_bytes(bytes, limit: budget)
+        budget = [budget - data.bytesize, 0].max if budget
+        data
+      end
+    end
 
     def deferred?
       @client.respond_to?(:lazy?) && @client.lazy?

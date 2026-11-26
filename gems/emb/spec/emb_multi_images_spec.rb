@@ -57,7 +57,7 @@ RSpec.describe Emb do
       end
 
       expect(sent).to contain_exactly(
-        ['EMB.IMGMULTI', 'VALUES', 'clip', 'a'],
+        ['EMB.IMGMULTI', 'VALUES', 'OUTPUTS', 'patches', 'clip', 'a'],
         ['EMB.IMGMULTI', 'clip', 'b']
       )
       expect(result).to eq([
@@ -122,7 +122,7 @@ RSpec.describe Emb do
       client = Emb::Client.new(lazy: :multi)
       allow(client).to receive(:send_command) do |*args|
         sent << args
-        [['embedding', blob(5.0)]]
+        args.first == 'EMB.IMGMULTI' ? [['embedding', blob(5.0)]] : ['embedding', blob(5.0)]
       end
 
       deferred = client[:clip].image('deferred'.b)

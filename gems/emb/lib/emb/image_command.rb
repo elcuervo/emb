@@ -25,10 +25,11 @@ module Emb
       command.concat(images)
     end
 
-    # EMB.IMGMULTI [VALUES] <model> <bytes> <model> <bytes>...
-    def multi_args(pairs, format:)
+    # EMB.IMGMULTI [VALUES] [OUTPUTS name,...] <model> <bytes> <model> <bytes>...
+    def multi_args(pairs, format:, names: [])
       command = ['EMB.IMGMULTI']
       command << 'VALUES' if format == :values
+      command << 'OUTPUTS' << names.join(',') unless names.empty?
       pairs.each { |model, bytes| command << model.to_s << bytes }
       command
     end

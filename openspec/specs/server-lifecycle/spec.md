@@ -16,7 +16,7 @@ The server SHALL gracefully shut down when it receives either SIGINT or SIGTERM.
 - **THEN** the server SHALL close its listening socket and stop executing new commands
 - **THEN** the server SHALL close connections without a command in progress, and close the others after their reply
 - **THEN** the server SHALL wait for in-flight requests to complete
-- **THEN** a configured dirty cache SHALL complete or attempt its bounded final snapshot, unless `NOSAVE` applies
+- **THEN** a dirty cache SHALL complete or attempt its bounded final snapshot when `cache_save_on_shutdown` is enabled (the default), unless `NOSAVE` applies
 - **THEN** the server SHALL flush pending telemetry when configured, within the shutdown deadline
 - **THEN** the server SHALL release ONNX Runtime resources
 - **THEN** the process SHALL exit with code 0

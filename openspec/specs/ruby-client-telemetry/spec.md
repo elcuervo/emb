@@ -62,7 +62,8 @@ resolves, so its duration includes the coalescing queue.
 
 The gem SHALL emit one `emb.batch` span per forced batch per client, carrying the
 share count, text count, and worker count used, and one `emb.share` span per
-command actually sent, carrying the model and the instance that served it. Share
+command actually sent, carrying the model when every pair in the share names the
+same one, and the instance that served it. Share
 spans SHALL be children of their batch span. Under `lazy: :batch` concurrently
 dispatched shares SHALL be recorded with overlapping time ranges so a
 flame-graph consumer can see the overlap; under `lazy: :multi` they SHALL be

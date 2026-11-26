@@ -49,10 +49,17 @@ module Emb
     def send_image_group(group, results, chunk)
       format = group.first.first[:format]
       group.each_slice(chunk) do |slice|
-        pairs = slice.map { |pair, _| [pair[:model], pair[:bytes]] }
-        replies = @client.send_command(*ImageCommand.multi_args(pairs, format: format))
+        replies = @client.send_command(*image_args(slice))
         slice.each_with_index { |(_, index), i| results[index] = image_value(replies[i], format) }
       end
+    end
+
+    # The group's projection rides on every pair's argv: a share is built only
+    # from pairs that asked for the same outputs.
+    def image_args(slice)
+      first = slice.first.first
+      pairs = slice.map { |pair, _| [pair[:model], pair[:bytes]] }
+      ImageCommand.multi_args(pairs, format: first[:format], names: first[:names])
     end
 
     def image_value(entry, format)

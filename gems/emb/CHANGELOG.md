@@ -12,6 +12,17 @@ All notable changes to the `emb` gem are documented here. The format follows
   `EMB.MULTI`. A two-model scope runs concurrently even when it fits in a single
   `batch_size` chunk. `lazy: :multi` still coalesces into serial `EMB`/`EMB.MULTI`.
 
+### Fixed
+
+- A deferred single-image call decodes the one keyed map `EMB.IMG` replies with
+  instead of raising `ArgumentError`; the share's image count, not its call
+  count, selects the reply shape.
+- `Emb.multi` blocks send the group's `OUTPUTS` on `EMB.IMGMULTI`, so `outputs:`
+  narrows the projection instead of being dropped.
+- A deferred `image(io)` reads the stream against the scope's remaining
+  `max_image_batch_bytes` and raises `Emb::ImageBatchLimitError` while reading,
+  instead of materializing an oversized payload first.
+
 ### Added
 
 - Image calls defer under the configured lazy mode. `Emb[:model].image(bytes)`

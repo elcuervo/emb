@@ -162,14 +162,15 @@ never included.
 
 Every event carries `cached_texts` (how many of its items the reply cache
 answered — texts, or for `EMB.IMG`/`EMB.IMGMULTI` the cache-served images: a
-fully cached image counts once, a partially cached image counts just its
-misses) and, when the server measured them, `dispatch_us`, `admit_us`, `run_us`
-and `preprocess_us`: the time that request's *uncached* work spent waiting for a
-session or batch window, waiting at the process CPU gate, running, and — for an
-image request — preprocessing its tensors. Image work is attributed the same way
-through the same fields: a request that runs inference reports the phases it
-paid, a fully cache-served image request reports its cached items with no
-measured phase work and still reads `attributed 1` (the server measured that
+fully cached image counts once; a partially cached image counts zero until one
+request serves all of its outputs from the cache) and, when the server measured
+them, `dispatch_us`, `admit_us`, `run_us` and `preprocess_us`: the time that
+request's *uncached* work spent waiting for a session or batch window, waiting
+at the process CPU gate, running, and — for an image request — preprocessing its
+tensors. Image work is attributed the same way through the same fields: a
+request that runs inference reports the phases it paid, a fully cache-served
+image request reports its cached items with no measured phase work and still
+reads `attributed 1` (the server measured that
 nothing ran), and a partial cache hit reports only the phases its misses
 incurred. `attributed` says whether those phases were measured at all — a
 request the server could not measure (for example one that failed before

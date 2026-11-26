@@ -40,6 +40,9 @@ type admittedFakeSession struct {
 }
 
 func (f *admittedFakeSession) RunNamedAdmitted(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error) {
+	// Spend the wait: runTimed subtracts it from the timed span, so an unspent
+	// wait reports negative run time.
+	time.Sleep(f.admission)
 	out, err := f.RunNamed(inputs)
 	if f.err != nil {
 		err = f.err
