@@ -906,6 +906,8 @@ var infoModelFields = []string{
 	"script_autotune_active", "embed_dispatch_wait_us",
 	"embed_admission_wait_us", "embed_run_us", "embed_runs",
 	"embed_sessions_busy", "embed_sessions_total",
+	"image_preprocess_us", "image_dispatch_wait_us", "image_admission_wait_us",
+	"image_run_us", "image_runs", "image_sessions_busy",
 }
 
 // infoCacheFields is the group EMB.INFO appends only when a cache is
@@ -1555,11 +1557,11 @@ func TestStatsRESPParity(t *testing.T) {
 			resp := readRESP(t, c)
 
 			declared, actual := parseRESPArrayCount(resp)
-			if declared != 134 {
-				t.Fatalf("expected 134 declared elements, got %d: %q", declared, resp)
+			if declared != 136 {
+				t.Fatalf("expected 136 declared elements, got %d: %q", declared, resp)
 			}
-			if actual != 134 {
-				t.Fatalf("expected 134 actual elements, got %d: %q", actual, resp)
+			if actual != 136 {
+				t.Fatalf("expected 136 actual elements, got %d: %q", actual, resp)
 			}
 
 			for _, f := range []string{
@@ -1575,6 +1577,7 @@ func TestStatsRESPParity(t *testing.T) {
 				"cpu_throttle_periods", "cpu_throttled_periods", "cpu_throttle_usec", "cpu_steal_usec",
 				"cache_hits", "cache_misses", "cache_evictions",
 				"script_requests", "script_errors", "script_avg_latency_us", "per_model_scripts",
+				"per_model_images",
 			} {
 				if !strings.Contains(resp, f) {
 					t.Fatalf("missing field %q in stats: %q", f, resp)

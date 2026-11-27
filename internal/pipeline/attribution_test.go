@@ -93,7 +93,12 @@ func TestResponsePhasesSumWithinTheRequest(t *testing.T) {
 	if resp.Run <= 0 {
 		t.Errorf("a completed run reported no run time: %+v", resp)
 	}
-	if sum := resp.DispatchWait + resp.AdmissionWait + resp.Run; sum > elapsed {
-		t.Errorf("phases %s exceed the request's %s", sum, elapsed)
+	// The phases are timed on the batch goroutine and elapsed on this one; a
+	// shared VM clock can read microseconds apart across cores, so the bound
+	// carries a skew allowance. The exact per-phase values are pinned against
+	// the model's counters in TestBatcherResponseCarriesThePhases.
+	const skew = time.Millisecond
+	if sum := resp.DispatchWait + resp.AdmissionWait + resp.Run; sum > elapsed+skew {
+		t.Errorf("phases %s exceed the request's %s by more than %s", sum, elapsed, skew)
 	}
 }

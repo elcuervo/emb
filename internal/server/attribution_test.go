@@ -9,10 +9,10 @@ import (
 )
 
 // monitorFieldNames is the MONITOR event's field order under both encodings:
-// the original six, then this request's attribution.
+// the original six, then this request's attribution (preprocess appended last).
 var monitorFieldNames = []string{
 	"seq", "at_us", "model", "texts", "latency_us", "err",
-	"cached_texts", "attributed", "dispatch_us", "admit_us", "run_us",
+	"cached_texts", "attributed", "dispatch_us", "admit_us", "run_us", "preprocess_us",
 }
 
 // monitorEvents reads one MONITOR reply and returns each event's fields by name.
@@ -133,18 +133,16 @@ func TestMonitorEventAttributesMULTIPairs(t *testing.T) {
 	}
 }
 
-func TestMonitorEventMarksTheImagePathUnattributed(t *testing.T) {
+func TestMonitorEventAttributesTheImagePath(t *testing.T) {
 	addr, _, sessions := serveImage(t, "1MB")
 	png := solidImagePNG(t, color.White)
 
 	miss := fetchEvent(t, addr, "EMB.IMG", "imgA", png)
-	if got := intOf(t, miss["attributed"]); got != 0 {
-		t.Errorf("the image path claims an attribution it does not measure: attributed = %d", got)
+	if got := intOf(t, miss["attributed"]); got != 1 {
+		t.Errorf("an image run is not attributed: attributed = %d", got)
 	}
-	for _, phase := range []string{"dispatch_us", "admit_us", "run_us"} {
-		if got := intOf(t, miss[phase]); got != 0 {
-			t.Errorf("unattributed image event reports %s = %d, want 0", phase, got)
-		}
+	if got := intOf(t, miss["preprocess_us"]); got <= 0 {
+		t.Errorf("an image run reports no preprocessing time: preprocess_us = %d", got)
 	}
 	if got := intOf(t, miss["cached_texts"]); got != 0 {
 		t.Errorf("uncached image request reports cached_texts = %d, want 0", got)
@@ -153,9 +151,18 @@ func TestMonitorEventMarksTheImagePathUnattributed(t *testing.T) {
 		t.Fatal("the image never ran")
 	}
 
+	// A fully cache-served request is attributed with zero phases: nothing ran.
 	hit := fetchEvent(t, addr, "EMB.IMG", "imgA", png)
 	if got := intOf(t, hit["cached_texts"]); got != 1 {
 		t.Errorf("cache-served image reports cached_texts = %d, want 1", got)
+	}
+	if got := intOf(t, hit["attributed"]); got != 1 {
+		t.Errorf("cache-served image reports attributed = %d, want 1", got)
+	}
+	for _, phase := range []string{"preprocess_us", "dispatch_us", "admit_us", "run_us"} {
+		if got := intOf(t, hit[phase]); got != 0 {
+			t.Errorf("cache-served image reports %s = %d, want 0 (nothing ran)", phase, got)
+		}
 	}
 }
 
@@ -167,13 +174,14 @@ func TestMonitorEventWithoutAttributionReadsAsUnattributed(t *testing.T) {
 	if ev.Attributed {
 		t.Error("an unattributed request reports Attributed true")
 	}
-	if ev.DispatchUs != 0 || ev.AdmitUs != 0 || ev.RunUs != 0 {
+	if ev.PreprocessUs != 0 || ev.DispatchUs != 0 || ev.AdmitUs != 0 || ev.RunUs != 0 {
 		t.Errorf("unattributed phases are non-zero: %+v", ev)
 	}
 
 	attributed := zero.attributed(requestAttribution{
 		cachedTexts:   2,
 		attributed:    true,
+		preprocess:    2 * time.Millisecond,
 		dispatchWait:  3 * time.Millisecond,
 		admissionWait: 4 * time.Millisecond,
 		run:           5 * time.Millisecond,
@@ -181,7 +189,7 @@ func TestMonitorEventWithoutAttributionReadsAsUnattributed(t *testing.T) {
 	if !attributed.Attributed || attributed.CachedTexts != 2 {
 		t.Errorf("attribution not carried: %+v", attributed)
 	}
-	if attributed.DispatchUs != 3000 || attributed.AdmitUs != 4000 || attributed.RunUs != 5000 {
+	if attributed.PreprocessUs != 2000 || attributed.DispatchUs != 3000 || attributed.AdmitUs != 4000 || attributed.RunUs != 5000 {
 		t.Errorf("phases in microseconds wrong: %+v", attributed)
 	}
 }

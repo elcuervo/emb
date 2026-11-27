@@ -5,9 +5,10 @@ import (
 	"time"
 )
 
-// MonitorEvent is one completed EMB / EMB.MULTI request record. Text
-// payloads are deliberately excluded (privacy + weight); latency and error
-// flags are the debugging signal.
+// MonitorEvent is one completed inference request record (EMB, EMB.MULTI,
+// EMB.IMG, EMB.IMGMULTI, EMB.EVAL, EMB.EVSHA). Text and image payloads are
+// deliberately excluded (privacy + weight); latency and error flags are the
+// debugging signal. For image commands Texts is the request's image count.
 type MonitorEvent struct {
 	Seq       uint64 // monotonically increasing, 1-based
 	AtUs      int64  // unix microseconds at request start
@@ -17,17 +18,23 @@ type MonitorEvent struct {
 	Err       bool
 
 	// CachedTexts is how many of Texts the reply cache answered without
-	// inference. Always measured.
+	// inference (for images, images whose every requested output was cached).
+	// Always measured.
 	CachedTexts int
 	// Attributed reports whether the phases below were measured for this
-	// request. A request served outside the embedding pool (an image run on its
-	// own tensor sessions) keeps no dispatch or run accounting, so it carries
-	// Attributed false with zero phases — absent attribution, never a claim
-	// that its run cost nothing.
+	// request. It is true once the request reached its inference path (the
+	// embedding pool, or for images embedImages); a request that failed before
+	// any inference carries Attributed false with zero phases — absent
+	// attribution, never a claim that its run cost nothing.
 	Attributed bool
-	// DispatchUs, AdmitUs and RunUs are the time this request's texts that were
+	// PreprocessUs is image preprocessing time (decode + resize + tensor
+	// normalization), measured around each image's plan.Tensor call. Zero for
+	// text requests and for image requests answered entirely from cache.
+	PreprocessUs int64
+	// DispatchUs, AdmitUs and RunUs are the time this request's work that was
 	// not cache-answered spent waiting for a session or batch window, waiting at
-	// the process CPU admission gate, and running. AdmitUs is kept out of RunUs.
+	// the process CPU admission gate, and running. For images these cover the
+	// image-session pool. AdmitUs is kept out of RunUs.
 	DispatchUs int64
 	AdmitUs    int64
 	RunUs      int64
@@ -38,6 +45,7 @@ type MonitorEvent struct {
 func (e MonitorEvent) attributed(a requestAttribution) MonitorEvent {
 	e.CachedTexts = a.cachedTexts
 	e.Attributed = a.attributed
+	e.PreprocessUs = a.preprocess.Microseconds()
 	e.DispatchUs = a.dispatchWait.Microseconds()
 	e.AdmitUs = a.admissionWait.Microseconds()
 	e.RunUs = a.run.Microseconds()

@@ -28,9 +28,9 @@ func monitorRowsReply(rows ...[]int64) []byte {
 	return encodeArray(encoded...)
 }
 
-// eventRow is one MONITOR event as its eleven fields.
+// eventRow is one MONITOR event as its twelve fields.
 func eventRow(seq, latencyUs, cachedTexts, attributed, dispatchUs, admitUs, runUs int64) []int64 {
-	return []int64{seq, 1_700_000_000_000_000, 0, 1, latencyUs, 0, cachedTexts, attributed, dispatchUs, admitUs, runUs}
+	return []int64{seq, 1_700_000_000_000_000, 0, 1, latencyUs, 0, cachedTexts, attributed, dispatchUs, admitUs, runUs, 0}
 }
 
 // attributedResponder serves a node whose window mixes cache-served requests

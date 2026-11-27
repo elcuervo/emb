@@ -3,10 +3,13 @@
 require 'batch_loader'
 require 'redis_client'
 require_relative 'batch_dispatch'
+require_relative 'image_batch'
+require_relative 'item_shape'
 require_relative 'values_batch'
 
 module Emb
   extend BatchDispatch
+  extend ItemShape
 
   BATCH_KEY = :emb
 
@@ -24,38 +27,57 @@ module Emb
   class ShortReplyError < RedisClient::ProtocolError; end
 
   BATCH_BLOCK = lambda do |items, loader, _args|
-    items.group_by(&:first).each do |client, client_items|
+    groups = items.group_by(&:first)
+    single_client = groups.size == 1
+    failures = []
+    groups.each do |client, client_items|
       chunk = client.respond_to?(:batch_size) && client.batch_size ? client.batch_size : Emb.configuration.batch_size
-      # Script items never coalesce (each call is its own share); split them out
-      # before packing embeds by model.
-      embeds, scripts = client_items.partition { |item| !script_item?(item) }
+      # Script items never coalesce (each call is its own share) and image
+      # items coalesce only with a compatible call; split both out before
+      # packing embeds by model.
+      embeds = client_items.select { |item| embed_item?(item) }
+      scripts = client_items.select { |item| script_item?(item) }
+      images = client_items.select { |item| image_item?(item) }
       parallel = client.respond_to?(:parallel_batch?) && client.parallel_batch?
 
-      # :batch — one or more plain EMB shares per model plus one share per
-      # script call, all dispatched concurrently. :multi — embeds coalesce
-      # across models into EMB/EMB.MULTI chunks, then scripts are sent one
-      # after another.
+      # :batch — one or more plain EMB shares per model, one or more EMB.IMG
+      # shares per compatible image group, plus one share per script call, all
+      # dispatched concurrently. :multi — embeds coalesce across models into
+      # EMB/EMB.MULTI chunks, then image groups and scripts are sent one after
+      # another.
       slices = if parallel
-                 batch_shares(embeds, scripts, chunk)
+                 batch_shares(embeds, scripts, images, chunk)
                else
-                 pack_slices(embeds, chunk) + scripts.map { |item| [item] }
+                 pack_slices(embeds, chunk) + ImageBatch.shares(images) +
+                   scripts.map { |item| [item] }
                end
       # A lone share stays on the forcing thread (no worker spawn).
-      run_batch(client, slices, loader, concurrent: parallel && slices.size > 1)
+      failures.concat(run_batch(client, slices, loader,
+                                concurrent: parallel && slices.size > 1,
+                                single_client: single_client) || [])
     end
+    # A failed share is isolated to its own slice: its items raise the share's
+    # error on use (like the parallel path), so no caller sees another share's.
+    failures.each { |error, slice, client| fail_share(loader, slice, error, client) }
   end
+
+  BATCH_PENDING_KEY = [BATCH_BLOCK.source_location, BATCH_KEY].freeze
 
   class << self
     # BatchDispatch mechanics (pack_slices, dispatch_parallel, resolve_slice,
     # ...) are internal to BATCH_BLOCK; nothing outside Emb calls them with an
     # explicit receiver.
     private(*BatchDispatch.instance_methods(false))
+    private(*ItemShape.instance_methods(false))
 
     def build_batch_loader(client, model, text, format: :binary)
       unless %i[binary values].include?(format)
         raise ArgumentError, "unknown format #{format.inspect} (expected :binary or :values)"
       end
 
+      # Copy at collection: the caller may mutate or re-tag its String after
+      # deferring, and the item is also batch-loader's dedupe key.
+      text = text.is_a?(Array) ? text.map(&:dup) : text.dup
       # default_value []: an item whose batch failed (serial path, or a local
       # error) resolves to an empty vector collection instead of nil, so
       # resolver methods like `loader.sum` do not blow up with
@@ -64,13 +86,23 @@ module Emb
       # Items carry [client, model, text, format] so the dispatch knows how to
       # shape and parse the reply.
       item = [client, model, text, format]
+      loader = BatchLoader.for(item).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
       # Telemetry keys its deferral clock by this item (the batch-loader dedupe
       # key); it must never be stored inside the tuple, which would make every
-      # call unique and defeat coalescing.
+      # call unique and defeat coalescing. Recorded once the item is pending, so
+      # a coalesced duplicate records against the instance the block resolves.
       Telemetry::Deferred.record(
         item, Telemetry.entry_for(client, operation: 'embed', model: model, texts: Array(text).size, format: format)
       )
-      BatchLoader.for(item).batch(default_value: [], key: BATCH_KEY, &BATCH_BLOCK)
+      loader
+    end
+
+    # Deferred image calls join the same batch scope as embeds and scripts, so
+    # forcing any of them resolves all. Bounds (batch_size images and
+    # max_image_batch_bytes encoded bytes across the pending scope) are
+    # enforced before the item is queued; see ImageBatch.
+    def build_image_loader(client, model, images, format: :binary, names: [])
+      ImageBatch.build(client, model, images, format: format, names: names)
     end
 
     # Scripts join the same batch scope as embeds (same BATCH_KEY) so forcing
@@ -79,15 +111,18 @@ module Emb
     # normalized decode for resolve_slice.
     def build_script_loader(client, argv, decode)
       item = [client, SCRIPT_ITEM, argv, decode]
+      loader = BatchLoader.for(item).batch(default_value: nil, key: BATCH_KEY, &BATCH_BLOCK)
       Telemetry::Deferred.record(
         item, Telemetry.entry_for(client, operation: 'script', model: argv[1], texts: argv[3].to_i, format: nil)
       )
-      BatchLoader.for(item).batch(default_value: nil, key: BATCH_KEY, &BATCH_BLOCK)
+      loader
     end
 
     # Forced batch: one emitting wrapper around either dispatch path, so the
     # batch's shape and wall time are recorded once, even when it raises.
-    def run_batch(client, slices, loader, concurrent:)
+    # `single_client` marks a window with nothing else to deliver; the serial
+    # dispatcher raises an all-failed group from inside this span.
+    def run_batch(client, slices, loader, concurrent:, single_client: false)
       # Queue ends when dispatch starts, on the forcing thread: the deferral
       # registry is per-thread, so workers must never read or write it. A
       # serial batch's later shares include their wait for earlier ones here.
@@ -99,9 +134,22 @@ module Emb
         if concurrent
           dispatch_parallel(client, slices, loader, durations)
         else
-          dispatch_serial(client, slices, loader, durations)
+          dispatch_serial(client, slices, loader, durations, single_client: single_client)
         end
       end
+    end
+
+    # Nothing in a single-client window was delivered: keep the fail-closed
+    # contract.
+    def fail_closed(failures)
+      first = nil
+      failures.each do |error, slice, client|
+        wrapped = batch_error(error, slice: slice, budget: retry_budget(client))
+        first ||= wrapped
+        slice.each { |item| Telemetry::Deferred.resolve(item, error: wrapped) }
+      end
+      clear_batch_pending!
+      raise first
     end
 
     # Removes every pending item of the batch scope. batch-loader prunes
@@ -111,8 +159,7 @@ module Emb
     # for a nil executor (no batch scope). Deferrals that never reached a
     # command are flushed here so they are reported as not dispatched.
     def clear_batch_pending!
-      key = [BATCH_BLOCK.source_location, BATCH_KEY]
-      BatchLoader::Executor.current&.items_by_block&.delete(key)
+      BatchLoader::Executor.current&.items_by_block&.delete(BATCH_PENDING_KEY)
       Telemetry::Deferred.flush
     end
 
@@ -173,6 +220,7 @@ module Emb
         (error.is_a?(RedisClient::ProtocolError) && !error.is_a?(ShortReplyError))
     end
 
-    private :clear_batch_pending!, :batch_error, :with_cause, :retry_budget, :transient_error?
+    private :fail_closed, :clear_batch_pending!, :batch_error, :with_cause, :retry_budget,
+            :transient_error?
   end
 end

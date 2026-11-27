@@ -19,6 +19,7 @@ import (
 	"github.com/tidwall/redcon"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/contract"
 	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/registry"
@@ -47,7 +48,9 @@ type connState struct {
 }
 
 type Server struct {
-	reg          *registry.Registry
+	reg *registry.Registry
+	// routes is the contract doc of every mux registration, for coverage tests.
+	routes       []contract.Doc
 	srv          *redcon.Server
 	ln           net.Listener
 	active       sync.WaitGroup
@@ -389,28 +392,28 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	mux := redcon.NewServeMux()
-	mux.HandleFunc("ping", s.handlePING)
-	mux.HandleFunc("hello", s.handleHELLO)
-	mux.HandleFunc("client", s.handleCLIENT)
-	mux.HandleFunc("auth", s.handleAUTH)
-	mux.HandleFunc("emb", s.handleEMB)
-	mux.HandleFunc("emb.models", s.handleMODELS)
-	mux.HandleFunc("emb.info", s.handleINFO)
-	mux.HandleFunc("emb.stats", s.handleSTATS)
-	mux.HandleFunc("monitor", s.handleMonitor)
-	mux.HandleFunc("emb.help", s.handleHELP)
-	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
-	mux.HandleFunc("emb.img", s.handleIMG)
-	mux.HandleFunc("emb.imgmulti", s.handleIMGMULTI)
-	mux.HandleFunc("emb.ready", s.handleREADY)
-	mux.HandleFunc("emb.eval", s.handleEVAL)
-	mux.HandleFunc("emb.evsha", s.handleEVSHA)
-	mux.HandleFunc("emb.script", s.handleSCRIPT)
-	mux.HandleFunc("info", s.handleInfo)
-	mux.HandleFunc("config", s.handleConfig)
-	mux.HandleFunc("shutdown", s.handleSHUTDOWN)
-	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
-	mux.HandleFunc("emb.save", s.handleSAVE)
+	s.route(mux, doc("PING"), s.handlePING)
+	s.route(mux, doc("HELLO"), s.handleHELLO)
+	s.route(mux, doc("CLIENT"), s.handleCLIENT)
+	s.route(mux, doc("AUTH"), s.handleAUTH)
+	s.route(mux, doc("EMB"), s.handleEMB)
+	s.route(mux, doc("EMB.MODELS"), s.handleMODELS)
+	s.route(mux, doc("EMB.INFO"), s.handleINFO)
+	s.route(mux, doc("EMB.STATS"), s.handleSTATS)
+	s.route(mux, doc("MONITOR"), s.handleMonitor)
+	s.route(mux, doc("EMB.HELP"), s.handleHELP)
+	s.route(mux, doc("EMB.MULTI"), s.handleEMBMULTI)
+	s.route(mux, doc("EMB.IMG"), s.handleIMG)
+	s.route(mux, doc("EMB.IMGMULTI"), s.handleIMGMULTI)
+	s.route(mux, doc("EMB.READY"), s.handleREADY)
+	s.route(mux, doc("EMB.EVAL"), s.handleEVAL)
+	s.route(mux, doc("EMB.EVSHA"), s.handleEVSHA)
+	s.route(mux, doc("EMB.SCRIPT"), s.handleSCRIPT)
+	s.route(mux, doc("INFO"), s.handleInfo)
+	s.route(mux, doc("CONFIG"), s.handleConfig)
+	s.route(mux, doc("SHUTDOWN"), s.handleSHUTDOWN)
+	s.route(mux, doc("EMB.CACHE.FLUSH"), s.handleCACHEFLUSH)
+	s.route(mux, doc("EMB.SAVE"), s.handleSAVE)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
 		// Account the received command: cmd.Raw is the full RESP bytes including
@@ -933,6 +936,7 @@ func parseFormatArg(args [][]byte, keywordPos int) (replyFormat, bool) {
 type requestAttribution struct {
 	cachedTexts   int
 	attributed    bool
+	preprocess    time.Duration
 	dispatchWait  time.Duration
 	admissionWait time.Duration
 	run           time.Duration
@@ -1161,7 +1165,7 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 		if conn.ProtocolVersion() == 3 {
 			// RESP3: a map per event, with the same field names as the
 			// RESP2 flat array (see the resp3-protocol spec).
-			conn.WriteMap(11)
+			conn.WriteMap(12)
 			conn.WriteBulkString("seq")
 			conn.WriteInt(int(e.Seq))
 			conn.WriteBulkString("at_us")
@@ -1192,11 +1196,13 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteInt(int(e.AdmitUs))
 			conn.WriteBulkString("run_us")
 			conn.WriteInt(int(e.RunUs))
+			conn.WriteBulkString("preprocess_us")
+			conn.WriteInt(int(e.PreprocessUs))
 			continue
 		}
 		// The first six elements keep their order: a client reading the
 		// original event positionally is unaffected by the appended fields.
-		conn.WriteArray(11)
+		conn.WriteArray(12)
 		conn.WriteInt(int(e.Seq))
 		conn.WriteInt(int(e.AtUs))
 		conn.WriteBulkString(e.Model)
@@ -1216,6 +1222,7 @@ func (s *Server) handleMonitor(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteInt(int(e.DispatchUs))
 		conn.WriteInt(int(e.AdmitUs))
 		conn.WriteInt(int(e.RunUs))
+		conn.WriteInt(int(e.PreprocessUs))
 	}
 }
 
@@ -1324,9 +1331,9 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	if s.cache != nil {
-		writePairs(conn, 53)
+		writePairs(conn, 59)
 	} else {
-		writePairs(conn, 46)
+		writePairs(conn, 52)
 	}
 	conn.WriteBulkString("dim")
 	conn.WriteInt(entry.Dim)
@@ -1468,6 +1475,23 @@ func (s *Server) handleINFO(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(int(stats.SessionsBusy))
 	conn.WriteBulkString("embed_sessions_total")
 	conn.WriteInt(int(stats.SessionsTotal))
+	// Image phase totals, kept apart from the text and script counters above.
+	// Read without opening the image session pool: an unloaded image model
+	// reports zeros, never a session. The session total is the image_sessions
+	// field above (ImageFootprint), not a second counter.
+	imgPreUs, imgDispUs, imgAdmitUs, imgRunUs, imgRuns, imgBusy := entry.ImageDispatch()
+	conn.WriteBulkString("image_preprocess_us")
+	conn.WriteInt(int(imgPreUs))
+	conn.WriteBulkString("image_dispatch_wait_us")
+	conn.WriteInt(int(imgDispUs))
+	conn.WriteBulkString("image_admission_wait_us")
+	conn.WriteInt(int(imgAdmitUs))
+	conn.WriteBulkString("image_run_us")
+	conn.WriteInt(int(imgRunUs))
+	conn.WriteBulkString("image_runs")
+	conn.WriteInt(int(imgRuns))
+	conn.WriteBulkString("image_sessions_busy")
+	conn.WriteInt(int(imgBusy))
 	if s.cache != nil {
 		// The counters are the requested model's own entries, so two models
 		// render their own cache behaviour instead of the process's. The byte
@@ -1505,6 +1529,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 
 	perModel := make([]string, 0, len(models))
 	perModelScripts := make([]string, 0, len(models))
+	perModelImages := make([]string, 0, len(models))
 	for _, m := range models {
 		sreq, serr := m.ScriptStats()
 		sessions, tokenizer := m.ScriptFootprint()
@@ -1514,6 +1539,14 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 			perModelScripts = append(perModelScripts, fmt.Sprintf("%s: req=%d err=%d sessions=%d tokenizer=%t wait=%dus run=%dus runs=%d busy=%d/%d class=%s inflight=%d conc=%d/%d autotune=%t",
 				m.Name, sreq, serr, sessions, tokenizer, scriptWaitUs, scriptRunUs, scriptRuns, scriptBusy, sessions,
 				scriptClass, scriptInflight, scriptCurrent, scriptTarget, scriptActive))
+		}
+		// Image phase totals, reported only for a model with image traffic or
+		// an opened image pool. Reading them never opens sessions.
+		imgPreUs, imgDispUs, imgAdmitUs, imgRunUs, imgRuns, imgBusy := m.ImageDispatch()
+		imgTotal := m.ImageFootprint()
+		if imgRuns > 0 || imgPreUs > 0 || imgTotal > 0 {
+			perModelImages = append(perModelImages, fmt.Sprintf("%s: preprocess=%dus dispatch=%dus admit=%dus run=%dus runs=%d busy=%d/%d",
+				m.Name, imgPreUs, imgDispUs, imgAdmitUs, imgRunUs, imgRuns, imgBusy, imgTotal))
 		}
 		if pool := m.LoadedPool(); pool != nil {
 			st := pool.Stats()
@@ -1559,7 +1592,7 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 		snapshotStatus = coordinator.Status()
 	}
 
-	writePairs(conn, 67)
+	writePairs(conn, 68)
 	conn.WriteBulkString("uptime_secs")
 	conn.WriteInt(uptime)
 	conn.WriteBulkString("total_requests")
@@ -1590,6 +1623,8 @@ func (s *Server) handleSTATS(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteInt(avgLatencyUs(s.scriptLatencyUs.Load(), s.scriptRequests.Load()))
 	conn.WriteBulkString("per_model_scripts")
 	conn.WriteBulkString(strings.Join(perModelScripts, " | "))
+	conn.WriteBulkString("per_model_images")
+	conn.WriteBulkString(strings.Join(perModelImages, " | "))
 	conn.WriteBulkString("connections")
 	conn.WriteInt(int(s.conns.Load()))
 	conn.WriteBulkString("idle_timeout_ms")
@@ -1930,6 +1965,8 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
 		"SHUTDOWN [NOSAVE|SAVE] [NOW] [FORCE] [ABORT] - Stop the server (the caller blocks with no reply; ABORT cancels a pending shutdown)",
 		"AUTH <password> - Authenticate with the server",
+		"HELLO [2|3] - Report or negotiate the RESP protocol version",
+		"CLIENT SETINFO <name> <value> - Report client metadata (Redis compatibility)",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
 		"Script input specs: {shape, data|fill|bytes, dtype} - fill builds a constant tensor host-side (no Lua data table); bytes packs little-endian elements; data/fill/bytes are mutually exclusive",

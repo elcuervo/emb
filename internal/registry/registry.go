@@ -114,6 +114,9 @@ type ModelEntry struct {
 	ImageRes    *ImageResources
 	imageOnce   sync.Once
 	imageResErr error
+	// imageResPtr publishes ImageRes atomically, so observability can read the
+	// image dispatch counters without forcing a lazy open or racing the Once.
+	imageResPtr atomic.Pointer[ImageResources]
 	// imageSessions is the number of image sessions opened so far, published
 	// atomically so observability (EMB.INFO) never races the lazy open.
 	imageSessions atomic.Int64

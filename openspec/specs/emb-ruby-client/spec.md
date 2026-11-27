@@ -367,3 +367,106 @@ The gem SHALL map a null (nil) reply slot on an embed response to Ruby `nil` rat
 
 - **WHEN** `client = Emb.new(lazy: :batch)` calls `client.eval(:minilm, script, ["a"])`
 - **THEN** no command SHALL be sent until the returned value is used
+
+### Requirement: Ruby client accepts image calls in the multi block
+
+The Ruby client SHALL accept `m[:model].image(bytes, *more, format:, outputs:)` inside `Emb.multi` and `Client#multi`, with the same arguments as `Proxy#image`. The block SHALL send the collected image pairs through `EMB.IMGMULTI`, and SHALL accept `format:` `:binary` (default) and `:values`. Results SHALL preserve submission order, one decoded Hash per image, and map a failed or truncated image to `nil`.
+
+#### Scenario: Multi-model image results preserve order
+- **WHEN** the block holds image calls for two models and both succeed
+- **THEN** it returns one output-name-to-value map per image in submission order
+- **AND** each map uses the reply decoder for the call's selected format
+
+#### Scenario: A multi-image call yields one result per image
+- **WHEN** `m[:model].image(a, b)` is called inside the block
+- **THEN** both images are sent as ordered pairs and the block returns two Hashes, exactly as two separate calls would
+
+#### Scenario: One failed image pair does not fail its siblings
+- **WHEN** the server returns a null for one pair in an `EMB.IMGMULTI` reply
+- **THEN** the corresponding result is `nil` and other results are decoded normally
+
+#### Scenario: Text and image pairs interleave
+- **WHEN** the block holds both text and image calls
+- **THEN** text pairs are sent as `EMB.MULTI`, image pairs as `EMB.IMGMULTI`
+- **AND** the returned results follow the block's submission order across both kinds
+
+#### Scenario: Incompatible image calls are not merged
+- **WHEN** image calls in one block request different formats or output projections
+- **THEN** each compatible group is sent as its own `EMB.IMGMULTI` and each result uses its requested decoding
+
+#### Scenario: Binary image bytes are preserved
+- **WHEN** an image call receives bytes containing NUL or high-bit bytes
+- **THEN** the client sends the exact bytes as binary-safe RESP bulk arguments without text transcoding or URL fetching
+
+#### Scenario: VALUES format is decoded per image
+- **WHEN** an image call inside the block uses `format: :values`
+- **THEN** the command carries the leading `VALUES` keyword and each result carries its outputs' self-describing envelopes plus the pair's `model` tag
+
+#### Scenario: Invalid format is rejected before sending
+- **WHEN** an image call inside the block receives a format other than `:binary` or `:values`
+- **THEN** it raises an argument error and sends no command
+
+#### Scenario: The explicit block stays eager
+- **WHEN** the client is configured with a lazy mode and image calls are collected in `Emb.multi`
+- **THEN** the resulting `EMB.IMGMULTI` is sent during the block's `run`, not deferred
+
+### Requirement: The gem validates its command surface against the contract
+
+The gem SHALL ship the server's contract and validate its own command surface against it when its specs run: every command name the gem sends SHALL be declared, every keyword token a builder emits SHALL be declared for that command, and the shipped copy SHALL be byte-identical to the repository artifact. The validation SHALL read the contract, not a hand-maintained list.
+
+#### Scenario: An undeclared command fails the build
+
+- **WHEN** the gem sends a command name absent from the shipped contract
+- **THEN** the gem's spec suite SHALL fail, naming the command and the call site file
+
+#### Scenario: A dropped keyword fails the build
+
+- **WHEN** a builder is asked for a projection but sends the command without the `OUTPUTS` keyword the contract declares for its argv shape
+- **THEN** the gem's spec suite SHALL fail, naming the command and the missing keyword
+
+#### Scenario: A stale vendored copy fails the build
+
+- **WHEN** the vendored contract differs from the repository's `commands.json`
+- **THEN** the gem's spec suite SHALL fail and name the sync task that refreshes it
+
+#### Scenario: A matching surface passes
+
+- **WHEN** every command name and keyword the gem emits for a call's default wire form is declared in the shipped contract and the copies match
+- **THEN** the validation SHALL pass without listing commands by hand
+
+### Requirement: A deferred or block call snapshots its payloads
+
+A deferred call (`lazy: :multi` / `:batch`) and an explicit `client.multi` block SHALL retain a copy of every payload they collect — text strings and encoded image bytes — so a caller mutating or re-tagging those strings after the call cannot change what is sent. The copy SHALL happen at collection time, not at dispatch.
+
+#### Scenario: Mutating deferred text changes nothing
+
+- **WHEN** a caller defers a text embed and then mutates the same String before forcing the batch
+- **THEN** the server SHALL receive the text as it was at the call, unchanged
+
+#### Scenario: Mutating multi-block text changes nothing
+
+- **WHEN** a caller adds a text to a `client.multi` block and then mutates the String before the block returns
+- **THEN** the sent `EMB.MULTI` pair SHALL carry the original text
+
+#### Scenario: Mutating multi-block image bytes changes nothing
+
+- **WHEN** a caller adds image bytes to a `client.multi` block and then appends to the same String before the block returns
+- **THEN** the sent `EMB.IMGMULTI` pair SHALL carry the original bytes
+
+### Requirement: A failed share is isolated to the calls it carries
+
+When one share of a serial batch fails, only the calls in that share SHALL fail; calls from a different client in the same batch window SHALL be dispatched on their own or fail with their own error, never with the other share's error.
+
+#### Scenario: A failing client does not poison another
+
+- **WHEN** two clients defer text in one batch window and the first client's command fails
+- **THEN** forcing the second client's call SHALL NOT raise the first client's error, and SHALL send the second client's command
+
+### Requirement: Image coercion leaves the caller's object untouched
+
+Coercing an image argument to binary bytes SHALL return a new String and SHALL NOT change the encoding, contents, or identity of the caller's String.
+
+#### Scenario: Caller string keeps its encoding
+
+- **WHEN** a UTF-8 String is passed as image bytes
+- **THEN** after the call the caller's String SHALL still be UTF-8 and unchanged

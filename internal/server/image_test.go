@@ -29,6 +29,9 @@ type fakeImageSession struct {
 	shapes    [][]int64
 	dim       int
 	err       error
+	// admitWait is the fixed CPU-admission wait the session reports through
+	// RunNamedAdmitted, so attribution tests have a deterministic phase.
+	admitWait time.Duration
 	// outBatch, when > 0, overrides the batch dimension of the returned outputs
 	// (shape[0] and row count) so a test can model a graph whose output batch
 	// disagrees with the images it was run with. 0 returns the requested batch.
@@ -95,6 +98,16 @@ func (f *fakeImageSession) RunNamed(inputs []onnx.NamedTensor) (map[string]onnx.
 }
 
 func (f *fakeImageSession) Close() error { return nil }
+
+// RunNamedAdmitted implements the registry's admittedNamedSession so a test can
+// pin the admission phase instead of measuring wall time. The wait is spent, not
+// just reported: the server subtracts it from the timed run, which would go
+// negative for a wait that never happened.
+func (f *fakeImageSession) RunNamedAdmitted(inputs []onnx.NamedTensor) (map[string]onnx.NamedTensor, time.Duration, error) {
+	time.Sleep(f.admitWait)
+	out, err := f.RunNamed(inputs)
+	return out, f.admitWait, err
+}
 
 func (f *fakeImageSession) callCount() int {
 	f.mu.Lock()

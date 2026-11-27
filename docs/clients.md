@@ -43,6 +43,20 @@ var vec []float32
 binary.Read(bytes.NewReader(raw), binary.LittleEndian, &vec)
 ```
 
+## Validating a client build
+
+[`commands.json`](../commands.json) is the server's command contract: every
+command the server serves, with its accepted keywords, arity, flags, and the
+reply schema for the two image commands. A client keeps a copy and fails its
+build when it sends a command or a keyword the contract does not declare,
+instead of discovering the drift at runtime.
+
+The Ruby gem ships such a copy (`gems/emb/lib/emb/commands.json`) and its specs
+assert that every command literal in `lib/` is declared, that every keyword its
+builders emit is declared for that command, and that its copy is byte-identical
+to the repository artifact. Refresh the copy with `bundle exec rake
+commands:sync` after the server's contract changes.
+
 ## Ruby gem
 
 The [`emb`](../gems/emb/README.md) gem adds connection pooling, a proxy, and
@@ -71,7 +85,22 @@ Emb[:dinov3].image(File.binread("cat.jpg"), outputs: ["patches"])
 # several images: one keyed Hash per requested slot, nil for a failed/truncated one
 Emb[:clip].image(File.binread("cat.jpg"), File.binread("dog.png"))
 # => [{ "embedding" => [0.01, ...] }, { "embedding" => [0.07, ...] }]
+
+# cross-model images ride the same eager block as text
+Emb.multi do |m|
+  m[:clip].image(File.binread("cat.jpg"))
+  m[:dinov3].image(File.binread("cat.jpg"))
+end
+# => [{ "embedding" => [...] }, { "embedding" => [...], "patches" => [...] }]
 ```
+
+The same calls exist on instance clients (`client[:clip].image(...)`,
+`client.multi { |m| ... }`). Under `lazy: :multi`/`:batch` image calls defer like
+embeds: nothing is sent until the value is used, compatible calls (same model,
+format, and `outputs:`) coalesce into one `EMB.IMG`, and a deferred scope is
+bounded by `batch_size` images and `max_image_batch_bytes` (32 MiB default).
+The explicit `multi` block stays eager, sends `EMB.IMGMULTI` for its image
+calls, and accepts the same `format:`/`outputs:` options as a single call.
 
 Gem list:
 

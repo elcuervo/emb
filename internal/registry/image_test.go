@@ -343,7 +343,7 @@ func TestImageResourcesEmbedSingleRunBatched(t *testing.T) {
 	elem := plan.ElementCount()
 	a := make([]float32, elem)
 	b := make([]float32, elem)
-	got, err := res.Embed([][]float32{a, b}, outputs)
+	got, _, err := res.Embed([][]float32{a, b}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestImageResourcesMeanPoolNormalizes(t *testing.T) {
 	}
 	outputs := []ImageOutput{{Name: "embedding", Tensor: "last_hidden_state", Select: "mean", Rows: 1, Dim: 2}}
 	res := &ImageResources{Sessions: []onnx.NamedSession{fake}, Plan: plan, Outputs: outputs, Normalize: true}
-	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	got, _, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +562,8 @@ func TestResolveImageOutputsLayout(t *testing.T) {
 		config.ImageOutputConfig{Name: "embedding", Tensor: "pooler_output"},
 		config.ImageOutputConfig{Name: "patches", Tensor: "last_hidden_state", Select: "tokens"},
 	)
-	md := modelImageMetadata{PatchSize: 16, NumRegisterTokens: 4}
+	registers := 4
+	md := modelImageMetadata{PatchSize: 16, NumRegisterTokens: &registers}
 	outs, err := resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, dinov3OutputInfo(), md)
 	if err != nil {
 		t.Fatal(err)
@@ -590,6 +591,20 @@ func TestResolveImageOutputsLayout(t *testing.T) {
 	if got := outs[1]; got.Start != 1 || got.Grid != 4 || got.Rows != 16 {
 		t.Fatalf("explicit layout = %+v, want start 1 grid 4 rows 16", got)
 	}
+
+	// A declared num_register_tokens: 0 still skips the CLS row; only an absent
+	// key leaves start at 0.
+	zero := 0
+	cfg.Image.Outputs[1].Start = nil
+	cfg.Image.Outputs[1].Grid = 0
+	outs, err = resolveImageOutputs(cfg, "m", 32, imagePreset{}, false, dinov3OutputInfo(),
+		modelImageMetadata{PatchSize: 16, NumRegisterTokens: &zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := outs[1]; got.Start != 1 || got.Grid != 2 {
+		t.Fatalf("declared-zero layout = %+v, want start 1 grid 2", got)
+	}
 }
 
 // TestLoadModelImageMetadata reads the layout a DINOv3 export declares about
@@ -609,13 +624,13 @@ func TestLoadModelImageMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	md := loadModelImageMetadata(graph)
-	if md.PatchSize != 16 || md.NumRegisterTokens != 4 {
+	if md.PatchSize != 16 || md.NumRegisterTokens == nil || *md.NumRegisterTokens != 4 {
 		t.Fatalf("metadata = %+v, want patch_size 16 registers 4", md)
 	}
 
 	// A graph with no config.json yields the zero metadata rather than failing.
 	md = loadModelImageMetadata(filepath.Join(t.TempDir(), "model.onnx"))
-	if md.PatchSize != 0 || md.NumRegisterTokens != 0 {
+	if md.PatchSize != 0 || md.NumRegisterTokens != nil {
 		t.Fatalf("metadata without config.json = %+v, want zero", md)
 	}
 }
@@ -718,7 +733,7 @@ func TestImageResourcesTokenGridValidation(t *testing.T) {
 		},
 	}}
 	res := &ImageResources{Sessions: []onnx.NamedSession{ok}, Plan: plan, Outputs: outputs, Normalize: false}
-	got, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	got, _, err := res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -736,7 +751,7 @@ func TestImageResourcesTokenGridValidation(t *testing.T) {
 		},
 	}}
 	res = &ImageResources{Sessions: []onnx.NamedSession{short}, Plan: plan, Outputs: outputs}
-	_, err = res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
+	_, _, err = res.Embed([][]float32{make([]float32, plan.ElementCount())}, outputs)
 	if err == nil {
 		t.Fatal("expected a row-count refusal")
 	}

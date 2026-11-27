@@ -3,6 +3,12 @@
 Full reference for the `emb` command surface. See the
 [README](../README.md) for install and quick start.
 
+The machine-readable contract for this surface is [`commands.json`](../commands.json):
+one entry per command with its grammar, accepted keywords, arity, flags, and — for
+`EMB.IMG` and `EMB.IMGMULTI` — a JSON Schema for the reply. This table renders that
+contract; `just commands-check` fails when the two drift, and clients validate their
+builds against it (the Ruby gem does — see [Clients](clients.md#validating-a-client-build)).
+
 | Command | Description |
 |---------|-------------|
 | `EMB <model> [BLOB\|VALUES] <text> [text...]` | Embed one or more texts. Default `BLOB`: single text → bulk string, multiple → array of bulk strings (float32 bytes). `VALUES`: `dtype`/`shape`/`values` envelope with decimal values |
@@ -10,9 +16,9 @@ Full reference for the `emb` command surface. See the
 | `EMB.IMG <model> [BLOB\|VALUES] [OUTPUTS <name>[,<name>...]] <bytes> [<bytes>...]` | Embed one or more images from raw JPEG/PNG/GIF/WebP bytes (each a binary-safe bulk). The reply is keyed by output name: one image → a map, several → an array of maps, null for failed/truncated slots. `OUTPUTS` narrows the projection (absent = every configured output). URLs are rejected |
 | `EMB.IMGMULTI [BLOB\|VALUES] [OUTPUTS <name>[,<name>...]] <model> <bytes> [<model> <bytes>...]` | Embed images across different models in one call; one keyed map per pair, MGET-style per-pair nulls, and under `VALUES` each pair carries its `model` beside its outputs |
 | `EMB.MODELS` | List loaded models with dimensions and status |
-| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, the embedding path's dispatch/admission/run timings and runs, `image_outputs` (each configured image product's tensor, selector, rows, dim and grid — read without running inference), and that model's own cache stats (hits, misses, rate, evictions, entries, bytes) |
-| `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown, CPU allowance/budget/active peak, cache/connection limits, mem (RSS MB), CPU user/sys usec, goroutines |
-| `MONITOR [seq] [limit]` | Recent completed-request events from a bounded ring: `seq`, `at_us` (µs), `model`, `texts`, `latency_us`, `err`, then the request's own attribution — `cached_texts` (how many of its texts the reply cache answered), `attributed` (whether the server measured its phases), `dispatch_us`, `admit_us`, `run_us`. Eleven fields in that closed order, a flat array under RESP2 and a map with the same names under RESP3; the five attribution fields are appended after `err`, so a client reading the original six positionally is unaffected. Incremental (`seq`) fetch; no text payloads |
+| `EMB.INFO <model>` | Model details: dim, workers, requests served, avg latency, batch determinism, CPU share/thread width/spinning, the embedding path's dispatch/admission/run timings and runs, the image path's preprocess/dispatch/admission/run timings, runs and session occupancy (`image_*`, separate from `embed_*` and `script_*`), `image_outputs` (each configured image product's tensor, selector, rows, dim and grid — read without running inference), and that model's own cache stats (hits, misses, rate, evictions, entries, bytes) |
+| `EMB.STATS` | Server statistics: uptime, total requests, per-model breakdown, CPU allowance/budget/active peak, cache/connection limits, `per_model_images` (image phase totals plus busy/total sessions per model), mem (RSS MB), CPU user/sys usec, goroutines |
+| `MONITOR [seq] [limit]` | Recent completed-request events from a bounded ring: `seq`, `at_us` (µs), `model`, `texts`, `latency_us`, `err`, then the request's own attribution — `cached_texts` (how many items the reply cache answered: texts, or for `EMB.IMG`/`EMB.IMGMULTI` the cache-served images, a fully cached image counting once), `attributed` (whether the server measured its phases), `dispatch_us`, `admit_us`, `run_us`, `preprocess_us` (image tensor preprocessing; text requests run none). Twelve fields in that closed order, a flat array under RESP2 and a map with the same names under RESP3; the six attribution fields are appended after `err`, so a client reading the original six positionally is unaffected. Incremental (`seq`) fetch; no text or image payloads |
 | `EMB.READY` | Health check: `+OK` (ready), `-ERR <reason>` (loading, draining, no models) |
 | `EMB.EVAL <model> <script> <numtexts> <text...> <arg...>` | Evaluate a Lua script once against a model (KEYS=texts, ARGV=args) |
 | `EMB.EVSHA <model> <sha> <numtexts> <text...> <arg...>` | Evaluate a cached script by SHA (see `EMB.SCRIPT LOAD`) |
@@ -57,6 +63,18 @@ reason an unresolved or fallback layout was served. See
 precedence, and fallbacks, and
 [Operations](operations.md#reading-the-process-cpu-plan) for what each timing
 does and does not include.
+
+The image path is attributed separately from `embed_*` and `script_*`:
+`EMB.INFO` carries `image_preprocess_us`, `image_dispatch_wait_us`,
+`image_admission_wait_us`, `image_run_us`, `image_runs` and
+`image_sessions_busy`, the cumulative image phases plus the live busy gauge;
+the opened session total is the existing `image_sessions` field. `EMB.STATS`
+carries `per_model_images`,
+a `" | "`-joined per-model string
+`name: preprocess=<n>us dispatch=<n>us admit=<n>us run=<n>us runs=<n> busy=<busy>/<total>`,
+present only for models with image traffic or an opened image pool. Reading either never opens an image
+session, so an unloaded image path reports its unloaded state rather than
+initializing the plan.
 
 ## SHUTDOWN
 
@@ -206,7 +224,11 @@ send its bytes. This keeps the request path network-free (no SSRF surface) and
 makes image caching optimal: entries are keyed
 `img:<model>:sha256(bytes):<output>`, so a changed image is always a different
 key, each output is cached on its own, and a hit costs no decode or network.
-Per-model stats and `EMB.CACHE.FLUSH <model>` cover every output of that model.
+Per-model stats and `EMB.CACHE.FLUSH <model>` cover every output of that model;
+no image bytes are recorded in stats. A request whose outputs are all cached
+reports its cache-served images in `MONITOR` with no measured phase work, while
+a partial hit preprocesses and runs only the missing outputs, so its phases
+cover the misses alone.
 
 Image limits are configurable and enforced before decode/inference:
 `max_images` (default 4096, `0` = unlimited), `max_image_bytes` (default 32 MiB),

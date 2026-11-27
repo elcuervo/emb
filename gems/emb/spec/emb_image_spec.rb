@@ -24,6 +24,9 @@ RSpec.describe Emb::Proxy do
       end
 
       expect(proxy.image(bytes)).to eq('embedding' => [1.5, -2.5])
+      # Coercion never re-tags the caller's own object.
+      expect(bytes.encoding).to eq(Encoding::UTF_8)
+      expect(bytes.bytes).to eq("\x89PNG\r\n\x1a\n\x00\xff\xfe".bytes)
     end
 
     it 'reuses the float32 reply decode path, keyed by output name' do

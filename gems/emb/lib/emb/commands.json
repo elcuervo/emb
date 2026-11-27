@@ -1,0 +1,387 @@
+{
+  "contract": 1,
+  "commands": [
+    {
+      "name": "AUTH",
+      "summary": "Authenticate the connection when a password is configured.",
+      "grammar": "AUTH \u003cpassword\u003e",
+      "keywords": [],
+      "arity": {
+        "min": 1,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "OK on success; an error otherwise."
+    },
+    {
+      "name": "CLIENT",
+      "summary": "Answer the CLIENT subcommands RESP3 client handshakes send.",
+      "grammar": "CLIENT SETINFO \u003cname\u003e \u003cvalue\u003e",
+      "keywords": [
+        "SETINFO"
+      ],
+      "arity": {
+        "min": 1,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "OK for CLIENT SETINFO; an error for unknown subcommands."
+    },
+    {
+      "name": "CONFIG",
+      "summary": "Read or live-tune runtime configuration parameters.",
+      "grammar": "CONFIG GET [pattern] | CONFIG SET \u003cparam\u003e \u003cvalue\u003e",
+      "keywords": [
+        "GET",
+        "SET"
+      ],
+      "arity": {
+        "min": 1,
+        "tail": "none"
+      },
+      "flags": [
+        "changes-config"
+      ],
+      "reply": "GET replies with flat name/value pairs; SET replies OK or an error."
+    },
+    {
+      "name": "EMB",
+      "summary": "Generate embeddings for one or more texts of one model.",
+      "grammar": "EMB \u003cmodel\u003e [BLOB|VALUES] \u003ctext\u003e [text...]",
+      "keywords": [
+        "BLOB",
+        "VALUES"
+      ],
+      "arity": {
+        "min": 2,
+        "tail": "variadic"
+      },
+      "flags": [
+        "inference"
+      ],
+      "reply": "One text: a bulk string of float32 bytes (BLOB) or a VALUES envelope. Several texts under BLOB: an array of the same in request order. Several texts under VALUES: one envelope with shape [count, dim]."
+    },
+    {
+      "name": "EMB.CACHE.FLUSH",
+      "summary": "Invalidate all cached embeddings, or one model's.",
+      "grammar": "EMB.CACHE.FLUSH [model]",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "writes-state"
+      ],
+      "reply": "Integer count of removed entries."
+    },
+    {
+      "name": "EMB.EVAL",
+      "summary": "Evaluate a Lua script once against a model.",
+      "grammar": "EMB.EVAL \u003cmodel\u003e \u003cscript\u003e \u003cnumtexts\u003e \u003ctext...\u003e \u003carg...\u003e",
+      "keywords": [],
+      "arity": {
+        "min": 3,
+        "tail": "variadic"
+      },
+      "flags": [
+        "inference"
+      ],
+      "reply": "The script's converted value, or an array of values for several texts."
+    },
+    {
+      "name": "EMB.EVSHA",
+      "summary": "Evaluate a cached script by SHA1.",
+      "grammar": "EMB.EVSHA \u003cmodel\u003e \u003csha\u003e \u003cnumtexts\u003e \u003ctext...\u003e \u003carg...\u003e",
+      "keywords": [],
+      "arity": {
+        "min": 3,
+        "tail": "variadic"
+      },
+      "flags": [
+        "inference"
+      ],
+      "reply": "The script's converted value, or an array of values for several texts."
+    },
+    {
+      "name": "EMB.HELP",
+      "summary": "Show the command reference, including the script surface.",
+      "grammar": "EMB.HELP",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "A bulk string of help lines."
+    },
+    {
+      "name": "EMB.IMG",
+      "summary": "Embed one or more raw encoded images of one model.",
+      "grammar": "EMB.IMG \u003cmodel\u003e [BLOB|VALUES] [OUTPUTS \u003cname\u003e[,\u003cname\u003e...]] \u003cimage-bytes\u003e [\u003cimage-bytes\u003e...]",
+      "keywords": [
+        "BLOB",
+        "VALUES",
+        "OUTPUTS"
+      ],
+      "arity": {
+        "min": 2,
+        "tail": "variadic"
+      },
+      "flags": [
+        "inference"
+      ],
+      "reply": "One image: a keyed map of output name to value; several: an array of such maps in request order, with null for a failed or truncated slot.",
+      "reply_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "null",
+            "description": "one image that failed or was truncated"
+          },
+          {
+            "type": "object",
+            "description": "one image: output name to that output's value"
+          },
+          {
+            "type": "array",
+            "description": "several images, one keyed map per image in request order",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "wire_notes": "RESP2 writes each map as a flat alternating name/value array; RESP3 writes a map. VALUES replaces each bulk string with a dtype/shape/values envelope."
+    },
+    {
+      "name": "EMB.IMGMULTI",
+      "summary": "Embed images across different models in one call.",
+      "grammar": "EMB.IMGMULTI [BLOB|VALUES] [OUTPUTS \u003cname\u003e[,\u003cname\u003e...]] \u003cmodel\u003e \u003cimage-bytes\u003e [\u003cmodel\u003e \u003cimage-bytes\u003e...]",
+      "keywords": [
+        "BLOB",
+        "VALUES",
+        "OUTPUTS"
+      ],
+      "arity": {
+        "min": 2,
+        "tail": "even-pairs"
+      },
+      "flags": [
+        "inference"
+      ],
+      "reply": "An array with one keyed map per pair in request order; a failed pair is null; under VALUES each pair carries its model beside its outputs.",
+      "reply_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "array",
+        "description": "one keyed map per model/image pair in request order",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "wire_notes": "RESP2 writes each map as a flat alternating name/value array; RESP3 writes a map. VALUES replaces each bulk string with a dtype/shape/values envelope."
+    },
+    {
+      "name": "EMB.INFO",
+      "summary": "Show one model's configuration and statistics.",
+      "grammar": "EMB.INFO \u003cmodel\u003e",
+      "keywords": [],
+      "arity": {
+        "min": 1,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "A map of model fields: dim, workers, latency, CPU plan, embed/image/script phases, image outputs, and cache stats."
+    },
+    {
+      "name": "EMB.MODELS",
+      "summary": "List loaded models with dimensions and status.",
+      "grammar": "EMB.MODELS",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "RESP2: an array of [name, dim, status]; RESP3: a map keyed by model name with dim and status."
+    },
+    {
+      "name": "EMB.MULTI",
+      "summary": "Embed texts across different models in one round trip.",
+      "grammar": "EMB.MULTI [BLOB|VALUES] \u003cmodel\u003e \u003ctext\u003e [\u003cmodel\u003e \u003ctext\u003e...]",
+      "keywords": [
+        "BLOB",
+        "VALUES"
+      ],
+      "arity": {
+        "min": 2,
+        "tail": "even-pairs"
+      },
+      "flags": [
+        "inference"
+      ],
+      "reply": "An array with one vector (or VALUES envelope) per pair in request order; a failed pair is null."
+    },
+    {
+      "name": "EMB.READY",
+      "summary": "Report server readiness.",
+      "grammar": "EMB.READY",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "+OK when ready; an error naming loading, draining, or no models."
+    },
+    {
+      "name": "EMB.SAVE",
+      "summary": "Accept an asynchronous cache snapshot.",
+      "grammar": "EMB.SAVE",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "writes-state"
+      ],
+      "reply": "OK once the snapshot is accepted; an error when persistence is disabled or disallowed."
+    },
+    {
+      "name": "EMB.SCRIPT",
+      "summary": "Compile, inspect, and flush cached Lua scripts.",
+      "grammar": "EMB.SCRIPT LOAD \u003cmodel\u003e \u003cscript\u003e | EMB.SCRIPT EXISTS \u003cmodel\u003e \u003csha...\u003e | EMB.SCRIPT FLUSH [\u003cmodel\u003e]",
+      "keywords": [
+        "LOAD",
+        "EXISTS",
+        "FLUSH"
+      ],
+      "arity": {
+        "min": 1,
+        "tail": "none"
+      },
+      "flags": [
+        "writes-state"
+      ],
+      "reply": "LOAD replies a bulk SHA1; EXISTS replies an array of 1/0 per SHA; FLUSH replies OK."
+    },
+    {
+      "name": "EMB.STATS",
+      "summary": "Show server-wide statistics.",
+      "grammar": "EMB.STATS",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "A map of uptime, requests, per-model breakdown, CPU, cache, connections, memory, and goroutines."
+    },
+    {
+      "name": "HELLO",
+      "summary": "Negotiate the RESP protocol version for the connection.",
+      "grammar": "HELLO [2|3]",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "A map (flat array under RESP2) with server, version, proto, mode, and role."
+    },
+    {
+      "name": "INFO",
+      "summary": "Show Redis-style server information sections.",
+      "grammar": "INFO [section...]",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "variadic"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "A bulk string of CRLF-separated sections."
+    },
+    {
+      "name": "MONITOR",
+      "summary": "Show recent completed request events.",
+      "grammar": "MONITOR [seq] [limit]",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection",
+        "exposes-traffic"
+      ],
+      "reply": "An array of events, each a 12-field flat array under RESP2 or a map under RESP3; no text payloads."
+    },
+    {
+      "name": "PING",
+      "summary": "Redis compatibility ping.",
+      "grammar": "PING",
+      "keywords": [],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "introspection"
+      ],
+      "reply": "Simple string PONG."
+    },
+    {
+      "name": "SHUTDOWN",
+      "summary": "Stop the server with Redis's shutdown semantics.",
+      "grammar": "SHUTDOWN [NOSAVE|SAVE] [NOW] [FORCE] [ABORT]",
+      "keywords": [
+        "NOSAVE",
+        "SAVE",
+        "NOW",
+        "FORCE",
+        "ABORT"
+      ],
+      "arity": {
+        "min": 0,
+        "tail": "none"
+      },
+      "flags": [
+        "terminates-server"
+      ],
+      "reply": "No reply: the caller blocks and the connection closes. SHUTDOWN ABORT replies OK or an error."
+    }
+  ]
+}

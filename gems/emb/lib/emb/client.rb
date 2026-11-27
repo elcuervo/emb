@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'connection_router'
+require_relative 'image_command'
 require 'redis_client'
 
 module Emb
@@ -14,6 +15,7 @@ module Emb
       cfg = Emb.configuration
       @lazy_mode = lazy.nil? ? cfg.lazy : validate_lazy!(lazy)
       @batch_size = redis_options.delete(:batch_size) || cfg.batch_size
+      @max_image_batch_bytes = image_batch_bytes(redis_options, cfg)
       url = extract_url!(redis_options, cfg)
       # Captured before ConnectionRouter consumes the merged options, so
       # fail-closed batches can report the retry budget (Emb::ServerError).
@@ -27,7 +29,7 @@ module Emb
 
     def pools = @router.pools
 
-    attr_reader :batch_size, :lazy_mode, :reconnect_attempts
+    attr_reader :batch_size, :lazy_mode, :reconnect_attempts, :max_image_batch_bytes
 
     def [](name)
       @registry[name] ||= Proxy.new(self, name.to_sym)
@@ -88,6 +90,12 @@ module Emb
 
     private
 
+    def image_batch_bytes(opts, cfg)
+      value = opts.delete(:max_image_batch_bytes) || cfg.max_image_batch_bytes
+      Configuration.validate_image_batch_bytes!(value)
+      value
+    end
+
     def validate_lazy!(value)
       unless Configuration::LAZY_MODES.include?(value)
         raise ArgumentError, "lazy must be false, :multi, or :batch (got #{value.inspect})"
@@ -99,7 +107,7 @@ module Emb
     # Per-call protocol: bypasses Configuration#protocol=, so validate here too.
     def merged_redis_options(opts, cfg, url)
       defaults = cfg.to_h
-      keys = defaults.keys - %i[url pool lazy batch_size]
+      keys = defaults.keys - %i[url pool lazy batch_size max_image_batch_bytes]
       keys -= %i[host port] if url
 
       keys.each do |key|

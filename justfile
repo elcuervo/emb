@@ -1000,6 +1000,26 @@ website-presets:
 website-presets-check:
     python3 website/tools/stamp-presets.py --check
 
+# Regenerate `commands.json` from internal/contract. The Go table is the only
+# writer, and the artifact is the one a client pins and diffs against.
+commands-gen:
+    go run ./cmd/emb-commands > commands.json
+
+# Check `commands.json` is in sync with the contract, naming the entries that
+# differ. CI runs this; it renders to a temp file rather than touching the
+# committed artifact, which no hand edit should ever touch.
+commands-check:
+    @tmp=$(mktemp); trap 'rm -f "$tmp" "$tmp.diff"' EXIT; \
+    go run ./cmd/emb-commands > "$tmp"; \
+    if ! diff -u commands.json "$tmp" > "$tmp.diff"; then \
+        cat "$tmp.diff"; \
+        echo; \
+        echo "stale entries in commands.json:"; \
+        sed -n 's/^[-+] *"name": "\(.*\)",$/\1/p' "$tmp.diff" | sort -u; \
+        echo "run 'just commands-gen' to regenerate it."; \
+        exit 1; \
+    fi
+
 # The plate's example controls are derived from `dns/examples.json`, so a
 # re-pinned example or a newly discovered joke becomes a control without an edit
 # to the page. `--check` is the drift guard CI runs.

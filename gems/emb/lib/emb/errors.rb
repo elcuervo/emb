@@ -14,4 +14,9 @@ module Emb
       @attempts = attempts
     end
   end
+
+  # Raised when deferring another image call would exceed the pending scope's
+  # `batch_size` image count or its `max_image_batch_bytes` total. The image is
+  # not queued or sent; force the pending values or start a new scope.
+  class ImageBatchLimitError < StandardError; end
 end
