@@ -73,7 +73,7 @@ module Emb
       end
 
       def [](text)
-        @pairs << { kind: :text, model: @model, text: text }
+        @pairs << { kind: :text, model: @model, text: text.dup }
       end
 
       # The same arguments as Proxy#image. Each image becomes its own pair, so

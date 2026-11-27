@@ -56,7 +56,7 @@ module Emb
       format = normalize_format(format)
       names = Array(outputs).map { |name| name.to_s.dup.freeze }
       images = coerce_images([image_bytes, *more])
-      return deferred_image(images, format, names) if deferred?
+      return Emb.build_image_loader(@client, @name, images, format: format, names: names) if deferred?
 
       Emb::Telemetry.embed_call(operation: 'image', model: @name, texts: images.size,
                                 format: format, mode: 'eager') do
@@ -64,15 +64,17 @@ module Emb
       end
     end
 
-    # coerce_image_bytes normalizes an image argument to a binary byte string
-    # without transcoding: a String's bytes are preserved exactly (only the
-    # encoding label is set to ASCII-8BIT), and an IO is read fully — or, with a
-    # limit, read only up to it so an oversized stream is never materialized.
+    # coerce_image_bytes normalizes an image argument to a fresh binary String
+    # without transcoding: a String's bytes are copied exactly (encoding label
+    # set to ASCII-8BIT), and an IO is read fully — or, with a limit, read only
+    # up to it so an oversized stream is never materialized. The caller's
+    # object is never touched, so a later mutation cannot change a deferred
+    # request that captured this value.
     def self.coerce_image_bytes(bytes, limit: nil)
-      data = bytes.respond_to?(:read) ? read_image_bytes(bytes, limit) : bytes
-      data = data.to_s
-      data = data.dup if data.frozen?
-      data.force_encoding(Encoding::BINARY)
+      return bytes.to_s.b unless bytes.respond_to?(:read)
+
+      data = read_image_bytes(bytes, limit)
+      data ? data.force_encoding(Encoding::BINARY) : ''.b
     end
 
     def self.read_image_bytes(io, limit)
@@ -99,13 +101,6 @@ module Emb
 
     def deferred?
       @client.respond_to?(:lazy?) && @client.lazy?
-    end
-
-    # Deferred bytes must be captured now: an IO read or a caller mutating its
-    # string afterwards cannot change the pending request.
-    def deferred_image(images, format, names)
-      retained = images.map { |data| data.dup.force_encoding(Encoding::BINARY) }
-      Emb.build_image_loader(@client, @name, retained, format: format, names: names)
     end
 
     def image_reply(images, format, names)

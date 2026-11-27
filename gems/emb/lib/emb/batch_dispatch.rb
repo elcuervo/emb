@@ -37,12 +37,14 @@ module Emb
       slices
     end
 
-    # Serial dispatch: one share in flight at a time. Redis errors fail closed
-    # with context; anything else is a local bug and is re-raised unchanged
-    # after the pending set is dropped. The failing share's items are closed
-    # with the error before the pending set is cleared, so only the shares that
-    # were never sent are flushed as not dispatched.
-    def dispatch_serial(client, slices, loader, durations)
+    # Serial dispatch: one share in flight at a time. A redis failure is
+    # collected per slice so the window's other shares still dispatch; a
+    # non-redis error is a local bug and is re-raised unchanged after the
+    # pending set is dropped. `single_client` marks a window with nothing else
+    # to deliver: an all-failed group keeps the fail-closed contract, and the
+    # raise happens here, inside the batch span, so the span records the error.
+    def dispatch_serial(client, slices, loader, durations, single_client: false)
+      failures = []
       slices.each do |slice|
         status, _, result, elapsed = dispatch_share(client, slice, Emb::Telemetry.current_context)
         durations << elapsed
@@ -50,14 +52,13 @@ module Emb
 
         resolve_slice(loader, slice, result)
       rescue RedisClient::Error => e
-        error = batch_error(e, slice: slice, budget: retry_budget(client))
-        slice.each { |item| Emb::Telemetry::Deferred.resolve(item, error: error) }
-        clear_batch_pending!
-        raise error
+        failures << [e, slice, client]
       rescue StandardError
         clear_batch_pending!
         raise
       end
+      fail_closed(failures) if single_client && failures.size == slices.size
+      failures
     end
 
     # Sends one chunk share and returns the raw reply entries. Single-model

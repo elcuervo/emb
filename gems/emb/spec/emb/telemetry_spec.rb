@@ -142,6 +142,9 @@ RSpec.describe Emb::Telemetry do
       spans = spans_named('emb.embed')
       expect(spans.size).to eq(1)
       expect(spans.first.attributes['emb.queue']).to be >= 0.02
+      # Both coalesced calls share the first item's entry; resolution removes it,
+      # so the scope end has nothing to flush as not dispatched.
+      expect(Thread.current[:emb_telemetry_deferrals]).to be_empty
     end
 
     it 'records the queue from deferral to dispatch and leaves nothing pending' do
@@ -157,6 +160,37 @@ RSpec.describe Emb::Telemetry do
 
       Emb::BatchScope.wrap { nil }
       expect(spans_named('emb.embed').size).to eq(1)
+    end
+
+    it "closes a mutated payload's span and drains the registry" do
+      client = TelemetryHelpers::FakeClient.new(lazy_mode: :multi)
+      text = +'hello'
+      loader = Emb.build_batch_loader(client, :minilm, text)
+      text << ' MUTATED'
+
+      force(loader)
+
+      expect(client.commands).to eq([%w[EMB minilm hello]])
+      expect(spans_named('emb.embed').size).to eq(1)
+      expect(Thread.current[:emb_telemetry_deferrals]).to be_empty
+    end
+
+    it 'drains a mixed text and image scope and flushes what never dispatched' do
+      client = TelemetryHelpers::FakeClient.new(lazy_mode: :multi)
+      text = Emb.build_batch_loader(client, :minilm, 'hello')
+      image = Emb::Proxy.new(client, :clip).image(+'bytes')
+
+      force(text)
+      expect(image).to eq('embedding' => [1.0, 2.0])
+
+      # Deferred after the flush, never forced: the scope end reports it as
+      # not dispatched and leaves the registry empty.
+      Emb.build_batch_loader(client, :bge, 'later')
+      Emb::BatchScope.wrap { nil }
+
+      expect(Thread.current[:emb_telemetry_deferrals]).to be_empty
+      expect(spans_named('emb.embed').size).to eq(3)
+      expect(spans_named('emb.embed').last.attributes['emb.dispatched']).to be(false)
     end
 
     it 'reports an item that never reached a command as not dispatched' do
@@ -306,10 +340,11 @@ RSpec.describe Emb::Telemetry do
 
       share = span_named('emb.share')
       expect(share.status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
+      expect(span_named('emb.batch').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
       expect(span_named('emb.embed').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
     end
 
-    it 'reports the unsent remainder as not dispatched and records one share duration' do
+    it 'attempts every share before failing closed and records each share duration' do
       failing = ->(_args) { raise RedisClient::CommandError, 'rejected' }
       client = TelemetryHelpers::FakeClient.new(lazy_mode: :multi, batch_size: 1, &failing)
       first = Emb.build_batch_loader(client, :minilm, 'one')
@@ -317,12 +352,13 @@ RSpec.describe Emb::Telemetry do
 
       expect { force(first) }.to raise_error(Emb::ServerError)
 
-      expect(client.commands.size).to eq(1)
-      dispatched = spans_named('emb.embed').map { |span| span.attributes['emb.dispatched'] }
-      expect(dispatched).to contain_exactly(true, false)
-      expect(histogram('emb.client.share.duration').count).to eq(1)
-      # Only the attempted share reports a queue; the unsent one never does.
-      expect(histogram('emb.client.queue.duration').count).to eq(1)
+      # A failed share no longer cancels the slices behind it: both were sent,
+      # and the window fails closed only after every share was settled.
+      expect(client.commands.size).to eq(2)
+      expect(spans_named('emb.embed').map { |span| span.attributes['emb.dispatched'] })
+        .to contain_exactly(true, true)
+      expect(histogram('emb.client.share.duration').count).to eq(2)
+      expect(histogram('emb.client.queue.duration').count).to eq(2)
     end
   end
 end

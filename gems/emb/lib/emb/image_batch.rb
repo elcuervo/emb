@@ -21,10 +21,11 @@ module Emb
     def build(client, model, images, format:, names:)
       check_limits!(client, images)
       item = [client, ITEM, model, images, format, names]
+      loader = BatchLoader.for(item).batch(default_value: [], key: Emb::BATCH_KEY, &Emb::BATCH_BLOCK)
       Telemetry::Deferred.record(
         item, Telemetry.entry_for(client, operation: 'image', model: model, texts: images.size, format: format)
       )
-      BatchLoader.for(item).batch(default_value: [], key: Emb::BATCH_KEY, &Emb::BATCH_BLOCK)
+      loader
     end
 
     # Groups only compatible calls (model, format, projection). The scope bound
@@ -97,7 +98,7 @@ module Emb
     end
 
     def pending_items
-      BatchLoader::Executor.current&.items_by_block&.[]([Emb::BATCH_BLOCK.source_location, Emb::BATCH_KEY])
+      BatchLoader::Executor.current&.items_by_block&.[](Emb::BATCH_PENDING_KEY)
     end
 
     def add_usage(totals, item, client)

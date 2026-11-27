@@ -460,6 +460,24 @@ RSpec.describe Emb do
       expect(log).to eq([['EMB', 'minilm', 'hello world']])
     end
 
+    it 'captures deferred text at call time' do
+      client = Emb::Client.new(lazy: :multi)
+      log = []
+      client.define_singleton_method(:send_command) do |*args|
+        log << args
+        [FakeEmbClient.vec(1.0, dim: 2), FakeEmbClient.vec(2.0, dim: 2)]
+      end
+
+      first = +'hello'
+      second = +'world'
+      loader = client[:minilm][first, second]
+      first << ' MUTATED'
+      second << '!'
+
+      expect(loader.first).to eq([1.0, 1.0])
+      expect(log).to eq([%w[EMB minilm hello world]])
+    end
+
     it 'returns Array of Array of Float for multi-text in a deferred mode' do
       client = Emb::Client.new(lazy: :multi)
       log = []
@@ -1048,6 +1066,46 @@ RSpec.describe Emb do
       end
       expect(client.commands.length).to eq(1)
       expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+    end
+
+    it "isolates a client's failed share from another client's queued work" do
+      failing = FailingEmbClient.new
+      healthy = FakeEmbClient.new(%w[EMB minilm b] => [FakeEmbClient.vec(2.0)])
+      failed = described_class.build_batch_loader(failing, :minilm, 'a')
+      sibling = described_class.build_batch_loader(healthy, :minilm, 'b')
+
+      # The sibling's force runs both clients' shares: its own resolves even
+      # though the other client's command failed.
+      expect(sibling).to eq([2.0, 2.0])
+      expect(healthy.commands).to eq([%w[EMB minilm b]])
+
+      # The failed call carries its own error, raised on use, never the
+      # sibling's.
+      expect { failed.first }.to raise_error(Emb::ServerError) do |e|
+        expect(e.attempts).to eq(1)
+        expect(e.cause).to be_a(READ_TIMEOUT)
+      end
+      expect(failing.commands.length).to eq(1)
+      expect(BatchLoader::Executor.current.items_by_block.values.sum(&:size)).to eq(0)
+    end
+
+    it 'keeps each client\'s own error when every client fails' do
+      first_client = FailingEmbClient.new
+      second_client = FailingEmbClient.new
+      failed = described_class.build_batch_loader(first_client, :minilm, 'a')
+      sibling = described_class.build_batch_loader(second_client, :bge, 'b')
+
+      # Forcing the second client still runs both shares; its own error names
+      # its own model, never the first client's.
+      expect { sibling.first }.to raise_error(Emb::ServerError) do |e|
+        expect(e.message).to include('models: bge')
+        expect(e.message).not_to include('minilm')
+      end
+      expect { failed.first }.to raise_error(Emb::ServerError) do |e|
+        expect(e.message).to include('models: minilm')
+      end
+      expect(first_client.commands.length).to eq(1)
+      expect(second_client.commands.length).to eq(1)
     end
 
     it 'resolves failed items to [] afterwards, with no further I/O' do

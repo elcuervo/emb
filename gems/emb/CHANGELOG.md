@@ -14,6 +14,18 @@ All notable changes to the `emb` gem are documented here. The format follows
 
 ### Fixed
 
+- A deferred call and each `client.multi` entry copy their text (and image bytes) when
+  the call is made, so mutating or re-tagging the caller's String afterwards can no
+  longer change the sent `EMB`/`EMB.MULTI`/`EMB.IMGMULTI` payload.
+- A failed share in a serial batch window no longer raises on a different client's
+  loader or drops that client's queued work: the window's other groups dispatch on
+  their own, and only the failed slice's items raise that share's `Emb::ServerError`.
+  A single-client window where nothing was delivered still fails closed (raise, then `[]`); with several clients, each failed share keeps its own error.
+- Deferral telemetry is keyed by the pending item's identity instead of its content
+  hash, so a payload mutation can no longer strand an entry: its span closes and the
+  scope's registry drains.
+- Image coercion returns a fresh binary String instead of re-tagging the caller's
+  String as `ASCII-8BIT` in place.
 - A deferred single-image call decodes the one keyed map `EMB.IMG` replies with
   instead of raising `ArgumentError`; the share's image count, not its call
   count, selects the reply shape.

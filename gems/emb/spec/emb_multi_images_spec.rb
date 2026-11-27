@@ -109,6 +109,26 @@ RSpec.describe Emb do
       expect(sent_bytes.bytes).to eq(bytes.bytes)
     end
 
+    it 'captures text and image bytes at call time' do
+      client, sent, replies = recording_client
+      replies << [blob(1.0)]
+      replies << [['embedding', blob(2.0)]]
+
+      text = +'hello'
+      bytes = +'abc'
+      client.multi do |m|
+        m[:minilm][text]
+        m[:clip].image(bytes)
+        text << ' MUTATED'
+        bytes << 'ZZZ'
+      end
+
+      expect(sent).to contain_exactly(
+        ['EMB.MULTI', 'minilm', 'hello'],
+        ['EMB.IMGMULTI', 'clip', 'abc']
+      )
+    end
+
     it 'rejects an unknown format before sending' do
       client, = recording_client
 

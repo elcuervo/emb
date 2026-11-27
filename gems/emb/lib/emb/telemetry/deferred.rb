@@ -15,9 +15,20 @@ module Emb
 
       module_function
 
-      # `||=` keeps the earliest deferral for a deduped tuple.
+      # `||=` keeps the earliest deferral for a coalesced tuple. Entries are
+      # keyed by the canonical item object itself (compared by identity): a
+      # content hash would follow a payload mutation and strand the entry.
       def record(item, entry)
-        deferrals[item] ||= entry.merge(at: Telemetry.mono, wall: Time.now)
+        deferrals[canonical(item)] ||= entry.merge(at: Telemetry.mono, wall: Time.now)
+      end
+
+      # batch-loader keeps the first instance of a coalesced key, so a
+      # duplicate call has to record against the item the block will resolve.
+      # shortcut: one linear scan of the pending scope per deferral (bounded by
+      # batch_size); revisit if deferral throughput ever matters.
+      def canonical(item)
+        pending = BatchLoader::Executor.current&.items_by_block&.[](Emb::BATCH_PENDING_KEY)
+        pending&.find { |queued| queued == item } || item
       end
 
       # Stamps the dispatch point of a share's items: the queue ends here,
@@ -77,7 +88,7 @@ module Emb
       end
 
       def deferrals
-        Thread.current[KEY] ||= {}
+        Thread.current[KEY] ||= {}.compare_by_identity
       end
 
       def open_span(entry, dispatched:, queue: nil)
