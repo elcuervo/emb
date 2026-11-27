@@ -68,51 +68,81 @@ func TestRenderIsDeterministic(t *testing.T) {
 	}
 }
 
+type schemaBranch struct {
+	Type  string `json:"type"`
+	Items struct {
+		OneOf []struct {
+			Type string `json:"type"`
+		} `json:"oneOf"`
+	} `json:"items"`
+}
+
+type replySchema struct {
+	DollarSchema string         `json:"$schema"`
+	Type         string         `json:"type"`
+	OneOf        []schemaBranch `json:"oneOf"`
+	Items        struct {
+		OneOf []struct {
+			Type string `json:"type"`
+		} `json:"oneOf"`
+	} `json:"items"`
+}
+
 func TestImageReplySchemas(t *testing.T) {
-	for _, name := range []string{"EMB.IMG", "EMB.IMGMULTI"} {
+	parse := func(name string) replySchema {
 		d, ok := ByName(name)
 		if !ok {
 			t.Fatalf("%s not declared", name)
 		}
-		var schema struct {
-			DollarSchema string `json:"$schema"`
-			OneOf        []struct {
-				Type  string `json:"type"`
-				Items struct {
-					OneOf []struct {
-						Type string `json:"type"`
-					} `json:"oneOf"`
-				} `json:"items"`
-			} `json:"oneOf"`
-		}
+		var schema replySchema
 		if err := json.Unmarshal(d.ReplySchema, &schema); err != nil {
 			t.Fatalf("%s schema: %v", name, err)
 		}
 		if schema.DollarSchema != "https://json-schema.org/draft/2020-12/schema" {
 			t.Fatalf("%s $schema = %q", name, schema.DollarSchema)
 		}
-		if len(schema.OneOf) != 2 {
-			t.Fatalf("%s oneOf has %d branches, want 2", name, len(schema.OneOf))
-		}
-		if schema.OneOf[0].Type != "object" {
-			t.Fatalf("%s oneOf[0].type = %q, want object", name, schema.OneOf[0].Type)
-		}
-		if schema.OneOf[1].Type != "array" {
-			t.Fatalf("%s oneOf[1].type = %q, want array", name, schema.OneOf[1].Type)
-		}
-		nullable := false
-		for _, item := range schema.OneOf[1].Items.OneOf {
-			if item.Type == "null" {
-				nullable = true
-			}
-		}
-		if !nullable {
-			t.Fatalf("%s array branch has no nullable slot", name)
-		}
 		if d.WireNotes == "" {
 			t.Fatalf("%s has no wire_notes", name)
 		}
+		return schema
 	}
+	hasNull := func(types []struct {
+		Type string `json:"type"`
+	}) bool {
+		for _, b := range types {
+			if b.Type == "null" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// One image can be a failed (null) slot, a single keyed map, or an array of
+	// maps: writeIMGResult collapses only a one-image request that succeeded.
+	img := parse("EMB.IMG")
+	branches := make(map[string]schemaBranch, len(img.OneOf))
+	for _, b := range img.OneOf {
+		branches[b.Type] = b
+	}
+	if len(branches) != 3 || branches["object"].Type == "" || branches["array"].Type == "" {
+		t.Fatalf("EMB.IMG oneOf = %#v, want null, object and array branches", img.OneOf)
+	}
+	if !hasNull(branches["array"].Items.OneOf) {
+		t.Fatalf("EMB.IMG array branch has no nullable slot")
+	}
+
+	// EMB.IMGMULTI always replies one slot per pair, so a bare object is invalid.
+	imgMulti := parse("EMB.IMGMULTI")
+	if imgMulti.Type != "array" {
+		t.Fatalf("EMB.IMGMULTI type = %q, want array", imgMulti.Type)
+	}
+	if len(imgMulti.OneOf) != 0 {
+		t.Fatalf("EMB.IMGMULTI has %d top-level oneOf branches, want none", len(imgMulti.OneOf))
+	}
+	if !hasNull(imgMulti.Items.OneOf) {
+		t.Fatalf("EMB.IMGMULTI array items have no nullable slot")
+	}
+
 	for _, d := range Docs {
 		if d.Name != "EMB.IMG" && d.Name != "EMB.IMGMULTI" && len(d.ReplySchema) != 0 {
 			t.Fatalf("%s carries an unexpected reply_schema", d.Name)

@@ -138,8 +138,10 @@ maintain a live count of shares currently dispatched:
 
 `emb.client.batch.parallelism` SHALL be the sum of a batch's share durations
 divided by that batch's wall duration, computed once per force from the same
-timings that produce the share durations. A fully serial batch SHALL report near 1
-and N concurrently running shares SHALL report near N.
+timings that produce the share durations. A fully serial batch whose shares
+account for nearly all of its wall duration SHALL report near 1 (batch work
+outside the shares lowers the ratio), and N concurrently running shares SHALL
+report near N.
 
 #### Scenario: Serial batch
 

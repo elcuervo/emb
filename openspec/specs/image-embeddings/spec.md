@@ -6,7 +6,7 @@ Serves embedding vectors for images without the client decoding, resizing, norma
 
 ### Requirement: Per-model image input configuration
 
-The server SHALL support an optional `image:` block on a model config declaring the image input tensor name, target size, crop mode, resample mode, rescale factor, per-channel mean, per-channel std, an optional `preset`, and an ordered `outputs` list. Each output SHALL declare a reply name and a graph tensor, plus an optional `select` (`none`, `cls`, `mean`, `tokens`, or `map`, defaulting to the model's `pooling`), an optional `start` (the first token row for `select: tokens`, default 0), and a a `grid` (the patch edge) that `select: tokens` requires, resolved from the output config, a preset, or the model's `config.json` metadata, so the emitted row count is always checkable. Output names SHALL be unique, the name `model` SHALL be reserved (an `EMB.IMGMULTI VALUES` pair carries its own `model` field beside its outputs, so a config declaring that output name SHALL fail to load), and the list SHALL be the complete set of products the model serves; there is no default output. A model without an `image:` block SHALL NOT accept image commands and the server SHALL reply with an error naming the model. The server SHALL fail model loading, naming the offending output, when an output's `select` is unknown, when `select: tokens` is declared without `grid` or for a tensor whose rank is below 3, when `grid` is declared but `size` is not a multiple of it, or when a declared row count cannot be reconciled with the tensor and the configuration.
+The server SHALL support an optional `image:` block on a model config declaring the image input tensor name, target size, crop mode, resample mode, rescale factor, per-channel mean, per-channel std, an optional `preset`, and an ordered `outputs` list. Each output SHALL declare a reply name and a graph tensor, plus an optional `select` (`none`, `cls`, `mean`, `tokens`, or `map`), an optional `start` (the first token row for `select: tokens`), and a `grid` (the patch edge) that `select: tokens` requires, resolved from the output config, a preset, or the model's `config.json` metadata, so the emitted row count is always checkable. An omitted `select` inherits the model's `pooling` only for a rank-3 tensor and only when that pooling is `cls` or `mean`; otherwise rank decides (`none` for a pre-pooled rank-2 row, `cls` for a rank-3 sequence). An omitted `start` resolves to one plus the model's `num_register_tokens` when its metadata declares them, and to 0 otherwise. Output names SHALL be unique, the name `model` SHALL be reserved (an `EMB.IMGMULTI VALUES` pair carries its own `model` field beside its outputs, so a config declaring that output name SHALL fail to load), and the list SHALL be the complete set of products the model serves; there is no default output. A model without an `image:` block SHALL NOT accept image commands and the server SHALL reply with an error naming the model. The server SHALL fail model loading, naming the offending output, when an output's `select` is unknown, when `select: tokens` is declared without `grid` or for a tensor whose rank is below 3, when `grid` is declared but `size` is not a multiple of it, or when a declared row count cannot be reconciled with the tensor and the configuration.
 
 #### Scenario: CLIP-style preprocessing config accepted
 
@@ -109,7 +109,7 @@ All images of a single image command (or `EMB.IMGMULTI` pair group) SHALL be pre
 
 ### Requirement: Cross-modal dual-encoder pairing
 
-When the same model serves both text and image embedding, `EMB <model> <text>` and every image output of that model SHALL carry vectors in the same dimensional space, using compatible pooling and normalization settings, so that text-to-image similarity is meaningful. Image outputs MAY read their own graph tensors (split `text_embeds`/`image_embeds` exports are supported), so output-tensor names need not match. The server SHALL fail model loading with a descriptive error when any image output's dimension disagrees with the text dimension.
+When the same model serves both text and image embedding, `EMB <model> <text>` and every vector image output of that model SHALL carry vectors in the same dimensional space, using compatible pooling and normalization settings, so that text-to-image similarity is meaningful. Image outputs MAY read their own graph tensors (split `text_embeds`/`image_embeds` exports are supported), so output-tensor names need not match. The server SHALL fail model loading with a descriptive error when any vector image output's dimension disagrees with the text dimension. Map outputs (`select: map`) are exempt: they are unreduced spatial maps, not embedding vectors, so they are never checked against the text dimension.
 
 #### Scenario: Shared space for text and image
 
@@ -118,7 +118,7 @@ When the same model serves both text and image embedding, `EMB <model> <text>` a
 
 #### Scenario: Dimension mismatch is rejected at load
 
-- **WHEN** any image output's dimension differs from the model's text dimension
+- **WHEN** any vector image output's dimension differs from the model's text dimension
 - **THEN** the server SHALL refuse to load the model with an error naming the output and both dimensions
 
 ### Requirement: Image request limits and truncation

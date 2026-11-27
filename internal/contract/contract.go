@@ -41,6 +41,10 @@ const imageSchema = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "oneOf": [
     {
+      "type": "null",
+      "description": "one image that failed or was truncated"
+    },
+    {
       "type": "object",
       "description": "one image: output name to that output's value"
     },
@@ -55,6 +59,20 @@ const imageSchema = `{
       }
     }
   ]
+}`
+
+// imageMultiSchema is array-only: writeIMGMULTIResult always writes one slot per
+// pair, so a collapsed single map is never a valid reply.
+const imageMultiSchema = `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "description": "one keyed map per model/image pair in request order",
+  "items": {
+    "oneOf": [
+      {"type": "object"},
+      {"type": "null"}
+    ]
+  }
 }`
 
 const imageWireNotes = "RESP2 writes each map as a flat alternating name/value array; RESP3 writes a map. VALUES replaces each bulk string with a dtype/shape/values envelope."
@@ -95,7 +113,7 @@ var Docs = []Doc{
 		Keywords: []string{"BLOB", "VALUES"},
 		Arity:    Arity{Min: 2, Tail: "variadic"},
 		Flags:    []Flag{FlagInference},
-		Reply:    "One text: a bulk string of float32 bytes (BLOB) or a VALUES envelope; several texts: an array of the same in request order.",
+		Reply:    "One text: a bulk string of float32 bytes (BLOB) or a VALUES envelope. Several texts under BLOB: an array of the same in request order. Several texts under VALUES: one envelope with shape [count, dim].",
 	},
 	{
 		Name:     "EMB.CACHE.FLUSH",
@@ -152,7 +170,7 @@ var Docs = []Doc{
 		Arity:       Arity{Min: 2, Tail: "even-pairs"},
 		Flags:       []Flag{FlagInference},
 		Reply:       "An array with one keyed map per pair in request order; a failed pair is null; under VALUES each pair carries its model beside its outputs.",
-		ReplySchema: json.RawMessage(imageSchema),
+		ReplySchema: json.RawMessage(imageMultiSchema),
 		WireNotes:   imageWireNotes,
 	},
 	{

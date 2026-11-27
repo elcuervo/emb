@@ -37,11 +37,19 @@ func TestContractRoutesMatchDocs(t *testing.T) {
 }
 
 // TestHelpListsEveryCommand proves EMB.HELP advertises every served command.
+// Command lines start with the wire name as their first token; a substring test
+// would let EMB.INFO pass for a missing INFO entry.
 func TestHelpListsEveryCommand(t *testing.T) {
 	addr, _ := serveTestWithServer(t)
 	help := bulkOf(t, redisCmd(t, addr, "EMB.HELP"))
+	named := make(map[string]bool)
+	for _, line := range strings.Split(help, "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			named[fields[0]] = true
+		}
+	}
 	for _, d := range contract.Docs {
-		if !strings.Contains(help, d.Name) {
+		if !named[d.Name] {
 			t.Errorf("EMB.HELP omits %s", d.Name)
 		}
 	}

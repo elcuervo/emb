@@ -421,7 +421,7 @@ The gem SHALL ship the server's contract and validate its own command surface ag
 
 #### Scenario: A dropped keyword fails the build
 
-- **WHEN** a builder sends a command without a keyword the contract declares mandatory for its argv shape (for example `EMB.IMGMULTI` without `OUTPUTS` when a projection was requested)
+- **WHEN** a builder is asked for a projection but sends the command without the `OUTPUTS` keyword the contract declares for its argv shape
 - **THEN** the gem's spec suite SHALL fail, naming the command and the missing keyword
 
 #### Scenario: A stale vendored copy fails the build
@@ -431,7 +431,7 @@ The gem SHALL ship the server's contract and validate its own command surface ag
 
 #### Scenario: A matching surface passes
 
-- **WHEN** the gem's command literals and emitted keywords all appear in the shipped contract and the copies match
+- **WHEN** every command name and keyword the gem emits for a call's default wire form is declared in the shipped contract and the copies match
 - **THEN** the validation SHALL pass without listing commands by hand
 
 ### Requirement: A deferred or block call snapshots its payloads

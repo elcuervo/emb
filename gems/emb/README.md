@@ -838,9 +838,11 @@ and `EMB.MULTI`, plus instance-based clients, URL configuration, and connection 
 
 The gem ships the server's command contract as `lib/emb/commands.json`. `spec/emb_commands_contract_spec.rb`
 fails when a command name or a keyword the gem sends is missing from that contract, and when the shipped copy
-differs from the repository's `commands.json`. Refresh the copy after a server contract change:
+differs from the repository's `commands.json`. After a server contract change, regenerate the
+repository catalog, then refresh the copy:
 
 ```bash
+just commands-gen
 bundle exec rake commands:sync
 ```
 
