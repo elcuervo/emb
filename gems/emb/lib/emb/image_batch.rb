@@ -17,10 +17,12 @@ module Emb
     module_function
 
     # Registers one deferred image call, refusing it before queue insertion
-    # when the pending scope would exceed either bound.
+    # when the pending scope would exceed either bound. An identical pending
+    # item already carries this payload (batch-loader dedupes it to one wire
+    # item), so a repeat call is not charged against the bound again.
     def build(client, model, images, format:, names:)
-      check_limits!(client, images)
       item = [client, ITEM, model, images, format, names]
+      check_limits!(client, images) unless pending_items&.include?(item)
       loader = BatchLoader.for(item).batch(default_value: [], key: Emb::BATCH_KEY, &Emb::BATCH_BLOCK)
       Telemetry::Deferred.record(
         item, Telemetry.entry_for(client, operation: 'image', model: model, texts: images.size, format: format)

@@ -112,8 +112,10 @@ func imagePresetNames() string {
 // modelImageMetadata is the layout subset of a model's config.json that an
 // export publishes about itself.
 type modelImageMetadata struct {
-	PatchSize         int `json:"patch_size"`
-	NumRegisterTokens int `json:"num_register_tokens"`
+	PatchSize int `json:"patch_size"`
+	// NumRegisterTokens is a pointer so a declared 0 (CLS only, no registers)
+	// is distinguishable from a config.json that omits the key.
+	NumRegisterTokens *int `json:"num_register_tokens"`
 }
 
 // loadModelImageMetadata reads config.json beside the graph or one directory up
@@ -1049,9 +1051,10 @@ func resolveImageOutputs(cfg config.ModelConfig, name string, size int, preset i
 		if select_ == "tokens" {
 			if oc.Start != nil {
 				out.Start = *oc.Start
-			} else if md.NumRegisterTokens > 0 {
-				// 1 CLS token + N register tokens before the patch grid.
-				out.Start = 1 + md.NumRegisterTokens
+			} else if md.NumRegisterTokens != nil {
+				// 1 CLS token + N register tokens before the patch grid. A
+				// declared 0 still means the CLS row is skipped.
+				out.Start = 1 + *md.NumRegisterTokens
 			}
 			out.Grid = oc.Grid
 			if out.Grid == 0 && md.PatchSize > 0 && (!presetSet || preset.LayoutFromModel) {
@@ -1063,7 +1066,11 @@ func resolveImageOutputs(cfg config.ModelConfig, name string, size int, preset i
 				out.Grid = size / md.PatchSize
 			}
 			if out.Grid <= 0 {
-				return nil, fmt.Errorf("model %q: image output %q selects tokens but has no grid; set image.outputs[].grid (the model's config.json declares no patch_size)", name, oc.Name)
+				hint := "the model's config.json declares no patch_size"
+				if presetSet && !preset.LayoutFromModel {
+					hint = "the selected preset keeps the token layout explicit"
+				}
+				return nil, fmt.Errorf("model %q: image output %q selects tokens but has no grid; set image.outputs[].grid (%s)", name, oc.Name, hint)
 			}
 			if size%out.Grid != 0 {
 				return nil, fmt.Errorf("model %q: image output %q grid %d does not divide image.size %d", name, oc.Name, out.Grid, size)

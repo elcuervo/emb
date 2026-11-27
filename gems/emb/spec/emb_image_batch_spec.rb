@@ -146,6 +146,23 @@ RSpec.describe Emb, '#image' do
     expect(sent).to eq([['EMB.IMG', 'clip', 'a', 'b']])
   end
 
+  it 'does not charge a duplicate deferred image against the scope bound' do
+    client = lazy_client(:multi, batch_size: 1)
+    sent = []
+    allow(client).to receive(:send_command) do |*args|
+      sent << args
+      ['embedding', blob(1.0)]
+    end
+
+    first = client[:clip].image('a'.b)
+    second = client[:clip].image('a'.b)
+    first['embedding']
+    second['embedding']
+
+    # One payload, one wire item, and both callers resolve from it.
+    expect(sent).to eq([['EMB.IMG', 'clip', 'a']])
+  end
+
   it 'rejects an image that would exceed max_image_batch_bytes' do
     client = lazy_client(:multi, max_image_batch_bytes: 8)
     allow(client).to receive(:send_command).and_return([['embedding', blob(1.0)]])
