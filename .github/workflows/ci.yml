@@ -173,6 +173,11 @@ jobs:
           go-version: "1.26"
           cache: true
 
+      # The `commands-check` recipe is the drift guard for `commands.json`.
+      # CI runs the recipe rather than repeating its logic here, so the check
+      # has one definition.
+      - uses: extractions/setup-just@v3
+
       - name: Install libtokenizers
         run: |
           sudo mkdir -p /opt/libtokenizers
@@ -184,6 +189,11 @@ jobs:
       - name: Format check
         run: |
           test -z "$(gofmt -l .)" || { echo "Run 'gofmt -s -w .' to fix formatting"; exit 1; }
+
+      - name: Command contract is in sync
+        run: just commands-check
+        env:
+          CGO_ENABLED: "0"
 
       - name: Vet
         run: go vet ./internal/config/... ./internal/hfhub/...

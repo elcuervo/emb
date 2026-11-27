@@ -43,6 +43,20 @@ var vec []float32
 binary.Read(bytes.NewReader(raw), binary.LittleEndian, &vec)
 ```
 
+## Validating a client build
+
+[`commands.json`](../commands.json) is the server's command contract: every
+command the server serves, with its accepted keywords, arity, flags, and the
+reply schema for the two image commands. A client keeps a copy and fails its
+build when it sends a command or a keyword the contract does not declare,
+instead of discovering the drift at runtime.
+
+The Ruby gem ships such a copy (`gems/emb/lib/emb/commands.json`) and its specs
+assert that every command literal in `lib/` is declared, that every keyword its
+builders emit is declared for that command, and that its copy is byte-identical
+to the repository artifact. Refresh the copy with `bundle exec rake
+commands:sync` after the server's contract changes.
+
 ## Ruby gem
 
 The [`emb`](../gems/emb/README.md) gem adds connection pooling, a proxy, and

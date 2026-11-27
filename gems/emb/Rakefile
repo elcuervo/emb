@@ -6,6 +6,18 @@ require 'rubocop/rake_task'
 RSpec::Core::RakeTask.new(:spec)
 RuboCop::RakeTask.new
 
+namespace :commands do
+  desc 'Copy the repository commands.json into the gem (lib/emb/commands.json)'
+  task :sync do
+    source = File.expand_path('../../commands.json', __dir__)
+    unless File.exist?(source)
+      abort "commands.json not found at #{source}; run `just commands-gen` at the repository root first"
+    end
+
+    cp source, File.expand_path('lib/emb/commands.json', __dir__)
+  end
+end
+
 namespace :spec do
   desc 'Run the real-Rails Railtie boot suite (no emb server required)'
   RSpec::Core::RakeTask.new(:rails) do |task|

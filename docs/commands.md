@@ -3,6 +3,12 @@
 Full reference for the `emb` command surface. See the
 [README](../README.md) for install and quick start.
 
+The machine-readable contract for this surface is [`commands.json`](../commands.json):
+one entry per command with its grammar, accepted keywords, arity, flags, and — for
+`EMB.IMG` and `EMB.IMGMULTI` — a JSON Schema for the reply. This table renders that
+contract; `just commands-check` fails when the two drift, and clients validate their
+builds against it (the Ruby gem does — see [Clients](clients.md#validating-a-client-build)).
+
 | Command | Description |
 |---------|-------------|
 | `EMB <model> [BLOB\|VALUES] <text> [text...]` | Embed one or more texts. Default `BLOB`: single text → bulk string, multiple → array of bulk strings (float32 bytes). `VALUES`: `dtype`/`shape`/`values` envelope with decimal values |

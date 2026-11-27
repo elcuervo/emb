@@ -19,6 +19,7 @@ import (
 	"github.com/tidwall/redcon"
 
 	"github.com/elcuervo/emb/internal/config"
+	"github.com/elcuervo/emb/internal/contract"
 	"github.com/elcuervo/emb/internal/permit"
 	"github.com/elcuervo/emb/internal/pipeline"
 	"github.com/elcuervo/emb/internal/registry"
@@ -47,7 +48,9 @@ type connState struct {
 }
 
 type Server struct {
-	reg          *registry.Registry
+	reg *registry.Registry
+	// routes is the contract doc of every mux registration, for coverage tests.
+	routes       []contract.Doc
 	srv          *redcon.Server
 	ln           net.Listener
 	active       sync.WaitGroup
@@ -389,28 +392,28 @@ func New(addr string, reg *registry.Registry, password string, cacheConfig strin
 	}
 
 	mux := redcon.NewServeMux()
-	mux.HandleFunc("ping", s.handlePING)
-	mux.HandleFunc("hello", s.handleHELLO)
-	mux.HandleFunc("client", s.handleCLIENT)
-	mux.HandleFunc("auth", s.handleAUTH)
-	mux.HandleFunc("emb", s.handleEMB)
-	mux.HandleFunc("emb.models", s.handleMODELS)
-	mux.HandleFunc("emb.info", s.handleINFO)
-	mux.HandleFunc("emb.stats", s.handleSTATS)
-	mux.HandleFunc("monitor", s.handleMonitor)
-	mux.HandleFunc("emb.help", s.handleHELP)
-	mux.HandleFunc("emb.multi", s.handleEMBMULTI)
-	mux.HandleFunc("emb.img", s.handleIMG)
-	mux.HandleFunc("emb.imgmulti", s.handleIMGMULTI)
-	mux.HandleFunc("emb.ready", s.handleREADY)
-	mux.HandleFunc("emb.eval", s.handleEVAL)
-	mux.HandleFunc("emb.evsha", s.handleEVSHA)
-	mux.HandleFunc("emb.script", s.handleSCRIPT)
-	mux.HandleFunc("info", s.handleInfo)
-	mux.HandleFunc("config", s.handleConfig)
-	mux.HandleFunc("shutdown", s.handleSHUTDOWN)
-	mux.HandleFunc("emb.cache.flush", s.handleCACHEFLUSH)
-	mux.HandleFunc("emb.save", s.handleSAVE)
+	s.route(mux, doc("PING"), s.handlePING)
+	s.route(mux, doc("HELLO"), s.handleHELLO)
+	s.route(mux, doc("CLIENT"), s.handleCLIENT)
+	s.route(mux, doc("AUTH"), s.handleAUTH)
+	s.route(mux, doc("EMB"), s.handleEMB)
+	s.route(mux, doc("EMB.MODELS"), s.handleMODELS)
+	s.route(mux, doc("EMB.INFO"), s.handleINFO)
+	s.route(mux, doc("EMB.STATS"), s.handleSTATS)
+	s.route(mux, doc("MONITOR"), s.handleMonitor)
+	s.route(mux, doc("EMB.HELP"), s.handleHELP)
+	s.route(mux, doc("EMB.MULTI"), s.handleEMBMULTI)
+	s.route(mux, doc("EMB.IMG"), s.handleIMG)
+	s.route(mux, doc("EMB.IMGMULTI"), s.handleIMGMULTI)
+	s.route(mux, doc("EMB.READY"), s.handleREADY)
+	s.route(mux, doc("EMB.EVAL"), s.handleEVAL)
+	s.route(mux, doc("EMB.EVSHA"), s.handleEVSHA)
+	s.route(mux, doc("EMB.SCRIPT"), s.handleSCRIPT)
+	s.route(mux, doc("INFO"), s.handleInfo)
+	s.route(mux, doc("CONFIG"), s.handleConfig)
+	s.route(mux, doc("SHUTDOWN"), s.handleSHUTDOWN)
+	s.route(mux, doc("EMB.CACHE.FLUSH"), s.handleCACHEFLUSH)
+	s.route(mux, doc("EMB.SAVE"), s.handleSAVE)
 
 	s.srv = redcon.NewServer(addr, func(conn redcon.Conn, cmd redcon.Command) {
 		// Account the received command: cmd.Raw is the full RESP bytes including
@@ -1962,6 +1965,8 @@ func (s *Server) handleHELP(conn redcon.Conn, cmd redcon.Command) {
 		"CONFIG SET <param> <value> - Change a runtime configuration parameter",
 		"SHUTDOWN [NOSAVE|SAVE] [NOW] [FORCE] [ABORT] - Stop the server (the caller blocks with no reply; ABORT cancels a pending shutdown)",
 		"AUTH <password> - Authenticate with the server",
+		"HELLO [2|3] - Report or negotiate the RESP protocol version",
+		"CLIENT SETINFO <name> <value> - Report client metadata (Redis compatibility)",
 		"PING - Redis compatibility",
 		"Script replies: string→bulk, list→array, string-keyed table→hash (flat field/value pairs), nil→null, {err=...}→error",
 		"Script input specs: {shape, data|fill|bytes, dtype} - fill builds a constant tensor host-side (no Lua data table); bytes packs little-endian elements; data/fill/bytes are mutually exclusive",
